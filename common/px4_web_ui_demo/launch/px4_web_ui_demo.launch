@@ -1,0 +1,15 @@
+<launch>
+  <arg name="host" default="0.0.0.0" />
+  <arg name="port" default="8090" />
+  <arg name="api_base_url" default="http://127.0.0.1:8080" />
+
+  <node pkg="px4_web_ui_demo"
+        type="px4_web_ui_demo_node.py"
+        name="px4_web_ui_demo"
+        output="screen">
+    <param name="host" value="$(arg host)" />
+    <param name="port" value="$(arg port)" />
+    <param name="api_base_url" value="$(arg api_base_url)" />
+  </node>
+</launch>
+
