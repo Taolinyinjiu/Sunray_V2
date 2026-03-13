@@ -1,0 +1,6 @@
+# 请求部分（客户端发给服务端
+float64 takeoff_relative_height # 起飞高度(m)
+float64 takeoff_max_velocity # 起飞最大速度(m/s)
+---
+bool accepted
+string message

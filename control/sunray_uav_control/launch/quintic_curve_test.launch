@@ -1,0 +1,22 @@
+<launch>
+  <node pkg="uav_control"
+        type="quintic_curve_test_node"
+        name="quintic_curve_test_node"
+        output="screen">
+    <param name="start_x" value="0.0" />
+    <param name="start_y" value="0.0" />
+    <param name="start_z" value="0.0" />
+
+    <param name="end_x" value="0.0" />
+    <param name="end_y" value="0.0" />
+    <param name="end_z" value="1.0" />
+
+    <param name="keep_time" value="5.0" />
+    <param name="publish_hz" value="50.0" />
+    <param name="loop" value="false" />
+    <param name="publish_initial_sample" value="true" />
+    <param name="use_generate_test" value="true" />
+    <param name="frame_id" value="map" />
+    <param name="topic_prefix" value="quintic_curve_test" />
+  </node>
+</launch>

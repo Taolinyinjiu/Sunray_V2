@@ -1,0 +1,6 @@
+bool use_takeoff_homepoint  # 使用起飞时记录的homepoint,如果该位为false，则使用下面指定的点位
+geometry_msgs/PoseStamped target_pose
+float64 land_max_velocity 
+---
+bool accepted
+string message

@@ -1,0 +1,40 @@
+<launch>
+  <arg name="control_config_file" default="$(find uav_control)/config/sunray_control_config.yaml" />
+  <arg name="uav_name" default="uav" />
+  <arg name="uav_id" default="1" />
+  <arg name="enable_offboard_control" default="true" />
+
+  <arg name="enable_odom_bridge" default="false" />
+  <arg name="use_model_states" default="false" />
+  <arg name="gazebo_model_name" default="$(arg uav_name)$(arg uav_id)" />
+  <arg name="odom_input" default="/$(arg uav_name)$(arg uav_id)/sunray/gazebo_pose" />
+  <arg name="odom_output" default="/$(arg uav_name)$(arg uav_id)/sunray_odom_in" />
+
+  <param name="/fsm/enable_offboard_control" value="$(arg enable_offboard_control)" />
+  <param name="/fsm/odom_topic" value="$(arg odom_output)" />
+
+  <include file="$(find uav_control)/launch/load_control_config.launch">
+    <arg name="control_config_file" value="$(arg control_config_file)" />
+    <arg name="uav_name" value="$(arg uav_name)" />
+    <arg name="uav_id" value="$(arg uav_id)" />
+  </include>
+
+  <group if="$(arg enable_odom_bridge)">
+    <node pkg="uav_control"
+          type="gazebo_model_states_to_odom.py"
+          name="gazebo_model_states_to_odom"
+          output="screen">
+      <param name="use_model_states" value="$(arg use_model_states)" />
+      <param name="model_name" value="$(arg gazebo_model_name)" />
+      <param name="input_topic" value="$(arg odom_input)" />
+      <param name="output_topic" value="$(arg odom_output)" />
+      <param name="frame_id" value="world" />
+      <param name="child_frame_id" value="body" />
+    </node>
+  </group>
+
+  <node pkg="uav_control"
+        type="sunray_fsm_node"
+        name="sunray_fsm_node"
+        output="screen" />
+</launch>

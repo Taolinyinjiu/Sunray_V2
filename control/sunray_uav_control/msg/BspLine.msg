@@ -1,0 +1,16 @@
+# 无人机id
+int32 drone_id  
+# 样条曲线阶数
+int32 order  
+# 轨迹开始的绝对时间
+time start_time  
+# 轨迹ID(用于覆盖，抢占)
+int64 traj_id  
+# 偏航点的时间间隔
+float64 yaw_dt  
+# 节点向量
+float64[] knots
+# 位置控制点序列  
+geometry_msgs/Point[] pos_pts  
+# 偏航控制点序列
+float64[] yaw_pts

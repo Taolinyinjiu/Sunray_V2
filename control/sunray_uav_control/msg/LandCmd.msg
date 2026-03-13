@@ -1,0 +1,3 @@
+# 降落指令
+int32 land_type                  # 0=px4 auto land, 1=code land
+float64 land_max_velocity         # 降落过程中的最大速度

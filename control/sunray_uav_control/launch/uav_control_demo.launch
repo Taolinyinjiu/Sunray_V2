@@ -1,0 +1,45 @@
+<launch>
+  <arg name="control_config_file" default="$(find uav_control)/config/sunray_control_config.yaml" />
+  <arg name="uav_name" default="uav" />
+  <arg name="uav_id" default="1" />
+  <arg name="gazebo_model_name" default="$(arg uav_name)$(arg uav_id)" />
+  <arg name="enable_offboard_control" default="true" />
+
+  <!-- false: 离线联调(不做真实解锁); true: 真实 OFFBOARD+ARM 接管 -->
+  <param name="/fsm/enable_offboard_control" value="$(arg enable_offboard_control)" />
+  <param name="/fsm/odom_topic" value="/$(arg uav_name)$(arg uav_id)/sunray_odom_in" />
+
+  <!-- 1) 加载控制配置参数 -->
+  <include file="$(find uav_control)/launch/load_control_config.launch">
+    <arg name="control_config_file" value="$(arg control_config_file)" />
+    <arg name="uav_name" value="$(arg uav_name)" />
+    <arg name="uav_id" value="$(arg uav_id)" />
+  </include>
+
+  <!-- 2) Gazebo model_states -> Sunray odom 输入 -->
+  <node pkg="uav_control"
+        type="gazebo_model_states_to_odom.py"
+        name="gazebo_model_states_to_odom"
+        output="screen">
+    <param name="use_model_states" value="true" />
+    <param name="model_name" value="$(arg gazebo_model_name)" />
+    <param name="input_topic" value="/$(arg uav_name)$(arg uav_id)/sunray/gazebo_pose" />
+    <param name="frame_id" value="world" />
+    <param name="child_frame_id" value="body" />
+  </node>
+
+  <!-- 3) 控制 demo 节点（FSM + 控制器 + 仲裁发布） -->
+  <node pkg="uav_control"
+        type="uav_control_demo_node"
+        name="uav_control_demo_node"
+        output="screen">
+    <param name="odom_topic" value="/$(arg uav_name)$(arg uav_id)/sunray_odom_in" />
+    <param name="update_hz" value="50.0" />
+    <param name="auto_takeoff" value="false" />
+    <param name="auto_takeoff_delay_s" value="3.0" />
+    <param name="test_sequence_enable" value="true" />
+    <param name="test_sequence_repeat" value="false" />
+    <param name="test_sequence_script" value="TAKEOFF_REQUEST@3.0,LAND_REQUEST@20.0" />
+    <param name="auto_seed_desired_from_odom" value="true" />
+  </node>
+</launch>

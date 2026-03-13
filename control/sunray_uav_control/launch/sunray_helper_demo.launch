@@ -1,0 +1,14 @@
+<launch>
+  <arg name="takeoff_wait_s" default="5.0" />
+  <arg name="move_wait_s" default="5.0" />
+  <arg name="land_wait_s" default="5.0" />
+
+  <node pkg="uav_control"
+        type="sunray_helper_demo_node"
+        name="sunray_helper_demo_node"
+        output="screen">
+    <param name="takeoff_wait_s" value="$(arg takeoff_wait_s)" />
+    <param name="move_wait_s" value="$(arg move_wait_s)" />
+    <param name="land_wait_s" value="$(arg land_wait_s)" />
+  </node>
+</launch>

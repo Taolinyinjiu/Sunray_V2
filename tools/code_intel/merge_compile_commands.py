@@ -10,7 +10,7 @@ Usage:
      ./tools/code_intel/merge_compile_commands.py build/uav_control/compile_commands.json
 
 Options:
-  -o, --output <path>    Output file path (default: ./compile_commands.json)
+  -o, --output <path>    Output file path (default: ./build/compile_commands.json)
   -b, --build-dir <path> Build directory root for subdir auto-discovery
                          (default: ./build)
 """
@@ -37,8 +37,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-o",
         "--output",
-        default="compile_commands.json",
-        help="合并后输出路径（默认：./compile_commands.json）",
+        default="build/compile_commands.json",
+        help="合并后输出路径（默认：./build/compile_commands.json）",
     )
     parser.add_argument(
         "-b",

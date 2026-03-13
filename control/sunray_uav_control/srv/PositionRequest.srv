@@ -1,0 +1,6 @@
+geometry_msgs/Point target_position
+bool yaw_ctrl
+float64 yaw
+---
+bool accepted
+string message

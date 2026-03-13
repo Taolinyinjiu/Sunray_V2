@@ -49,6 +49,7 @@ __pycache__/
 /tools/build_scripts/bin/
 /tools/build_scripts/tui/build/
 /tools/build_scripts/tui/third_party/
+/tools/build_scripts/build_deprecated/
 
 .clang-tidy
 .clang-format
