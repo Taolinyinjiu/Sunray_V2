@@ -1,3 +1,6 @@
 [submodule "simulation"]
 	path = simulation
 	url = https://gitee.com/yundrone_sunray2023/simulation.git
+[submodule "communication/sunray_communication/lib"]
+	path = communication/sunray_communication/lib
+	url = https://gitee.com/yundrone_sunray2023/communication.git
