@@ -16,10 +16,10 @@ modules:
     build_path: "build/px4_bridge"
     dependencies: []
   # Sunray 重构中的demo
-  px4_web_api_demo:
+  px4_param_tui:
     description: "Sunray 重构中的测试demo"
-    source_path: "common/px4_web_api_demo"
-    build_path: "build/px4_web_api_demo"
+    source_path: "test/px4_param_tui"
+    build_path: "build/px4_param_tui"
     dependencies: []
   px4_web_ui_demo:
     description: "Sunray 重构中的测试demo"
@@ -76,8 +76,7 @@ groups:
   # common测试
   common_test:
     description: "common测试"
-    modules: ["px4_bridge", "px4_web_api_demo", "px4_web_ui_demo"]
-
+    modules: ["px4_bridge"]
   # control测试
   control_test:
     description: "control测试"

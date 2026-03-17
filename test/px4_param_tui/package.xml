@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>px4_param_tui</name>
+  <version>0.1.0</version>
+  <description>Mouse-first test TUI coupled with PX4_ParamManager for PX4 parameter write/read.</description>
+
+  <maintainer email="taolin@example.com">taolin</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>mavros_msgs</depend>
+
+  <export/>
+</package>
