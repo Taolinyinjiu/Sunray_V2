@@ -7,10 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   mavros_msgs
+  rospy
+  std_msgs
+  std_srvs
 )
 
 catkin_package(
-  CATKIN_DEPENDS roscpp mavros_msgs
+  CATKIN_DEPENDS roscpp mavros_msgs rospy std_msgs std_srvs
 )
 
 include_directories(
@@ -37,4 +40,27 @@ target_link_libraries(px4_param_tui_node
   ftxui::screen
   ftxui::dom
   ftxui::component
+)
+
+find_library(LZMA_LIB lzma REQUIRED)
+
+add_executable(px4_param_tui_meta_node
+  src/px4_param_tui_meta_node.cpp
+)
+
+target_link_libraries(px4_param_tui_meta_node
+  ${catkin_LIBRARIES}
+  ${LZMA_LIB}
+  ftxui::screen
+  ftxui::dom
+  ftxui::component
+)
+
+catkin_install_python(PROGRAMS
+  scripts/px4_param_meta_server.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(DIRECTORY launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

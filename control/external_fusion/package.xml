@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>external_fusion</name>
+  <version>0.0.0</version>
+  <description>External fusion package for Sunray control stack.</description>
+
+  <maintainer email="taolin@todo.todo">taolin</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_ros</depend>
+
+  <export>
+  </export>
+</package>
+

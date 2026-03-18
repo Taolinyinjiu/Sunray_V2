@@ -1,0 +1,10 @@
+<launch>
+  <arg name="metadata" default="$(find px4_param_tui)/metadata/parameters.json.xz"/>
+  <arg name="node_name" default="px4_param_meta_server"/>
+
+  <node pkg="px4_param_tui"
+        type="px4_param_meta_server.py"
+        name="$(arg node_name)"
+        output="screen"
+        args="--metadata $(arg metadata) --ros --node-name $(arg node_name)"/>
+</launch>

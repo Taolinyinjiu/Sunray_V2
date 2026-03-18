@@ -1,0 +1,15 @@
+# 1.通过参数切换输入源
+# 0:fastlio2+ekf_imu 1:vins 2:viobot 3:mocap 
+external_fusion: 3
+
+# 以下订阅与发布话题，通过ros参数空间中的uav_name+uav_id拼接为订阅话题，即订阅话题 = /uav_name+uav_id/local_topic
+
+# ------------------订阅话题-----------------
+# 局部定位话题
+local_topic: sunray/localization/local_odom
+# 全局定位话题
+global_topic: sunray/localization/global_odom
+# 回环检测话题
+loop_topic: sunray/localization/local_to_global
+# px4 localposition 话题
+px4_local_topic: 

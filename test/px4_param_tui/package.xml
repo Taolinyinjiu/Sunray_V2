@@ -11,6 +11,9 @@
 
   <depend>roscpp</depend>
   <depend>mavros_msgs</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
 
   <export/>
 </package>

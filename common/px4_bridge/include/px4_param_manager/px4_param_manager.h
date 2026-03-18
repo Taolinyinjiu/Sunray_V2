@@ -53,7 +53,7 @@ private:
   // 通过调用mavros提供的服务,读取px4飞控指定的参数
   bool read_param_raw(const char *name, int *value);
   bool read_param_raw(const char *name, double *value);
-
+	// 维护两个ros服务端
   ros::ServiceClient param_set_client_;
   ros::ServiceClient param_get_client_;
   bool initialized_ = false;

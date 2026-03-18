@@ -1,0 +1,15 @@
+<launch>
+  <arg name="uav_name" default="uav"/>
+  <arg name="uav_id" default="1"/>
+  <arg name="metadata" default="/home/taolin/Documents/GitHub/PX4-Autopilot/build/cuav_7-nano_default/parameters.json.xz"/>
+
+  <param name="uav_name" value="$(arg uav_name)"/>
+  <param name="uav_id" value="$(arg uav_id)"/>
+
+  <node pkg="px4_param_tui"
+        type="px4_param_tui_meta_node"
+        name="px4_param_tui_meta_node"
+        output="screen">
+    <param name="metadata_path" value="$(arg metadata)"/>
+  </node>
+</launch>
