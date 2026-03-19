@@ -1,0 +1,104 @@
+sources_list:
+  VIOBOT:
+    # sources_id 表示该定位源的id序号，在launch中指定定位源通过指定sources_id的方式来进行实现
+    source_id: 0
+    # 表示该定位源的职责或者说定位能力
+    capabilities:
+      # 表示当前定位源是否提供local系下的里程计，如果提供则订阅对应的topic
+      provides_local: true
+      # 表示当前定位源是否提供global系下的里程计，如果提供则订阅对应的topic
+      provides_global: false  
+      # 表示当前定位源是否支持回环检测，如果支持则订阅对应的topic
+      supported_loops: [disable]
+      # publish_mode 表示我们将如何对待订阅话题得到的的数据，当设置为DIRECT_COPY表示我们将把话题在两者之间进行复制
+      # 也就是说，当设置为 SINGLE_COPY时，我们会输出 测量值=local_odom=global_odom
+      publish_mode: SINGLE_COPY
+    source_topics:
+      # 此处话题和上方对应，provides_local_measurement:true则对应订阅local_topic话题
+      local_topic: /sunray/localization/local_odom
+      global_topic: ""
+      loop_topic: ""
+# mocap提供global系下的定位，测量值=local_odom=global_odom
+  MOCAP:
+    source_id: 1
+    capabilities:
+      # 由于动捕是一种基于外部观测方法得到的里程计，因此其实际上不提供local系下的里程计
+      provides_local: false
+      # 动捕提供global系下的里程计
+      provides_global: true  
+      # 动捕不支持使用回环检测
+      supported_loops: [disable]
+      # 测量值=local_odom=global_odom
+      publish_mode: SINGLE_COPY
+    source_topics:
+      local_topic: ""
+      global_topic: /uav1/sunray/odometry
+      loop_topic: ""
+
+
+
+
+
+
+
+
+
+
+# ---------------  以下部分需要修改  -----------------
+
+
+  # Fast-LIO2:
+  #   sources_id: 0
+  #   capabilities:
+  #     provides_local: true
+  #     provides_global: true
+  #     supported_loops: [disable, lidar_loop, aruco_loop]
+  #     global_mode: dual_input
+  #   topics:
+  #     local_topic: /sunray/localization/local_odom
+  #     global_topic: /sunray/localization/global_odom
+  #     loop_topic: /sunray/localization/local_to_global
+  # VINS:
+  #   sources_id: 1
+  #   capabilities:
+  #     provides_local: true
+  #     provides_global: false  # 由于vins无法输出全局点云，这里我们认为vins不支持global
+  #     supported_loops: [disable] # vins实际上支持回环，但是为了简单起见，这里我们先不管吧
+  #     global_mode: DIRECT_COPY
+  #   topics:
+  #     local_topic: /sunray/localization/local_odom
+  #     global_topic: /sunray/localization/global_odom
+  #     loop_topic: /sunray/localization/local_to_global
+  # VIOBOT:
+  #   sources_id: 2
+  #   capabilities:
+  #     provides_local: true
+  #     provides_global: false  
+  #     supported_loops: [disable] 
+  #     global_mode: DIRECT_COPY
+  #   topics:
+  #     local_topic: /sunray/localization/local_odom
+  #     global_topic: /sunray/localization/global_odom
+  #     loop_topic: /sunray/localization/local_to_global
+  # RTK:
+  #   sources_id: 3
+  #   capabilities:
+  #     provides_local: false
+  #     provides_global: true  
+  #     supported_loops: [disable] 
+  #     global_mode: DIRECT_COPY
+  #   topics:
+  #     local_topic: /sunray/localization/local_odom
+  #     global_topic: /sunray/localization/global_odom
+  #     loop_topic: /sunray/localization/local_to_global
+  # Mocap:
+  #   sources_id: 3
+  #   capabilities:
+  #     provides_local: false
+  #     provides_global: true  
+  #     supported_loops: [disable] 
+  #     global_mode: DIRECT_COPY
+  #   topics:
+  #     local_topic: /sunray/localization/local_odom
+  #     global_topic: /sunray/localization/global_odom
+  #     loop_topic: /sunray/localization/local_to_global

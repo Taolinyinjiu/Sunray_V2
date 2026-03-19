@@ -48,6 +48,11 @@ modules:
     build_path: "build/livox_ros_driver2"
     dependencies: []
   # 定位模块功能包
+  localization_fusion:
+    description: "localization_fusion 功能包"
+    source_path: "localization/localization_fusion"
+    build_path: "build/localization_fusion"
+    dependencies: []
   fast_lio:
     description: "fast_lio 功能包"
     source_path: "localization/fast_lio"
@@ -81,7 +86,12 @@ groups:
   control_test:
     description: "control测试"
     modules: ["uav_control"]
+  # localization_fusion 测试用
+  localization_fusion_test:
+    description: "localization_fusion测试包"
+    modules: ["sunray_mavros","vrpn_client_ros","localization_fusion"]
 
+  # ------------------机型分类------------------- 
   S-150-Basic:
     description: "Sunray-150-基础款功能包"
     modules: ["sunray_mavros","vrpn_client_ros","sunray_mocap"]

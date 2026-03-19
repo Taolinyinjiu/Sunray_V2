@@ -1,0 +1,24 @@
+<launch>
+  <!-- 运行时参数 -->
+  <arg name="source_id" default="1" doc="定位源ID，对应localization_sources.yaml中的source_id" />
+  <arg name="loop" default="disable" doc="回环模式：disable/lidar_loop/aruco_loop" />
+  <arg name="health_rate_hz" default="10.0" doc="定位健康状态发布频率(Hz)" />
+
+  <!-- 配置文件 -->
+  <arg name="config_file"
+       default="$(find localization_fusion)/config/localization_sources.yaml"
+       doc="定位源配置文件路径" />
+
+  <node pkg="localization_fusion"
+        type="localization_fusion_node"
+        name="localization_fusion"
+        output="screen">
+    <!-- 私有参数：由LocalizationFusion::LoadRuntimeParams读取 -->
+    <param name="source_id" value="$(arg source_id)" />
+    <param name="loop" value="$(arg loop)" />
+    <param name="health_rate_hz" value="$(arg health_rate_hz)" />
+
+    <!-- 私有参数：由LocalizationFusion::LoadSourceConfigs读取 -->
+    <rosparam command="load" file="$(arg config_file)" />
+  </node>
+</launch>
