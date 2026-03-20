@@ -64,7 +64,7 @@ private:
   void ProcessGlobalOdom(const nav_msgs::Odometry &global_msg);		//处理“收到 global 输入”后的主流程：更新缓存、按模式补齐另一侧输出或触发变换更新
   void PublishLocalOdom(const nav_msgs::Odometry &msg);	// 只负责发布 local_odom（封装统一 frame、stamp、pub 调用）。
   void PublishGlobalOdom(const nav_msgs::Odometry &msg);	// 只负责发布 global_odom（同上，封装发布细节）。
-  void PublishOdomState();	// 发布状态话题（如 local_odom_valid/global_odom_valid、当前 source/loop 等
+  void PublishOdomState();	// 发布 OdomStatus 状态话题（有效性、来源、能力、模式与最新状态量）
   
 	// ------回环相关-----
 	void TryUpdateMapToOdom();	// 尝试根据当前 local/global 数据估计或更新 T_map_odom（数据不满足条件时不更新）。

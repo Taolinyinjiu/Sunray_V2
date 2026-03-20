@@ -6,38 +6,31 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 usage() {
   cat <<'USAGE_EOF'
-Run localization_fusion + vrpn + sunray_mocap + topic monitors in one tmux session.
+Run localization_fusion + topic monitors in one tmux session.
 
-Layout (single window):
-  Top row (2 panes):
-    left  -> vrpn_client_ros sample.launch
-    right -> sunray_mocap mocap_odom.launch
-  Bottom row (4 panes):
-    left       -> localization_fusion.launch
-    mid-left   -> rostopic echo local_odom
-    mid-right  -> rostopic echo global_odom
-    right      -> rostopic echo odom_state
+Layout (single window, 4 panes):
+  left       -> localization_fusion.launch
+  mid-left   -> rostopic echo local_odom
+  mid-right  -> rostopic echo global_odom
+  right      -> rostopic echo odom_status
 
 Usage:
-  run_localization_fusion_mocap_tmux.sh start [options]
-  run_localization_fusion_mocap_tmux.sh stop [options]
-  run_localization_fusion_mocap_tmux.sh attach [options]
-  run_localization_fusion_mocap_tmux.sh status [options]
+  run_localization_fusion_only_tmux.sh start [options]
+  run_localization_fusion_only_tmux.sh stop [options]
+  run_localization_fusion_only_tmux.sh attach [options]
+  run_localization_fusion_only_tmux.sh status [options]
 
 Options:
-  --session <name>         tmux session name (default: sunray_loc_fusion_test)
+  --session <name>         tmux session name (default: sunray_loc_fusion_only)
   --source-id <int>        localization_fusion source_id (default: 1)
   --loop <mode>            localization_fusion loop mode (default: disable)
   --health-rate-hz <num>   localization health check rate (default: 10.0)
 
   --local-topic <topic>    topic for local odom echo (default: /sunray/localization/local_odom)
   --global-topic <topic>   topic for global odom echo (default: /sunray/localization/global_odom)
-  --state-topic <topic>    topic for odom_state echo (default: /sunray/localization/odom_state)
+  --state-topic <topic>    topic for odom_status echo (default: /sunray/localization/odom_status)
 
   --fusion-cmd <cmd>       override fusion launch command
-  --vrpn-cmd <cmd>         override vrpn launch command
-  --mocap-cmd <cmd>        override mocap launch command
-
   --ros-setup <cmd>        setup command before run
                            (default: source /opt/ros/noetic/setup.bash && source <workspace>/devel/setup.bash if exists)
   --no-attach              start only: do not auto attach
@@ -90,7 +83,7 @@ if [[ "$ACTION" == "-h" || "$ACTION" == "--help" ]]; then
 fi
 shift || true
 
-SESSION="sunray_loc_fusion_test"
+SESSION="sunray_loc_fusion_only"
 SOURCE_ID=1
 LOOP_MODE="disable"
 HEALTH_RATE_HZ="10.0"
@@ -102,8 +95,6 @@ GLOBAL_ODOM_TOPIC="/sunray/localization/global_odom"
 ODOM_STATE_TOPIC="/sunray/localization/odom_status"
 
 FUSION_CMD_OVERRIDE=""
-VRPN_CMD_OVERRIDE=""
-MOCAP_CMD_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -145,16 +136,6 @@ while [[ $# -gt 0 ]]; do
     --fusion-cmd)
       [[ $# -ge 2 ]] || { err "--fusion-cmd requires a value"; exit 2; }
       FUSION_CMD_OVERRIDE="$2"
-      shift 2
-      ;;
-    --vrpn-cmd)
-      [[ $# -ge 2 ]] || { err "--vrpn-cmd requires a value"; exit 2; }
-      VRPN_CMD_OVERRIDE="$2"
-      shift 2
-      ;;
-    --mocap-cmd)
-      [[ $# -ge 2 ]] || { err "--mocap-cmd requires a value"; exit 2; }
-      MOCAP_CMD_OVERRIDE="$2"
       shift 2
       ;;
     --ros-setup)
@@ -222,7 +203,6 @@ if [[ "$ACTION" == "stop" ]]; then
   exit 0
 fi
 
-# ACTION == start
 if tmux_has_session "$SESSION"; then
   err "session '$SESSION' already exists"
   echo "[loc_fusion_tmux] use: $0 attach --session $SESSION"
@@ -246,75 +226,44 @@ else
   FUSION_CMD="roslaunch localization_fusion localization_fusion.launch source_id:=$SOURCE_ID loop:=$LOOP_MODE health_rate_hz:=$HEALTH_RATE_HZ"
 fi
 
-if [[ -n "$VRPN_CMD_OVERRIDE" ]]; then
-  VRPN_CMD="$VRPN_CMD_OVERRIDE"
-else
-  VRPN_CMD="$WAIT_MASTER_CMD; roslaunch --wait vrpn_client_ros sample.launch"
-fi
-
-if [[ -n "$MOCAP_CMD_OVERRIDE" ]]; then
-  MOCAP_CMD="$MOCAP_CMD_OVERRIDE"
-else
-  MOCAP_CMD="$WAIT_MASTER_CMD; roslaunch --wait sunray_mocap mocap_odom.launch"
-fi
-
 LOCAL_ECHO_CMD="$WAIT_MASTER_CMD; rostopic echo \"$LOCAL_ODOM_TOPIC\""
 GLOBAL_ECHO_CMD="$WAIT_MASTER_CMD; rostopic echo \"$GLOBAL_ODOM_TOPIC\""
 STATE_ECHO_CMD="$WAIT_MASTER_CMD; rostopic echo \"$ODOM_STATE_TOPIC\""
 
 echo "[loc_fusion_tmux] creating session: $SESSION"
-echo "[loc_fusion_tmux] layout: top(vrpn|mocap), bottom(fusion|local_odom|global_odom|odom_state)"
+echo "[loc_fusion_tmux] layout: single-row(fusion|local_odom|global_odom|odom_status)"
 echo "[loc_fusion_tmux] fusion:      $FUSION_CMD"
-echo "[loc_fusion_tmux] vrpn:        $VRPN_CMD"
-echo "[loc_fusion_tmux] mocap:       $MOCAP_CMD"
 echo "[loc_fusion_tmux] echo_local:  $LOCAL_ODOM_TOPIC"
 echo "[loc_fusion_tmux] echo_global: $GLOBAL_ODOM_TOPIC"
 echo "[loc_fusion_tmux] echo_state:  $ODOM_STATE_TOPIC"
 
 tmux new-session -d -s "$SESSION" -n "loc_test"
 
-pane_top_left="$(tmux display-message -p -t "$SESSION":0.0 "#{pane_id}")"
-pane_bottom_fusion="$(tmux split-window -v -t "$pane_top_left" -p 68 -P -F "#{pane_id}")"
-pane_top_right="$(tmux split-window -h -t "$pane_top_left" -P -F "#{pane_id}")"
+pane_fusion="$(tmux display-message -p -t "$SESSION":0.0 "#{pane_id}")"
+pane_local="$(tmux split-window -h -t "$pane_fusion" -p 75 -P -F "#{pane_id}")"
+pane_global="$(tmux split-window -h -t "$pane_local" -p 66 -P -F "#{pane_id}")"
+pane_state="$(tmux split-window -h -t "$pane_global" -p 50 -P -F "#{pane_id}")"
 
-pane_bottom_rest3="$(tmux split-window -h -t "$pane_bottom_fusion" -p 75 -P -F "#{pane_id}")"
-pane_bottom_rest2="$(tmux split-window -h -t "$pane_bottom_rest3" -p 66 -P -F "#{pane_id}")"
-pane_bottom_state="$(tmux split-window -h -t "$pane_bottom_rest2" -p 50 -P -F "#{pane_id}")"
-
-pane_top_vrpn="$pane_top_left"
-pane_top_mocap="$pane_top_right"
-pane_bottom_local="$pane_bottom_rest3"
-pane_bottom_global="$pane_bottom_rest2"
-
-# Pane titles for easier reading
-# shellcheck disable=SC2016
 tmux set-option -t "$SESSION" -g pane-border-status top
 
-tmux select-pane -t "$pane_top_vrpn" -T "vrpn"
-tmux select-pane -t "$pane_top_mocap" -T "mocap"
-tmux select-pane -t "$pane_bottom_fusion" -T "localization_fusion"
-tmux select-pane -t "$pane_bottom_local" -T "echo local_odom"
-tmux select-pane -t "$pane_bottom_global" -T "echo global_odom"
-tmux select-pane -t "$pane_bottom_state" -T "echo odom_status"
+tmux select-pane -t "$pane_fusion" -T "localization_fusion"
+tmux select-pane -t "$pane_local" -T "echo local_odom"
+tmux select-pane -t "$pane_global" -T "echo global_odom"
+tmux select-pane -t "$pane_state" -T "echo odom_status"
 
 FUSION_LINE="$(build_pane_line fusion "$FUSION_CMD")"
-VRPN_LINE="$(build_pane_line vrpn "$VRPN_CMD")"
-MOCAP_LINE="$(build_pane_line mocap "$MOCAP_CMD")"
 LOCAL_ECHO_LINE="$(build_pane_line local_odom "$LOCAL_ECHO_CMD")"
 GLOBAL_ECHO_LINE="$(build_pane_line global_odom "$GLOBAL_ECHO_CMD")"
 STATE_ECHO_LINE="$(build_pane_line odom_state "$STATE_ECHO_CMD")"
 
-# Launch fusion first to initialize ROS master, then others wait on master.
-tmux send-keys -t "$pane_bottom_fusion" "$FUSION_LINE" C-m
+tmux send-keys -t "$pane_fusion" "$FUSION_LINE" C-m
 sleep 1.0
 
-tmux send-keys -t "$pane_top_vrpn" "$VRPN_LINE" C-m
-tmux send-keys -t "$pane_top_mocap" "$MOCAP_LINE" C-m
-tmux send-keys -t "$pane_bottom_local" "$LOCAL_ECHO_LINE" C-m
-tmux send-keys -t "$pane_bottom_global" "$GLOBAL_ECHO_LINE" C-m
-tmux send-keys -t "$pane_bottom_state" "$STATE_ECHO_LINE" C-m
+tmux send-keys -t "$pane_local" "$LOCAL_ECHO_LINE" C-m
+tmux send-keys -t "$pane_global" "$GLOBAL_ECHO_LINE" C-m
+tmux send-keys -t "$pane_state" "$STATE_ECHO_LINE" C-m
 
-tmux select-pane -t "$pane_bottom_fusion"
+tmux select-pane -t "$pane_fusion"
 
 echo "[loc_fusion_tmux] started. Press Ctrl+C in any pane to stop all."
 echo "[loc_fusion_tmux] stop manually: $0 stop --session $SESSION"

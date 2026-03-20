@@ -21,10 +21,10 @@ modules:
     source_path: "test/px4_param_tui"
     build_path: "build/px4_param_tui"
     dependencies: []
-  px4_web_ui_demo:
+  sunray_msgs:
     description: "Sunray 重构中的测试demo"
-    source_path: "common/px4_web_ui_demo"
-    build_path: "build/px4_web_ui_demo"
+    source_path: "common/sunray_msgs"
+    build_path: "build/sunray_msgs"
     dependencies: []
   # 驱动模块功能包
   sunray_mavros:
@@ -52,7 +52,7 @@ modules:
     description: "localization_fusion 功能包"
     source_path: "localization/localization_fusion"
     build_path: "build/localization_fusion"
-    dependencies: []
+    dependencies: [sunray_msgs]
   fast_lio:
     description: "fast_lio 功能包"
     source_path: "localization/fast_lio"

@@ -12,11 +12,73 @@
 #include "localization_fusion.hpp"
 
 #include <algorithm>
-#include <std_msgs/String.h>
+#include <sunray_msgs/OdomStatus.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
 
 #include "localization_fusion_utils.hpp"
 
 namespace localization_fusion {
+namespace {
+
+constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;
+
+void SetZeroVector3(geometry_msgs::Vector3 &vec) {
+  vec.x = 0.0;
+  vec.y = 0.0;
+  vec.z = 0.0;
+}
+
+void SetIdentityQuaternion(geometry_msgs::Quaternion &quat) {
+  quat.x = 0.0;
+  quat.y = 0.0;
+  quat.z = 0.0;
+  quat.w = 1.0;
+}
+
+void SetIdentityTransform(geometry_msgs::Transform &transform) {
+  SetZeroVector3(transform.translation);
+  SetIdentityQuaternion(transform.rotation);
+}
+
+void FillStatusOdomFields(const nav_msgs::Odometry &odom,
+                          geometry_msgs::Vector3 &position,
+                          geometry_msgs::Vector3 &velocity,
+                          geometry_msgs::Vector3 &attitude_rpy_deg,
+                          geometry_msgs::Quaternion &attitude_quat) {
+  position.x = odom.pose.pose.position.x;
+  position.y = odom.pose.pose.position.y;
+  position.z = odom.pose.pose.position.z;
+
+  velocity.x = odom.twist.twist.linear.x;
+  velocity.y = odom.twist.twist.linear.y;
+  velocity.z = odom.twist.twist.linear.z;
+
+  SetZeroVector3(attitude_rpy_deg);
+  SetIdentityQuaternion(attitude_quat);
+
+  const auto &q_msg = odom.pose.pose.orientation;
+  tf2::Quaternion q(q_msg.x, q_msg.y, q_msg.z, q_msg.w);
+  if (q.length2() <= 1e-12) {
+    return;
+  }
+
+  q.normalize();
+  attitude_quat.x = q.x();
+  attitude_quat.y = q.y();
+  attitude_quat.z = q.z();
+  attitude_quat.w = q.w();
+
+  double roll = 0.0;
+  double pitch = 0.0;
+  double yaw = 0.0;
+  tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+  attitude_rpy_deg.x = roll * kRadToDeg;
+  attitude_rpy_deg.y = pitch * kRadToDeg;
+  attitude_rpy_deg.z = yaw * kRadToDeg;
+}
+
+} // namespace
 
 LocalizationFusion::LocalizationFusion(ros::NodeHandle &nh, ros::NodeHandle &pnh)
     : nh_(nh), private_nh_(pnh) {}
@@ -60,7 +122,7 @@ void LocalizationFusion::SetupPublishers() {
   global_odom_pub_ =
       nh_.advertise<nav_msgs::Odometry>("/sunray/localization/global_odom", 10);
   odom_state_pub_ =
-      nh_.advertise<std_msgs::String>("/sunray/localization/odom_state", 10);
+      nh_.advertise<sunray_msgs::OdomStatus>("/sunray/localization/odom_status", 10);
 }
 
 // 设置local系，global系，loop_check对应的订阅者
@@ -188,10 +250,94 @@ void LocalizationFusion::PublishGlobalOdom(const nav_msgs::Odometry &msg) {
 }
 // 发布当前里程计状态
 void LocalizationFusion::PublishOdomState() {
-  std_msgs::String state_msg;
-  state_msg.data =
-      std::string("local_valid=") + (local_odom_valid_ ? "true" : "false") +
-      ",global_valid=" + (global_odom_valid_ ? "true" : "false");
+  sunray_msgs::OdomStatus state_msg;
+  state_msg.header.stamp = ros::Time::now();
+  state_msg.header.frame_id.clear();
+
+  state_msg.external_source = 0u;
+  state_msg.provides_local = false;
+  state_msg.provides_global = false;
+  state_msg.provides_loopcheck = false;
+  state_msg.odom_valid = false;
+  state_msg.loopcheck_valid = false;
+  state_msg.publish_mode = static_cast<uint8_t>(
+      localization_fusion_types::PublishMode::SINGLE_COPY);
+
+  state_msg.external_local_topic.clear();
+  state_msg.external_global_topic.clear();
+  state_msg.external_loopcheck_topic.clear();
+
+  SetZeroVector3(state_msg.local_position);
+  SetZeroVector3(state_msg.local_velocity);
+  SetZeroVector3(state_msg.local_attitude_rpy);
+  SetIdentityQuaternion(state_msg.local_attitude_quat);
+
+  SetZeroVector3(state_msg.global_position);
+  SetZeroVector3(state_msg.global_velocity);
+  SetZeroVector3(state_msg.global_attitude_rpy);
+  SetIdentityQuaternion(state_msg.global_attitude_quat);
+
+  state_msg.loopcheck_tf_parent_frame.clear();
+  state_msg.loopcheck_tf_child_frame.clear();
+  SetIdentityTransform(state_msg.loopcheck_tf);
+
+  const SourceConfig *cfg = FindSelectedSource();
+  if (cfg != nullptr) {
+    state_msg.external_source = static_cast<uint8_t>(cfg->source_id);
+    state_msg.provides_local = cfg->capabilities.provides_local;
+    state_msg.provides_global = cfg->capabilities.provides_global;
+    state_msg.external_local_topic = cfg->source_topics.local_topic;
+    state_msg.external_global_topic = cfg->source_topics.global_topic;
+    state_msg.external_loopcheck_topic = cfg->source_topics.loop_topic;
+    state_msg.publish_mode = static_cast<uint8_t>(cfg->capabilities.publish_mode);
+
+    bool supports_loopcheck = false;
+    for (const auto mode : cfg->capabilities.supported_loops) {
+      if (mode != LoopMode::DISABLE) {
+        supports_loopcheck = true;
+        break;
+      }
+    }
+    state_msg.provides_loopcheck = supports_loopcheck;
+
+    if (cfg->capabilities.provides_local && cfg->capabilities.provides_global) {
+      state_msg.odom_valid = local_odom_valid_ && global_odom_valid_;
+    } else if (cfg->capabilities.provides_local) {
+      state_msg.odom_valid = local_odom_valid_;
+    } else if (cfg->capabilities.provides_global) {
+      state_msg.odom_valid = global_odom_valid_;
+    } else {
+      state_msg.odom_valid = false;
+    }
+  } else {
+    state_msg.odom_valid = local_odom_valid_ || global_odom_valid_;
+  }
+
+  if (local_odom_valid_) {
+    state_msg.header.frame_id = last_local_meas_.header.frame_id;
+    FillStatusOdomFields(last_local_meas_, state_msg.local_position,
+                         state_msg.local_velocity,
+                         state_msg.local_attitude_rpy,
+                         state_msg.local_attitude_quat);
+  }
+
+  if (global_odom_valid_) {
+    if (state_msg.header.frame_id.empty()) {
+      state_msg.header.frame_id = last_global_meas_.header.frame_id;
+    }
+    FillStatusOdomFields(last_global_meas_, state_msg.global_position,
+                         state_msg.global_velocity,
+                         state_msg.global_attitude_rpy,
+                         state_msg.global_attitude_quat);
+  }
+
+  if (!map_to_odom_tf_.header.frame_id.empty() ||
+      !map_to_odom_tf_.child_frame_id.empty()) {
+    state_msg.loopcheck_tf_parent_frame = map_to_odom_tf_.header.frame_id;
+    state_msg.loopcheck_tf_child_frame = map_to_odom_tf_.child_frame_id;
+    state_msg.loopcheck_tf = map_to_odom_tf_.transform;
+  }
+
   odom_state_pub_.publish(state_msg);
 }
 

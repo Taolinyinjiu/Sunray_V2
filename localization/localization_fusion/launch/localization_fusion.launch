@@ -1,6 +1,6 @@
 <launch>
   <!-- 运行时参数 -->
-  <arg name="source_id" default="1" doc="定位源ID，对应localization_sources.yaml中的source_id" />
+  <arg name="source_id" default="2" doc="定位源ID，对应localization_sources.yaml中的source_id" />
   <arg name="loop" default="disable" doc="回环模式：disable/lidar_loop/aruco_loop" />
   <arg name="health_rate_hz" default="10.0" doc="定位健康状态发布频率(Hz)" />
 

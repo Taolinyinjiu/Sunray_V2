@@ -18,6 +18,7 @@ sources_list:
       local_topic: /sunray/localization/local_odom
       global_topic: ""
       loop_topic: ""
+
 # mocap提供global系下的定位，测量值=local_odom=global_odom
   MOCAP:
     source_id: 1
@@ -35,7 +36,22 @@ sources_list:
       global_topic: /uav1/sunray/odometry
       loop_topic: ""
 
-
+# vins-fusion 提供local系下的定位，测量值=local_odom=global_odom
+  VINS:
+    source_id: 2
+    capabilities:
+      # vins 依赖机体双目相机和飞控的IMU数据，因此提供的是local系下的位置估计
+      provides_local: true
+      # vins 在开启回环的时候会构建全局地图，但本身并不输出global系下的位置估计
+      provides_global: false  
+      # 动捕不支持使用回环检测
+      supported_loops: [disable]
+      # 测量值=local_odom=global_odom
+      publish_mode: SINGLE_COPY
+    source_topics:
+      local_topic: "/vins_estimator/imu_propagate"
+      global_topic: ""
+      loop_topic: ""
 
 
 

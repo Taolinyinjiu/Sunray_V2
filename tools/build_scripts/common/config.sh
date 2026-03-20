@@ -142,8 +142,75 @@ check_module_conflicts() {
 }
 
 # 解析依赖关系
+# 依赖解析缓存（在 resolve_dependencies 中初始化）
+_RESOLVE_RESOLVED_MODULES=()
+_RESOLVE_VISITING_MODULES=()
+
+resolve_module_dependencies() {
+    local module="$1"
+
+    [[ -z "$module" ]] && return 0
+
+    if [[ ! "$module" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        print_error "模块名不合法或暂不支持（仅支持字母/数字/下划线）: $module"
+        return 1
+    fi
+
+    if array_contains "$module" "${_RESOLVE_RESOLVED_MODULES[@]}"; then
+        return 0
+    fi
+
+    if array_contains "$module" "${_RESOLVE_VISITING_MODULES[@]}"; then
+        print_error "检测到循环依赖: $module"
+        return 1
+    fi
+
+    if ! module_exists "$module"; then
+        print_error "未找到依赖模块: $module"
+        return 1
+    fi
+
+    _RESOLVE_VISITING_MODULES+=("$module")
+
+    local deps_raw
+    deps_raw="$(get_module_config "$module" "dependencies")"
+    deps_raw="${deps_raw//[\[\]\"]}"
+    if [[ -n "$deps_raw" ]]; then
+        local dep=""
+        IFS=',' read -ra dep_list <<< "$deps_raw"
+        for dep in "${dep_list[@]}"; do
+            dep="$(trim "$dep")"
+            [[ -z "$dep" ]] && continue
+            resolve_module_dependencies "$dep" || return 1
+        done
+    fi
+
+    local next_visiting=()
+    local item=""
+    for item in "${_RESOLVE_VISITING_MODULES[@]}"; do
+        if [[ "$item" != "$module" ]]; then
+            next_visiting+=("$item")
+        fi
+    done
+    _RESOLVE_VISITING_MODULES=("${next_visiting[@]}")
+
+    if ! array_contains "$module" "${_RESOLVE_RESOLVED_MODULES[@]}"; then
+        _RESOLVE_RESOLVED_MODULES+=("$module")
+    fi
+}
+
 resolve_dependencies() {
-    echo "$@"
+    local requested_modules=("$@")
+    local module=""
+
+    _RESOLVE_RESOLVED_MODULES=()
+    _RESOLVE_VISITING_MODULES=()
+
+    for module in "${requested_modules[@]}"; do
+        resolve_module_dependencies "$module" || return 1
+    done
+
+    printf '%s\n' "${_RESOLVE_RESOLVED_MODULES[@]}"
 }
 
 # 快速配置验证
