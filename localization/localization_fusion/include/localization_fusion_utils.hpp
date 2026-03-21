@@ -4,10 +4,10 @@
  *
  * 使用说明：
  * 1) 先包含本头文件和 localization_fusion_types.hpp；
- * 2) 读取 yaml 字段后，使用 ParseLoopMode/ParsePublishMode 将字符串转为枚举；
- * 3) 使用 AddLoopIfMissing 维护 supported_loops，避免重复；
- * 4) 使用 HasLocalTopic/HasGlobalTopic/HasLoopTopic 判断 topic 是否可用；
- * 5) 打印日志时使用 ToString(LoopMode/PublishMode) 统一输出格式。
+ * 2) 读取 yaml 字段后，使用 ParseRelocalizationMode/ParsePublishMode 将字符串转为枚举；
+ * 3) 使用 AddRelocalizationIfMissing 维护 supported_relocalization，避免重复；
+ * 4) 使用 HasLocalTopic/HasGlobalTopic/HasRelocalizationTopic 判断 topic 是否可用；
+ * 5) 打印日志时使用 ToString(RelocalizationMode/PublishMode) 统一输出格式。
  *
  * 约定：
  * - 当 yaml 中 topic 写成 null 或空串时，解析后按空字符串处理；
@@ -33,15 +33,15 @@ inline std::string ToLower(std::string s) {
   return s;
 }
 
-// 解析 loop 字符串。
-// 支持别名: disable/off, lidar_loop/lidar, aruco_loop/aruco
+// 解析 relocalization 字符串。
+// 支持: disable/lidar_relocalization/aruco_relocalization
 // 异常: 未识别输入会抛出 std::invalid_argument
-inline LoopMode ParseLoopMode(const std::string& raw) {
+inline RelocalizationMode ParseRelocalizationMode(const std::string& raw) {
   const std::string s = ToLower(raw);
-  if (s == "disable" || s == "off") return LoopMode::DISABLE;
-  if (s == "lidar_loop" || s == "lidar") return LoopMode::LIDAR_LOOP;
-  if (s == "aruco_loop" || s == "aruco") return LoopMode::ARUCO_LOOP;
-  throw std::invalid_argument("Unknown LoopMode: " + raw);
+  if (s == "disable") return RelocalizationMode::DISABLE;
+  if (s == "lidar_relocalization") return RelocalizationMode::LIDAR_RELOCALIZATION;
+  if (s == "aruco_relocalization") return RelocalizationMode::ARUCO_RELOCALIZATION;
+  throw std::invalid_argument("Unknown RelocalizationMode: " + raw);
 }
 
 // 解析 publish_mode 字符串。
@@ -63,11 +63,11 @@ inline PublishMode ParsePublishMode(const std::string& raw) {
 }
 
 // 枚举转字符串（用于日志打印和调试输出）。
-inline const char* ToString(LoopMode mode) {
+inline const char* ToString(RelocalizationMode mode) {
   switch (mode) {
-    case LoopMode::DISABLE: return "disable";
-    case LoopMode::LIDAR_LOOP: return "lidar_loop";
-    case LoopMode::ARUCO_LOOP: return "aruco_loop";
+    case RelocalizationMode::DISABLE: return "disable";
+    case RelocalizationMode::LIDAR_RELOCALIZATION: return "lidar_relocalization";
+    case RelocalizationMode::ARUCO_RELOCALIZATION: return "aruco_relocalization";
     default: return "unknown";
   }
 }
@@ -82,16 +82,17 @@ inline const char* ToString(PublishMode mode) {
   }
 }
 
-// 检查某个 loop 是否在 capabilities 的支持列表中。
-inline bool SupportsLoop(const Capabilities& caps, LoopMode mode) {
-  return std::find(caps.supported_loops.begin(), caps.supported_loops.end(),
-                   mode) != caps.supported_loops.end();
+// 检查某个 relocalization 是否在 capabilities 的支持列表中。
+inline bool SupportsRelocalization(const Capabilities& caps, RelocalizationMode mode) {
+  return std::find(caps.supported_relocalization.begin(),
+                   caps.supported_relocalization.end(),
+                   mode) != caps.supported_relocalization.end();
 }
 
-// 仅在不存在时添加 loop，避免 supported_loops 出现重复元素。
-inline void AddLoopIfMissing(Capabilities& caps, LoopMode mode) {
-  if (!SupportsLoop(caps, mode)) {
-    caps.supported_loops.push_back(mode);
+// 仅在不存在时添加 relocalization，避免 supported_relocalization 出现重复元素。
+inline void AddRelocalizationIfMissing(Capabilities& caps, RelocalizationMode mode) {
+  if (!SupportsRelocalization(caps, mode)) {
+    caps.supported_relocalization.push_back(mode);
   }
 }
 
@@ -105,9 +106,9 @@ inline bool HasGlobalTopic(const Topics& topics) {
   return !topics.global_topic.empty();
 }
 
-// 判断 loop topic 是否可用（非空串即视为可用）。
-inline bool HasLoopTopic(const Topics& topics) {
-  return !topics.loop_topic.empty();
+// 判断重定位 topic 是否可用（非空串即视为可用）。
+inline bool HasRelocalizationTopic(const Topics& topics) {
+  return !topics.relocalization_topic.empty();
 }
 
 } // namespace localization_fusion_types

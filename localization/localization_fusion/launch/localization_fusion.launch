@@ -1,9 +1,17 @@
 <launch>
   <!-- 运行时参数 -->
-  <arg name="source_id" default="2" doc="定位源ID，对应localization_sources.yaml中的source_id" />
-  <arg name="loop" default="disable" doc="回环模式：disable/lidar_loop/aruco_loop" />
+  <arg name="source_id" default="3" doc="定位源ID，对应localization_sources.yaml中的source_id" />
+  <arg name="loop" default="disable" doc="运行时重定位模式：disable/lidar_relocalization/aruco_relocalization（config文件中只声明定位源支持哪些模式）" />
   <arg name="health_rate_hz" default="10.0" doc="定位健康状态发布频率(Hz)" />
+  <arg name="test" default="false" doc="测试模式：为多机命名空间补齐全局参数 /uav_name 与 /uav_id" />
+  <arg name="test_uav_name" default="uav" doc="测试模式下写入到全局空间的 /uav_name" />
+  <arg name="test_uav_id" default="1" doc="测试模式下写入到全局空间的 /uav_id" />
 
+  <!-- test=true 时，为 localization_fusion 输出话题前缀补齐全局参数 -->
+  <group if="$(arg test)">
+    <param name="/uav_name" value="$(arg test_uav_name)" />
+    <param name="/uav_id" type="int" value="$(arg test_uav_id)" />
+  </group>
   <!-- 配置文件 -->
   <arg name="config_file"
        default="$(find localization_fusion)/config/localization_sources.yaml"

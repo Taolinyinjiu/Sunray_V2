@@ -8,8 +8,8 @@ sources_list:
       provides_local: true
       # 表示当前定位源是否提供global系下的里程计，如果提供则订阅对应的topic
       provides_global: false  
-      # 表示当前定位源是否支持回环检测，如果支持则订阅对应的topic
-      supported_loops: [disable]
+      # 表示当前定位源是否支持重定位，如果支持则订阅对应的topic
+      supported_relocalization: [disable]
       # publish_mode 表示我们将如何对待订阅话题得到的的数据，当设置为DIRECT_COPY表示我们将把话题在两者之间进行复制
       # 也就是说，当设置为 SINGLE_COPY时，我们会输出 测量值=local_odom=global_odom
       publish_mode: SINGLE_COPY
@@ -17,7 +17,7 @@ sources_list:
       # 此处话题和上方对应，provides_local_measurement:true则对应订阅local_topic话题
       local_topic: /sunray/localization/local_odom
       global_topic: ""
-      loop_topic: ""
+      relocalization_topic: ""
 
 # mocap提供global系下的定位，测量值=local_odom=global_odom
   MOCAP:
@@ -27,14 +27,14 @@ sources_list:
       provides_local: false
       # 动捕提供global系下的里程计
       provides_global: true  
-      # 动捕不支持使用回环检测
-      supported_loops: [disable]
+      # 单动捕不支持使用重定位检测
+      supported_relocalization: [disable]
       # 测量值=local_odom=global_odom
       publish_mode: SINGLE_COPY
     source_topics:
       local_topic: ""
       global_topic: /uav1/sunray/odometry
-      loop_topic: ""
+      relocalization_topic: ""
 
 # vins-fusion 提供local系下的定位，测量值=local_odom=global_odom
   VINS:
@@ -44,14 +44,31 @@ sources_list:
       provides_local: true
       # vins 在开启回环的时候会构建全局地图，但本身并不输出global系下的位置估计
       provides_global: false  
-      # 动捕不支持使用回环检测
-      supported_loops: [disable]
+      # 单vins不支持使用重定位检测
+      supported_relocalization: [disable]
       # 测量值=local_odom=global_odom
       publish_mode: SINGLE_COPY
     source_topics:
       local_topic: "/vins_estimator/imu_propagate"
       global_topic: ""
-      loop_topic: ""
+      relocalization_topic: ""
+
+# gazebo 仿真器下的绝对真值，提供global系下的定位，测量值=local_odom=global_odom
+  GAZEBO:
+    source_id: 3
+    capabilities:
+      # gazebo 基于渲染器提供真值估计，因此不提供local而是提供global
+      provides_local: false
+      # gazebo提供global系下的定位
+      provides_global: true  
+      # 单gazebo不支持使用重定位检测
+      supported_relocalization: [disable]
+      # 测量值=local_odom=global_odom
+      publish_mode: SINGLE_COPY
+    source_topics:
+      local_topic: ""
+      global_topic: "/uav1/sunray/gazebo_pose" 
+      relocalization_topic: ""
 
 
 
@@ -68,53 +85,53 @@ sources_list:
   #   capabilities:
   #     provides_local: true
   #     provides_global: true
-  #     supported_loops: [disable, lidar_loop, aruco_loop]
+  #     supported_relocalization: [disable, lidar_relocalization, aruco_relocalization]
   #     global_mode: dual_input
   #   topics:
   #     local_topic: /sunray/localization/local_odom
   #     global_topic: /sunray/localization/global_odom
-  #     loop_topic: /sunray/localization/local_to_global
+  #     relocalization_topic: /sunray/localization/local_to_global
   # VINS:
   #   sources_id: 1
   #   capabilities:
   #     provides_local: true
   #     provides_global: false  # 由于vins无法输出全局点云，这里我们认为vins不支持global
-  #     supported_loops: [disable] # vins实际上支持回环，但是为了简单起见，这里我们先不管吧
+  #     supported_relocalization: [disable] # vins实际上支持回环，但是为了简单起见，这里我们先不管吧
   #     global_mode: DIRECT_COPY
   #   topics:
   #     local_topic: /sunray/localization/local_odom
   #     global_topic: /sunray/localization/global_odom
-  #     loop_topic: /sunray/localization/local_to_global
+  #     relocalization_topic: /sunray/localization/local_to_global
   # VIOBOT:
   #   sources_id: 2
   #   capabilities:
   #     provides_local: true
   #     provides_global: false  
-  #     supported_loops: [disable] 
+  #     supported_relocalization: [disable] 
   #     global_mode: DIRECT_COPY
   #   topics:
   #     local_topic: /sunray/localization/local_odom
   #     global_topic: /sunray/localization/global_odom
-  #     loop_topic: /sunray/localization/local_to_global
+  #     relocalization_topic: /sunray/localization/local_to_global
   # RTK:
   #   sources_id: 3
   #   capabilities:
   #     provides_local: false
   #     provides_global: true  
-  #     supported_loops: [disable] 
+  #     supported_relocalization: [disable] 
   #     global_mode: DIRECT_COPY
   #   topics:
   #     local_topic: /sunray/localization/local_odom
   #     global_topic: /sunray/localization/global_odom
-  #     loop_topic: /sunray/localization/local_to_global
+  #     relocalization_topic: /sunray/localization/local_to_global
   # Mocap:
   #   sources_id: 3
   #   capabilities:
   #     provides_local: false
   #     provides_global: true  
-  #     supported_loops: [disable] 
+  #     supported_relocalization: [disable] 
   #     global_mode: DIRECT_COPY
   #   topics:
   #     local_topic: /sunray/localization/local_odom
   #     global_topic: /sunray/localization/global_odom
-  #     loop_topic: /sunray/localization/local_to_global
+  #     relocalization_topic: /sunray/localization/local_to_global

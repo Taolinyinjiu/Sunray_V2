@@ -8,7 +8,6 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   mavros_msgs
   nav_msgs
-  px4_bridge
   roscpp
   sensor_msgs
   std_msgs
@@ -20,7 +19,6 @@ catkin_package(
     geometry_msgs
     mavros_msgs
     nav_msgs
-    px4_bridge
     roscpp
     sensor_msgs
     std_msgs
@@ -32,16 +30,15 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-## Refactor package build targets will be added here, for example:
-# add_library(${PROJECT_NAME}_core
-#   src/xxx.cpp
-# )
-#
-# add_executable(${PROJECT_NAME}_node
-#   src/xxx_node.cpp
-# )
-#
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${PROJECT_NAME}_core
-#   ${catkin_LIBRARIES}
-# )
+add_executable(vision_pose_node
+  src/vision_pose_node.cpp
+  src/vision_pose.cpp
+)
+
+target_link_libraries(vision_pose_node
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(vision_pose_node
+  ${catkin_EXPORTED_TARGETS}
+)

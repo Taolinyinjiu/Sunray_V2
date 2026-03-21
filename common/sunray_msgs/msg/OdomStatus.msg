@@ -7,7 +7,8 @@ uint8 external_source	# 外部定位数据来源类型
 
 uint8 VIOBOT = 0	# VIOBOT 系列定位源（含 VIOBOT2、Baton mini）
 uint8 MOCAP = 1	# 动作捕捉定位源
-
+uint8 VINS = 2
+	
 # -------------capability-------------
 bool provides_local	# 是否提供局部定位能力
 

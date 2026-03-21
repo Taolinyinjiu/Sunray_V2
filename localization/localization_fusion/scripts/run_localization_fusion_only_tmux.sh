@@ -22,9 +22,9 @@ Usage:
 
 Options:
   --session <name>         tmux session name (default: sunray_loc_fusion_only)
-  --source-id <int>        localization_fusion source_id (default: 1)
-  --loop <mode>            localization_fusion loop mode (default: disable)
-  --health-rate-hz <num>   localization health check rate (default: 10.0)
+  --source-id <int>        override localization_fusion.launch arg source_id (default: use launch default)
+  --loop <mode>            override localization_fusion.launch arg loop (default: use launch default)
+  --health-rate-hz <num>   override localization_fusion.launch arg health_rate_hz (default: use launch default)
 
   --local-topic <topic>    topic for local odom echo (default: /sunray/localization/local_odom)
   --global-topic <topic>   topic for global odom echo (default: /sunray/localization/global_odom)
@@ -84,9 +84,9 @@ fi
 shift || true
 
 SESSION="sunray_loc_fusion_only"
-SOURCE_ID=1
-LOOP_MODE="disable"
-HEALTH_RATE_HZ="10.0"
+SOURCE_ID=""
+LOOP_MODE=""
+HEALTH_RATE_HZ=""
 AUTO_ATTACH=1
 ROS_SETUP=""
 
@@ -223,7 +223,16 @@ WAIT_MASTER_CMD="until rostopic list >/dev/null 2>&1; do sleep 0.2; done"
 if [[ -n "$FUSION_CMD_OVERRIDE" ]]; then
   FUSION_CMD="$FUSION_CMD_OVERRIDE"
 else
-  FUSION_CMD="roslaunch localization_fusion localization_fusion.launch source_id:=$SOURCE_ID loop:=$LOOP_MODE health_rate_hz:=$HEALTH_RATE_HZ"
+  FUSION_CMD="roslaunch localization_fusion localization_fusion.launch"
+  if [[ -n "$SOURCE_ID" ]]; then
+    FUSION_CMD="$FUSION_CMD source_id:=$SOURCE_ID"
+  fi
+  if [[ -n "$LOOP_MODE" ]]; then
+    FUSION_CMD="$FUSION_CMD loop:=$LOOP_MODE"
+  fi
+  if [[ -n "$HEALTH_RATE_HZ" ]]; then
+    FUSION_CMD="$FUSION_CMD health_rate_hz:=$HEALTH_RATE_HZ"
+  fi
 fi
 
 LOCAL_ECHO_CMD="$WAIT_MASTER_CMD; rostopic echo \"$LOCAL_ODOM_TOPIC\""
