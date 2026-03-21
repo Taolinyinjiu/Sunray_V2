@@ -26,6 +26,12 @@ modules:
     source_path: "common/sunray_msgs"
     build_path: "build/sunray_msgs"
     dependencies: []
+  # 仿真模块功能包
+  sunray_simulator:
+    description: "sunray_simulator 功能包"
+    source_path: "simulation/sunray_simulator"
+    build_path: "build/sunray_simulator"
+    dependencies: []
   # 驱动模块功能包
   sunray_mavros:
     description: "sunray_mavros 功能包"
@@ -46,6 +52,11 @@ modules:
     description: "livox_ros_driver2 功能包"
     source_path: "drivers/livox_ros_driver2"
     build_path: "build/livox_ros_driver2"
+    dependencies: []
+  web_cam:
+    description: "web_cam 功能包"
+    source_path: "drivers/web_cam"
+    build_path: "build/web_cam"
     dependencies: []
   # 定位模块功能包
   localization_fusion:
@@ -91,14 +102,19 @@ groups:
     description: "localization_fusion测试包"
     modules: ["sunray_mavros","vrpn_client_ros","localization_fusion"]
 
-  # ------------------机型分类------------------- 
+  # 仿真
+  Simulation:
+    description: "仿真功能包"
+    modules: ["sunray_simulator"]
+    
+  # 机型分类
   S-150-Basic:
     description: "Sunray-150-基础款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","sunray_mocap"]
+    modules: ["sunray_mavros","vrpn_client_ros","web_cam","sunray_mocap"]
 
   S-150-Lidar:
     description: "Sunray-150-三维激光雷达款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","livox_ros_driver2","sunray_mocap","fast_lio"]
+    modules: ["sunray_mavros","vrpn_client_ros","web_cam","livox_ros_driver2","sunray_mocap","fast_lio"]
 
   S-150-Stereo:
     description: "Sunray-150-双目款功能包"
@@ -106,7 +122,7 @@ groups:
 
   S-300-Standard:
     description: "Sunray-300-标准款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","livox_ros_driver2","sunray_mocap","fast_lio","sunray_gimbal"]
+    modules: ["sunray_mavros","vrpn_client_ros","web_cam","livox_ros_driver2","sunray_mocap","fast_lio","sunray_gimbal"]
 
 # ========== 构建配置 ==========
 build_config:
