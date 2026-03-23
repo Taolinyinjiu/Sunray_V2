@@ -26,6 +26,11 @@ modules:
     source_path: "common/sunray_msgs"
     build_path: "build/sunray_msgs"
     dependencies: []
+  sunray_common:
+    description: "Sunray 重构中的测试demo"
+    source_path: "common/sunray_common"
+    build_path: "build/sunray_common"
+    dependencies: []
   # 仿真模块功能包
   sunray_simulator:
     description: "sunray_simulator 功能包"

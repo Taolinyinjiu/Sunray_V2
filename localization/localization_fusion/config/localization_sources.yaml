@@ -1,137 +1,73 @@
+# 设计sources_list的目的在于，我们希望以一种简洁的方式，实现对不同定位源的配置，并希望得到一定的的兼容性
+
 sources_list:
+  # # Example 定位源的名称
+  # Example:
+  #   # source_id 表示该定位源的序号，在localization_fusion.launch文件中，通过指定定位源的序号，来加载对应的参数
+  #   source_id: -1
+  #   # localization_mode 表示该定位源的输入模式，分为一下四种模式
+  #   # 0: local 只输入local系下的里程计  如 vins,viobot,fastlio2
+  #   # 1: global 只输入global系下的里程计 如 rtk,mocap,aruco
+  #   # 2: local_and_global 同时输入local和global系下的里程计，并且global系是持续输入 fastlio2 + lidar_relocalization 
+  #   # 3: local_with_aruco 同时输入local和global系下的里程计，但global系是偶尔输入 fastlio2 + aruco_relocalization
+  #   localization_mode: 0
+  #   # odometry_topic 表示订阅的里程计话题名
+  #   # 由于yaml文件无法实现读取动态的ros参数，但考虑到会有多机的需求，因此这里使用${uav_ns}作为前缀时，表示订阅的话题前加上无人机的标识符uav_name+uav_id
+  #   # 假设当前为单机仿真，则订阅话题为"/uav1/sunray/example/odom"
+  #   odometry_topic: "${uav_ns}/sunray/example/odom" 
+  #   # relocalization_topic 表示订阅的重定位话题名，重定位话题的数据类型应该为nav_msgs::Odometry
+  #   # odometry_types: 2 or 3, relocalization_topic 作为global系数据输出，tf树根据两者值构造
+  #   relocalization_topic: ""
+
   VIOBOT:
-    # sources_id 表示该定位源的id序号，在launch中指定定位源通过指定sources_id的方式来进行实现
+    # 定位源序号
     source_id: 0
-    # 表示该定位源的职责或者说定位能力
-    capabilities:
-      # 表示当前定位源是否提供local系下的里程计，如果提供则订阅对应的topic
-      provides_local: true
-      # 表示当前定位源是否提供global系下的里程计，如果提供则订阅对应的topic
-      provides_global: false  
-      # 表示当前定位源是否支持重定位，如果支持则订阅对应的topic
-      supported_relocalization: [disable]
-      # publish_mode 表示我们将如何对待订阅话题得到的的数据，当设置为DIRECT_COPY表示我们将把话题在两者之间进行复制
-      # 也就是说，当设置为 SINGLE_COPY时，我们会输出 测量值=local_odom=global_odom
-      publish_mode: SINGLE_COPY
-    source_topics:
-      # 此处话题和上方对应，provides_local_measurement:true则对应订阅local_topic话题
-      local_topic: /sunray/localization/local_odom
-      global_topic: ""
-      relocalization_topic: ""
-
-# mocap提供global系下的定位，测量值=local_odom=global_odom
+    # 输入类型：只输入local系下的里程计
+    localization_mode: local
+    # 订阅的里程计话题
+    odometry_topic: ""
+    # 订阅的重定位话题
+    relocalization_topic: ""
+  
   MOCAP:
+    # 定位源序号
     source_id: 1
-    capabilities:
-      # 由于动捕是一种基于外部观测方法得到的里程计，因此其实际上不提供local系下的里程计
-      provides_local: false
-      # 动捕提供global系下的里程计
-      provides_global: true  
-      # 单动捕不支持使用重定位检测
-      supported_relocalization: [disable]
-      # 测量值=local_odom=global_odom
-      publish_mode: SINGLE_COPY
-    source_topics:
-      local_topic: ""
-      global_topic: /uav1/sunray/odometry
-      relocalization_topic: ""
+    # 输入类型：只输入global系下的里程计
+    localization_mode: global
+    # 订阅的里程计话题
+    odometry_topic: ""
+    # 订阅的重定位话题
+    relocalization_topic: ""
 
-# vins-fusion 提供local系下的定位，测量值=local_odom=global_odom
   VINS:
+    # 定位源序号
     source_id: 2
-    capabilities:
-      # vins 依赖机体双目相机和飞控的IMU数据，因此提供的是local系下的位置估计
-      provides_local: true
-      # vins 在开启回环的时候会构建全局地图，但本身并不输出global系下的位置估计
-      provides_global: false  
-      # 单vins不支持使用重定位检测
-      supported_relocalization: [disable]
-      # 测量值=local_odom=global_odom
-      publish_mode: SINGLE_COPY
-    source_topics:
-      local_topic: "/vins_estimator/imu_propagate"
-      global_topic: ""
-      relocalization_topic: ""
+    # 输入类型：只输入local系下的里程计
+    localization_mode: local
+    # 订阅的里程计话题
+    odometry_topic: ""
+    # 订阅的重定位话题
+    relocalization_topic: ""
 
-# gazebo 仿真器下的绝对真值，提供global系下的定位，测量值=local_odom=global_odom
   GAZEBO:
+    # 定位源序号
     source_id: 3
-    capabilities:
-      # gazebo 基于渲染器提供真值估计，因此不提供local而是提供global
-      provides_local: false
-      # gazebo提供global系下的定位
-      provides_global: true  
-      # 单gazebo不支持使用重定位检测
-      supported_relocalization: [disable]
-      # 测量值=local_odom=global_odom
-      publish_mode: SINGLE_COPY
-    source_topics:
-      local_topic: ""
-      global_topic: "/uav1/sunray/gazebo_pose" 
-      relocalization_topic: ""
+    # 输入类型：只输入global系下的里程计
+    localization_mode: global
+    # 订阅的里程计话题
+    odometry_topic: ""
+    # 订阅的重定位话题
+    relocalization_topic: ""
+
+  GAZEBO_ARUCO:
+    # 定位源序号
+    source_id: 4
+    # 输入类型：输入local系下的里程计和基于aruco的重定位
+    localization_mode: local_with_aruco
+    # 订阅的里程计话题
+    odometry_topic: ""
+    # 订阅的重定位话题
+    relocalization_topic: ""
 
 
 
-
-
-
-
-
-# ---------------  以下部分需要修改  -----------------
-
-
-  # Fast-LIO2:
-  #   sources_id: 0
-  #   capabilities:
-  #     provides_local: true
-  #     provides_global: true
-  #     supported_relocalization: [disable, lidar_relocalization, aruco_relocalization]
-  #     global_mode: dual_input
-  #   topics:
-  #     local_topic: /sunray/localization/local_odom
-  #     global_topic: /sunray/localization/global_odom
-  #     relocalization_topic: /sunray/localization/local_to_global
-  # VINS:
-  #   sources_id: 1
-  #   capabilities:
-  #     provides_local: true
-  #     provides_global: false  # 由于vins无法输出全局点云，这里我们认为vins不支持global
-  #     supported_relocalization: [disable] # vins实际上支持回环，但是为了简单起见，这里我们先不管吧
-  #     global_mode: DIRECT_COPY
-  #   topics:
-  #     local_topic: /sunray/localization/local_odom
-  #     global_topic: /sunray/localization/global_odom
-  #     relocalization_topic: /sunray/localization/local_to_global
-  # VIOBOT:
-  #   sources_id: 2
-  #   capabilities:
-  #     provides_local: true
-  #     provides_global: false  
-  #     supported_relocalization: [disable] 
-  #     global_mode: DIRECT_COPY
-  #   topics:
-  #     local_topic: /sunray/localization/local_odom
-  #     global_topic: /sunray/localization/global_odom
-  #     relocalization_topic: /sunray/localization/local_to_global
-  # RTK:
-  #   sources_id: 3
-  #   capabilities:
-  #     provides_local: false
-  #     provides_global: true  
-  #     supported_relocalization: [disable] 
-  #     global_mode: DIRECT_COPY
-  #   topics:
-  #     local_topic: /sunray/localization/local_odom
-  #     global_topic: /sunray/localization/global_odom
-  #     relocalization_topic: /sunray/localization/local_to_global
-  # Mocap:
-  #   sources_id: 3
-  #   capabilities:
-  #     provides_local: false
-  #     provides_global: true  
-  #     supported_relocalization: [disable] 
-  #     global_mode: DIRECT_COPY
-  #   topics:
-  #     local_topic: /sunray/localization/local_odom
-  #     global_topic: /sunray/localization/global_odom
-  #     relocalization_topic: /sunray/localization/local_to_global

@@ -13,12 +13,14 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   nav_msgs
   geometry_msgs
+  sunray_common
   sunray_msgs
   tf2
   tf2_ros
   tf2_geometry_msgs
   message_filters
 )
+find_package(yaml-cpp REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -29,6 +31,7 @@ catkin_package(
     sensor_msgs
     nav_msgs
     geometry_msgs
+    sunray_common
     sunray_msgs
     tf2
     tf2_ros
@@ -48,6 +51,7 @@ add_library(localization_fusion_core
 )
 target_link_libraries(localization_fusion_core
   ${catkin_LIBRARIES}
+  yaml-cpp
 )
 add_dependencies(localization_fusion_core
   ${${PROJECT_NAME}_EXPORTED_TARGETS}

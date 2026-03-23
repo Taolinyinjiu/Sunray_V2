@@ -1,32 +1,27 @@
 <launch>
-  <!-- 运行时参数 -->
-  <arg name="source_id" default="3" doc="定位源ID，对应localization_sources.yaml中的source_id" />
-  <arg name="loop" default="disable" doc="运行时重定位模式：disable/lidar_relocalization/aruco_relocalization（config文件中只声明定位源支持哪些模式）" />
-  <arg name="health_rate_hz" default="10.0" doc="定位健康状态发布频率(Hz)" />
-  <arg name="test" default="false" doc="测试模式：为多机命名空间补齐全局参数 /uav_name 与 /uav_id" />
-  <arg name="test_uav_name" default="uav" doc="测试模式下写入到全局空间的 /uav_name" />
-  <arg name="test_uav_id" default="1" doc="测试模式下写入到全局空间的 /uav_id" />
+	<!-- 当前使用的定位源配置 -->
+	<arg name="source_id" default="3" />
+	<!-- 配置文件路径 -->
+	<arg name="config_yamlfile_path"
+       default="$(find localization_fusion)/config/localization_sources.yaml" />
+	<!-- OdomStatus输出的频率 -->
+	<arg name="health_rate_hz" default="10.0" />
+	<!-- 单机测试 -->
+	<arg name="test" default="false" />
+	<arg name="test_uav_name" default="uav" />
+	<arg name="test_uav_id" default="1" />
+	<!-- 如果是测试，则向全局设置参数uav_name+uav_id -->
+	<group if="$(arg test)">
+		<param name="/uav_name" value="$(arg test_uav_name)" />
+		<param name="/uav_id" type="int" value="$(arg test_uav_id)" />
+	</group>
+	
+	<!-- 启动节点 -->
+	<node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion" output="screen" >
+		<!-- 将参数设置为节点私有参数-->
+		<param name="source_id" value="$(arg source_id)" />
+		<param name="config_yamlfile_path" value="$(arg )" />
+		<param name="health_rate_hz" value="$(arg health_rate_hz)" />
+	</node>
 
-  <!-- test=true 时，为 localization_fusion 输出话题前缀补齐全局参数 -->
-  <group if="$(arg test)">
-    <param name="/uav_name" value="$(arg test_uav_name)" />
-    <param name="/uav_id" type="int" value="$(arg test_uav_id)" />
-  </group>
-  <!-- 配置文件 -->
-  <arg name="config_file"
-       default="$(find localization_fusion)/config/localization_sources.yaml"
-       doc="定位源配置文件路径" />
-
-  <node pkg="localization_fusion"
-        type="localization_fusion_node"
-        name="localization_fusion"
-        output="screen">
-    <!-- 私有参数：由LocalizationFusion::LoadRuntimeParams读取 -->
-    <param name="source_id" value="$(arg source_id)" />
-    <param name="loop" value="$(arg loop)" />
-    <param name="health_rate_hz" value="$(arg health_rate_hz)" />
-
-    <!-- 私有参数：由LocalizationFusion::LoadSourceConfigs读取 -->
-    <rosparam command="load" file="$(arg config_file)" />
-  </node>
 </launch>

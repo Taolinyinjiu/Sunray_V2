@@ -12,53 +12,30 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
-#include <vector>
 
-// clang-format off
-
-namespace localization_fusion_types {
-
-// 重定位模式，分别是失能，基于雷达的重定位，基于ARUCO的重定位
-enum class RelocalizationMode {
-  DISABLE = 0,
-  LIDAR_RELOCALIZATION = 1,
-  ARUCO_RELOCALIZATION = 2
-};
-
-// 输出模式（控制 local/global 的输出关系）
-enum class PublishMode {
-  // 单输入复制：local_odom = global_odom = single_input
-  SINGLE_COPY = 0,
-  // 双输入直通：local_odom = local_meas, global_odom = global_meas 最直观的表现就是动捕环境下实现 机+车 fastlio 集群
-  DUAL_DIRECT = 1,
-  // 双输入初始化变换：先初始化 T_map_odom，再 global_odom = T_map_odom * local_odom
-  INIT_TRANSFORM = 2
-};
-
-// 定位源 能力描述，描述某个定位源的职责
-struct Capabilities {
-  bool provides_local{false}; // 该定位源能否提供local系下的位置估计
-  bool provides_global{false}; // 该定位源能否提供global系下的位置估计
-  std::vector<RelocalizationMode> supported_relocalization{}; // 该定位源能否支持重定位
-  PublishMode publish_mode{PublishMode::SINGLE_COPY}; // 输出策略
-};
-
-// 构造话题配置结构体
-struct Topics {
-  std::string local_topic;      // 大多数定位源都会提供local系下的定位能力，这里表示local系下订阅话题
-  std::string global_topic;     // 部分定位源会提供global系下定位能力，这里表示global系下订阅话题
-  std::string relocalization_topic; // 该定位源重定位/回环数据输出话题
+// 定位源输入的类型
+enum class LocalizationMode : uint8_t {
+  LOCAL = 0,        // odometry_topic -> local odom
+  GLOBAL = 1,       // odometry_topic -> global odom
+  LOCAL_AND_GLOBAL = 2, // odometry_topic -> local odom,
+                         // relocalization_topic -> global odom
+  LOCAL_WITH_ARUCO = 3   // odometry_topic -> local odom,
+                         // relocalization_topic -> relocalization
 };
 
 // 单个定位源的配置结构体
 struct SourceConfig {
-  int source_id{-1}; // 外部定位源id，对应yaml中的source_id
-  std::string source_name;     // 该定位源的名称，可以打印到日志中
-  Topics source_topics; // 配置该定位源的话题
-  Capabilities capabilities; // 配置该定位源的职责
-  double timeout_s{0.2}; // 配置超时时间
+	std::string source_name; // 该定位源的名称，可以打印到日志中
+  int source_id{-1};       // 外部定位源id，对应yaml中的source_id
+  LocalizationMode localization_mode{LocalizationMode::LOCAL}; // 配置定位源的输入类型
+	std::string odometry_topic{""};
+	std::string relocalization_topic{""};
+  double timeout_s{0.2};                       // 配置超时时间
 };
 
-}
-// clang-format on
+// 读整个 yaml 文件，返回转译后的 source_id 对应的 config 结构体
+SourceConfig load_config_from_yaml(const std::string &yaml_path,
+                                   const int source_id,
+                                   const std::string &uav_ns);

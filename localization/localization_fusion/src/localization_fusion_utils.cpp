@@ -1,250 +1,103 @@
-/**
- * @file localization_fusion_utils.cpp
- * @author your name (you@domain.com)
- * @brief
- * 本文件作为localization_fusion.hpp中参数加载/校验类函数的实现，请注意，这部分主要由ai进行生成，读取指定路径下的yaml格式配置文件并生成配置信息
- * @version 0.1
- * @date 2026-03-19
- *
- * @copyright Copyright (c) 2026
- *
- */
+#include "localization_fusion_types.hpp"
+#include "string_uav_namespace_utils.hpp"
+#include <stdexcept>       // 引入stdexcpet用于抛出异常
+#include <yaml-cpp/yaml.h> // 引入Yaml-cpp库，用于读取yaml文件
 
-#include "localization_fusion.hpp"
-
-#include <exception>
-
-#include <XmlRpcValue.h>
-
-#include "localization_fusion_utils.hpp"
-
-namespace localization_fusion {
-
-// 加载运行时参数
-bool LocalizationFusion::LoadRuntimeParams() {
-  // 使用私有命名空间，读取source_id参数
-  private_nh_.param<int>("source_id", selected_source_id_, -1);
-  // 默认loop回环为失能状态
-  std::string loop_str = "disable";
-  // 使用私有命名空间，读取loop参数
-  private_nh_.param<std::string>("loop", loop_str, "disable");
-
-  private_nh_.param<std::string>("global_frame_id", global_frame_id_,
-                                 global_frame_id_);
-  private_nh_.param<std::string>("local_frame_id", local_frame_id_,
-                                 local_frame_id_);
-  private_nh_.param<std::string>("base_frame_id", base_frame_id_,
-                                 base_frame_id_);
-
-  // UAV namespace (global params): /uav_name + /uav_id -> /uav{ID}
-  // 例：/uav_name=uav, /uav_id=1 => uav_ns="/uav1"
-  {
-    std::string uav_name;
-    int uav_id = 0;
-    const bool ok_name =
-        ros::param::get("/uav_name", uav_name) && !uav_name.empty();
-    const bool ok_id = ros::param::get("/uav_id", uav_id);
-    uav_ns.clear();
-    if (ok_name && ok_id) {
-      if (!uav_name.empty() && uav_name.front() == '/') {
-        uav_name.erase(0, 1);
-      }
-      uav_ns = "/" + uav_name + std::to_string(uav_id);
-    }
+// 这里我们只需要实现一个函数，就是从指定的路径中加载配置参数
+SourceConfig load_config_from_yaml(const std::string &yaml_path,
+                                   const int source_id,
+                                   const std::string &uav_ns) {
+  // 构建用于返回的结构体
+  SourceConfig result_config;
+  // 根据传入的yaml文件路径，查找对应的yaml文件
+  // 首先检查yaml路径是否为空
+  if (yaml_path.empty()) {
+    // 为空则抛出异常
+    throw std::invalid_argument("yaml_path connot be empty");
+  } else if (source_id < 0) {
+    throw std::invalid_argument("the source_id: " + std::to_string(source_id) +
+                                ", it must >= 0");
+  } else if (uav_ns.empty()) {
+    throw std::invalid_argument("uav_ns connot be empty");
   }
-
-  // 由于字符串解析函数可能遇到用户拼写错误抛出异常，因此这里使用try进行
+  // 输入初步没有问题，尝试读取yaml文件
+  // 构造一个YAML的根节点
+  YAML::Node root;
+  // 由于读取的过程可能引发异常，因此使用try语法
   try {
-    // 将回环参数进行枚举转换
-    selected_relocalization_mode_ =
-        localization_fusion_types::ParseRelocalizationMode(loop_str);
-  } catch (const std::exception &e) {
-    ROS_ERROR("[localization_fusion] Invalid loop param: %s", e.what());
-    return false;
+    // 从指定的路径中读取yaml文件并解析为YAML::Node
+    root = YAML::LoadFile(yaml_path);
+  } catch (const YAML::Exception &e) { // 如果解析的过程中发生错误，捕捉到异常
+    throw std::runtime_error("Failed to load yaml file '" + yaml_path + ":" +
+                             e.what());
   }
-  // 当读取到的selected_source_id_ 有效时输出true
-  return selected_source_id_ >= 0;
-}
-
-// 加载定位源配置（~sources_list）
-bool LocalizationFusion::LoadSourceConfigs() {
-  // XmlRpc::XmlRpcValue 是 ROS 参数系统中的通用容器，可承载 map/array/string
-  // 等类型。
-  XmlRpc::XmlRpcValue sources_list;
-
-  // 读取私有参数 ~sources_list。
-  // 该参数在launch文件中使用rosparam load 导入。
-  if (!private_nh_.getParam("sources_list", sources_list)) {
-    ROS_ERROR("[localization_fusion] Missing param: ~sources_list");
-    return false;
+  // 顺利读取，取出字段sources_list的部分
+  const YAML::Node sources_list = root["sources_list"];
+  // 如果sources_list为空，或者不是键值对的形式，则抛出异常
+  if (!sources_list || !sources_list.IsMap()) {
+    throw std::runtime_error("the yaml file '" + yaml_path +
+                             "' is missing a valid sources_list map");
   }
-
-  // 期望 sources_list 是 map 结构（yaml 键值对），例如：
-  // sources_list:
-  //   VIOBOT: {...}
-  //   MOCAP:  {...}
-  if (sources_list.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
-    ROS_ERROR("[localization_fusion] ~sources_list must be a map.");
-    return false;
-  }
-
-  // 清空旧配置，避免重复加载时残留历史数据。
-  sources_.clear();
-
-  // 使用迭代器，遍历每个 source 节点（key 为 source_name，value 为
-  // source_cfg）。
-  for (auto it = sources_list.begin(); it != sources_list.end(); ++it) {
-    // 先读取定位源的名字
-    const std::string source_name = static_cast<std::string>(it->first);
-    // 再构造配置键值对
-    XmlRpc::XmlRpcValue source_cfg = it->second;
-
-    // 先构造临时配置对象，解析完后再写入 sources_。
-    SourceConfig cfg;
-    cfg.source_name = source_name;
-
-    // source_id 是必填项，且必须是 int。
-    if (source_cfg.hasMember("source_id") &&
-        source_cfg["source_id"].getType() == XmlRpc::XmlRpcValue::TypeInt) {
-      cfg.source_id = static_cast<int>(source_cfg["source_id"]);
-    } else {
-      ROS_ERROR("[localization_fusion] source '%s' missing valid source_id.",
-                source_name.c_str());
-      return false;
-    }
-
-    // timeout_s 是可选项，允许 int/double
-    // 两种数值类型，但最后都会被转换为double类型使用
-    if (source_cfg.hasMember("timeout_s") &&
-        (source_cfg["timeout_s"].getType() == XmlRpc::XmlRpcValue::TypeDouble ||
-         source_cfg["timeout_s"].getType() == XmlRpc::XmlRpcValue::TypeInt)) {
-      cfg.timeout_s = static_cast<double>(source_cfg["timeout_s"]);
-    }
-
-    // capabilities 是能力描述：
-    // - provides_local / provides_global
-    // - supported_relocalization
-    // - publish_mode
-    if (source_cfg.hasMember("capabilities")) {
-      auto caps = source_cfg["capabilities"];
-
-      if (caps.hasMember("provides_local") &&
-          caps["provides_local"].getType() ==
-              XmlRpc::XmlRpcValue::TypeBoolean) {
-        cfg.capabilities.provides_local =
-            static_cast<bool>(caps["provides_local"]);
-      }
-      if (caps.hasMember("provides_global") &&
-          caps["provides_global"].getType() ==
-              XmlRpc::XmlRpcValue::TypeBoolean) {
-        cfg.capabilities.provides_global =
-            static_cast<bool>(caps["provides_global"]);
-      }
-
-      if (caps.hasMember("supported_relocalization") &&
-          caps["supported_relocalization"].getType() ==
-              XmlRpc::XmlRpcValue::TypeArray) {
-        for (int i = 0; i < caps["supported_relocalization"].size(); ++i) {
-          // 非字符串元素直接跳过，避免类型污染。
-          if (caps["supported_relocalization"][i].getType() !=
-              XmlRpc::XmlRpcValue::TypeString) {
-            continue;
-          }
-          try {
-            auto mode = localization_fusion_types::ParseRelocalizationMode(
-                static_cast<std::string>(caps["supported_relocalization"][i]));
-            // 去重后再加入 supported_relocalization。
-            localization_fusion_types::AddRelocalizationIfMissing(
-                cfg.capabilities, mode);
-          } catch (const std::exception &e) {
-            ROS_ERROR("[localization_fusion] source '%s' invalid loop: %s",
-                      source_name.c_str(), e.what());
-            return false;
-          }
+  // 根据传入的source_id寻找我们对应的定位源配置
+  // 首先，我们需要遍历source_list，找到source_id与传入的source_id一致的那一项，再取那一项的其他字段
+  // 使用迭代器进行遍历
+  for (const auto &item : sources_list) {
+    // 首先得到定位源的名字
+    const std::string source_name = item.first.as<std::string>();
+    // 得到定位源对应的字段
+    const YAML::Node source_node = item.second;
+    // 如果定位源对应的字段中，source_id 与传入的id一致，则认为是我们需要的
+    // 首先检查字段存在，再判断值相等,这样不会导致异常
+    if (source_node["source_id"] &&
+        source_node["source_id"].as<int>() == source_id) {
+      if (source_node
+              ["localization_mode"]) // 定位模式，分别有local,global,local_and_global,local_with_aruco，使用字符串判断
+      {
+        // 将yaml字段内容填充到temp_string
+        std::string temp_string =
+            source_node["localization_mode"].as<std::string>();
+        if (temp_string == "local") {
+          result_config.localization_mode = LocalizationMode::LOCAL;
+        } else if (temp_string == "global") {
+          result_config.localization_mode = LocalizationMode::GLOBAL;
+        } else if (temp_string == "local_and_global") {
+          result_config.localization_mode = LocalizationMode::LOCAL_AND_GLOBAL;
+        } else if (temp_string == "local_with_aruco") {
+          result_config.localization_mode = LocalizationMode::LOCAL_WITH_ARUCO;
+        } else {
+          // 运行到这里，说明一个都没匹配上，抛出异常
+          throw std::runtime_error(
+              "localization_mode in localization_sources.yaml need check");
         }
       }
-
-      if (caps.hasMember("publish_mode") &&
-          caps["publish_mode"].getType() == XmlRpc::XmlRpcValue::TypeString) {
-        try {
-          cfg.capabilities.publish_mode =
-              localization_fusion_types::ParsePublishMode(
-                  static_cast<std::string>(caps["publish_mode"]));
-        } catch (const std::exception &e) {
-          ROS_ERROR(
-              "[localization_fusion] source '%s' invalid publish_mode: %s",
-              source_name.c_str(), e.what());
-          return false;
-        }
+      // 里程计对应话题
+      if (source_node["odometry_topic"]) {
+        std::string temp_string =
+            source_node["odometry_topic"].as<std::string>();
+        // 这里存在的问题是，我们允许使用"${uav_ns}"用来代指/uav1这样的标识符,因此我们需要先转译
+        temp_string = sunray_common::replace_uav_ns(temp_string, uav_ns);
+        result_config.odometry_topic = temp_string;
       }
+      // 重定位对应话题,只有在启用了重定位的时候才需要读取
+      if ((result_config.localization_mode ==
+               LocalizationMode::LOCAL_AND_GLOBAL ||
+           result_config.localization_mode ==
+               LocalizationMode::LOCAL_WITH_ARUCO) &&
+          source_node["relocalization_topic"]) {
+        std::string temp_string =
+            source_node["relocalization_topic"].as<std::string>();
+        temp_string = sunray_common::replace_uav_ns(temp_string, uav_ns);
+        result_config.relocalization_topic = temp_string;
+      }
+      // 最后填充名字与序号
+      result_config.source_name = source_name;
+      result_config.source_id = source_node["source_id"].as<int>();
     }
-
-    // source_topics 描述输入话题配置。
-    // 若 yaml 中写 null，XmlRpc 中通常不是 TypeString，这里会保持默认空串。
-    if (source_cfg.hasMember("source_topics")) {
-      auto topics = source_cfg["source_topics"];
-      if (topics.hasMember("local_topic") &&
-          topics["local_topic"].getType() == XmlRpc::XmlRpcValue::TypeString) {
-        cfg.source_topics.local_topic =
-            static_cast<std::string>(topics["local_topic"]);
-      }
-      if (topics.hasMember("global_topic") &&
-          topics["global_topic"].getType() == XmlRpc::XmlRpcValue::TypeString) {
-        cfg.source_topics.global_topic =
-            static_cast<std::string>(topics["global_topic"]);
-      }
-      if (topics.hasMember("relocalization_topic") &&
-          topics["relocalization_topic"].getType() ==
-              XmlRpc::XmlRpcValue::TypeString) {
-        cfg.source_topics.relocalization_topic =
-            static_cast<std::string>(topics["relocalization_topic"]);
-      }
-    }
-
-    // 以 source_id 为键写入注册表（后写入会覆盖同 id 旧值）。
-    sources_[cfg.source_id] = cfg;
   }
-
-  // 至少加载到 1 个 source 才算成功。
-  return !sources_.empty();
-}
-
-// 在启动前检查 当前选择的 source + loop 组合是否符合Sunray项目准则、可正常运行
-bool LocalizationFusion::ValidateMode(
-    const SourceConfig &cfg, RelocalizationMode relocalization_mode) const {
-  // 检查当前的配置与launch文件中指定的回环模式是否匹配
-  if (!localization_fusion_types::SupportsRelocalization(cfg.capabilities,
-                                                         relocalization_mode)) {
-    ROS_ERROR(
-        "[localization_fusion] source_id=%d does not support relocalization=%s",
-        cfg.source_id,
-        localization_fusion_types::ToString(relocalization_mode));
-    return false;
-  }
-  // 如果定位源既不支持local系与不支持global系，则报错
-  if (!cfg.capabilities.provides_local && !cfg.capabilities.provides_global) {
-    ROS_ERROR(
-        "[localization_fusion] source_id=%d provides neither local nor global.",
-        cfg.source_id);
-    return false;
-  }
-  // 如果提供了local系但是订阅的local_topics为空字符串，则报错
-  if (cfg.capabilities.provides_local &&
-      !localization_fusion_types::HasLocalTopic(cfg.source_topics)) {
-    ROS_ERROR("[localization_fusion] source_id=%d requires local_topic.",
-              cfg.source_id);
-    return false;
-  }
-
-  // 如果提供了global系但是订阅的global_topics为空字符串，则报错
-  if (cfg.capabilities.provides_global &&
-      !localization_fusion_types::HasGlobalTopic(cfg.source_topics)) {
-    ROS_ERROR("[localization_fusion] source_id=%d requires global_topic.",
-              cfg.source_id);
-    return false;
-  }
-
-  return true;
-}
-
-} // namespace localization_fusion
+  // 结束遍历，得到结果(-1为结构体默认值，如果为-1说明没有更新id，也就是说没有对应的定位源)
+  if (result_config.source_id == -1) {
+    // 如果是-1表示SourceConfig使用的是默认的值，因此需要抛出异常
+    throw std::runtime_error("faild to load config");
+  } else
+    return result_config;
+};
