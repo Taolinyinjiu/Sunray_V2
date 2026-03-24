@@ -3,50 +3,39 @@
 std_msgs/Header header	# 消息头（时间戳与坐标系名）
 
 # -------------source-------------
-uint8 external_source	# 外部定位数据来源类型
+string external_source_name 
+uint8 external_source_id	# 外部定位数据来源
 
+string localization_mode_name 
+uint8 localization_mode # 重定位模式
+
+# external_source_id 重定位数据来源枚举
 uint8 VIOBOT = 0	# VIOBOT 系列定位源（含 VIOBOT2、Baton mini）
 uint8 MOCAP = 1	# 动作捕捉定位源
 uint8 VINS = 2
-	
-# -------------capability-------------
-bool provides_local	# 是否提供局部定位能力
+uint8 GAZEBO = 3
+uint8 GAZEBO_ARUCO = 4
 
-bool provides_global	# 是否提供全局定位能力
-
-bool provides_loopcheck	# 是否支持回环检测
+# localization_mode 重定位模式枚举
+uint8 LOCAL = 0
+uint8 GLOBAL = 1
+uint8 LOCAL_AND_GLOBAL = 2
+uint8 LOCAL_WITH_ARUCO = 3
 
 # -------------status-------------
-bool odom_valid	# 外部定位数据是否有效（通常基于数据间隔超时判定）
+bool has_odometry	# 是否收到里程计数据
+bool has_relocalization	# 是否收到重定位数据
 
-bool loopcheck_valid	# 回环检测是否有效
+time last_odometry_time	# 最新的里程计数据发送时间
 
-# -------------publish_mode-------------
-uint8 publish_mode	# 当前发布模式
+# 由于localization模块只负责聚合，转发，不对里程计数据进行分析，也不进行有效性判断
 
-uint8 SINGLE_COPY = 0	# 单路复制输出
-uint8 DUAL_DIRECT = 1	# 双路直出
-uint8 INIT_TRANSFORM = 2	# 初始化变换后输出
+bool odom_timeout	# 外部定位数据是否有效（通常基于数据间隔超时判定）
 
-# -------------topic-------------
-string external_local_topic	# 外部局部定位话题名
+# 由于重定位涉及到了tf转换，当重定位数据错误而继续时，会导致程序发生异常，因此这里对重定位数据进行一些校验
+bool relocalization_data_valid
 
-string external_global_topic	# 外部全局定位话题名
-
-string external_loopcheck_topic	# 外部回环检测话题名
-
-# -------------data-------------
-geometry_msgs/Vector3 local_position	# 位置 [x, y, z]，单位 m
-geometry_msgs/Vector3 local_velocity	# 速度 [vx, vy, vz]，单位 m/s
-geometry_msgs/Vector3 local_attitude_rpy	# 姿态角[roll pitch yaw] 单位deg
-geometry_msgs/Quaternion local_attitude_quat	# 姿态角 四元数
-
-geometry_msgs/Vector3 global_position	# 位置 [x, y, z]，单位 m
-geometry_msgs/Vector3 global_velocity	# 速度 [vx, vy, vz]，单位 m/s
-geometry_msgs/Vector3 global_attitude_rpy	# 姿态角[roll pitch yaw] 单位deg
-geometry_msgs/Quaternion global_attitude_quat	# 姿态角 四元数
-
-string loopcheck_tf_parent_frame
-string loopcheck_tf_child_frame
-
-geometry_msgs/Transform loopcheck_tf
+# -------------- tf --------------
+string global_frame_id
+string local_frame_id
+string base_frame_id

@@ -1,6 +1,6 @@
 <launch>
 	<!-- 当前使用的定位源配置 -->
-	<arg name="source_id" default="3" />
+	<arg name="source_id" default="4" />
 	<!-- 配置文件路径 -->
 	<arg name="config_yamlfile_path"
        default="$(find localization_fusion)/config/localization_sources.yaml" />
@@ -20,7 +20,7 @@
 	<node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion" output="screen" >
 		<!-- 将参数设置为节点私有参数-->
 		<param name="source_id" value="$(arg source_id)" />
-		<param name="config_yamlfile_path" value="$(arg )" />
+		<param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
 		<param name="health_rate_hz" value="$(arg health_rate_hz)" />
 	</node>
 

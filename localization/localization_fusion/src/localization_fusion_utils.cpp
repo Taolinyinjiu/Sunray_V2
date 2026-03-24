@@ -74,9 +74,12 @@ SourceConfig load_config_from_yaml(const std::string &yaml_path,
       if (source_node["odometry_topic"]) {
         std::string temp_string =
             source_node["odometry_topic"].as<std::string>();
-        // 这里存在的问题是，我们允许使用"${uav_ns}"用来代指/uav1这样的标识符,因此我们需要先转译
-        temp_string = sunray_common::replace_uav_ns(temp_string, uav_ns);
-        result_config.odometry_topic = temp_string;
+        if (!temp_string.empty()) {
+          result_config.odometry_topic = temp_string;
+        } else {
+          throw std::runtime_error(
+              "the odometry_topic in localization_sources.yaml missing value");
+        }
       }
       // 重定位对应话题,只有在启用了重定位的时候才需要读取
       if ((result_config.localization_mode ==
@@ -86,8 +89,11 @@ SourceConfig load_config_from_yaml(const std::string &yaml_path,
           source_node["relocalization_topic"]) {
         std::string temp_string =
             source_node["relocalization_topic"].as<std::string>();
-        temp_string = sunray_common::replace_uav_ns(temp_string, uav_ns);
-        result_config.relocalization_topic = temp_string;
+        if (!temp_string.empty()) {
+          result_config.relocalization_topic = temp_string;
+        } else {
+          throw std::runtime_error("the relocalization_topic in localization_sources.yaml missing value");
+        }
       }
       // 最后填充名字与序号
       result_config.source_name = source_name;

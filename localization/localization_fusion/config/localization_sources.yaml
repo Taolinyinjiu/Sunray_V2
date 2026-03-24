@@ -55,7 +55,7 @@ sources_list:
     # 输入类型：只输入global系下的里程计
     localization_mode: global
     # 订阅的里程计话题
-    odometry_topic: ""
+    odometry_topic: "{uav_ns}/sunray/gazebo_pose"
     # 订阅的重定位话题
     relocalization_topic: ""
 
@@ -65,9 +65,9 @@ sources_list:
     # 输入类型：输入local系下的里程计和基于aruco的重定位
     localization_mode: local_with_aruco
     # 订阅的里程计话题
-    odometry_topic: ""
+    odometry_topic: "${uav_ns}/sunray_odom_in"
     # 订阅的重定位话题
-    relocalization_topic: ""
+    relocalization_topic: "/aruco_test"
 
 
 
