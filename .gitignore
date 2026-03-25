@@ -52,5 +52,5 @@ __pycache__/
 /tools/build_scripts/build_deprecated/
 
 .clang-tidy
-.clang-format
+# .clang-format
 
