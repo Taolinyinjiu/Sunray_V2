@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
+  mavros_msgs
   roscpp
   rospy
   std_msgs
@@ -31,6 +32,7 @@ catkin_package(
     sensor_msgs
     nav_msgs
     geometry_msgs
+    mavros_msgs
     sunray_common
     sunray_msgs
     tf2
@@ -71,7 +73,18 @@ add_dependencies(localization_fusion_node
   ${catkin_EXPORTED_TARGETS}
 )
 
-install(TARGETS localization_fusion_core localization_fusion_node
+add_executable(send_vision_pose_node
+  test/send_vision_pose.cpp
+)
+target_link_libraries(send_vision_pose_node
+  ${catkin_LIBRARIES}
+)
+add_dependencies(send_vision_pose_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+install(TARGETS localization_fusion_core localization_fusion_node send_vision_pose_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

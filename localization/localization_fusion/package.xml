@@ -15,6 +15,7 @@
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>mavros_msgs</depend>
   <depend>sunray_common</depend>
   <depend>sunray_msgs</depend>
   <depend>tf2</depend>
