@@ -4,7 +4,6 @@
 #include <sunray_msgs/OdomStatus.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-
 #include <Eigen/Dense>
 
 // 由于我们在launch文件中将传入的参数设置为了节点私有参数，因此需要在这里构造私有句柄
@@ -225,7 +224,7 @@ void LocalizationFusion::relocalization_callback(const nav_msgs::OdometryConstPt
 		relocalization_data_valid_ = false;
 		return;
 	}
-	// 本来我是想处理完如果输入有问题抛出异常的，但是考虑到飞行过程总如果出现问题抛出异常，会导致local数据中断发送，因此这里我选择的是直接return
+	// 本来我是想处理完如果输入有问题抛出异常的，但是考虑到飞行过程总如果出现问题抛出异常，会导致local数据中断发送，因此这里我选择的是置标志位，然后return
 	relocalization_data_valid_ = true;
 	last_relocalization_data_ = *msg;
 	has_relocalization_data_ = true;
