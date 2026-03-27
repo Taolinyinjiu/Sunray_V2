@@ -5,6 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
+  geographic_msgs
   geometry_msgs
   message_generation
   nav_msgs
@@ -19,6 +20,8 @@ add_message_files(
   # Px4StateCore.msg
   # Px4StateHealth.msg
   Px4State.msg
+  UAVControlCMD.msg
+  UAVControllerState.msg
 )
 
 ## Add service definitions after creating files under srv/
@@ -31,6 +34,7 @@ add_message_files(
 generate_messages(
   DEPENDENCIES
   actionlib_msgs
+  geographic_msgs
   geometry_msgs
   nav_msgs
   sensor_msgs
@@ -40,6 +44,7 @@ generate_messages(
 catkin_package(
   CATKIN_DEPENDS
     actionlib_msgs
+    geographic_msgs
     geometry_msgs
     message_runtime
     nav_msgs

@@ -3,133 +3,156 @@
 
 # ========== 模块定义 ==========
 modules:
-  # Sunray重构 UAV_Control
-  uav_control:
-    description: "Sunray 重构中的uav_control"
-    source_path: "control/sunray_uav_control_refactor"
-    build_path: "build/sunray_uav_control_refactor"
-    dependencies: []
-  # Sunray 重构中的 PX4_Bridge
-  px4_bridge:
-    description: "Sunray 重构中的uav_control"
-    source_path: "common/px4_bridge"
-    build_path: "build/px4_bridge"
-    dependencies: []
-  # Sunray 重构中的demo
-  px4_param_tui:
-    description: "Sunray 重构中的测试demo"
-    source_path: "test/px4_param_tui"
-    build_path: "build/px4_param_tui"
-    dependencies: []
-  sunray_msgs:
-    description: "Sunray 重构中的测试demo"
-    source_path: "common/sunray_msgs"
-    build_path: "build/sunray_msgs"
-    dependencies: []
-  sunray_common:
-    description: "Sunray 重构中的测试demo"
-    source_path: "common/sunray_common"
-    build_path: "build/sunray_common"
-    dependencies: []
-  # 仿真模块功能包
-  sunray_simulator:
-    description: "sunray_simulator 功能包"
-    source_path: "simulation/sunray_simulator"
-    build_path: "build/sunray_simulator"
-    dependencies: []
-  # 驱动模块功能包
-  sunray_mavros:
-    description: "sunray_mavros 功能包"
-    source_path: "drivers/sunray_mavros"
-    build_path: "build/sunray_mavros"
-    dependencies: []
-  vrpn_client_ros:
-    description: "vrpn_client_ros 功能包"
-    source_path: "drivers/vrpn_client_ros"
-    build_path: "build/vrpn_client_ros"
-    dependencies: []
-  sunray_gimbal:
-    description: "sunray_gimbal 功能包"
-    source_path: "drivers/sunray_gimbal"
-    build_path: "build/sunray_gimbal"
-    dependencies: []
-  livox_ros_driver2:
-    description: "livox_ros_driver2 功能包"
-    source_path: "drivers/livox_ros_driver2"
-    build_path: "build/livox_ros_driver2"
-    dependencies: []
-  web_cam:
-    description: "web_cam 功能包"
-    source_path: "drivers/web_cam"
-    build_path: "build/web_cam"
-    dependencies: []
-  # 定位模块功能包
-  localization_fusion:
-    description: "localization_fusion 功能包"
-    source_path: "localization/localization_fusion"
-    build_path: "build/localization_fusion"
-    dependencies: [sunray_msgs]
-  fast_lio:
-    description: "fast_lio 功能包"
-    source_path: "localization/fast_lio"
-    build_path: "build/fast_lio"
-    dependencies: []
-  sunray_mocap:
-    description: "sunray_mocap 功能包"
-    source_path: "localization/sunray_mocap"
-    build_path: "build/sunray_mocap"
-    dependencies: []
-  sunray_viobot:
-    description: "sunray_viobot 功能包"
-    source_path: "localization/sunray_viobot"
-    build_path: "build/sunray_viobot"
-    dependencies: []
-  # 规划模块功能包
-  ego-planner-swarm:
-    description: "ego_planner_swarm 功能包"
-    source_path: "planning/source/ego-planner-swarm"
-    build_path: "build/ego-planner-swarm"
-    dependencies: []
+    # Sunray重构 UAV_Control
+    uav_control:
+        description: "Sunray 重构中的uav_control"
+        source_path: "control/sunray_uav_control_refactor"
+        build_path: "build/sunray_uav_control_refactor"
+        dependencies: []
+    # Sunray 重构中的 PX4_Bridge
+    px4_bridge:
+        description: "Sunray 重构中的uav_control"
+        source_path: "common/px4_bridge"
+        build_path: "build/px4_bridge"
+        dependencies: []
+    # Sunray 重构中的demo
+    px4_param_tui:
+        description: "Sunray 重构中的测试demo"
+        source_path: "test/px4_param_tui"
+        build_path: "build/px4_param_tui"
+        dependencies: []
+    sunray_msgs:
+        description: "Sunray 重构中的测试demo"
+        source_path: "common/sunray_msgs"
+        build_path: "build/sunray_msgs"
+        dependencies: []
+    sunray_common:
+        description: "Sunray 重构中的测试demo"
+        source_path: "common/sunray_common"
+        build_path: "build/sunray_common"
+        dependencies: []
+    # 仿真模块功能包
+    sunray_simulator:
+        description: "sunray_simulator 功能包"
+        source_path: "simulation/sunray_simulator"
+        build_path: "build/sunray_simulator"
+        dependencies: []
+    # 驱动模块功能包
+    sunray_mavros:
+        description: "sunray_mavros 功能包"
+        source_path: "drivers/sunray_mavros"
+        build_path: "build/sunray_mavros"
+        dependencies: []
+    vrpn_client_ros:
+        description: "vrpn_client_ros 功能包"
+        source_path: "drivers/vrpn_client_ros"
+        build_path: "build/vrpn_client_ros"
+        dependencies: []
+    sunray_gimbal:
+        description: "sunray_gimbal 功能包"
+        source_path: "drivers/sunray_gimbal"
+        build_path: "build/sunray_gimbal"
+        dependencies: []
+    livox_ros_driver2:
+        description: "livox_ros_driver2 功能包"
+        source_path: "drivers/livox_ros_driver2"
+        build_path: "build/livox_ros_driver2"
+        dependencies: []
+    web_cam:
+        description: "web_cam 功能包"
+        source_path: "drivers/web_cam"
+        build_path: "build/web_cam"
+        dependencies: []
+    # 定位模块功能包
+    localization_fusion:
+        description: "localization_fusion 功能包"
+        source_path: "localization/localization_fusion"
+        build_path: "build/localization_fusion"
+        dependencies: [sunray_msgs]
+    fast_lio:
+        description: "fast_lio 功能包"
+        source_path: "localization/fast_lio"
+        build_path: "build/fast_lio"
+        dependencies: []
+    sunray_mocap:
+        description: "sunray_mocap 功能包"
+        source_path: "localization/sunray_mocap"
+        build_path: "build/sunray_mocap"
+        dependencies: []
+    sunray_viobot:
+        description: "sunray_viobot 功能包"
+        source_path: "localization/sunray_viobot"
+        build_path: "build/sunray_viobot"
+        dependencies: []
+    # 规划模块功能包
+    ego-planner-swarm:
+        description: "ego_planner_swarm 功能包"
+        source_path: "planning/source/ego-planner-swarm"
+        build_path: "build/ego-planner-swarm"
+        dependencies: []
 
 # ========== 预定义组 ==========
 # 直接基于 build_deprecated 目录的脚本内容
 groups:
-  # common测试
-  common_test:
-    description: "common测试"
-    modules: ["px4_bridge"]
-  # control测试
-  control_test:
-    description: "control测试"
-    modules: ["uav_control"]
-  # localization_fusion 测试用
-  localization_fusion_test:
-    description: "localization_fusion测试包"
-    modules: ["sunray_mavros","vrpn_client_ros","localization_fusion"]
+    # common测试
+    common_test:
+        description: "common测试"
+        modules: ["px4_bridge"]
+    # control测试
+    control_test:
+        description: "control测试"
+        modules: ["uav_control"]
+    # localization_fusion 测试用
+    localization_fusion_test:
+        description: "localization_fusion测试包"
+        modules: ["sunray_mavros", "vrpn_client_ros", "localization_fusion"]
 
-  # 仿真
-  Simulation:
-    description: "仿真功能包"
-    modules: ["sunray_simulator"]
-    
-  # 机型分类
-  S-150-Basic:
-    description: "Sunray-150-基础款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","web_cam","sunray_mocap"]
+    # 仿真
+    Simulation:
+        description: "仿真功能包"
+        modules: ["sunray_simulator"]
 
-  S-150-Lidar:
-    description: "Sunray-150-三维激光雷达款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","web_cam","livox_ros_driver2","sunray_mocap","fast_lio"]
+    # 机型分类
+    S-150-Basic:
+        description: "Sunray-150-基础款功能包"
+        modules: ["sunray_mavros", "vrpn_client_ros", "web_cam", "sunray_mocap"]
 
-  S-150-Stereo:
-    description: "Sunray-150-双目款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","sunray_mocap","sunray_viobot"]
+    S-150-Lidar:
+        description: "Sunray-150-三维激光雷达款功能包"
+        modules:
+            [
+                "sunray_mavros",
+                "vrpn_client_ros",
+                "web_cam",
+                "livox_ros_driver2",
+                "sunray_mocap",
+                "fast_lio",
+            ]
 
-  S-300-Standard:
-    description: "Sunray-300-标准款功能包"
-    modules: ["sunray_mavros","vrpn_client_ros","web_cam","livox_ros_driver2","sunray_mocap","fast_lio","sunray_gimbal"]
+    S-150-Stereo:
+        description: "Sunray-150-双目款功能包"
+        modules:
+            [
+                "sunray_mavros",
+                "vrpn_client_ros",
+                "sunray_mocap",
+                "sunray_viobot",
+            ]
+
+    S-300-Standard:
+        description: "Sunray-300-标准款功能包"
+        modules:
+            [
+                "sunray_mavros",
+                "vrpn_client_ros",
+                "web_cam",
+                "livox_ros_driver2",
+                "sunray_mocap",
+                "fast_lio",
+                "sunray_gimbal",
+            ]
 
 # ========== 构建配置 ==========
 build_config:
-  default_jobs: "auto"
-  catkin_command: "catkin_make"
+    default_jobs: "auto"
+    catkin_command: "catkin_make"
