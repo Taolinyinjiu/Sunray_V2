@@ -6,8 +6,8 @@ modules:
     # Sunray重构 UAV_Control
     uav_control:
         description: "Sunray 重构中的uav_control"
-        source_path: "control/sunray_uav_control_refactor"
-        build_path: "build/sunray_uav_control_refactor"
+        source_path: "control/sunray_uav_control"
+        build_path: "build/sunray_uav_control"
         dependencies: []
     # Sunray 重构中的 PX4_Bridge
     px4_bridge:

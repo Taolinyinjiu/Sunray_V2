@@ -1,5 +1,0 @@
-int32 land_type # land_type: 0=code land, 1=px4 auto land
-float64 land_max_velocity # 降落过程中的最大速度
----
-bool accepted
-string message

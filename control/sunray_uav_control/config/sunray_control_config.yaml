@@ -1,184 +1,114 @@
 # -------------------本文件中所设置的参数，在uav_control_fsm中使用yaml-cpp库进行读取，launch文件仅传递config.yaml路径----------------------
+
+# -------------------基本参数-----------------------
 basic_param:
-  # 无人机质量
-  mass_kg: 0.96
-  # 重力加速度
-  gravity: 9.8
-  # 控制器类型 0:px4_position_controller 1:px4_velocity_controller 2:sunray_attitude_controller 3:rl_raptor_controller
-  controller_types: 2
-  # 控制器更新频率(Hz)
-  controller_update_frequency: 100
-  # 状态机低频监督循环频率(Hz)
-  supervisor_update_frequency: 10
-  # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符uav1之类的
-  odom_topic_name: "${uav_ns}/sunray/localization/local_odom"
-  # 是否将里程计与px4进行融合
-  fuse_odom_to_px4: true
-  # 里程计融合类型 0：vision_pose 1:odometry 建议在当前里程计没有协方差时选择vision_pose
-  fust_odom_type: 0
-  # 融合的频率(建议设定在30-50Hz之间，如果链路富裕可以提高到80-100)
-  fuse_odom_frequency: 50
-  # 轨迹参考类型 0:flat_output(微分平坦轨迹) 1:se3(全位姿轨迹)
-  trajectory_type: 0
+    # 无人机质量
+    mass_kg: 0.96
+    # 重力加速度
+    gravity: 9.8
+    # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
+    controller_types: 2
+    # 控制器更新频率(Hz)
+    controller_update_frequency: 100
+    # 状态机低频监督循环频率(Hz)
+    supervisor_update_frequency: 10
+    # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符uav1之类的
+    odom_topic_name: "${uav_ns}/sunray/localization/local_odom"
+    # 里程计融合类型 0: disable 1：vision_pose 2:odometry 建议在当前里程计没有协方差时选择vision_pose
+    fuse_odom_type: 1
+    # 里程计融合的频率(需要根据外部里程计的更新频率决定，融合频率应当低于或者等于外部里程计更新频率)
+    fuse_odom_frequency: 50
+    # 轨迹参考类型 0:flat_output(微分平坦轨迹) 1:se3(全位姿轨迹)
+    trajectory_type: 0
+
+# -------------------保护参数-----------------------
+protct_param:
+    # 最低电压
+    low_voltage: 13.2 # 4S battery
+    # 达到最低电压时执行的操作 0:无操作 1:立即降落 2：返航并降落
+    low_voltage_operate: 0
+    # 是否允许在无遥控器连接时启动无人机
+    control_with_no_rc: false
+    # 当遥控器状态从连接变成丢失连接时，执行什么操作 0:无操作 1:降落 2:返回
+    lost_with_rc: 1
+    # 是否允许代码解锁无人机
+    arm_with_code: true
+    # 是否允许代码起飞
+    takeoff_with_code: true
+    # 是否进行倾倒检测：当无人机姿态发生大幅度反转时上锁无人机
+    check_flip: false
+    # 最大倾斜角度(角度制)
+    tilt_angle_max: 20
+    # 当msg超时执行的操作，请注意，由于mavros超时必然导致setpoint无法得到有效的执行，也就是说mavros连接丢失，则无人机控制回到px4自身而非sunray控制节点，因此此处并不包含mavros的丢失
+    # 0:无操作 1:立即降落 2：返航并降落
+    msg_timeout_operate: 1
+
+# -------------------消息超时参数-----------------------
+# 此处均指正常工作，也就是持续有数据后丢失或者数据超时
+msg_timeout_param: # 单位为秒(s)
+    # 里程计
+    local_odometry: 0.5
+    # mavros链路(由于所有与px4有关的数据都是从mavros链路拿到的，因此这里直接判断链路稳定性)
+    mavros_connect: 0.5
+    # TODO：地面站链路(不工作则不会考虑)
+    sunray_station: 0.5
+
+# -------------------起飞降落参数-----------------------
+takeoff_land_param:
+    # 相对当前位置的起飞高度(米)
+    takeoff_relative_height: 0.6
+    # 起飞过程中的最大速度(m/s)
+    takeoff_max_velocity: 0.5
+    # 指定降落模式 0：code to land 1:px4.auto_land
+    land_type: 0
+    # 降落过程中的最大速度
+    land_max_velocity: 0.5
+
+# -------------------电子围栏参数-----------------------
+# local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上
+local_fence_param:
+    x_max: 4.0
+    x_min: -4.0
+    y_max: 4.0
+    y_min: -4.0
+    z_max: 2.0
+    z_min: 0.0 #如果你的使用场景中，起飞点并不是最低点，可以考虑酌情修改
+# TODO：添加经纬高地理围栏参数
+
+# -------------------飞行速度参数-----------------------
+velocity_param:
+    # 最大飞行速度(m/s)
+    max_velocity:
+        x_vel: 3.0
+        y_vel: 3.0
+        z_vel: 1.0
+    # 遥控器控制时的最大速度
+    max_velocity_with_rc:
+        x_vel: 1.0
+        y_vel: 1.0
+        z_vel: 1.0
+    # 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
+    yaw_rate: 30
+
 # -------------------高频控制源仲裁参数-----------------------
 # 高频topic控制统一通过 envelope meta 进入状态机仲裁
 # 低频service命令(起飞/降落/返航/单次位置控制)会直接打断当前高频控制源
 command_sources:
-  default:
-    priority: 0
-    timeout: 0.5
-  api:
-    priority: 20
-    timeout: 0.5
-  planner:
-    priority: 40
-    timeout: 0.5
-  mission:
-    priority: 50
-    timeout: 0.5
-  rc:
-    priority: 100
-    timeout: 0.2
-  safety:
-    priority: 255
-    timeout: 0.1
-# -------------------保护参数-----------------------
-protct_param:
-  # 最低电压
-  low_voltage: 13.2 # 4S battery
-  # 达到最低电压时执行的操作 0:无操作 1:降落 2：返回
-  low_voltage_operate: 0
-  # 是否允许在无遥控器连接时启动无人机
-  control_with_no_rc: false
-  # 当遥控器状态从连接变成丢失连接时，执行什么操作 0:无操作 1:降落 2:返回
-  lost_with_rc: 1
-  # 是否允许代码解锁无人机
-  arm_with_code: true
-  # 是否允许代码起飞
-  takeoff_with_code: true
-  # 是否进行倾倒检测：当无人机姿态发生大幅度反转时上锁无人机
-  check_flip: false
-  # 最大倾斜角度(角度制)
-  tilt_angle_max: 20
-# -------------------起飞降落参数-----------------------
-takeoff_land_param:
-  # 相对当前位置的起飞高度(米)
-  takeoff_relative_height: 0.6
-  # 起飞过程中的最大速度(m/s)
-  takeoff_max_velocity: 0.5
-  # 指定降落模式 0：code to land 1:px4.auto_land
-  land_type: 0
-  # 降落过程中的最大速度
-  land_max_velocity: 0.5
-# -------------------Helper 阻塞接口等待参数-----------------------
-# 起飞阻塞接口等待 FSM 进入 HOVER 的超时时间
-takeoff_wait_s: 30.0
-# 单点/返航中间段等阻塞接口的默认等待时间
-move_wait_s: 30.0
-# 降落/返航阻塞接口等待 FSM 完成的超时时间
-land_wait_s: 30.0
-# FSM 已完成后，额外等待 PX4 landed/disarmed 确认的时间
-land_confirm_wait_s: 3.0
-# Helper 内部轮询等待频率
-wait_poll_hz: 20.0
-# -------------------电子围栏参数-----------------------
-# 使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上
-local_fence_param:
-  x_max: 4.0
-  x_min: -4.0
-  y_max: 4.0
-  y_min: -4.0
-  z_max: 2.0
-  z_min: 0.0 #如果你的使用场景中，起飞点并不是最低点，可以考虑酌情修改
-# -------------------高级速度控制模式电子围栏参数-----------------------
-# 该参数表示在使用高级速度控制时，无人机以当前位置为中心，构造空间矩形，当无人机跃过该空间矩形时切换到悬停模式，如果无法切换为悬停模式则切换到降落模式，如果降落模式也无法切换则切换为紧急降落模式
-velocity_electronic_fence:
-  x: 1.0
-  y: 1.0
-  z: 1.0
-# -------------------消息超时参数-----------------------
-msg_timeout:
-  # 里程计
-  odom: 0.5
-  # 遥控器
-  rc: 0.5
-  # 对于向Sunray_FSM发送控制命令的各部分，都需要有心跳包的连接
-  control_heartbeat: 0.5
-  imu: 0.5
-  battery: 0.5
-# -------------------位置误差容许参数-----------------------
-error_tolerance:
-  pos_x: 0.2
-  pos_y: 0.2
-  pos_z: 0.2
-# -------------------飞行速度参数-----------------------
-# 最大飞行速度(m/s)
-max_velocity:
-  x_vel: 3.0
-  y_vel: 3.0
-  z_vel: 1.0
-# 遥控器控制时的最大速度
-max_velocity_with_rc:
-  x_vel: 1.0
-  y_vel: 1.0
-  z_vel: 1.0
-# 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
-yaw_rate: 30
-
-# -------------------控制器参数-----------------------
-# -----------px4_position_controller----------------
-
-# 该控制器基于px4完整的控制环，因此参数主要由px4中的控制环参数决定
-# 对该控制器的参数整定，使用QGC的在线优化以及PID Tuning界面观察曲线调整参数
-
-# -----------px4_velocity_controller----------------
-#  该控制器基于px4速度环，对于位置的控制基于PID控制理论，PID的输出作为速度环的输入，因此需要调节PID参数
-# MPC前缀并不表示模型预测控制理论，而是 多选翼控制器
-px4_velocity_controller_gains:
-  position:
-    MPC_XY_P: 1.0
-    MPC_XY_I: 0.0
-    MPC_XY_D: 0.0
-    MPC_Z_P: 1.0
-    MPC_Z_I: 0.0
-    MPC_Z_D: 0.0
-  settings:
-    # 积分分离阈值，当位置偏差过大时，停止积分防止大幅度的超调
-    anti_windup_threshold: 2.0
-
-# ----------sunray_attitude_controller---------------
-sunray_attitude_controller:
-  hover_percent: 0.37
-  # 姿态-推力输出的最小推力，需允许降落末段进入 0.0x 区间
-  min_command_thrust: 0.02
-  pxy_int_max: 10.0
-  pz_int_max: 10.0
-  Kp_xy: 3.
-  Kp_z: 3.0
-  Kv_xy: 3.0
-  Kv_z: 3.0
-  Kvi_xy: 0.3
-  Kvi_z: 0.3
-  # 降落阶段 XY 保持比例系数
-  land_xy_kp: 1.0
-  # 降落阶段 XY 最大修正速度(m/s)
-  land_max_velocity_xy_mps: 0.5
-  # 近地低速触地检测阈值
-  land_touchdown_velocity_threshold_mps: 0.1
-  land_touchdown_velocity_hold_time_s: 1.0
-  # 进入近地末段的高度阈值(m)
-  land_touchdown_height_threshold_m: 0.15
-  # 触地/近地末段的增强下压速度(m/s)
-  land_touchdown_downpress_speed_mps: 0.35
-  land_touchdown_downpress_time_s: 1.0
-  # 触地短暂收尾阶段相对常规下降速度的放大倍数
-  land_near_ground_speed_scale: 1.6
-  # z参考允许略低于地面的偏置，用于抵消地效(m)
-  land_reference_margin_m: 0.05
-  # 进入近地末段后，随高度连续增加的推力压低裕度
-  land_near_ground_thrust_margin: 0.04
-  # 触地锁存后，相对悬停油门额外压低的更强推力裕度
-  land_touchdown_thrust_margin: 0.10
-
-# ----------rl_raptor_controller---------------
-# 基本的思路是修改px4代码，uorb消息 -> mavlink -> mavros消息 <- sunray_control
+    default:
+        priority: 0
+        timeout: 0.5
+    api:
+        priority: 20
+        timeout: 0.5
+    planner:
+        priority: 40
+        timeout: 0.5
+    mission:
+        priority: 50
+        timeout: 0.5
+    rc:
+        priority: 100
+        timeout: 0.2
+    safety:
+        priority: 255
+        timeout: 0.1

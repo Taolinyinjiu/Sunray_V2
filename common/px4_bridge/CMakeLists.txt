@@ -126,63 +126,86 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
 )
 
-add_library(px4_bridge
+set(PX4_BRIDGE_SOURCES)
+foreach(src_file
   src/px4_data_reader.cpp
   src/px4_data_reader_callback.cpp
   src/px4_param_manager.cpp
 )
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${src_file}")
+    list(APPEND PX4_BRIDGE_SOURCES "${src_file}")
+  endif()
+endforeach()
+
+if(PX4_BRIDGE_SOURCES STREQUAL "")
+  message(FATAL_ERROR "px4_bridge has no available source files.")
+endif()
+
+add_library(px4_bridge ${PX4_BRIDGE_SOURCES})
 
 target_link_libraries(px4_bridge
   ${catkin_LIBRARIES}
   ${EIGEN3_LIBRARIES}
 )
 
-add_executable(px4_bridge_test_node
-  src/px4_bridge_test_node.cpp
-)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/px4_bridge_test_node.cpp")
+  add_executable(px4_bridge_test_node
+    src/px4_bridge_test_node.cpp
+  )
 
-target_link_libraries(px4_bridge_test_node
-  px4_bridge
-  ${catkin_LIBRARIES}
-  ${EIGEN3_LIBRARIES}
-)
+  target_link_libraries(px4_bridge_test_node
+    px4_bridge
+    ${catkin_LIBRARIES}
+    ${EIGEN3_LIBRARIES}
+  )
+endif()
 
 #############
 ## Testing ##
 #############
 if(CATKIN_ENABLE_TESTING)
-  catkin_add_gtest(px4_bridge_param_types_ut
-    test/unit/test_px4_param_types.cpp
-  )
-  if(TARGET px4_bridge_param_types_ut)
-    target_link_libraries(px4_bridge_param_types_ut
-      ${catkin_LIBRARIES}
-      ${EIGEN3_LIBRARIES}
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/unit/test_px4_param_types.cpp")
+    catkin_add_gtest(px4_bridge_param_types_ut
+      test/unit/test_px4_param_types.cpp
     )
+    if(TARGET px4_bridge_param_types_ut)
+      target_link_libraries(px4_bridge_param_types_ut
+        ${catkin_LIBRARIES}
+        ${EIGEN3_LIBRARIES}
+      )
+    endif()
   endif()
 
-  catkin_add_gtest(px4_bridge_data_reader_ut
-    test/unit/test_px4_data_reader.cpp
-    src/px4_data_reader.cpp
-    src/px4_data_reader_callback.cpp
-  )
-  if(TARGET px4_bridge_data_reader_ut)
-    target_link_libraries(px4_bridge_data_reader_ut
-      ${catkin_LIBRARIES}
-      ${EIGEN3_LIBRARIES}
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/unit/test_px4_data_reader.cpp"
+     AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/px4_data_reader.cpp"
+     AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/px4_data_reader_callback.cpp")
+    catkin_add_gtest(px4_bridge_data_reader_ut
+      test/unit/test_px4_data_reader.cpp
+      src/px4_data_reader.cpp
+      src/px4_data_reader_callback.cpp
     )
+    if(TARGET px4_bridge_data_reader_ut)
+      target_link_libraries(px4_bridge_data_reader_ut
+        ${catkin_LIBRARIES}
+        ${EIGEN3_LIBRARIES}
+      )
+    endif()
   endif()
 
-  catkin_add_gtest(px4_bridge_reader_param_integration
-    test/integration/test_px4_data_reader_param_fetch.cpp
-    src/px4_data_reader.cpp
-    src/px4_data_reader_callback.cpp
-  )
-  if(TARGET px4_bridge_reader_param_integration)
-    target_link_libraries(px4_bridge_reader_param_integration
-      ${catkin_LIBRARIES}
-      ${EIGEN3_LIBRARIES}
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/integration/test_px4_data_reader_param_fetch.cpp"
+     AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/px4_data_reader.cpp"
+     AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/px4_data_reader_callback.cpp")
+    catkin_add_gtest(px4_bridge_reader_param_integration
+      test/integration/test_px4_data_reader_param_fetch.cpp
+      src/px4_data_reader.cpp
+      src/px4_data_reader_callback.cpp
     )
+    if(TARGET px4_bridge_reader_param_integration)
+      target_link_libraries(px4_bridge_reader_param_integration
+        ${catkin_LIBRARIES}
+        ${EIGEN3_LIBRARIES}
+      )
+    endif()
   endif()
 endif()
 
