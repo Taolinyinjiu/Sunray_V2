@@ -1,13 +1,13 @@
 <launch>
 	<!-- 当前使用的定位源配置 -->
-	<arg name="source_id" default="4" />
+	<arg name="source_id" default="3" />
 	<!-- 配置文件路径 -->
 	<arg name="config_yamlfile_path"
        default="$(find localization_fusion)/config/localization_sources.yaml" />
 	<!-- OdomStatus输出的频率 -->
 	<arg name="health_rate_hz" default="10.0" />
 	<!-- 单机测试 -->
-	<arg name="test" default="false" />
+	<arg name="test" default="true" />
 	<arg name="test_uav_name" default="uav" />
 	<arg name="test_uav_id" default="1" />
 	<!-- 如果是测试，则向全局设置参数uav_name+uav_id -->
@@ -15,7 +15,7 @@
 		<param name="/uav_name" value="$(arg test_uav_name)" />
 		<param name="/uav_id" type="int" value="$(arg test_uav_id)" />
 	</group>
-	
+
 	<!-- 启动节点 -->
 	<node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion" output="screen" >
 		<!-- 将参数设置为节点私有参数-->

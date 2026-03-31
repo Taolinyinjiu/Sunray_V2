@@ -1,73 +1,70 @@
 # 设计sources_list的目的在于，我们希望以一种简洁的方式，实现对不同定位源的配置，并希望得到一定的的兼容性
 
 sources_list:
-  # # Example 定位源的名称
-  # Example:
-  #   # source_id 表示该定位源的序号，在localization_fusion.launch文件中，通过指定定位源的序号，来加载对应的参数
-  #   source_id: -1
-  #   # localization_mode 表示该定位源的输入模式，分为一下四种模式
-  #   # 0: local 只输入local系下的里程计  如 vins,viobot,fastlio2
-  #   # 1: global 只输入global系下的里程计 如 rtk,mocap,aruco
-  #   # 2: local_and_global 同时输入local和global系下的里程计，并且global系是持续输入 fastlio2 + lidar_relocalization 
-  #   # 3: local_with_aruco 同时输入local和global系下的里程计，但global系是偶尔输入 fastlio2 + aruco_relocalization
-  #   localization_mode: 0
-  #   # odometry_topic 表示订阅的里程计话题名
-  #   # 由于yaml文件无法实现读取动态的ros参数，但考虑到会有多机的需求，因此这里使用${uav_ns}作为前缀时，表示订阅的话题前加上无人机的标识符uav_name+uav_id
-  #   # 假设当前为单机仿真，则订阅话题为"/uav1/sunray/example/odom"
-  #   odometry_topic: "${uav_ns}/sunray/example/odom" 
-  #   # relocalization_topic 表示订阅的重定位话题名，重定位话题的数据类型应该为nav_msgs::Odometry
-  #   # odometry_types: 2 or 3, relocalization_topic 作为global系数据输出，tf树根据两者值构造
-  #   relocalization_topic: ""
+    # # Example 定位源的名称
+    # Example:
+    #   # source_id 表示该定位源的序号，在localization_fusion.launch文件中，通过指定定位源的序号，来加载对应的参数
+    #   source_id: -1
+    #   # localization_mode 表示该定位源的输入模式，分为一下四种模式
+    #   # 0: local 只输入local系下的里程计  如 vins,viobot,fastlio2
+    #   # 1: global 只输入global系下的里程计 如 rtk,mocap,aruco
+    #   # 2: local_and_global 同时输入local和global系下的里程计，并且global系是持续输入 fastlio2 + lidar_relocalization
+    #   # 3: local_with_aruco 同时输入local和global系下的里程计，但global系是偶尔输入 fastlio2 + aruco_relocalization
+    #   localization_mode: 0
+    #   # odometry_topic 表示订阅的里程计话题名
+    #   # 由于yaml文件无法实现读取动态的ros参数，但考虑到会有多机的需求，因此这里使用${uav_ns}作为前缀时，表示订阅的话题前加上无人机的标识符uav_name+uav_id
+    #   # 假设当前为单机仿真，则订阅话题为"/uav1/sunray/example/odom"
+    #   odometry_topic: "${uav_ns}/sunray/example/odom"
+    #   # relocalization_topic 表示订阅的重定位话题名，重定位话题的数据类型应该为nav_msgs::Odometry
+    #   # odometry_types: 2 or 3, relocalization_topic 作为global系数据输出，tf树根据两者值构造
+    #   relocalization_topic: ""
 
-  VIOBOT:
-    # 定位源序号
-    source_id: 0
-    # 输入类型：只输入local系下的里程计
-    localization_mode: local
-    # 订阅的里程计话题
-    odometry_topic: ""
-    # 订阅的重定位话题
-    relocalization_topic: ""
-  
-  MOCAP:
-    # 定位源序号
-    source_id: 1
-    # 输入类型：只输入global系下的里程计
-    localization_mode: global
-    # 订阅的里程计话题
-    odometry_topic: ""
-    # 订阅的重定位话题
-    relocalization_topic: ""
+    VIOBOT:
+        # 定位源序号
+        source_id: 0
+        # 输入类型：只输入local系下的里程计
+        localization_mode: local
+        # 订阅的里程计话题
+        odometry_topic: ""
+        # 订阅的重定位话题
+        relocalization_topic: ""
 
-  VINS:
-    # 定位源序号
-    source_id: 2
-    # 输入类型：只输入local系下的里程计
-    localization_mode: local
-    # 订阅的里程计话题
-    odometry_topic: ""
-    # 订阅的重定位话题
-    relocalization_topic: ""
+    MOCAP:
+        # 定位源序号
+        source_id: 1
+        # 输入类型：只输入global系下的里程计
+        localization_mode: global
+        # 订阅的里程计话题
+        odometry_topic: ""
+        # 订阅的重定位话题
+        relocalization_topic: ""
 
-  GAZEBO:
-    # 定位源序号
-    source_id: 3
-    # 输入类型：只输入global系下的里程计
-    localization_mode: global
-    # 订阅的里程计话题
-    odometry_topic: "{uav_ns}/sunray/gazebo_pose"
-    # 订阅的重定位话题
-    relocalization_topic: ""
+    VINS:
+        # 定位源序号
+        source_id: 2
+        # 输入类型：只输入local系下的里程计
+        localization_mode: local
+        # 订阅的里程计话题
+        odometry_topic: ""
+        # 订阅的重定位话题
+        relocalization_topic: ""
 
-  GAZEBO_ARUCO:
-    # 定位源序号
-    source_id: 4
-    # 输入类型：输入local系下的里程计和基于aruco的重定位
-    localization_mode: local_with_aruco
-    # 订阅的里程计话题
-    odometry_topic: "${uav_ns}/sunray_odom_in"
-    # 订阅的重定位话题
-    relocalization_topic: "/aruco_test"
+    GAZEBO:
+        # 定位源序号
+        source_id: 3
+        # 输入类型：只输入global系下的里程计
+        localization_mode: global
+        # 订阅的里程计话题
+        odometry_topic: "${uav_ns}/sunray/gazebo_pose"
+        # 订阅的重定位话题
+        relocalization_topic: ""
 
-
-
+    GAZEBO_ARUCO:
+        # 定位源序号
+        source_id: 4
+        # 输入类型：输入local系下的里程计和基于aruco的重定位
+        localization_mode: local_with_aruco
+        # 订阅的里程计话题
+        odometry_topic: "${uav_ns}/sunray_odom_in"
+        # 订阅的重定位话题
+        relocalization_topic: "/aruco_test"

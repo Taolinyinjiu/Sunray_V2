@@ -7,7 +7,9 @@
     3. 向Sunray_FSM提供规范的函数实现
     4. 发布controller_state话题，属于自定义消息sunray_msgs::UAVControllerState
     5. 修改构造函数为仅存储ros句柄，显示调用init()函数进行初始化
-    6. TODO: [ ] 实现public中需要的函数
+    6. 初始化检查使用void类型，如果检查失败会通过抛出异常的方式终止程序运行
+       运行时检查函数使用bool类型，检查失败通过返回false警告
+    7. TODO: [ ] 实现public中需要的函数
              [-] 实现controller_state_pub_的初始化
              [-] 实现pub_timer_的初始化
              [ ] 实现px4_mode和px4_arm的同步(从mavros_helper中读取数据)
@@ -29,7 +31,7 @@
 #include <px4_param_manager/px4_param_manager.h>
 #include <ros/node_handle.h>
 #include <string>
-
+#include "utils/quintic_curve.hpp"
 // 在这里构造参数结构体？对于原生控制器，要检查什么参数呢
 struct Original_Param {
     // 1, vision_pose
@@ -70,28 +72,48 @@ class PX4_OriginController : public Controller_Interface {
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
     // ----------------------控制器状态话题更新函数-----------------
-    void pub_controller_state();  // 发布controller_state
+    void pub_controller_state() override;  // 发布controller_state
   private:
     // ----------------------配置相关-----------------------
     std::string config_yamlfile_path_;
     std::string uav_ns_;
     Original_Param config_param_;
-    // ----------------------检查参数-----------------------
-    bool check_param();
+    // ----------------------检查相关-----------------------
+    // void 类型 + throw后缀 = 整个启动过程只会执行一次，抛出异常则终止启动
+    // bool 类型 表示运行过程中检查，会反复调用maybe
+    void load_and_validate_config_or_throw();   // 读取并校验yaml文件配置的参数
+    void ensure_fusion_param_ready_or_throw();  // 检查外部里程计融合参数是否正确
+
+    bool check_px4_basic_state();      // 检查px4飞控的状态
+    bool check_mavros_stream_ready();  // 检查mavros_helper是否在稳定的更新数据
+    bool check_odom_freshness();       // 检查外部里程计数据是否新鲜
+    bool check_odom_for_fusion(
+        control_common::UAVStateEstimate& fuse_odom);  // 检查本次用于融合的里程计是否有效
+    bool controller_ready_ = false;
     // ---------------------定时器回调函数---------------------
     void pub_px4_state_timer_cb(const ros::TimerEvent&);    // 发布PX4State话题
     void pub_vision_fuse_timer_cb(const ros::TimerEvent&);  // 发布vision_fuse
-    // 将pub_controller_state() 移出定时器回调函数，其发布由状态机手动调用，以保持数据的新鲜度
     // -------------------ros句柄与mavros辅助类-----------------
     ros::NodeHandle nh_;
     MavrosHelper mavros_helper_;
     PX4_ParamManager mavros_param_;
+    // ---------------------曲线辅助类-----------------
+    curve::QuinticCurve quint_curve_;
     // --------------------px4状态-----------------------
     control_common::FlightMode px4_mode_ = control_common::FlightMode::Undefined;
     control_common::LandedState px4_land_ = control_common::LandedState::Undefined;
     bool px4_arm_ = false;
     double pub_px4_state_freq_ = 100.0;  // 考虑简单点，在这里硬编码px4state的发布频率
     bool param_state_ = false;
+
+    // 开始切换offboard的触发时间
+    ros::Time start_checkout_offboard_time_{ros::Time(0)};
+    ros::Time last_checkout_offboard_time_{ros::Time(0)};
+    // arm解锁成功的触发时间
+    ros::Time last_arm_time_{ros::Time(0)};
+    // 起飞成功判断阈值,保持至少2s的稳定，算到达期望位置
+    double takeoff_success_keep_time_s = 2;
+    ros::Time start_checkout_takeoff_success_time_{ros::Time(0)};
     // --------------------里程计状态---------------------
     control_common::UAVStateEstimate uav_odometry_;
     bool has_uav_odometry_{false};

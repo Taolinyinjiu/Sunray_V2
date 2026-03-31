@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(sunray_uav_control)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Eigen3 REQUIRED)
@@ -14,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
   sunray_common
   sunray_msgs
 )
+
+find_package(yaml-cpp REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
@@ -30,11 +37,25 @@ include_directories(
 
 add_library(sunray_uav_control_lib
   src/mavros_helper/mavros_helper.cpp
+  src/controller/utils.cpp
 )
 
 target_link_libraries(sunray_uav_control_lib
   ${catkin_LIBRARIES}
   ${EIGEN3_LIBRARIES}
+  yaml-cpp
+)
+
+add_executable(origin_controller_takeoff_test
+  test/px4_origin_controller_takeoff/origin_controller_test.cpp
+  src/controller/px4_origin_controller.cpp
+)
+
+target_link_libraries(origin_controller_takeoff_test
+  sunray_uav_control_lib
+  ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
+  yaml-cpp
 )
 
 if(CATKIN_ENABLE_TESTING)
@@ -73,6 +94,7 @@ install(DIRECTORY launch/
 
 install(TARGETS
   sunray_uav_control_lib
+  origin_controller_takeoff_test
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

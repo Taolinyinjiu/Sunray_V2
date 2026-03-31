@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" ?>
 <package format="2">
   <name>sunray_uav_control</name>
   <version>0.0.0</version>
@@ -15,8 +15,10 @@
   <depend>px4_bridge</depend>
   <depend>roscpp</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>sunray_common</depend>
   <depend>sunray_msgs</depend>
+  <depend>yaml-cpp</depend>
   <test_depend>gtest</test_depend>
 
   <export>

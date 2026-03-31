@@ -10,8 +10,7 @@ class Controller_Interface {
     virtual bool init() = 0;  // 使用显式的 init代替构造函数
     virtual bool is_ready() = 0;
     // -------------状态注入---------------
-    virtual void set_current_odom(const control_common::UAVStateEstimate& odom);
-    virtual void set_vision_param(bool fuse_type, double fuse_odom_freq);
+    virtual void set_current_odom(const control_common::UAVStateEstimate& odom) = 0;
     // -------------运动相关接口-------------
     // 触发起飞，参数为起飞高度和最大起飞速度
     virtual bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) = 0;
@@ -34,6 +33,9 @@ class Controller_Interface {
     // ---------------------起降状态查询接口-----------------------
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_land_complete() = 0;
+    // ---------------------控制器状态发布接口----------------------
+    virtual void pub_controller_state() = 0;
+    // 为了将Sunray_FSM与Mavros/PX4解耦，这里还是决定，参数由控制器自己读取yaml文件而不是函数传递
 
   protected:
 };
