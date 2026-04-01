@@ -128,9 +128,7 @@ include_directories(
 
 set(PX4_BRIDGE_SOURCES)
 foreach(src_file
-  src/px4_data_reader.cpp
-  src/px4_data_reader_callback.cpp
-  src/px4_param_manager.cpp
+  src/px4_param_manager/px4_param_manager.cpp
 )
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${src_file}")
     list(APPEND PX4_BRIDGE_SOURCES "${src_file}")
