@@ -119,7 +119,7 @@ inline void QuinticCurve::clear() {
 }
 
 inline bool QuinticCurve::is_ready() {
-    return start_time_ != ros::Time(0);
+    return curve_constraint_type_ != ConstarintType::Undefined;
 }
 
 inline QuinticCurveState QuinticCurve::get_result() {

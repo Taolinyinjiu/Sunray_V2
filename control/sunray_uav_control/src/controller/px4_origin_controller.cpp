@@ -88,6 +88,7 @@ void PX4_OriginController::set_current_odom(const control_common::UAVStateEstima
 }
 
 // -------------运动相关接口------------
+
 bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
     // 如何设计呢？起始这里的问题是，我们如何触发？
     // 实现思路为这样，我们不断的触发这个函数直到达到预设的起飞高度，也就是这样
@@ -116,6 +117,9 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
         quint_curve_.set_curve_maxvel(max_takeoff_velocity);
         // quint_curve并不显式的设置开始运动的时间，我们以第一次调用get_result的时刻为开始运动的时间
         // 我们需要考虑无人机是否需要一点时间来进行加速，也就是说从电机桨叶不转动到转动的过程，是先不计算数据的
+        // 顺便记录一下初始时刻的yaw角和地面高度
+        takeoff_yaw_ = mavros_helper_.get_yaw_rad();
+        takeoff_ground_height = uav_odometry_.position.z();
     }
     control_common::Mavros_State px4_state = mavros_helper_.get_state();
     if (px4_state.flight_mode != control_common::FlightMode::Offboard) {
@@ -134,9 +138,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                             control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
         // 速度置零
         setpoint_cmd.velocity = Eigen::Vector3d::Zero();
-        // 从mavros中拿出yaw角
-        double current_yaw = mavros_helper_.get_yaw_rad();
-        setpoint_cmd.yaw = current_yaw;
+        // 保持yaw角不变
+        setpoint_cmd.yaw = takeoff_yaw_;
         // 发送
         mavros_helper_.pub_local_setpoint(setpoint_cmd);
         // // 开始进入 offboard 检查窗口
@@ -167,35 +170,36 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
         } else {  // 飞控当前处于解锁状态
             // 注意到起飞阶段由于无人机在地面，与在空中的动力学分析不一致，起飞阶段setpoint具有严重的滞后
             // 这里尝试一种起飞方式，先通过速度控制，实现离地，然后切换为轨迹控制
-            // if (last_arm_time_ == ros::Time(0)) {
-            //     control_common::Mavros_SetpointLocal setpoint_cmd;
-            //     // 设置坐标系
-            //     setpoint_cmd.frame =
-            //         control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
-            //     // 掩码这里先忽略位置与加速度和yaw_rate，使用位运算
-            //     setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
-            //                         control_common::Mavros_SetpointLocal::Mask::IgnorePy |
-            //                         control_common::Mavros_SetpointLocal::Mask::IgnorePz |
-            //                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
-            //                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
-            //                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
-            //                         control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
-            //     // z轴速度设置为0.1
-            //     setpoint_cmd.velocity = Eigen::Vector3d(0, 0, 0.1);
-            //     // 从mavros中拿出yaw角
-            //     double current_yaw = mavros_helper_.get_yaw_rad();
-            //     setpoint_cmd.yaw = current_yaw;
-            //     // 发送
-            //     mavros_helper_.pub_local_setpoint(setpoint_cmd);
-            //     // 设置轨迹点
-            //     quint_curve_.set_start_trajpoint(uav_odometry_.position,
-            //                                      Eigen::Vector3d(0, 0, 0.1));
-            //     if (abs(uav_odometry_.velocity.z() - 0.1) < 0.02) {
-            //         last_arm_time_ = now;
-            //     } else {
-            //         return false;
-            //     }
-            // }
+            if (last_arm_time_ == ros::Time(0)) {
+                control_common::Mavros_SetpointLocal setpoint_cmd;
+                // 设置坐标系
+                setpoint_cmd.frame =
+                    control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+                // 掩码这里先忽略位置与加速度和yaw_rate，使用位运算
+                setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
+                                    control_common::Mavros_SetpointLocal::Mask::IgnorePy |
+                                    control_common::Mavros_SetpointLocal::Mask::IgnorePz |
+                                    control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                                    control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                                    control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
+                                    control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+                // z轴速度设置为0.1
+                setpoint_cmd.velocity = Eigen::Vector3d(0, 0, 0.1);
+                // 设置yaw角为初始时刻yaw角
+                setpoint_cmd.yaw = takeoff_yaw_;
+                // 发送
+                mavros_helper_.pub_local_setpoint(setpoint_cmd);
+                // 设置轨迹点
+                quint_curve_.set_start_trajpoint(uav_odometry_.position,
+                                                 Eigen::Vector3d(0, 0, 0.1));
+                ROS_INFO("uav_odometry z : %f", uav_odometry_.position.z());
+                ROS_INFO("takeoff_ground_height : %f", takeoff_ground_height);
+                if (uav_odometry_.position.z() - takeoff_ground_height > 0.05) {
+                    last_arm_time_ = now;
+                } else {
+                    return false;
+                }
+            }
             // 得到五次项曲线输出
             curve::QuinticCurveState curve_result;
             curve_result = quint_curve_.get_result();
@@ -206,12 +210,11 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             setpoint_cmd.position = curve_result.position;
             setpoint_cmd.velocity = curve_result.velocity;
             setpoint_cmd.accel_or_force = curve_result.acceleration;
-            setpoint_cmd.yaw = mavros_helper_.get_yaw_rad();
+            setpoint_cmd.yaw = takeoff_yaw_;
             // 发布setpotin_cmd
             mavros_helper_.pub_local_setpoint(setpoint_cmd);
             // 在这里判断是否到达期望的起飞目标点
-            Eigen::Vector3d pos_err_vec =
-                uav_odometry_.position - quint_curve_.get_start_position();
+            Eigen::Vector3d pos_err_vec = uav_odometry_.position - quint_curve_.get_end_position();
             double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
 
             Eigen::Vector3d vel_err_vec = uav_odometry_.velocity - Eigen::Vector3d::Zero();
@@ -233,6 +236,76 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
 }
 // 仅测试
 bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
+    ros::Time now = ros::Time::now();
+    // 第一次进入land函数，先初始化用到的变量
+    if (start_land_time_ == ros::Time(0)) {
+        // 清除掉五次项曲线的参数，然后重新填入
+        quint_curve_.clear();
+        // 使用当前位置作为轨迹的起点
+        quint_curve_.set_start_trajpoint(uav_odometry_.position, Eigen::Vector3d::Zero());
+        // 使用当前位置的xy和地面高度+2作为轨迹的终点,速度使用0.1
+        Eigen::Vector3d land_position = Eigen::Vector3d(
+            uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height + 0.2);
+        Eigen::Vector3d land_vel = Eigen::Vector3d(0, 0, -0.2);
+        // 设置轨迹的终点参数
+        quint_curve_.set_end_trajpoint(land_position, land_vel);
+        // 使用最大降落速度求解时间
+        quint_curve_.set_curve_maxvel(max_land_velocity);
+        // 记录当前的yaw角
+        land_yaw_ = mavros_helper_.get_yaw_rad();
+        // 更新时间戳
+        start_land_time_ = now;
+    }
+    if (land_near_ground_ == false) {
+        // 得到五次项曲线输出
+        curve::QuinticCurveState curve_result;
+        curve_result = quint_curve_.get_result();
+        // 使用五次项输出填充setpoint_cmd
+        control_common::Mavros_SetpointLocal setpoint_cmd;
+        setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+        setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+        setpoint_cmd.position = curve_result.position;
+        setpoint_cmd.velocity = curve_result.velocity;
+        setpoint_cmd.accel_or_force = curve_result.acceleration;
+        // yaw角设置为降落触发时的yaw角
+        setpoint_cmd.yaw = land_yaw_;
+        // 发布setpotin_cmd
+        mavros_helper_.pub_local_setpoint(setpoint_cmd);
+    }
+    // 检查轨迹是否执行到目标点，也就是近地段
+    bool near_ground = (uav_odometry_.position.z() - quint_curve_.get_end_position().z() < 0.05);
+    bool velocity_low = (uav_odometry_.velocity.norm() < 0.15);
+    control_common::LandedState px4_landed = mavros_helper_.get_state().landed_state;
+    if (near_ground && velocity_low) {
+        land_near_ground_ = true;
+    }
+    // 轨迹结束后，设置为锁xy然后持续下降
+    if (land_near_ground_ == true) {
+        control_common::Mavros_SetpointLocal setpoint_cmd;
+        setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+        setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate |
+                            control_common::Mavros_SetpointLocal::Mask::IgnorePz;
+        curve::QuinticCurveState curve_result;
+        curve_result = quint_curve_.get_result();
+        setpoint_cmd.position = curve_result.position;
+        setpoint_cmd.velocity = curve_result.velocity;
+        setpoint_cmd.yaw = land_yaw_;
+        // 持续检查是否接触地面
+        velocity_low = std::abs(uav_odometry_.velocity.z()) < 0.1;
+        bool px4_land = px4_landed == control_common::LandedState::OnGround;
+        if (velocity_low || px4_land) {  // 考虑传感器漂移，这里用||逻辑
+            if (land_touchground_time_ == ros::Time(0)) {
+                land_touchground_time_ = now;
+            }
+            if ((now - land_touchground_time_).toSec() > 1.0) {
+                mavros_helper_.set_arm(false);  // 上锁
+                return true;
+            }
+        } else {
+            land_touchground_time_ = ros::Time(0);
+        }
+        mavros_helper_.pub_local_setpoint(setpoint_cmd);
+    }
     return false;
 }
 bool PX4_OriginController::hover() {

@@ -44,13 +44,28 @@ class OriginControllerTakeoffTest {
         } else {
             ROS_WARN_THROTTLE(1.0, "controller is error.");
         }
-        const bool done = controller_.takeoff(relative_takeoff_height_, max_takeoff_velocity_);
-        if (done) {
-            ROS_INFO("[origin_controller_test] takeoff complete.");
-            // 可选：继续悬停测试
-            // controller_.hover();
-        } else {
-            ROS_WARN_THROTTLE(1.0, "error.");
+        if (has_land_ == false) {
+            const bool done = controller_.takeoff(relative_takeoff_height_, max_takeoff_velocity_);
+            if (done) {
+                ROS_INFO("[origin_controller_test] takeoff complete.");
+                if (takeoff_success_time == ros::Time(0))
+                    takeoff_success_time = ros::Time::now();
+                // 可选：继续悬停测试
+                // controller_.hover();
+            } else {
+                ROS_WARN_THROTTLE(1.0, "error.");
+            }
+        }
+        if (takeoff_success_time != ros::Time(0)) {
+            if ((ros::Time::now() - takeoff_success_time).toSec() > 5) {
+                has_land_ = true;
+                const bool land_state = controller_.land(0, 0.2);
+                if (land_state) {
+                    ROS_INFO("[origin_controller_test] land complete.");
+                } else {
+                    ROS_WARN_THROTTLE(1.0, "land error.");
+                }
+            }
         }
     }
 
@@ -59,9 +74,11 @@ class OriginControllerTakeoffTest {
     ros::Subscriber odom_sub_;
     ros::Timer timer_;
 
+    ros::Time takeoff_success_time{ros::Time(0)};
+
     PX4_OriginController controller_;
     bool has_odom_;
-
+    bool has_land_;
     double relative_takeoff_height_{1.5};
     double max_takeoff_velocity_{0.6};
     double loop_hz_{30.0};
@@ -71,7 +88,6 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "origin_controller_takeoff_test");
     ros::NodeHandle nh;
     OriginControllerTakeoffTest node(nh);
-
     ros::spin();
     return 0;
 }

@@ -105,7 +105,11 @@ class PX4_OriginController : public Controller_Interface {
     bool px4_arm_ = false;
     double pub_px4_state_freq_ = 100.0;  // 考虑简单点，在这里硬编码px4state的发布频率
     bool param_state_ = false;
-
+    // 初始时刻的yaw角(弧度 rad)，用于起飞锁定
+    double takeoff_yaw_ = 0.0;
+    double land_yaw_ = 0.0;
+    // 地面高度
+    double takeoff_ground_height = 0.0;
     // 开始切换offboard的触发时间
     ros::Time start_checkout_offboard_time_{ros::Time(0)};
     ros::Time last_checkout_offboard_time_{ros::Time(0)};
@@ -114,6 +118,10 @@ class PX4_OriginController : public Controller_Interface {
     // 起飞成功判断阈值,保持至少2s的稳定，算到达期望位置
     double takeoff_success_keep_time_s = 2;
     ros::Time start_checkout_takeoff_success_time_{ros::Time(0)};
+    // 降落阶段开始的时间
+    ros::Time start_land_time_{ros::Time(0)};
+    bool land_near_ground_ = false;
+    ros::Time land_touchground_time_{ros::Time(0)};
     // --------------------里程计状态---------------------
     control_common::UAVStateEstimate uav_odometry_;
     bool has_uav_odometry_{false};
