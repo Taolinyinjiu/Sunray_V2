@@ -35,7 +35,7 @@ sources_list:
         # 输入类型：只输入global系下的里程计
         localization_mode: global
         # 订阅的里程计话题
-        odometry_topic: ""
+        odometry_topic: "${uav_ns}/sunray/odometry"
         # 订阅的重定位话题
         relocalization_topic: ""
 

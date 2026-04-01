@@ -175,14 +175,14 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 // 设置坐标系
                 setpoint_cmd.frame =
                     control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
-                // 掩码这里先忽略位置与加速度和yaw_rate，使用位运算
-                setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
-                                    control_common::Mavros_SetpointLocal::Mask::IgnorePy |
-                                    control_common::Mavros_SetpointLocal::Mask::IgnorePz |
+                // 掩码这里忽略z轴位置，三轴加速度和yaw_rate，使用位运算
+                setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePz |
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+                // 设置xy轴的位置
+                setpoint_cmd.position = uav_odometry_.position;
                 // z轴速度设置为0.1
                 setpoint_cmd.velocity = Eigen::Vector3d(0, 0, 0.1);
                 // 设置yaw角为初始时刻yaw角
@@ -219,7 +219,9 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
 
             Eigen::Vector3d vel_err_vec = uav_odometry_.velocity - Eigen::Vector3d::Zero();
             double vel_err = vel_err_vec.norm();  // 推荐：速度误差标量
-            if (pos_err < 0.15 && vel_err < 0.15) {
+            ROS_INFO("pos_err : %f", pos_err);
+            ROS_INFO("vel_err : %f", vel_err);
+            if (pos_err < 0.3 && vel_err < 0.15) {
                 if (start_checkout_takeoff_success_time_ == ros::Time(0)) {
                     start_checkout_takeoff_success_time_ = now;
                 }
