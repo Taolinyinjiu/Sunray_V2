@@ -173,8 +173,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             if (last_arm_time_ == ros::Time(0)) {
                 control_common::Mavros_SetpointLocal setpoint_cmd;
                 // 设置坐标系
-                setpoint_cmd.frame =
-                    control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+                // setpoint_cmd.frame =
+                //     control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
                 // 掩码这里忽略z轴位置，三轴加速度和yaw_rate，使用位运算
                 setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePz |
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
@@ -207,7 +207,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             curve_result = quint_curve_.get_result();
             // 使用五次项输出填充setpoint_cmd
             control_common::Mavros_SetpointLocal setpoint_cmd;
-            setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+            // setpoint_cmd.frame =
+            // control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
             setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
             setpoint_cmd.position = curve_result.position;
             setpoint_cmd.velocity = curve_result.velocity;
@@ -274,7 +275,7 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
         curve_result = quint_curve_.get_result();
         // 使用五次项输出填充setpoint_cmd
         control_common::Mavros_SetpointLocal setpoint_cmd;
-        setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+        // setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
         setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
         setpoint_cmd.position = curve_result.position;
         setpoint_cmd.velocity = curve_result.velocity;
@@ -294,7 +295,7 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
     // 轨迹结束后，设置为锁xy然后持续下降
     if (land_near_ground_ == true) {
         control_common::Mavros_SetpointLocal setpoint_cmd;
-        setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+        // setpoint_cmd.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
         setpoint_cmd.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate |
                             control_common::Mavros_SetpointLocal::Mask::IgnorePz;
         curve::QuinticCurveState curve_result;
