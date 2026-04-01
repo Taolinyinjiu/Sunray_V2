@@ -195,8 +195,9 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 ROS_INFO("takeoff_ground_height : %f", takeoff_ground_height);
                 if (uav_odometry_.position.z() - takeoff_ground_height > 0.05) {
                     last_arm_time_ = now;
-                    quint_curve_.set_start_trajpoint(uav_odometry_.position,
-                                                     Eigen::Vector3d(0, 0, 0.1));
+                    Eigen::Vector3d renew_pos = start_pos;
+                    renew_pos.z() = uav_odometry_.position.z();
+                    quint_curve_.set_start_trajpoint(renew_pos, Eigen::Vector3d(0, 0, 0.1));
                 } else {
                     return false;
                 }
@@ -244,11 +245,19 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
     if (start_land_time_ == ros::Time(0)) {
         // 清除掉五次项曲线的参数，然后重新填入
         quint_curve_.clear();
+        ROS_INFO("satrt_position x : %f,y : %f,z : %f",
+                 uav_odometry_.position.x(),
+                 uav_odometry_.position.y(),
+                 uav_odometry_.position.z());
         // 使用当前位置作为轨迹的起点
         quint_curve_.set_start_trajpoint(uav_odometry_.position, Eigen::Vector3d::Zero());
         // 使用当前位置的xy和地面高度+2作为轨迹的终点,速度使用0.1
         Eigen::Vector3d land_position = Eigen::Vector3d(
             uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height + 0.2);
+        ROS_INFO("land_position x : %f,y : %f,z : %f",
+                 land_position.x(),
+                 land_position.y(),
+                 land_position.z());
         Eigen::Vector3d land_vel = Eigen::Vector3d(0, 0, -0.2);
         // 设置轨迹的终点参数
         quint_curve_.set_end_trajpoint(land_position, land_vel);
