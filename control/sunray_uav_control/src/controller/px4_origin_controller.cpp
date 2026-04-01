@@ -1,4 +1,6 @@
 #include "controller/px4_origin_controller.hpp"
+#include "Eigen/src/Core/Matrix.h"
+#include "control_data_types/mavros_helper_data_types.hpp"
 #include "string_uav_namespace_utils.hpp"
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
@@ -246,19 +248,15 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
     if (start_land_time_ == ros::Time(0)) {
         // 清除掉五次项曲线的参数，然后重新填入
         quint_curve_.clear();
-        ROS_INFO("satrt_position x : %f,y : %f,z : %f",
-                 uav_odometry_.position.x(),
-                 uav_odometry_.position.y(),
-                 uav_odometry_.position.z());
-        // 使用当前位置作为轨迹的起点
-        quint_curve_.set_start_trajpoint(uav_odometry_.position, Eigen::Vector3d::Zero());
+
+        // 使用当前setpoint的输出position部分为轨迹的起点，保证setpoint的连续性
+        control_common::Mavros_SetpointLocal last_setpoint;
+        last_setpoint = mavros_helper_.get_target_local();
+        Eigen::Vector3d last_setpoint_position = last_setpoint.position;
+        quint_curve_.set_start_trajpoint(last_setpoint_position, Eigen::Vector3d::Zero());
         // 使用当前位置的xy和地面高度+2作为轨迹的终点,速度使用0.1
         Eigen::Vector3d land_position = Eigen::Vector3d(
             uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height + 0.2);
-        ROS_INFO("land_position x : %f,y : %f,z : %f",
-                 land_position.x(),
-                 land_position.y(),
-                 land_position.z());
         Eigen::Vector3d land_vel = Eigen::Vector3d(0, 0, -0.2);
         // 设置轨迹的终点参数
         quint_curve_.set_end_trajpoint(land_position, land_vel);
@@ -268,6 +266,14 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
         land_yaw_ = mavros_helper_.get_yaw_rad();
         // 更新时间戳
         start_land_time_ = now;
+        ROS_INFO("satrt_position x : %f,y : %f,z : %f",
+                 last_setpoint.position.x(),
+                 last_setpoint.position.y(),
+                 last_setpoint.position.z());
+        ROS_INFO("land_position x : %f,y : %f,z : %f",
+                 land_position.x(),
+                 land_position.y(),
+                 land_position.z());
     }
     if (land_near_ground_ == false) {
         // 得到五次项曲线输出
@@ -302,11 +308,15 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
         curve_result = quint_curve_.get_result();
         setpoint_cmd.position = curve_result.position;
         setpoint_cmd.velocity = curve_result.velocity;
+
         setpoint_cmd.yaw = land_yaw_;
         // 持续检查是否接触地面
         velocity_low = std::abs(uav_odometry_.velocity.z()) < 0.1;
+        if (velocity_low == true) {
+            setpoint_cmd.velocity.z() -= 0.1;
+        }
         bool px4_land = px4_landed == control_common::LandedState::OnGround;
-        if (velocity_low || px4_land) {  // 考虑传感器漂移，这里用||逻辑
+        if (velocity_low && px4_land) {  // 考虑传感器漂移，这里用||逻辑
             if (land_touchground_time_ == ros::Time(0)) {
                 land_touchground_time_ = now;
             }
