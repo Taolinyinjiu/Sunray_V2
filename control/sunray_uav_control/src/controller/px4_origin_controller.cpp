@@ -182,7 +182,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
                                     control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
                 // 设置xy轴的位置
-                setpoint_cmd.position = uav_odometry_.position;
+                Eigen::Vector3d start_pos = quint_curve_.get_start_position();
+                setpoint_cmd.position = start_pos;
                 // z轴速度设置为0.1
                 setpoint_cmd.velocity = Eigen::Vector3d(0, 0, 0.1);
                 // 设置yaw角为初始时刻yaw角
@@ -190,12 +191,12 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 // 发送
                 mavros_helper_.pub_local_setpoint(setpoint_cmd);
                 // 设置轨迹点
-                quint_curve_.set_start_trajpoint(uav_odometry_.position,
-                                                 Eigen::Vector3d(0, 0, 0.1));
                 ROS_INFO("uav_odometry z : %f", uav_odometry_.position.z());
                 ROS_INFO("takeoff_ground_height : %f", takeoff_ground_height);
                 if (uav_odometry_.position.z() - takeoff_ground_height > 0.05) {
                     last_arm_time_ = now;
+                    quint_curve_.set_start_trajpoint(uav_odometry_.position,
+                                                     Eigen::Vector3d(0, 0, 0.1));
                 } else {
                     return false;
                 }
