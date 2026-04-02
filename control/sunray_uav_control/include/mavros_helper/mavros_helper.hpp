@@ -30,6 +30,7 @@
 #include <mavros_msgs/SysStatus.h>
 #include <mavros_msgs/BatteryStatus.h>
 #include <mavros_msgs/EstimatorStatus.h>
+#include <mavros_msgs/CommandLong.h>
 #include <sensor_msgs/Imu.h>
 #include <nav_msgs/Odometry.h>
 #include <mavros_msgs/PositionTarget.h>
@@ -119,6 +120,8 @@ class MavrosHelper {
     bool set_px4_mode(control_common::FlightMode flight_mode);
     // 解锁飞控,传入 true解锁，false上锁，返回值同上，并不表示结果，而表示这个触发的请求是否被处理
     bool set_arm(bool arm_state);
+    // 紧急上锁
+    bool emergency_kill();
     // 重启飞控
     bool reboot_px4();
     // 向mavros发布setpoint数据
@@ -148,7 +151,7 @@ class MavrosHelper {
     ros::ServiceClient px4_arm_client_;
     ros::ServiceClient px4_mode_client_;
     ros::ServiceClient px4_reboot_client;
-
+    ros::ServiceClient px4_cmdlong_client_;  // 新增：用于emergency kil
     // 本地缓存
     ros::NodeHandle nh_;
     std::string uav_ns_;

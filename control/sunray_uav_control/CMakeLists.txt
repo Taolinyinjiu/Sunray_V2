@@ -58,6 +58,30 @@ target_link_libraries(origin_controller_takeoff_test
   yaml-cpp
 )
 
+add_executable(origin_controller_square_test
+  test/px4_origin_controller_takeoff/origin_controller_square.cpp
+  src/controller/px4_origin_controller.cpp
+)
+
+target_link_libraries(origin_controller_square_test
+  sunray_uav_control_lib
+  ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
+  yaml-cpp
+)
+
+add_executable(origin_controller_square_test_velocity
+  test/px4_origin_controller_takeoff/origin_controller_square_velocity.cpp
+  src/controller/px4_origin_controller.cpp
+)
+
+target_link_libraries(origin_controller_square_test_velocity
+  sunray_uav_control_lib
+  ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
+  yaml-cpp
+)
+
 if(CATKIN_ENABLE_TESTING)
   catkin_add_gtest(base_controller_compile_test
     test/base_controller_compile_test.cpp
@@ -95,6 +119,8 @@ install(DIRECTORY launch/
 install(TARGETS
   sunray_uav_control_lib
   origin_controller_takeoff_test
+  origin_controller_square_test
+  origin_controller_square_test_velocity
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

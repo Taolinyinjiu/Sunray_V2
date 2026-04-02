@@ -30,10 +30,9 @@ struct UavControlCmd {
         UNDEFINE = 11
     };
     enum class YawMode : uint8_t {
-        SET_YAW = 0,      // 设置yaw角
-        KEEP_YAW = 1,     // 保持当前yaw角不变
+        KEEP_YAW = 0,     // 设置yaw角
+        SET_YAW = 1,      // 保持当前yaw角不变
         SET_YAWRATE = 2,  // 设置yaw角的角速度
-        UNDEFINE = 3
     };
 
     CmdSource cmd_source{CmdSource::UNDEFINE};     // 控制指令来源
@@ -44,12 +43,10 @@ struct UavControlCmd {
     Eigen::Vector3d acceleration{Eigen::Vector3d::Zero()};
     Eigen::Vector3d jerk{Eigen::Vector3d::Zero()};
     Eigen::Vector3d snap{Eigen::Vector3d::Zero()};
-    Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()};
-    Eigen::Vector3d attitude{Eigen::Vector3d::Zero()};
     // ------------这个特殊一点，经纬高---------------
     Eigen::Vector3d wgs84_position{Eigen::Vector3d::Zero()};
     // ------------- yaw角控制模式---------------
-    YawMode yaw_mode{YawMode::UNDEFINE};
+    YawMode yaw_mode{YawMode::KEEP_YAW};
     double yaw{0.0};
     double yaw_rate{0.0};
     // ---------------是否固定为当前高度----------------

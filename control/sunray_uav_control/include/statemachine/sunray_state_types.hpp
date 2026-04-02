@@ -16,13 +16,14 @@ namespace sunray_fsm {
 
 // sunray_fsm的状态集合
 enum class SunrayState {
-    OFF = 0,  ///< 待机/未激活状态。
-    INIT,     ///< 各组件初始化成功，允许在该状态使用遥控器进行控制
-    TAKEOFF,  ///< 起飞过程状态。
-    HOVER,    ///< 悬停状态（主稳态）。
-    RETURN,   ///< 返航状态
-    LAND,     ///< 降落过程状态。
-    MOVE      ///< 运动状态
+    OFF = 0,        ///< 待机/未激活状态。
+    INIT,           ///< 各组件初始化成功，允许在该状态使用遥控器进行控制
+    TAKEOFF,        ///< 起飞过程状态。
+    HOVER,          ///< 悬停状态（主稳态）。
+    RETURN,         ///< 返航状态
+    LAND,           ///< 降落过程状态。
+    MOVE,           ///< 运动状态
+    EMERGENCY_KILL  ///< 紧急锁桨
 };
 enum class SunrayEvent {
     TAKEOFF_REQUEST = 0,    ///< 请求起飞。

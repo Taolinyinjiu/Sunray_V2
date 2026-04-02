@@ -102,8 +102,32 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
     // }
     // 首先如果控制器状态未就绪，拒绝起飞，返回false
     // 本函数在确定到达起飞位置后，返回true，其他情况均返回false，控制器依据返回true切换为hover状态
+    if (land_complete_ == true) {
+        land_complete_ = false;
+    }
     if (controller_ready_ == false) {
         return false;
+    }
+    if (takeoff_complete_ == true) {
+        control_common::Mavros_SetpointLocal current_setpoint;
+        current_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+        current_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                                control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                                control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                                control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                                control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                                control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
+                                control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+        control_common::Mavros_Pose current_odom = mavros_helper_.get_local_pose();
+        current_setpoint.position = current_odom.position;
+        current_setpoint.yaw = mavros_helper_.get_yaw_rad();
+        mavros_helper_.pub_local_setpoint(last_setpoint_);
+
+        ROS_INFO("satrt_position x : %f,y : %f,z : %f",
+                 current_setpoint.position.x(),
+                 current_setpoint.position.y(),
+                 current_setpoint.position.z());
+        return true;
     }
     ros::Time now = ros::Time::now();
     // 通过五次项曲线类，确定是否为第一次进入takeoff函数
@@ -218,6 +242,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             setpoint_cmd.yaw = takeoff_yaw_;
             // 发布setpotin_cmd
             mavros_helper_.pub_local_setpoint(setpoint_cmd);
+            // 缓存状态
+            last_setpoint_ = setpoint_cmd;
             // 在这里判断是否到达期望的起飞目标点
             Eigen::Vector3d pos_err_vec = uav_odometry_.position - quint_curve_.get_end_position();
             double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
@@ -232,6 +258,13 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 }
                 if ((now - start_checkout_takeoff_success_time_).toSec() >
                     takeoff_success_keep_time_s) {
+                    takeoff_complete_ = true;
+                    // 清理上下文
+                    start_checkout_offboard_time_ = ros::Time(0);
+                    last_checkout_offboard_time_ = ros::Time(0);
+                    last_arm_time_ = ros::Time(0);
+                    start_checkout_takeoff_success_time_ = ros::Time(0);
+                    quint_curve_.clear();
                     return true;
                 }
             } else {
@@ -241,9 +274,24 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
     }
     return false;
 }
+
+bool PX4_OriginController::is_takeoff_complete() {
+    return takeoff_complete_;
+}
+
 // 仅测试
 bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
+    if (land_type == 1) {
+        // 切换为px4的auto land模式
+        mavros_helper_.set_px4_mode(control_common::FlightMode::AutoLand);
+        bool land_state =
+            mavros_helper_.get_state().landed_state == control_common::LandedState::OnGround;
+        return land_state;
+    }
     ros::Time now = ros::Time::now();
+    if (land_complete_ == true) {
+        return true;
+    }
     // 第一次进入land函数，先初始化用到的变量
     if (start_land_time_ == ros::Time(0)) {
         // 清除掉五次项曲线的参数，然后重新填入
@@ -322,7 +370,16 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
             }
             if ((now - land_touchground_time_).toSec() > 1.0) {
                 mavros_helper_.set_arm(false);  // 上锁
-                return true;
+                if (mavros_helper_.get_state().armed == false) {
+                    // 上锁成功，清理上下文
+                    land_complete_ = true;
+                    takeoff_complete_ = false;
+                    quint_curve_.clear();
+                    start_land_time_ = ros::Time(0);
+                    land_near_ground_ = false;
+                    land_touchground_time_ = ros::Time(0);
+                }
+                return land_complete_;
             }
         } else {
             land_touchground_time_ = ros::Time(0);
@@ -331,37 +388,248 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
     }
     return false;
 }
-bool PX4_OriginController::hover() {
-    return false;
+
+bool PX4_OriginController::is_land_complete() {
+    return land_complete_;
 }
+
+bool PX4_OriginController::hover() {
+    // hover 阶段，我们认为使用上一次的setpoint中的position值用于悬停
+    control_common::Mavros_SetpointLocal hover_setpoint;
+    hover_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    hover_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                          control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                          control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
+                          control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+    control_common::Mavros_SetpointLocal current_setpoint;
+    current_setpoint = mavros_helper_.get_target_local();
+    hover_setpoint.position = current_setpoint.position;
+    hover_setpoint.yaw = current_setpoint.yaw;
+    mavros_helper_.pub_local_setpoint(hover_setpoint);
+    // 是否应当分析误差来确定返回值为true or false呢
+    return true;
+}
+
+bool PX4_OriginController::emergency_kill() {
+    return mavros_helper_.emergency_kill();
+}
+
 bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point) {
-    return false;
+    // 记录当前时间戳
+    ros::Time now = ros::Time::now();
+    // 如果传入的point没有对位置进行赋值
+    if (!point.position.has_value()) {
+        return false;
+    }
+    // 新目标判据，使用==会由于数值漂移导致异常情况(虽然很少出现)
+    constexpr double kNewTargetPosEps = 1e-3;
+    // 新目标状态
+    bool is_new_target = false;
+    // 检查是否为新目标
+    if (!last_point_.position.has_value()) {
+        // 缓存没有值，为新目标
+        is_new_target = true;
+    } else {
+        const double dp = (point.position.value() - last_point_.position.value()).norm();
+        // 位置误差大于常量误差，为新值
+        if (dp > kNewTargetPosEps) {
+            is_new_target = true;
+        }
+    }
+    // 如果为新目标，则清除一些上下文参数
+    if (is_new_target) {
+        move_point_arrive_state_ = false;
+        start_move_arrive_time_ = ros::Time(0);
+        last_point_ = point;
+    }
+    control_common::Mavros_SetpointLocal send_setpoint;
+    send_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    send_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+    send_setpoint.position = point.position.value();
+    if (point.yaw.has_value()) {
+        send_setpoint.yaw = point.yaw.value();
+    } else {
+        send_setpoint.yaw = last_setpoint_.yaw;
+    }
+    mavros_helper_.pub_local_setpoint(send_setpoint);
+    // 更新缓存
+    last_setpoint_ = send_setpoint;
+    // 检查误差
+    Eigen::Vector3d pos_err_vec = uav_odometry_.position - point.position.value();
+    double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
+
+    Eigen::Vector3d vel_err_vec = uav_odometry_.velocity - Eigen::Vector3d::Zero();
+    double vel_err = vel_err_vec.norm();  // 推荐：速度误差标量
+    ROS_INFO("pos_err : %f", pos_err);
+    ROS_INFO("vel_err : %f", vel_err);
+    if (pos_err < 0.15 && vel_err < 0.15) {
+        if (start_move_arrive_time_ == ros::Time(0)) {
+            start_move_arrive_time_ = now;
+        }
+        if ((now - start_move_arrive_time_).toSec() > 0.5) {
+            move_point_arrive_state_ = true;
+        }
+    } else {
+        start_move_arrive_time_ = ros::Time(0);
+    }
+    return move_point_arrive_state_;
 }
 bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t velocity) {
-    return false;
+    // 请注意，velocity是一个比较危险的接口，我们会默认返回true
+    control_common::Mavros_SetpointLocal velocity_setpoint;
+    velocity_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    velocity_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
+                             control_common::Mavros_SetpointLocal::Mask::IgnorePy |
+                             control_common::Mavros_SetpointLocal::Mask::IgnorePz |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    velocity_setpoint.velocity = velocity.velocity.value();
+    if (velocity.yaw.has_value()) {
+        velocity_setpoint.yaw = velocity.yaw.value();
+    } else {
+        velocity_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYaw;
+    }
+    if (velocity.yaw_rate.has_value()) {
+        velocity_setpoint.yaw_rate = velocity.yaw_rate.value();
+    } else {
+        velocity_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+    }
+    mavros_helper_.pub_local_setpoint(velocity_setpoint);
+    return true;
 }
 bool PX4_OriginController::move_trajectory(
     controller_data_types::TargetTrajectoryPoint_t trajpoint) {
-    return false;
+    // 轨迹接口传递有值的字段，没有值的字段设置为掩码
+    control_common::Mavros_SetpointLocal trajpoint_setpoint;
+    trajpoint_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    trajpoint_setpoint.position = trajpoint.position;
+    if (trajpoint.velocity.has_value()) {
+        trajpoint_setpoint.velocity = trajpoint.velocity.value();
+    } else {
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                                   control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                                   control_common::Mavros_SetpointLocal::Mask::IgnoreVz;
+    }
+    if (trajpoint.acceleration.has_value()) {
+        trajpoint_setpoint.accel_or_force = trajpoint.acceleration.value();
+    } else {
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                                   control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                                   control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    }
+    if (trajpoint.yaw.has_value()) {
+        trajpoint_setpoint.yaw = trajpoint.yaw.value();
+    } else {
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYaw;
+    }
+    if (trajpoint.yaw_rate.has_value()) {
+        trajpoint_setpoint.yaw_rate = trajpoint.yaw_rate.value();
+    } else {
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
+    }
+    // 我们如何设置轨迹的反馈呢？这里的问题是，拿到了轨迹的反馈，有什么用呢？
+    // 轨迹是一个高频变化的值，因此拿到轨迹的反馈，其实没有什么用，so
+    // 返回的是true表示接受到了o.o
+    return true;
 }
+// BUG: body系的函数存在一点小问题
 bool PX4_OriginController::move_point_body(controller_data_types::TargetPoint_t point) {
-    return false;
+    // 首选检查传入的point是否有值
+    if (!point.position.has_value()) {
+        return false;
+    }
+    constexpr double kPosEps = 1e-3;
+    constexpr double kYawEps = 1e-3;
+
+    bool is_new_body_target = false;
+    if (!last_point_body_.position.has_value()) {
+        is_new_body_target = true;
+    } else {
+        double dp = (point.position.value() - last_point_body_.position.value()).norm();
+        if (dp > kPosEps)
+            is_new_body_target = true;
+
+        if (!is_new_body_target && point.yaw.has_value() && last_point_body_.yaw.has_value()) {
+            if (std::abs(point.yaw.value() - last_point_body_.yaw.value()) > kYawEps) {
+                is_new_body_target = true;
+            }
+        } else if (!is_new_body_target &&
+                   (point.yaw.has_value() != last_point_body_.yaw.has_value())) {
+            is_new_body_target = true;
+        }
+    }
+    if (is_new_body_target) {
+        // 得到当前的yaw角
+        const double yaw = mavros_helper_.get_yaw_rad();
+        const double c = std::cos(yaw);
+        const double s = std::sin(yaw);
+        // 做body系到local系的转换
+        const Eigen::Vector3d p_b = point.position.value();
+        Eigen::Vector3d delta_w;
+        delta_w.x() = c * p_b.x() - s * p_b.y();
+        delta_w.y() = s * p_b.x() + c * p_b.y();
+        // z轴不进行转换
+        delta_w.z() = p_b.z();
+        // 目标点 = 当前点 + 增量点
+        controller_data_types::TargetPoint_t world_point;
+        world_point.position = uav_odometry_.position + delta_w;
+
+        // yaw语义：若给了yaw，按“相对机体yaw增量”处理；否则保持当前朝向
+        if (point.yaw.has_value()) {
+            world_point.yaw = yaw + point.yaw.value();
+        } else {
+            world_point.yaw = yaw;
+        }
+        last_point_ = world_point;
+        last_point_body_ = point;
+    }
+    // 复用已有move_point逻辑（到点判定/缓存/停留判定）
+    return move_point(last_point_);
 }
 bool PX4_OriginController::move_velocity_body(controller_data_types::TargetVelocity_t velocity) {
-    return false;
+    // 输入检查
+    if (!velocity.velocity.has_value()) {
+        return false;
+    }
+    // 读取当前的yaw角
+    const double yaw = mavros_helper_.get_yaw_rad();
+    const double c = std::cos(yaw);
+    const double s = std::sin(yaw);
+    // 转换输入的body velocity -> world velocity
+    const Eigen::Vector3d v_b = velocity.velocity.value();
+    Eigen::Vector3d v_w;
+    v_w.x() = c * v_b.x() - s * v_b.y();
+    v_w.y() = s * v_b.x() + c * v_b.y();
+    v_w.z() = v_b.z();
+    // 转换为world下的速度
+    controller_data_types::TargetVelocity_t world_vel;
+    world_vel.velocity = v_w;
+    // yaw语义：
+    // - 若输入yaw有值：按“相对机体yaw增量”解释
+    // - 否则保持当前yaw
+    if (velocity.yaw.has_value()) {
+        world_vel.yaw = yaw + velocity.yaw.value();
+    } else {
+        world_vel.yaw = yaw;
+    }
+    return move_velocity(world_vel);
 }
+// WGS84不知道怎么测试，先放一边
 bool PX4_OriginController::move_point_wgs84(controller_data_types::TargetPoint_t point) {
     return false;
 }
 // -------------起降状态查询接口------------
-// 仅测试
-bool PX4_OriginController::is_takeoff_complete() {
-    return false;
-}
 
-bool PX4_OriginController::is_land_complete() {
-    return false;
-}
 void PX4_OriginController::pub_controller_state() {
     return;
 }

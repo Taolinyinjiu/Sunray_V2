@@ -16,7 +16,8 @@ class OriginControllerTakeoffTest {
         private_nh.param("loop_hz", loop_hz_, 30.0);
         private_nh.param("takeoff_land_cycles", takeoff_land_cycles_, 1);
         takeoff_land_cycles_ = std::max(1, takeoff_land_cycles_);
-        ROS_INFO("[origin_controller_test] configured takeoff_land_cycles: %d", takeoff_land_cycles_);
+        ROS_INFO("[origin_controller_test] configured takeoff_land_cycles: %d",
+                 takeoff_land_cycles_);
 
         if (!controller_.init()) {
             ROS_ERROR("[origin_controller_test] controller init failed.");
@@ -59,7 +60,7 @@ class OriginControllerTakeoffTest {
         }
 
         if (in_land_phase_) {
-            const bool land_state = controller_.land(0, 0.2);
+            const bool land_state = controller_.land(1, 0.2);
             if (land_state) {
                 ++completed_cycles_;
                 in_land_phase_ = false;
@@ -73,7 +74,8 @@ class OriginControllerTakeoffTest {
             return;
         }
 
-        const bool takeoff_done = controller_.takeoff(relative_takeoff_height_, max_takeoff_velocity_);
+        const bool takeoff_done =
+            controller_.takeoff(relative_takeoff_height_, max_takeoff_velocity_);
         if (takeoff_done) {
             if (takeoff_success_time_ == ros::Time(0)) {
                 takeoff_success_time_ = ros::Time::now();

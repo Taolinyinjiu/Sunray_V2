@@ -84,6 +84,7 @@ bool MavrosHelper::init(MavrosHelper_ConfigList config_list) {
         // 然后是服务端
         px4_arm_client_ = nh_.serviceClient<mavros_msgs::CommandBool>(uav_ns_+"/mavros/cmd/arming");
         px4_mode_client_ = nh_.serviceClient<mavros_msgs::SetMode>(uav_ns_ + "/mavros/set_mode");
+        px4_cmdlong_client_ = nh_.serviceClient<mavros_msgs::CommandLong>(uav_ns_ + "/mavros/cmd/command");
         // 最后是PX4State
         px4_state_pub_ = nh_.advertise<sunray_msgs::Px4State>(uav_ns_ + "/sunray/px4_state", 10);
     }
@@ -255,6 +256,34 @@ bool MavrosHelper::set_arm(bool arm_state) {
     mavros_msgs::CommandBool arm_cmd;
     arm_cmd.request.value = arm_state;
     return px4_arm_client_.call(arm_cmd) && arm_cmd.response.success;
+}
+
+bool MavrosHelper::emergency_kill() {
+    mavros_msgs::CommandLong srv;
+    srv.request.broadcast = false;
+    srv.request.command = 400;  // MAV_CMD_COMPONENT_ARM_DISARM
+    srv.request.confirmation = 0;
+    srv.request.param1 = 0.0;      // disarm
+    srv.request.param2 = 21196.0;  // force disarm magic number
+
+    if (!px4_cmdlong_client_.exists()) {
+        ROS_WARN("[mavros_helper] cmd_long service not ready.");
+    }
+
+    const bool call_ok = px4_cmdlong_client_.call(srv);
+    if (!call_ok) {
+        ROS_ERROR("[mavros_helper] emergency_kill call failed.");
+        return false;
+    }
+
+    if (!srv.response.success) {
+        ROS_ERROR("[mavros_helper] emergency_kill rejected by PX4. result=%d",
+                  static_cast<int>(srv.response.result));
+        return false;
+    }
+
+    ROS_ERROR("[mavros_helper] emergency_kill accepted.");
+    return true;
 }
 
 bool MavrosHelper::pub_local_setpoint(control_common::Mavros_SetpointLocal setpoint_local) {

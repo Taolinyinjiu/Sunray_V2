@@ -1,0 +1,23 @@
+<launch>
+  <arg name="config_yamlfile_path"
+       default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
+  <arg name="relative_takeoff_height" default="0.6" />
+  <arg name="max_takeoff_velocity" default="0.6" />
+  <arg name="square_side_length" default="2.0" />
+  <arg name="point_hold_time_s" default="3.0" />
+  <arg name="square_move_speed" default="0.4" />
+  <arg name="loop_hz" default="30.0" />
+
+  <node pkg="sunray_uav_control"
+        type="origin_controller_square_test_velocity"
+        name="origin_controller_square_test_velocity"
+        output="screen">
+    <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <param name="relative_takeoff_height" value="$(arg relative_takeoff_height)" />
+    <param name="max_takeoff_velocity" value="$(arg max_takeoff_velocity)" />
+    <param name="square_side_length" value="$(arg square_side_length)" />
+    <param name="point_hold_time_s" value="$(arg point_hold_time_s)" />
+    <param name="square_move_speed" value="$(arg square_move_speed)" />
+    <param name="loop_hz" value="$(arg loop_hz)" />
+  </node>
+</launch>

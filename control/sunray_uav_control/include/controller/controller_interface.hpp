@@ -18,6 +18,8 @@ class Controller_Interface {
     virtual bool land(bool land_type, double max_land_velocity) = 0;
     // 在当前点悬停(运动过程触发立即停止并进入悬停)
     virtual bool hover() = 0;
+    // 紧急上锁
+    virtual bool emergency_kill() = 0;
     // 运动到某一点
     virtual bool move_point(controller_data_types::TargetPoint_t point) = 0;
     // 以速度控制的方式运动

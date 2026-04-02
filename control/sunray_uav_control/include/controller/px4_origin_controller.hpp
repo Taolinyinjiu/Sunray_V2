@@ -56,6 +56,8 @@ class PX4_OriginController : public Controller_Interface {
     bool land(bool land_type, double max_land_velocity) override;
     // 在当前点悬停(运动过程触发立即停止并进入悬停)
     bool hover() override;
+    // 紧急上锁
+    bool emergency_kill() override;
     // 运动到某一点
     bool move_point(controller_data_types::TargetPoint_t point) override;
     // 以速度控制的方式运动
@@ -122,6 +124,17 @@ class PX4_OriginController : public Controller_Interface {
     ros::Time start_land_time_{ros::Time(0)};
     bool land_near_ground_ = false;
     ros::Time land_touchground_time_{ros::Time(0)};
+    // move稳定的时间
+    ros::Time start_move_arrive_time_{ros::Time(0)};
+    bool move_point_arrive_state_{false};
+    // -----------------缓存状态----------------
+    control_common::Mavros_SetpointLocal last_setpoint_{};
+    controller_data_types::TargetPoint_t last_point_;
+    controller_data_types::TargetPoint_t last_point_body_;
+
+    // -------------------起降状态标志位--------------
+    bool takeoff_complete_{false};
+    bool land_complete_{false};
     // --------------------里程计状态---------------------
     control_common::UAVStateEstimate uav_odometry_;
     bool has_uav_odometry_{false};
