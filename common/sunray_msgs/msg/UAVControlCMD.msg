@@ -1,18 +1,19 @@
 std_msgs/Header header
 
+# 枚举中，使用UNDEFINE = 0标识未定义
+uint8 UNDEFINE=0 					# 未定义的来源
+
 # ---------- command source ----------
 # ----------- 命令来源枚举 -------------
-uint8 UNDEFINE=0 #未知来源
-uint8 SUNRAY_STATION=1  # SUNRAY地面站
-uint8 PLANNING=2    # 规划模块
-uint8 RC=3  # 遥控器
-uint8 DEMO=4    # 示例demo
+uint8 SUNRAY_STATION=1  	# SUNRAY地面站
+uint8 RC_CONTROLLER=2    	# RC遥控器控制
+uint8 TERMINAL=3  				# 终端TUI/命令行控制
+uint8 CONTROL_CMD=4    		# Sunray系列代码控制
 # 命令来源
 uint8 cmd_source
 
 # ---------- control command ----------
 # ------------- 控制命令枚举 ------------
-uint8 UNDEFINE=0 # 未知命令
 uint8 TAKEOFF=1 # 起飞
 uint8 LAND=2    # 降落
 uint8 RETURN=3  # 返航
@@ -29,7 +30,7 @@ uint8 control_cmd
 
 # ---------- control data  ----------
 # ----------- 控制数据 ----------------
-geometry_msgs/Point desired_pos
+geometry_msgs/Vector3 desired_pos
 geometry_msgs/Vector3 desired_vel
 geometry_msgs/Vector3 desired_acc
 geometry_msgs/Vector3 desired_jerk

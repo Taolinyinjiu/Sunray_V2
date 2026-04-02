@@ -737,7 +737,7 @@ bool PX4_OriginController::check_mavros_stream_ready() {
 }
 
 bool PX4_OriginController::check_odom_freshness() {
-    return ((ros::Time::now() - uav_odometry_.timestamp).toSec() > 0.15);
+    return ((ros::Time::now() - uav_odometry_.timestamp).toSec() < 0.15);
 }
 
 bool PX4_OriginController::check_odom_for_fusion(control_common::UAVStateEstimate& fuse_odom) {
@@ -760,7 +760,7 @@ bool PX4_OriginController::check_odom_for_fusion(control_common::UAVStateEstimat
     if (!finite3(fuse_odom.bodyrate.x(), fuse_odom.bodyrate.y(), fuse_odom.bodyrate.z()))
         return false;
     // 4. 四元数范数检查
-    const double qn = std::sqrt(fuse_odom.orientation.x() * fuse_odom.orientation.w() +
+    const double qn = std::sqrt(fuse_odom.orientation.w() * fuse_odom.orientation.w() +
                                 fuse_odom.orientation.x() * fuse_odom.orientation.x() +
                                 fuse_odom.orientation.y() * fuse_odom.orientation.y() +
                                 fuse_odom.orientation.z() * fuse_odom.orientation.z());

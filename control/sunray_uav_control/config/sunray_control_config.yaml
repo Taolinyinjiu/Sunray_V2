@@ -22,7 +22,7 @@ basic_param:
     trajectory_type: 0
 
 # -------------------保护参数-----------------------
-protct_param:
+protect_param:
     # 最低电压
     low_voltage: 13.2 # 4S battery
     # 达到最低电压时执行的操作 0:无操作 1:立即降落 2：返航并降落
@@ -111,25 +111,3 @@ velocity_param:
     # 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
     yaw_rate: 30
 
-# -------------------高频控制源仲裁参数-----------------------
-# 高频topic控制统一通过 envelope meta 进入状态机仲裁
-# 低频service命令(起飞/降落/返航/单次位置控制)会直接打断当前高频控制源
-command_sources:
-    default:
-        priority: 0
-        timeout: 0.5
-    api:
-        priority: 20
-        timeout: 0.5
-    planner:
-        priority: 40
-        timeout: 0.5
-    mission:
-        priority: 50
-        timeout: 0.5
-    rc:
-        priority: 100
-        timeout: 0.2
-    safety:
-        priority: 255
-        timeout: 0.1
