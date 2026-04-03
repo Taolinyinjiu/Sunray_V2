@@ -47,23 +47,15 @@ class Sunray_FSM {
 
   private:
     // ------------------------- 表驱动FSM类型 -------------------------
-    // using 类型别名，用于简化代码
-    using GuardFn = std::function<bool()>;  // 守卫条件，用于判断本次状态转移是否允许发生
-    using ActionFn = std::function<bool()>;  // 执行状态，在发生状态转移的时候执行的动作
-    // 状态转移表结构体
-    struct Transition {
-        sunray_fsm::SunrayState from;   // 状态机当前状态
-        sunray_fsm::SunrayEvent event;  // 发生的事件(control_cmd)
-        sunray_fsm::SunrayState to;     // 状态机要转移到的状态
-        GuardFn guard;                  // 判断是否允许转移
-        ActionFn action;                // 转移成功后执行的命令
-    };
 
     // ------------------------- FSM核心 -------------------------
-    void init_transition_table();                             // 初始化状态转移表
-    const std::vector<Transition>& get_transition_table();    // 获取状态转移表
-    bool handle_event(sunray_fsm::SunrayEvent event);         // 状态转移句柄
-    bool handle_global_event(sunray_fsm::SunrayEvent event);  // KILL等全局高优先级事件
+    void init_transition_table();  // 初始化状态转移表
+    const std::vector<sunray_fsm::Transition>&
+    get_transition_table();  // 获取状态转移表，请注意，每一条状态转移的规则，对应一个结构体，所有结构体加起来，对应一个容器，因此使用vecotr作为返回类型
+    bool handle_event(sunray_fsm::SunrayEvent event);  // 状态转移句柄
+    bool handle_global_event(
+        sunray_fsm::SunrayEvent
+            event);  // KILL等全局高优先级事件(实际上目前只有kill一个事件在这里被处理)
 
     // ------------------------- 函数 -------------------------
     // init() = load_param() + set_subscriber() + set_publisher() + register_controller
@@ -91,22 +83,21 @@ class Sunray_FSM {
     bool update_controller_output(control_common::UavControlCmd control_cmd);
     // ------------------特殊指令，单次触发--------------
     // 这个由于还没想好，要不要把起飞降落的参数设置为可以通过话题的方式来修改，先设置为使用yaml文件的吧
-    bool takeoff();
+    bool set_controller_mission();  // 设置控制器进入任务模式，切换飞控从position到offboard
+    bool takeoff();                 // 执行起飞任务
     bool land();
     bool hover();        // hover也没有参数，因为控制器的hover就没有参数
     bool return_home();  // return = move_point_local() + land()
     bool emergency_kill();
     // ------------------运动指令，持续触发--------------
-    bool move_point_local(controller_data_types::TargetPoint_t point);
-    bool move_velocity_local(controller_data_types::TargetVelocity_t velocity);
-    bool move_velocity_body(controller_data_types::TargetVelocity_t velocity);
-    bool move_trajectory(controller_data_types::TargetTrajectoryPoint_t trajpoint);
-    // 发布到body系的pointpoint模式需要单独讨论
-    bool move_point_body(controller_data_types::TargetPoint_t point);
-    // 这个数据类型还没想好，先放一边吧
+    // 这里全部使用无参类型，内部访问类成员last_control_cmd_以及last_odometry_和sunray_controller_来决定输出
+    bool move_point();
+    bool move_velocity();
+    bool move_trajectory();
     bool move_point_wgs84();
-
     // ------------------------- 变量 ---------------------------
+    // 无人机相关信息
+    std::string uav_ns_;
     // ROS句柄
     ros::NodeHandle nh_;
     // ROS订阅者
@@ -129,6 +120,11 @@ class Sunray_FSM {
     bool allow_move_{false};     // 允许移动
     bool is_flip_{false};        // 当前是否出现姿态大幅偏转
     bool is_fence_{false};       // 当前是否超过地理围栏/电子围栏的限制
-    sunray_fsm::SunrayState fsm_state_{sunray_fsm::SunrayState::OFF};  // 当前状态
-    sunray_fsm::sunray_fsm_config_t fsm_config_;                       // 状态机参数结构体
+
+    // 用于判断状态or切换状态的变量
+    bool controller_ready_;
+
+    sunray_fsm::SunrayState fsm_state_{sunray_fsm::SunrayState::INIT};  // 当前状态
+    sunray_fsm::sunray_fsm_config_t fsm_config_;                        // 状态机参数结构体
+    std::vector<sunray_fsm::Transition> sunray_state_transmit_table_;   // 成员变量
 };

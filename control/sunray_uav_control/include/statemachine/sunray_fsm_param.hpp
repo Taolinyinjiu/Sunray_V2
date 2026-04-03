@@ -53,11 +53,15 @@ struct takeoff_land_param_t {
     double land_max_velocity{0.0};
 };
 // -------------------运动误差与超时参数--------------
-struct mission_error_param_t {
+struct mission_param_t {
     double timeout_s{0.0};
     double judge_stabile_time_s{0.0};
     double pos_stabile_err_m{0.0};
     double vel_stabile_err_mps{0.0};
+};
+struct mission_error_param_t {
+    mission_param_t takeoff_error_param;
+    mission_param_t move_point_error_param;
 };
 // -------------------电子围栏参数-----------------------
 struct local_fence_param_t {
@@ -76,13 +80,12 @@ struct velocity_param_t {
 };
 // 一个大而去全的结构体，将上面的结构体全放进来，简化代码逻辑
 struct sunray_fsm_config_t {
-    basic_param_t basic_param;                     // 基础参数
-    protect_param_t protect_param;                 // 保护措施参数
-    msg_timeout_param_t msg_timeout_param;         // 消息超时参数
-    takeoff_land_param_t takeoff_land_param;       // 起飞降落参数
-    mission_error_param_t takeoff_error_param;     // 起飞运动判断参数
-    mission_error_param_t move_point_error_param;  // 单点运动误差判断参数
-    local_fence_param_t local_fence_param;         // local系电子围栏参数
-    velocity_param_t velocity_param;               // 飞行速度参数
+    basic_param_t basic_param;                  // 基础参数
+    protect_param_t protect_param;              // 保护措施参数
+    msg_timeout_param_t msg_timeout_param;      // 消息超时参数
+    takeoff_land_param_t takeoff_land_param;    // 起飞降落参数
+    mission_error_param_t mission_error_param;  // 运动误差判断参数
+    local_fence_param_t local_fence_param;      // local系电子围栏参数
+    velocity_param_t velocity_param;            // 飞行速度参数
 };
 }  // namespace sunray_fsm

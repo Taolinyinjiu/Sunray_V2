@@ -17,10 +17,9 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   OdomStatus.msg
-  # Px4StateCore.msg
-  # Px4StateHealth.msg
   Px4State.msg
   UAVControlCMD.msg
+  UAVControlFSMState.msg
   UAVControllerState.msg
 )
 
