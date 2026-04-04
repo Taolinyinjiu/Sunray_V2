@@ -625,7 +625,7 @@ bool PX4_OriginController::move_velocity_body(controller_data_types::TargetVeloc
     return move_velocity(world_vel);
 }
 // WGS84不知道怎么测试，先放一边
-bool PX4_OriginController::move_point_wgs84(controller_data_types::TargetPoint_t point) {
+bool PX4_OriginController::move_point_wgs84(geographic_msgs::GeoPoint point) {
     return false;
 }
 // -------------起降状态查询接口------------

@@ -33,10 +33,10 @@ enum class SunrayEvent {
     LAND_COMPLETED,         ///< 降落完成。
     RETURN_REQUEST,         ///< 请求返航。
     RETURN_COMPLETED,       ///< 返航完成。
-    KILL_REQUEST,           ///< 请求返航。
-    KILL_COMPLETED,         ///< 返航完成。
-    HOVER_REQUEST,          ///< 请求返航。
-    HOVER_COMPLETED,        ///< 返航完成。
+    KILL_REQUEST,           ///< 请求紧急锁桨。
+    KILL_COMPLETED,         ///< 紧急锁桨完成。
+    HOVER_REQUEST,          ///< 请求悬停。
+    HOVER_COMPLETED,        ///< 悬停完成。
     POINT_REQUEST,          ///< 进入位置控制
     POINT_COMPLETED,        ///< 位置控制完成
     VELOCITY_REQUEST,       ///< 进入速度控制

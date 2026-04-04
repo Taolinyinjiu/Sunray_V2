@@ -5,11 +5,28 @@
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
 #include <sunray_msgs/UAVControlFSMState.h>
+#include "controller/px4_origin_controller.hpp"
+#include <sunray_msgs/OdomStatus.h>
+
+// Sunray_FSM更新路径
+//
+// 低频 ros node : Surnay_FSM->process()
+//     - 状态切换
+//     - 数据发布
+// 高频 Sunray_FSM Therad controller_update_loop()
+//     - 设置里程计
+//     - 控制器输出
+
 // 构造函数
 Sunray_FSM::Sunray_FSM(ros::NodeHandle& nh) {
     nh_ = nh;
 };
-
+Sunray_FSM::~Sunray_FSM() {
+    stop_controller_thread_.store(true, std::memory_order_relaxed);
+    if (controller_update_thread_.joinable()) {
+        controller_update_thread_.join();
+    }
+}
 void Sunray_FSM::init() {
     // 请注意init中所有函数均为无返回类型,初始化主要对静态参数进行检查，检查不通过，抛出具体异常
     load_param();
@@ -19,6 +36,13 @@ void Sunray_FSM::init() {
 
     // 初始化状态转移表
     init_transition_table();
+    // 控制器更新线程
+    stop_controller_thread_.store(false, std::memory_order_relaxed);
+    controller_update_thread_ = std::thread(&Sunray_FSM::controller_update_loop, this);
+}
+
+void Sunray_FSM::process() {
+    //
 }
 
 // OFF -> INIT -> TAKEOFF -> HOVER -> MOVE
@@ -222,11 +246,11 @@ bool Sunray_FSM::handle_global_event(sunray_fsm::SunrayEvent event) {
 // 处理正常情况下的状态转移
 bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
     // 首先丢进全局高优先级状态检查
-    if (handle_event(event)) {
+    if (handle_global_event(event)) {
         return true;
     }
     // handle_event() -> false 说明不是kill状态，按照正常流程往下走
-    bool return_state;
+    bool return_state = false;
     // 获取缓存的状态转移表
     const auto state_table = get_transition_table();
     // 使用迭代器 查找匹配字段
@@ -336,4 +360,314 @@ void Sunray_FSM::init_publisher() {
     // 似乎只有一个状态机状态发布者
     sunray_fsm_state_pub_ =
         nh_.advertise<sunray_msgs::UAVControlFSMState>(uav_ns_ + "/sunray/fsm/state", 10);
+}
+// 为状态机注册控制器
+void Sunray_FSM::register_controller() {
+    // 根据参数结构体中的controller_type选择要注册的控制器
+    // 根据调用的顺序来看，对controller_type的检查已经在load_param()函数中被进行了，因此这里我们不进行检查，直接使用就好
+    // 根据sunray_control_config.yaml中的定义，控制器的类型分别为
+    // 0: px4_origin_controller px4原生控制器
+    // 1: sunray_attitude_controller sunray项目的姿态推力控制器
+    // 2: rl_raptor_controller 基于raptor的强化学习控制器
+    switch (fsm_config_.basic_param.controller_types) {
+    case 0: {
+        sunray_controller_ = std::make_shared<PX4_OriginController>(nh_);
+        // 在这里做控制器的初始化,可以不用在外面判断控制器的类型再写报错异常信息
+        if (sunray_controller_->init() == false) {
+            // 如果控制器初始化失败，抛出异常
+            throw std::runtime_error("{Px4 Original Controller initialization failed");
+        }
+        break;
+    }
+    case 1: {
+        break;
+    }
+    case 2: {
+        break;
+    }
+        // 这里没有default分支，因为load_param()界定了fsm_config_.basic_param.controller_types只会有0，1，2三个值，不可能有其他值被传入
+    }
+}
+
+// 检查是否允许起飞
+bool Sunray_FSM::check_allow_takeoff() {
+    // 这里的思路是这样的，首先函数的结果作为类变量allow_takeoff_的值缓存，所有需要判断能否起飞的程序，都是直接判断变量allow_takeoff_是否为true来进行起飞
+    // check_allow_takeoff()实际上是一个被定时器调用，综合分析各个消息，来决定是否起飞的函数，可以认为是一个信息处理中枢
+    // 1. 首先是配置文件中 takeoff_with_code
+    // 是否为true，如果该值为false，则要求rc节点存在并且持续发送连接状态
+    // 2. 外部system_check模块是否正常工作，如果正常工作则其数据需要被参考，比如是否允许起飞之类
+
+    // 构造临时变量
+    bool temp_allow_state;
+
+    // 首先读取参数takeoff_with_code
+    if (fsm_config_.protect_param.takeoff_with_code == true) {
+        temp_allow_state = true;
+    } else {
+        temp_allow_state = false;
+    }
+    // 这里处理遥控器传递的信息
+    if (rc_connected == true) {  // 首先遥控器要连接
+        // 这里判断需要再设计一下
+    }
+    // 将临时变量更新到类变量
+    allow_takeoff_ = temp_allow_state;
+    return allow_takeoff_;
+}
+
+// --------------------话题回调函数----------------------
+
+// 外部里程计回调函数
+void Sunray_FSM::local_odom_callback(const nav_msgs::Odometry& msg) {
+    control_common::UAVStateEstimate temp(msg);
+    last_odometry_ = temp;
+}
+// 外部里程计状态回调函数
+void Sunray_FSM::localization_state_callback(const sunray_msgs::OdomStatus& msg) {}
+
+// 无人机控制指令回调函数
+void Sunray_FSM::uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg) {
+    // 构造临时变量
+    control_common::UavControlCmd temp_cmd(msg);
+    // 更新缓存
+    last_control_cmd_ = temp_cmd;
+    // 将control_cmd中的指令，转换为sunray_fsm的事件请求
+    switch (temp_cmd.control_cmd) {
+    case control_common::UavControlCmd::ControlCmd::TAKEOFF:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::LAND:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::RETURN:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::RETURN_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::KILL:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::KILL_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::HOVER:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::HOVER_REQUEST);
+        break;
+    // local系和body系都是同一个point_request和point_completed
+    case control_common::UavControlCmd::ControlCmd::MOVE_POINT:
+    case control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY:
+    case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::VELOCITY_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::MOVE_TRAJECTORY:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::TRAJECTORY_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84:
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST);
+        break;
+    case control_common::UavControlCmd::ControlCmd::UNDEFINE:
+    default:
+        // 未定义指令不入队，避免污染事件流
+        break;
+    }
+}
+// 系统检查回调函数
+void Sunray_FSM::system_check_callback() {}
+
+// ----------------定时器回调函数----------------
+// 发布Sunray_FSM的相关信息
+void Sunray_FSM::pub_sunray_fsm_state() {
+    // >  这里我们删除了px4state消息类型，因为我们想要让状态机与px4相关的，进行一个解耦
+
+    // 构建要发布的消息
+    sunray_msgs::UAVControlFSMState fsm_state_msg;
+    // 首先填充话题头
+    fsm_state_msg.header.stamp = ros::Time::now();
+    // 当前起飞参数
+    fsm_state_msg.takeoff_relative_height = fsm_config_.takeoff_land_param.takeoff_relative_height;
+    fsm_state_msg.takeoff_max_velocity = fsm_config_.takeoff_land_param.takeoff_max_velocity;
+    // 当前降落参数
+    fsm_state_msg.land_type = fsm_config_.takeoff_land_param.land_type;
+    fsm_state_msg.land_max_velocity = fsm_config_.takeoff_land_param.land_max_velocity;
+    // 当前返航的目标点
+    fsm_state_msg.home_point.x = home_point_.x();
+    fsm_state_msg.home_point.y = home_point_.y();
+    fsm_state_msg.home_point.z = home_point_.z();
+    // 当前的控制指令(由于两者的数据类型不同，一个是uint8另一个是强类型枚举，但是由于值都是一一对应的，因此这里用类型转换)
+    fsm_state_msg.control_cmd = static_cast<uint8_t>(last_control_cmd_.control_cmd);
+    // 状态机的状态同样使用静态类型转换
+    fsm_state_msg.sunray_fsm_state = static_cast<uint8_t>(fsm_state_);
+    // 发布消息
+    sunray_fsm_state_pub_.publish(fsm_state_msg);
+}
+// 发布Sunray_Controller的相关信息
+void Sunray_FSM::pub_controller_state() {
+    sunray_controller_->pub_controller_state();
+}
+// -------------------------控制指令执行函数------------------
+bool Sunray_FSM::takeoff() {
+    return sunray_controller_->takeoff(fsm_config_.takeoff_land_param.takeoff_relative_height,
+                                       fsm_config_.takeoff_land_param.takeoff_max_velocity);
+}
+bool Sunray_FSM::land() {
+    return sunray_controller_->land(fsm_config_.takeoff_land_param.land_type,
+                                    fsm_config_.takeoff_land_param.land_max_velocity);
+}
+bool Sunray_FSM::hover() {
+    return sunray_controller_->hover();
+}
+bool Sunray_FSM::emergency_kill() {
+    return sunray_controller_->emergency_kill();
+}
+bool Sunray_FSM::move_point() {
+    // 提取move_point的类型
+    controller_data_types::TargetPoint_t point;
+    point.position = last_control_cmd_.position;
+    point.yaw = last_control_cmd_.yaw;
+    // 根据loal系还是body系决定调用的函数
+    if (last_control_cmd_.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT) {
+        return sunray_controller_->move_point(point);
+    } else {
+        return sunray_controller_->move_point_body(point);
+    }
+}
+bool Sunray_FSM::move_velocity() {
+    // 提取速度类型
+    controller_data_types::TargetVelocity_t velocity;
+    velocity.velocity = last_control_cmd_.velocity;
+    velocity.yaw = last_control_cmd_.yaw;
+    velocity.yaw_rate = last_control_cmd_.yaw_rate;
+    // 根据local系和body系决定调用的函数
+    if (last_control_cmd_.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY) {
+        return sunray_controller_->move_velocity(velocity);
+    } else {
+        return sunray_controller_->move_velocity_body(velocity);
+    }
+}
+bool Sunray_FSM::move_trajectory() {
+    // 提取轨迹类型
+    controller_data_types::TargetTrajectoryPoint_t traj_point;
+    traj_point.position = last_control_cmd_.position;
+    traj_point.velocity = last_control_cmd_.velocity;
+    traj_point.acceleration = last_control_cmd_.acceleration;
+    traj_point.jerk = last_control_cmd_.jerk;
+    traj_point.yaw = last_control_cmd_.yaw;
+    traj_point.yaw_rate = last_control_cmd_.yaw_rate;
+    return sunray_controller_->move_trajectory(traj_point);
+}
+bool Sunray_FSM::move_point_wgs84() {
+    // 提取wgs84坐标系下的目标点
+    geographic_msgs::GeoPoint geo_point;
+    geo_point.altitude = last_control_cmd_.wgs84_position.altitude;
+    geo_point.latitude = last_control_cmd_.wgs84_position.latitude;
+    geo_point.longitude = last_control_cmd_.wgs84_position.longitude;
+    return sunray_controller_->move_point_wgs84(geo_point);
+}
+// 首先我们是这样来设计这个函数的，我们为这个函数新建一个线程，以200Hz的频率or100Hz的频率来运行，这个频率取决于config文件中的controller_update_frequency参数决定
+// 然后这个函数是一个void类型，因为线程单独运行并不需要返回值
+void Sunray_FSM::update_controller_output() {
+    // 然后我们需要根据状态机自身的状态，来决定如何调用控制器的api函数，但是这里实际上并不涉及到对状态机状态切换的请求，
+    // 比如当前为INIT状态，控制命令的回调函数接受到了takeoff的控制命令，那么回调函数会触发一次request，然后外部某个函数检查，更新状态
+    // 这个函数，只负责当前状态下的函数调用流程
+
+    switch (fsm_state_) {
+    case sunray_fsm::SunrayState::OFF: {
+        // OFF状态下我们什么都不做
+        break;
+    }
+    case sunray_fsm::SunrayState::INIT: {
+        // INIT状态下我们也什么都不做
+        break;
+    }
+    case sunray_fsm::SunrayState::TAKEOFF: {
+        // 起飞状态下，我们疯狂调用takeoff函数
+        if (takeoff()) {
+            enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_COMPLETED);
+        }
+        break;
+    }
+    case sunray_fsm::SunrayState::HOVER: {
+        hover();
+        break;
+    }
+    case sunray_fsm::SunrayState::RETURN: {
+        // 值得注意的是，控制器并没有提供return状态的函数，因为控制器自身并不存储历史状态
+        // 所以我们要先使用move_point回到home点，然后进入land状态
+        break;
+    }
+    case sunray_fsm::SunrayState::LAND: {
+        // 降落状态下，我们疯狂调用takeoff函数
+        if (land()) {
+            enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_COMPLETED);
+        }
+        break;
+    }
+    case sunray_fsm::SunrayState::MOVE: {
+        // move阶段这里存在的问题是，有多种的move方式，因此我们需要根据last_control_cmd中的指令决定调用的函数
+        if (last_control_cmd_.control_cmd ==
+                control_common::UavControlCmd::ControlCmd::MOVE_POINT ||
+            last_control_cmd_.control_cmd ==
+                control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY) {
+            if (move_point()) {
+                enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_COMPLETED);
+            }
+        } else if (last_control_cmd_.control_cmd ==
+                       control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY ||
+                   last_control_cmd_.control_cmd ==
+                       control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY) {
+            if (move_velocity()) {
+                enqueue_fsm_event(sunray_fsm::SunrayEvent::VELOCITY_COMPLETED);
+            }
+        } else if (last_control_cmd_.control_cmd ==
+                   control_common::UavControlCmd::ControlCmd::MOVE_TRAJECTORY) {
+            if (move_trajectory()) {
+                enqueue_fsm_event(sunray_fsm::SunrayEvent::TRAJECTORY_COMPLETED);
+            }
+        } else if (last_control_cmd_.control_cmd ==
+                   control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84) {
+            if (move_point_wgs84()) {
+                enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_WGS84_COMPLETED);
+            }
+        }
+        break;
+    }
+    case sunray_fsm::SunrayState::EMERGENCY_KILL: {
+        if (emergency_kill()) {
+            enqueue_fsm_event(sunray_fsm::SunrayEvent::KILL_COMPLETED);
+        }
+        break;
+    }
+    }
+}
+
+// 向状态事件队列中传入事件
+// note:如果传入的事件与队列中最新的事件相同，则不会传入
+void Sunray_FSM::enqueue_fsm_event(sunray_fsm::SunrayEvent input_event) {
+    if (!fsm_event_list.empty() && fsm_event_list.back() == input_event) {
+        // 如果事件队列非空，并且传入的与队列中最新的是一致的，那么就return
+        return;
+    }
+    fsm_event_list.push(input_event);
+}
+// 处理状态机事件中的事件
+void Sunray_FSM::process_fsm_event_queue() {
+    // 首先判断是否为空
+    if (fsm_event_list.empty()) {
+        return;
+    }
+    // 弹出事件controller_update_loop
+    auto event = fsm_event_list.front();
+    fsm_event_list.pop();
+    handle_event(event);
+}
+// 控制器循环更新
+void Sunray_FSM::controller_update_loop() {
+    // 首先得到更新的频率
+    const double hz = fsm_config_.basic_param.controller_update_frequency;
+    ros::Rate rate(hz);
+    // 循环
+    while (ros::ok() && !stop_controller_thread_.load(std::memory_order_relaxed)) {
+        // 这里是否需要加锁呢
+        sunray_controller_->set_current_odom(last_odometry_);
+        update_controller_output();
+        rate.sleep();
+    }
 }

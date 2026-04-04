@@ -69,7 +69,7 @@ class PX4_OriginController : public Controller_Interface {
     // 以机体系速度的方式运动
     bool move_velocity_body(controller_data_types::TargetVelocity_t velocity) override;
     // 移动到WGS84下的某一点
-    bool move_point_wgs84(controller_data_types::TargetPoint_t point) override;
+    bool move_point_wgs84(geographic_msgs::GeoPoint point) override;
     // ---------------------起降状态查询接口-----------------------
     bool is_takeoff_complete() override;
     bool is_land_complete() override;

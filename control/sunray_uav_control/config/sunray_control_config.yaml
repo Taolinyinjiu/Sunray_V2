@@ -31,9 +31,9 @@ protect_param:
     control_with_no_rc: false
     # 当遥控器状态从连接变成丢失连接时，执行什么操作 0:无操作 1:降落 2:返回
     lost_with_rc: 1
-    # 是否允许代码解锁无人机
+    # 是否允许代码解锁无人机，如果为false需要通过遥控器的按键进行解锁
     arm_with_code: true
-    # 是否允许代码起飞
+    # 是否允许代码起飞，如果为false需要通过推动遥控器的油门摇杆，发出起飞指令
     takeoff_with_code: true
     # 是否进行倾倒检测：当无人机姿态发生大幅度反转时上锁无人机
     check_flip: false
@@ -110,4 +110,3 @@ velocity_param:
         z_vel: 1.0
     # 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
     yaw_rate: 30
-

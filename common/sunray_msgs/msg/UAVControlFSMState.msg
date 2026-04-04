@@ -11,10 +11,7 @@ uint8 land_type
 float64 land_max_velocity
 
 # 当前返航目标点
-geometry_msgs/PoseStamped home_point
-
-# 当前无人机的状态PX4State
-sunray_msgs/Px4State px4_state
+geometry_msgs/Vector3 home_point
 
 # ------------- 控制命令枚举 ------------
 uint8 UNDEFINE=0    # 未知指令
@@ -45,9 +42,3 @@ uint8 EMERGENCY_KILL=7
 
 # 当前的sunray状态机状态
 uint8 sunray_fsm_state
-
-# 当前误差
-geometry_msgs/Vector3 pos_err
-
-# 当前是否进入运动稳态
-bool move_stable

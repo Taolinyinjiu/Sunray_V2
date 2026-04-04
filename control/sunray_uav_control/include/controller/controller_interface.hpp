@@ -2,7 +2,7 @@
 
 #include "control_data_types/uav_state_estimate.hpp"
 #include "control_data_types/controller_desired_types.hpp"
-
+#include <geographic_msgs/GeoPoint.h>
 class Controller_Interface {
   public:
     virtual ~Controller_Interface() = default;
@@ -31,7 +31,7 @@ class Controller_Interface {
     // 以机体系速度的方式运动
     virtual bool move_velocity_body(controller_data_types::TargetVelocity_t velocity) = 0;
     // 移动到WGS84下的某一点
-    virtual bool move_point_wgs84(controller_data_types::TargetPoint_t point) = 0;
+    virtual bool move_point_wgs84(geographic_msgs::GeoPoint point) = 0;
     // ---------------------起降状态查询接口-----------------------
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_land_complete() = 0;
