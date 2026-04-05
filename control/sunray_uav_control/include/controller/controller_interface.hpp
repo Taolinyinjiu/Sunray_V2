@@ -35,6 +35,7 @@ class Controller_Interface {
     // ---------------------起降状态查询接口-----------------------
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_land_complete() = 0;
+    virtual bool is_point_complete() = 0;
     // ---------------------控制器状态发布接口----------------------
     virtual void pub_controller_state() = 0;
     // 为了将Sunray_FSM与Mavros/PX4解耦，这里还是决定，参数由控制器自己读取yaml文件而不是函数传递

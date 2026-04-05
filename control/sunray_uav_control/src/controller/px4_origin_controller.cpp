@@ -69,19 +69,40 @@ bool PX4_OriginController::init() {
     return true;
 }
 
+// is_ready的返回结果作为Sunray_FSM : OFF -> INIT 的判断状态
+// 我们需要讨论，什么是控制器所关心的？
+// 1. 里程计是否超时
+// 2. 各项连接是否正确
+// 3. 飞控正常工作
 bool PX4_OriginController::is_ready() {
-    control_common::Mavros_State mavros_state = mavros_helper_.get_state();
-    px4_mode_ = mavros_state.flight_mode;
-    px4_land_ = mavros_state.landed_state;
-    px4_arm_ = mavros_state.armed;
-    bool mavros_ready = mavros_helper_.is_ready();
-    if (px4_land_ == control_common::LandedState::OnGround && px4_arm_ == false &&
-        has_uav_odometry_ == true && mavros_ready == true) {
-        controller_ready_ = true;
-        return true;
-    } else {
+    ros::Time now = ros::Time::now();
+    // 首先判断里程计是否超时
+    if (uav_odometry_.timestamp == ros::Time(0)) {
+        // 没有接受到里程计数据，返回false
+        ROS_INFO("odom msg lost");
         return false;
     }
+    // 判断里程计是否超时
+    // if ((now - uav_odometry_.timestamp).toSec() > 0.5) {
+    //     // 里程计超时
+    //     ROS_INFO("odom msg timeout");
+    //     return false;
+    // }
+    control_common::Mavros_State mavros_state = mavros_helper_.get_state();
+    if (mavros_state.connected != true) {
+        // px4未正常连接，判断为超时
+        ROS_INFO("mavros not connect");
+        return false;
+    }
+    // 判断mavros_helper提取的各项数据，是否满足要求
+    bool mavros_ready = mavros_helper_.is_ready();
+    if (!mavros_ready) {
+        ROS_INFO("mavros helper not ready");
+        return false;
+    }
+
+    controller_ready_ = true;
+    return true;
 }
 
 void PX4_OriginController::set_current_odom(const control_common::UAVStateEstimate& odom) {
@@ -277,6 +298,10 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
 
 bool PX4_OriginController::is_takeoff_complete() {
     return takeoff_complete_;
+}
+
+bool PX4_OriginController::is_point_complete() {
+    return point_complete_;
 }
 
 // 仅测试
@@ -477,9 +502,11 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
         }
         if ((now - start_move_arrive_time_).toSec() > 0.5) {
             move_point_arrive_state_ = true;
+            point_complete_ = true;
         }
     } else {
         start_move_arrive_time_ = ros::Time(0);
+        point_complete_ = false;
     }
     return move_point_arrive_state_;
 }

@@ -73,6 +73,7 @@ class PX4_OriginController : public Controller_Interface {
     // ---------------------起降状态查询接口-----------------------
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
+    bool is_point_complete() override;
     // ----------------------控制器状态话题更新函数-----------------
     void pub_controller_state() override;  // 发布controller_state
   private:
@@ -135,6 +136,7 @@ class PX4_OriginController : public Controller_Interface {
     // -------------------起降状态标志位--------------
     bool takeoff_complete_{false};
     bool land_complete_{false};
+    bool point_complete_{false};
     // --------------------里程计状态---------------------
     control_common::UAVStateEstimate uav_odometry_;
     bool has_uav_odometry_{false};
