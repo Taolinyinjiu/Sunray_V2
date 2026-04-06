@@ -112,6 +112,25 @@ void PX4_OriginController::set_current_odom(const control_common::UAVStateEstima
 
 // -------------运动相关接口------------
 
+void PX4_OriginController::on_ground_keep_setpoint() {
+    // 这里我们也不做判断，只要调用这个接口，我们就输出需要的setpoint
+    control_common::Mavros_SetpointLocal current_setpoint;
+    current_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    //
+    current_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
+                            control_common::Mavros_SetpointLocal::Mask::IgnorePy |
+                            control_common::Mavros_SetpointLocal::Mask::IgnorePz |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate |
+                            control_common::Mavros_SetpointLocal::Mask::IgnoreYaw;
+    current_setpoint.accel_or_force.z() = -100;
+    mavros_helper_.pub_local_setpoint(current_setpoint);
+}
+
 bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
     // 如何设计呢？起始这里的问题是，我们如何触发？
     // 实现思路为这样，我们不断的触发这个函数直到达到预设的起飞高度，也就是这样
@@ -142,7 +161,7 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
         control_common::Mavros_Pose current_odom = mavros_helper_.get_local_pose();
         current_setpoint.position = current_odom.position;
         current_setpoint.yaw = mavros_helper_.get_yaw_rad();
-        mavros_helper_.pub_local_setpoint(last_setpoint_);
+        mavros_helper_.pub_local_setpoint(current_setpoint);
 
         ROS_INFO("satrt_position x : %f,y : %f,z : %f",
                  current_setpoint.position.x(),
@@ -231,8 +250,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 // 设置xy轴的位置
                 Eigen::Vector3d start_pos = quint_curve_.get_start_position();
                 setpoint_cmd.position = start_pos;
-                // z轴速度设置为0.1
-                setpoint_cmd.velocity = Eigen::Vector3d(0, 0, 0.1);
+                // z轴速度设置为0.3
+                setpoint_cmd.velocity = Eigen::Vector3d(0, 0, 0.3);
                 // 设置yaw角为初始时刻yaw角
                 setpoint_cmd.yaw = takeoff_yaw_;
                 // 发送
@@ -240,11 +259,14 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 // 设置轨迹点
                 ROS_INFO("uav_odometry z : %f", uav_odometry_.position.z());
                 ROS_INFO("takeoff_ground_height : %f", takeoff_ground_height);
+                // 但是注意，当离地后，切换为生成的轨迹，而非固定的0.3
                 if (uav_odometry_.position.z() - takeoff_ground_height > 0.05) {
                     last_arm_time_ = now;
                     Eigen::Vector3d renew_pos = start_pos;
                     renew_pos.z() = uav_odometry_.position.z();
-                    quint_curve_.set_start_trajpoint(renew_pos, Eigen::Vector3d(0, 0, 0.1));
+                    Eigen::Vector3d renew_vel = uav_odometry_.velocity;
+                    quint_curve_.set_start_trajpoint(renew_pos,
+                                                     Eigen::Vector3d(0, 0, renew_vel.z()));
                 } else {
                     return false;
                 }
@@ -386,7 +408,7 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
         // 持续检查是否接触地面
         velocity_low = std::abs(uav_odometry_.velocity.z()) < 0.1;
         if (velocity_low == true) {
-            setpoint_cmd.velocity.z() -= 0.1;
+            setpoint_cmd.velocity.z() -= 0.2;
         }
         bool px4_land = px4_landed == control_common::LandedState::OnGround;
         if (velocity_low && px4_land) {  // 考虑传感器漂移，这里用||逻辑

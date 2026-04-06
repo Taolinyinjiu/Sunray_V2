@@ -243,7 +243,7 @@ void Sunray_FSM::init_transition_table() {
                                             sunray_fsm::SunrayState::LAND,
                                             always,
                                             always});
-    // LAND -> INIT
+    // LAND -> READY
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::LAND,
                                             sunray_fsm::SunrayEvent::LAND_COMPLETED,
                                             sunray_fsm::SunrayState::INIT,
@@ -776,8 +776,9 @@ void Sunray_FSM::update_controller_output() {
         // OFF状态下我们什么都不做
         break;
     }
+    // INIT模式更新为：切换为offboard模式，监听rc_controller的输入，持续发布setpoint流
     case sunray_fsm::SunrayState::INIT: {
-        // INIT状态下我们也什么都不做
+        sunray_controller_->on_ground_keep_setpoint();
         break;
     }
     case sunray_fsm::SunrayState::TAKEOFF: {

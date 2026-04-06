@@ -12,6 +12,8 @@ class Controller_Interface {
     // -------------状态注入---------------
     virtual void set_current_odom(const control_common::UAVStateEstimate& odom) = 0;
     // -------------运动相关接口-------------
+    // 在地面，保持setpoint流，该函数用于状态机INIT阶段保持setpoint流持续发布，设置为-100的z轴推力
+    virtual void on_ground_keep_setpoint() = 0;
     // 触发起飞，参数为起飞高度和最大起飞速度
     virtual bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) = 0;
     // 触发降落，参数为降落类型和最大降落速度

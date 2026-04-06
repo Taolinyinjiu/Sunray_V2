@@ -639,7 +639,9 @@ void MavrosHelper::mavros_setpoint_attitude_callback(const mavros_msgs::Attitude
 bool MavrosHelper::is_ready() {
     // 首先得到当前时间戳
     const ros::Time now_time = ros::Time::now();
-    const ros::Duration timeout(0.5);
+    // 对于mavros来说，数据的频率是不定的，比如state是1Hz,extendstate是5Hz,estimator_state也是1Hz
+    // target_setpoint_local在没有setpoint输入的时候是不会发送的，因此这里的逻辑进行了一点修改
+    const ros::Duration timeout(1.5);  // 如果超过1.5s没有数据，就认为mavros链路出问题了
     // 根据缓存的 config_list 检查对应数据是否超时。
     // 对于带有 valid 字段的缓存，这里同步刷新 valid；
     // 对于 UAVStateEstimate，只参与 ready 判定，不额外写入 valid。
@@ -660,11 +662,10 @@ bool MavrosHelper::is_ready() {
     }
 
     if (config_cache_.uav_target_state == true) {
-        mavros_setpoint_local_data_.valid =
-            (now_time - mavros_setpoint_local_data_.timestamp) <= timeout;
+        // 实际上这里只需要setpoint_attitude的，因为local并不是会永远存在的，但是attitude的会
         mavros_setpoint_attitude_data_.valid =
             (now_time - mavros_setpoint_attitude_data_.timestamp) <= timeout;
-        ready = ready && mavros_setpoint_local_data_.valid && mavros_setpoint_attitude_data_.valid;
+        ready = ready && mavros_setpoint_attitude_data_.valid;
     }
 
     // 控制句柄属于“是否成功初始化接口”，不是时间新鲜度问题。
