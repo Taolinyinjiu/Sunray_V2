@@ -751,6 +751,7 @@ bool Sunray_FSM::update_home_point() {
     }
     // 更新home点
     home_point_ = odom_snapshot.position;
+    home_point_.z() = fsm_config_.takeoff_land_param.takeoff_relative_height;
     return true;
 }
 

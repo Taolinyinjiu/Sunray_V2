@@ -1,0 +1,29 @@
+cmake_minimum_required(VERSION 3.0.2)
+project(control_tools)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  rospy
+  std_msgs
+  sunray_msgs
+)
+
+catkin_package(
+  CATKIN_DEPENDS roscpp rospy std_msgs sunray_msgs
+)
+
+include_directories(
+  ${catkin_INCLUDE_DIRS}
+)
+
+add_executable(terminal_control_node
+  src/terminal_control/terminal_control.cpp
+)
+
+target_link_libraries(terminal_control_node
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(terminal_control_node ${catkin_EXPORTED_TARGETS})

@@ -2,11 +2,11 @@
 	<!-- 当前使用的定位源配置 -->
 	<arg name="source_id" default="3" />
 	<!-- 配置文件路径 -->
-	<arg name="config_yamlfile_path"
-       default="$(find localization_fusion)/config/localization_sources.yaml" />
+	<arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
 	<!-- OdomStatus输出的频率 -->
 	<arg name="health_rate_hz" default="10.0" />
-	<!-- 单机测试 -->
+	<!-- 是否使用localization_fusion节点接收时刻时间戳替代定位源发送时刻时间戳-->
+    <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />	<!-- 单机测试 -->
 	<arg name="test" default="true" />
 	<arg name="test_uav_name" default="uav" />
 	<arg name="test_uav_id" default="1" />
@@ -22,6 +22,7 @@
 		<param name="source_id" value="$(arg source_id)" />
 		<param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
 		<param name="health_rate_hz" value="$(arg health_rate_hz)" />
+		<param name="use_receive_time" value="$(arg use_receive_time)" />
 	</node>
 
 </launch>

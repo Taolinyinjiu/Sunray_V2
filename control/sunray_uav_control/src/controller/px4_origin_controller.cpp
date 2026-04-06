@@ -83,11 +83,11 @@ bool PX4_OriginController::is_ready() {
         return false;
     }
     // 判断里程计是否超时
-    // if ((now - uav_odometry_.timestamp).toSec() > 0.5) {
-    //     // 里程计超时
-    //     ROS_INFO("odom msg timeout");
-    //     return false;
-    // }
+    if ((now - uav_odometry_.timestamp).toSec() > 0.5) {
+        // 里程计超时
+        ROS_INFO("odom msg timeout");
+        return false;
+    }
     control_common::Mavros_State mavros_state = mavros_helper_.get_state();
     if (mavros_state.connected != true) {
         // px4未正常连接，判断为超时

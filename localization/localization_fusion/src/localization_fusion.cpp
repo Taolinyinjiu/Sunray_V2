@@ -29,6 +29,10 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
         // 读取失败，抛出异常
         throw std::runtime_error("missing param" + node_name + "/health_rate_hz");
     }
+    if (!private_nh_.getParam("use_receive_time", use_receive_time_)) {
+        // 读取失败，抛出异常
+        throw std::runtime_error("missing param" + node_name + "/use_receive_time");
+    }
     // 读取全局参数
     std::string uav_name;
     int uav_id;
@@ -148,6 +152,10 @@ void LocalizationFusion::odometry_callback(const nav_msgs::OdometryConstPtr& msg
     nav_msgs::Odometry temp_msg = *msg;  // 首先解引用，拿到里程计的值
     last_odometry_data_ = temp_msg;
     has_odometry_data_ = true;
+    // 改时间戳
+    if (use_receive_time_) {
+        temp_msg.header.stamp = ros::Time::now();
+    }
     // 改frame
     temp_msg.header.frame_id = local_frame_id_;
     temp_msg.child_frame_id = base_frame_id_;

@@ -26,7 +26,7 @@
 #include "localization_fusion_types.hpp"
 
 // 在clangd格式化的基础上做了一边手动对齐注释，提高可读性
-// clang-format off 
+// clang-format off
 
 class LocalizationFusion {
   public:
@@ -104,7 +104,7 @@ class LocalizationFusion {
     SourceConfig selected_source_{};  // 结合launch文件中的source_id,从config文件中构建读取参数并缓存
     bool has_selected_source_{false};  // 状态标识符，表示是否读取到了配置参数
     double health_rate_hz_{10};
-
+    bool use_receive_time_{false}; // 使用接收时刻时间戳替换里程计信息时间戳
     // 输出topic约定
     std::string global_odometry_topic_{"${uav_ns}/sunray/localization/global_odom"};
     std::string local_odometry_topic_{"${uav_ns}/sunray/localization/local_odom"};
