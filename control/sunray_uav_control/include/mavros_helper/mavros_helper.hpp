@@ -101,6 +101,8 @@ class MavrosHelper {
     control_common::Mavros_Pose get_local_pose();
     // 返回飞控当前的惯性系下的速度
     control_common::Mavros_Velocity get_local_velocity();
+    // 返回imu数据
+    control_common::Mavros_IMU get_imu_data();
     // 返回飞控当前姿态
     Eigen::Quaterniond get_attitude_quat();
     Eigen::Vector3d get_attitude_eluer_rad();
@@ -137,6 +139,7 @@ class MavrosHelper {
     ros::Subscriber sys_sub_;
     ros::Subscriber estimator_sub_;
     ros::Subscriber local_odom_sub_;
+    ros::Subscriber imu_sub_;
     // ros::Subscriber local_attitude_sub_; 考虑了一下，这里直接从里程计提取姿态数据就好了
     ros::Subscriber setpoint_local_sub_;
     ros::Subscriber setpoint_attitude_sub_;
@@ -169,7 +172,7 @@ class MavrosHelper {
     control_common::Mavros_SetpointLocal mavros_setpoint_local_data_;
     control_common::Mavros_SetpointAttitude mavros_setpoint_attitude_data_;
     control_common::Mavros_GPS mavros_gps;
-
+    control_common::Mavros_IMU mavros_imu_date_;
     // 当使用多线程时，如果存在读取和回调同时发生，也就是说读取的数据正在被回调函数写入，此时会存在一些风险
     // 需要考虑加不加锁以及如何加锁的问题
 
@@ -179,6 +182,7 @@ class MavrosHelper {
     void mavros_sys_callback(const mavros_msgs::SysStatus& msg);
     void mavros_estimator_callback(const mavros_msgs::EstimatorStatus& msg);
     void mavros_localodom_callback(const nav_msgs::Odometry& msg);
+    void mavros_imu_callback(const sensor_msgs::Imu& msg);
     void mavros_setpoint_local_callback(const mavros_msgs::PositionTarget& msg);
     void mavros_setpoint_attitude_callback(const mavros_msgs::AttitudeTarget& msg);
 };

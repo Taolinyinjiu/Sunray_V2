@@ -13,6 +13,7 @@
  *	3. 由于后续我们并不准备实现SE3 Control以及对应的求解器，因此选择使用微分平坦轨迹作为后续所有控制器的参考输入，也就是期望状态，并修改命名，将Desired_State_t修改为FlatTrajectoryPoint
  *  4. 使用命名空间包裹，和sunray_uav_control现有语义一致
 		5. 由于引入了C++ 17的语法糖，因此可以不使用mask掩码来判断是否有值被填入
+		6. 修正5,我们只对yaw以及yaw_rate使用optional特性
  *
  * @version 0.1
  * @date 2026-03-16
@@ -31,22 +32,22 @@ namespace controller_data_types {
 struct TargetTrajectoryPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    Eigen::Vector3d position;                     // 期望位置，世界坐标系
-    std::optional<Eigen::Vector3d> velocity;      // 期望速度，世界坐标系
-    std::optional<Eigen::Vector3d> acceleration;  // 期望加速度
-    std::optional<Eigen::Vector3d> jerk;          // 期望加加速度(原生控制器不支持)
+    Eigen::Vector3d position;      // 期望位置，世界坐标系
+    Eigen::Vector3d velocity;      // 期望速度，世界坐标系
+    Eigen::Vector3d acceleration;  // 期望加速度
+    Eigen::Vector3d jerk;          // 期望加加速度(原生控制器不支持)
 
-    std::optional<double> yaw = 0.0;       // 期望偏航角
-    std::optional<double> yaw_rate = 0.0;  // 期望偏航角速度
+    std::optional<float> yaw = 0.0;       // 期望偏航角
+    std::optional<float> yaw_rate = 0.0;  // 期望偏航角速度
 };
 
 struct TargetPoint_t {
-    std::optional<Eigen::Vector3d> position;
+    Eigen::Vector3d position;
     std::optional<float> yaw;
 };
 
 struct TargetVelocity_t {
-    std::optional<Eigen::Vector3d> velocity;
+    Eigen::Vector3d velocity;
     std::optional<float> yaw;
     std::optional<float> yaw_rate;
 };

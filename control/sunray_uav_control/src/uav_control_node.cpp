@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 
     // 获取状态机更新频率
     double update_hz = sunray_fsm.get_update_frequency();
-    ros::Rate rate(update_hz);
+    ros::Rate rate(100);
     while (ros::ok() && !stop_request) {
         // 状态机更新
         sunray_fsm.process();

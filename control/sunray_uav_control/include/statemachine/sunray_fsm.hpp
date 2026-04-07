@@ -122,7 +122,7 @@ class Sunray_FSM {
     ros::Subscriber system_check_sub_;
     // ROS话题发布者
     ros::Publisher sunray_fsm_state_pub_;
-
+    ros::Publisher sunray_odom_debug_pub_;
     // 控制器指针
     std::shared_ptr<Controller_Interface> sunray_controller_;  // 全局唯一的控制器实例
     // 里程计缓存

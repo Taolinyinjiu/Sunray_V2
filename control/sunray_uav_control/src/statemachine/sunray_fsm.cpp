@@ -6,6 +6,7 @@
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
 #include <sunray_msgs/UAVControlFSMState.h>
 #include "controller/px4_origin_controller.hpp"
+#include "controller/px4_linear_attitude_controller.hpp"
 #include <sunray_msgs/OdomStatus.h>
 #include "utils/orientation_utils.hpp"
 // Sunray_FSM更新路径
@@ -73,7 +74,6 @@ void Sunray_FSM::process() {
 }
 
 // OFF -> INIT -> TAKEOFF -> HOVER -> MOVE
-//                   |         |        |
 // |                 |         |        |
 // LAND  <- - -  - - - - - - - | - - -  |
 //                             |        |
@@ -408,6 +408,8 @@ void Sunray_FSM::init_publisher() {
     // 似乎只有一个状态机状态发布者
     sunray_fsm_state_pub_ =
         nh_.advertise<sunray_msgs::UAVControlFSMState>(uav_ns_ + "/sunray/fsm/state", 10);
+    sunray_odom_debug_pub_ =
+        nh_.advertise<nav_msgs::Odometry>(uav_ns_ + "/surnay/debug/odometrry", 10);
 }
 // 为状态机注册控制器
 void Sunray_FSM::register_controller() {
@@ -428,6 +430,12 @@ void Sunray_FSM::register_controller() {
         break;
     }
     case 1: {
+        sunray_controller_ = std::make_shared<PX4_LinearAttitude_Controller>(nh_);
+        // 在这里做控制器的初始化,可以不用在外面判断控制器的类型再写报错异常信息
+        if (sunray_controller_->init() == false) {
+            // 如果控制器初始化失败，抛出异常
+            throw std::runtime_error("{Px4 Original Controller initialization failed");
+        }
         break;
     }
     case 2: {
@@ -870,6 +878,10 @@ void Sunray_FSM::controller_update_loop() {
         {
             std::lock_guard<std::mutex> lk(odom_mutex_);
             odom_snapshot = last_odometry_;
+            std::cout << "UAV Odometry Snap: "
+                      << "pos _x :" << odom_snapshot.position.x() << ","
+                      << "pos _y :" << odom_snapshot.position.y() << ","
+                      << "pos _z :" << odom_snapshot.position.z() << "," << std::endl;
         }
         sunray_controller_->set_current_odom(odom_snapshot);
         update_controller_output();

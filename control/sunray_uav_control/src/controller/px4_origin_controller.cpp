@@ -467,25 +467,18 @@ bool PX4_OriginController::emergency_kill() {
 bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point) {
     // 记录当前时间戳
     ros::Time now = ros::Time::now();
-    // 如果传入的point没有对位置进行赋值
-    if (!point.position.has_value()) {
-        return false;
-    }
+
     // 新目标判据，使用==会由于数值漂移导致异常情况(虽然很少出现)
     constexpr double kNewTargetPosEps = 1e-3;
     // 新目标状态
     bool is_new_target = false;
     // 检查是否为新目标
-    if (!last_point_.position.has_value()) {
-        // 缓存没有值，为新目标
+    const double dp = (point.position - last_point_.position).norm();
+    // 位置误差大于常量误差，为新值
+    if (dp > kNewTargetPosEps) {
         is_new_target = true;
-    } else {
-        const double dp = (point.position.value() - last_point_.position.value()).norm();
-        // 位置误差大于常量误差，为新值
-        if (dp > kNewTargetPosEps) {
-            is_new_target = true;
-        }
     }
+
     // 如果为新目标，则清除一些上下文参数
     if (is_new_target) {
         move_point_arrive_state_ = false;
@@ -501,7 +494,7 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
                          control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
-    send_setpoint.position = point.position.value();
+    send_setpoint.position = point.position;
     if (point.yaw.has_value()) {
         send_setpoint.yaw = point.yaw.value();
     } else {
@@ -511,7 +504,7 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
     // 更新缓存
     last_setpoint_ = send_setpoint;
     // 检查误差
-    Eigen::Vector3d pos_err_vec = uav_odometry_.position - point.position.value();
+    Eigen::Vector3d pos_err_vec = uav_odometry_.position - point.position;
     double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
 
     Eigen::Vector3d vel_err_vec = uav_odometry_.velocity - Eigen::Vector3d::Zero();
@@ -542,7 +535,7 @@ bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t
                              control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
                              control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
                              control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
-    velocity_setpoint.velocity = velocity.velocity.value();
+    velocity_setpoint.velocity = velocity.velocity;
     if (velocity.yaw.has_value()) {
         velocity_setpoint.yaw = velocity.yaw.value();
     } else {
@@ -558,24 +551,13 @@ bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t
 }
 bool PX4_OriginController::move_trajectory(
     controller_data_types::TargetTrajectoryPoint_t trajpoint) {
-    // 轨迹接口传递有值的字段，没有值的字段设置为掩码
+
     control_common::Mavros_SetpointLocal trajpoint_setpoint;
     trajpoint_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
     trajpoint_setpoint.position = trajpoint.position;
-    if (trajpoint.velocity.has_value()) {
-        trajpoint_setpoint.velocity = trajpoint.velocity.value();
-    } else {
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
-                                   control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
-                                   control_common::Mavros_SetpointLocal::Mask::IgnoreVz;
-    }
-    if (trajpoint.acceleration.has_value()) {
-        trajpoint_setpoint.accel_or_force = trajpoint.acceleration.value();
-    } else {
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
-                                   control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
-                                   control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
-    }
+    trajpoint_setpoint.velocity = trajpoint.velocity;
+    trajpoint_setpoint.accel_or_force = trajpoint.acceleration;
+
     if (trajpoint.yaw.has_value()) {
         trajpoint_setpoint.yaw = trajpoint.yaw.value();
     } else {
@@ -591,39 +573,34 @@ bool PX4_OriginController::move_trajectory(
     // 返回的是true表示接受到了o.o
     return true;
 }
-// BUG: body系的函数存在一点小问题
+// BUG:
+// body系的函数存在一点小问题,主要表现在与move_point使用方式上不一致，body系在持续调用的时候，如果point不变，认为是原先不变的一个目标点
 bool PX4_OriginController::move_point_body(controller_data_types::TargetPoint_t point) {
-    // 首选检查传入的point是否有值
-    if (!point.position.has_value()) {
-        return false;
-    }
+    // 新期望点判断常量
     constexpr double kPosEps = 1e-3;
     constexpr double kYawEps = 1e-3;
-
+    // 是否为新目标点状态
     bool is_new_body_target = false;
-    if (!last_point_body_.position.has_value()) {
+    // 计算差值
+    double dp = (point.position - last_point_body_.position).norm();
+    if (dp > kPosEps)
         is_new_body_target = true;
-    } else {
-        double dp = (point.position.value() - last_point_body_.position.value()).norm();
-        if (dp > kPosEps)
-            is_new_body_target = true;
 
-        if (!is_new_body_target && point.yaw.has_value() && last_point_body_.yaw.has_value()) {
-            if (std::abs(point.yaw.value() - last_point_body_.yaw.value()) > kYawEps) {
-                is_new_body_target = true;
-            }
-        } else if (!is_new_body_target &&
-                   (point.yaw.has_value() != last_point_body_.yaw.has_value())) {
+    if (!is_new_body_target && point.yaw.has_value() && last_point_body_.yaw.has_value()) {
+        if (std::abs(point.yaw.value() - last_point_body_.yaw.value()) > kYawEps) {
             is_new_body_target = true;
         }
+    } else if (!is_new_body_target && (point.yaw.has_value() != last_point_body_.yaw.has_value())) {
+        is_new_body_target = true;
     }
+
     if (is_new_body_target) {
         // 得到当前的yaw角
         const double yaw = mavros_helper_.get_yaw_rad();
         const double c = std::cos(yaw);
         const double s = std::sin(yaw);
         // 做body系到local系的转换
-        const Eigen::Vector3d p_b = point.position.value();
+        const Eigen::Vector3d p_b = point.position;
         Eigen::Vector3d delta_w;
         delta_w.x() = c * p_b.x() - s * p_b.y();
         delta_w.y() = s * p_b.x() + c * p_b.y();
@@ -631,7 +608,12 @@ bool PX4_OriginController::move_point_body(controller_data_types::TargetPoint_t 
         delta_w.z() = p_b.z();
         // 目标点 = 当前点 + 增量点
         controller_data_types::TargetPoint_t world_point;
-        world_point.position = uav_odometry_.position + delta_w;
+        Eigen::Vector3d des_position = Eigen::Vector3d::Zero();
+        des_position.x() = uav_odometry_.position.x() + delta_w.x();
+        des_position.y() = uav_odometry_.position.y() + delta_w.y();
+        des_position.z() = delta_w.z();
+        world_point.position = des_position;
+        // 但是z轴是直接
 
         // yaw语义：若给了yaw，按“相对机体yaw增量”处理；否则保持当前朝向
         if (point.yaw.has_value()) {
@@ -646,16 +628,13 @@ bool PX4_OriginController::move_point_body(controller_data_types::TargetPoint_t 
     return move_point(last_point_);
 }
 bool PX4_OriginController::move_velocity_body(controller_data_types::TargetVelocity_t velocity) {
-    // 输入检查
-    if (!velocity.velocity.has_value()) {
-        return false;
-    }
+
     // 读取当前的yaw角
     const double yaw = mavros_helper_.get_yaw_rad();
     const double c = std::cos(yaw);
     const double s = std::sin(yaw);
     // 转换输入的body velocity -> world velocity
-    const Eigen::Vector3d v_b = velocity.velocity.value();
+    const Eigen::Vector3d v_b = velocity.velocity;
     Eigen::Vector3d v_w;
     v_w.x() = c * v_b.x() - s * v_b.y();
     v_w.y() = s * v_b.x() + c * v_b.y();

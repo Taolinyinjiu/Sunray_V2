@@ -96,6 +96,14 @@ struct Mavros_GPS {
     double altitude_amsl;
 };
 
+struct Mavros_IMU {
+    Eigen::Quaterniond orientation;
+    Eigen::Vector3d bodyrate;
+    Eigen::Vector3d accelection;
+
+    ros::Time stamp;
+};
+
 // 姿态数据使用Eigen::Vector3d返回欧拉角，使用Eigen::Quaternion返回四元数,设计两个函数，使用后缀区分
 
 struct Mavros_SetpointLocal {

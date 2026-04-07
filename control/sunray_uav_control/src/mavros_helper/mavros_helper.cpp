@@ -62,6 +62,7 @@ bool MavrosHelper::init(MavrosHelper_ConfigList config_list) {
                                     10,
                                     &MavrosHelper::mavros_localodom_callback,
                                     this);
+        imu_sub_ = nh_.subscribe(uav_ns_ + "/mavros/imu/data",10,&MavrosHelper::mavros_imu_callback,this);
     }
     if(config_list.uav_target_state == true){
         setpoint_local_sub_ = nh_.subscribe(uav_ns_+"/mavros/setpoint_raw/target_local",
@@ -113,6 +114,10 @@ control_common::Mavros_Pose MavrosHelper::get_local_pose() {
 
 control_common::Mavros_Velocity MavrosHelper::get_local_velocity() {
     return mavros_local_vel_data_;
+}
+
+control_common::Mavros_IMU MavrosHelper::get_imu_data() {
+    return mavros_imu_date_;
 }
 
 Eigen::Quaterniond MavrosHelper::get_attitude_quat() {
@@ -573,6 +578,24 @@ void MavrosHelper::mavros_localodom_callback(const nav_msgs::Odometry& msg) {
     // 提取速度
     mavros_local_vel_data_.linear = mavros_odometry_data_.velocity;
     mavros_local_vel_data_.angular = mavros_odometry_data_.bodyrate;
+}
+
+void MavrosHelper::mavros_imu_callback(const sensor_msgs::Imu& msg) {
+    // 填充时间
+    mavros_imu_date_.stamp = msg.header.stamp;
+    // 填充姿态
+    mavros_imu_date_.orientation.w() = msg.orientation.w;
+    mavros_imu_date_.orientation.x() = msg.orientation.x;
+    mavros_imu_date_.orientation.y() = msg.orientation.y;
+    mavros_imu_date_.orientation.z() = msg.orientation.z;
+    // 填充线速度
+    mavros_imu_date_.accelection.x() = msg.linear_acceleration.x;
+    mavros_imu_date_.accelection.y() = msg.linear_acceleration.y;
+    mavros_imu_date_.accelection.z() = msg.linear_acceleration.z;
+    // 填充角速度
+    mavros_imu_date_.bodyrate.x() = msg.angular_velocity.x;
+    mavros_imu_date_.bodyrate.y() = msg.angular_velocity.y;
+    mavros_imu_date_.bodyrate.z() = msg.angular_velocity.z;
 }
 
 void MavrosHelper::mavros_setpoint_local_callback(const mavros_msgs::PositionTarget& msg) {

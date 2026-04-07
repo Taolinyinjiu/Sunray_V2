@@ -52,6 +52,8 @@ add_library(sunray_uav_control_lib
   src/mavros_helper/mavros_helper.cpp
   src/controller/utils.cpp
   src/controller/px4_origin_controller.cpp
+  src/controller/px4_linear_attitude_controller.cpp
+  src/controller/core_algorithm/linear_attitude_control.cpp
   src/statemachine/sunray_fsm_loadparam.cpp
   src/statemachine/sunray_fsm.cpp
 )
