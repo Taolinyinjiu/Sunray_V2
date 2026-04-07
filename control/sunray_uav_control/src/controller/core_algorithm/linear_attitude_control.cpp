@@ -13,7 +13,8 @@ void Linear_AttitudeControl::load_param(Linear_AttitudeControl_Param_t& param) {
     resetThrustMapping();  // 重置推力映射
 }
 
-// 析构函数编译器自动生成
+// 对控制器进行如下修改
+// 1. pos修改为optional项，当没有输入位置时，使用纯速度控制 -> rc_control
 Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
     const controller_data_types::TargetTrajectoryPoint_t des_state,
     const control_common::UAVStateEstimate& current_odom,

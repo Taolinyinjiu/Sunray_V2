@@ -100,6 +100,7 @@ class PX4_LinearAttitude_Controller : public Controller_Interface {
     // 降落阶段开始的时间
     ros::Time start_land_time_{ros::Time(0)};
     bool land_near_ground_ = false;
+    ros::Time landing_time_{ros::Time(0)};
     ros::Time land_touchground_time_{ros::Time(0)};
     // move稳定的时间
     ros::Time start_move_arrive_time_{ros::Time(0)};

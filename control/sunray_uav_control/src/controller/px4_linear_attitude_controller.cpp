@@ -237,7 +237,8 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
                     if ((now - start_checkout_takeoff_success_time_).toSec() >
                         takeoff_success_keep_time_s) {
                         takeoff_complete_ = true;
-                        hover_point = uav_odometry_.position;
+                        hover_point = quint_curve_.get_start_position();
+                        hover_point.z() += relative_takeoff_height;
                         // 清理上下文
                         start_checkout_offboard_time_ = ros::Time(0);
                         last_checkout_offboard_time_ = ros::Time(0);
@@ -275,7 +276,7 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         quint_curve_.set_start_trajpoint(uav_odometry_.position, Eigen::Vector3d::Zero());
         // 使用当前位置的xy和地面高度作为轨迹的终点,速度使用0.1
         Eigen::Vector3d land_position = Eigen::Vector3d(
-            uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height);
+            uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height + 0.1);
         Eigen::Vector3d land_vel = Eigen::Vector3d(0, 0, -0.1);
         // 设置轨迹的终点参数
         quint_curve_.set_end_trajpoint(land_position, land_vel);
@@ -305,12 +306,14 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         // 发布输出
         mavros_helper_.pub_attitude_setpoint(setpoint);
     }
-    // 检查轨迹是否执行到目标点，也就是近地段
-    bool near_ground = (uav_odometry_.position.z() - quint_curve_.get_end_position().z() < 0.05);
+    // 我们会注意到,设置速度为-0.1时，无人机的在离地15cm左右时，由于地效的原因，会在该处悬停，因此我们对这里进行一些设计
+    // 使得des_pos.z变成一个随时间下降的量，这样control会得到一个随时间变化的pos_error然后得到我们想要的推力以
+    bool near_ground = (uav_odometry_.position.z() < 0.2);
     bool velocity_low = (uav_odometry_.velocity.norm() < 0.15);
     control_common::LandedState px4_landed = mavros_helper_.get_state().landed_state;
     if (near_ground && velocity_low) {
         land_near_ground_ = true;
+        landing_time_ = now;
     }
     // 轨迹结束后，设置为锁xy然后持续下降
     if (land_near_ground_ == true) {
@@ -318,7 +321,8 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         controller_data_types::TargetTrajectoryPoint_t linear_input_state;
         linear_input_state.position = quint_curve_.get_end_position();
         // 设置z轴位置为锁存的地面高度 - 0.2
-        linear_input_state.position.z() = takeoff_ground_height - 0.2;
+        linear_input_state.position.z() =
+            takeoff_ground_height - 0.5 * ((now - landing_time_).toNSec());
         // 设置期望速度为( 0 0 -0.3)
         linear_input_state.velocity = Eigen::Vector3d(0, 0, -0.1);
         linear_input_state.yaw = land_yaw_;  // yaw角使用之前锁存的yaw
@@ -326,9 +330,8 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
 
         // 持续检查是否接触地面
         velocity_low = std::abs(uav_odometry_.velocity.z()) < 0.1;
-
-        if (velocity_low == true) {
-            linear_input_state.velocity.z() -= 99;
+        if (velocity_low && uav_odometry_.position.z() < (takeoff_ground_height + 0.05)) {
+            linear_input_state.velocity.z() -= 5;
         }
         bool px4_land = px4_landed == control_common::LandedState::OnGround;
         if (velocity_low && px4_land) {  // 考虑传感器漂移，这里用||逻辑
@@ -381,7 +384,9 @@ bool PX4_LinearAttitude_Controller::hover() {
     setpoint.orientation = output.orientation;
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
-    return false;
+
+    controller.estimateThrustModel(imu_data.accelection);
+    return true;
 }
 bool PX4_LinearAttitude_Controller::emergency_kill() {
     return false;
