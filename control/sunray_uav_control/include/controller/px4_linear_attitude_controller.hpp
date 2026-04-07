@@ -109,6 +109,7 @@ class PX4_LinearAttitude_Controller : public Controller_Interface {
     control_common::Mavros_SetpointAttitude last_setpoint_;
     controller_data_types::TargetPoint_t last_point_;
     controller_data_types::TargetPoint_t last_point_body_;
+    Eigen::Vector3d land_point_;
     Eigen::Vector3d hover_point;
     // -------------------起降状态与move_point到位标志位--------------
     bool takeoff_complete_{false};
