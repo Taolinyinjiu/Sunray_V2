@@ -878,10 +878,6 @@ void Sunray_FSM::controller_update_loop() {
         {
             std::lock_guard<std::mutex> lk(odom_mutex_);
             odom_snapshot = last_odometry_;
-            std::cout << "UAV Odometry Snap: "
-                      << "pos _x :" << odom_snapshot.position.x() << ","
-                      << "pos _y :" << odom_snapshot.position.y() << ","
-                      << "pos _z :" << odom_snapshot.position.z() << "," << std::endl;
         }
         sunray_controller_->set_current_odom(odom_snapshot);
         update_controller_output();

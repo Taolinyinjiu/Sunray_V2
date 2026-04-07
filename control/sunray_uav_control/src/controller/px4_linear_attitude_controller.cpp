@@ -189,24 +189,13 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
                 controller_data_types::TargetTrajectoryPoint_t linear_input;
                 Linear_AttitudeControl_Output_t output;
                 linear_input = get_rotor_speed_up_des(now);
-                std::cout << "linear input: "
-                          << "pos_x :" << linear_input.position.x() << ","
-                          << "pos_y :" << linear_input.position.y() << ","
-                          << "pos_z :" << linear_input.position.z() << ","
-                          << "vel_x :" << linear_input.velocity.x() << ","
-                          << "vel_y :" << linear_input.velocity.y() << ","
-                          << "vel_z :" << linear_input.velocity.z() << ",";
+
                 control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
                 output = controller.calculateControl(linear_input, uav_odometry_, imu_data);
                 setpoint.orientation = output.orientation;
                 setpoint.thrust = output.thrust;
                 mavros_helper_.pub_attitude_setpoint(setpoint);
-                std::cout << "setpoint orientation: "
-                          << "x: " << setpoint.orientation.x() << ", "
-                          << "y: " << setpoint.orientation.y() << ", "
-                          << "z: " << setpoint.orientation.z() << ", "
-                          << "w: " << setpoint.orientation.w() << std::endl;
-                std::cout << "thrust :" << setpoint.thrust << std::endl;
+
                 // 更新缓存
                 last_setpoint_ = setpoint;
                 return false;
@@ -226,12 +215,7 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
                 control_common::Mavros_SetpointAttitude setpoint;
                 setpoint.orientation = output.orientation;
                 setpoint.thrust = output.thrust;
-                std::cout << "setpoint orientation: "
-                          << "x: " << setpoint.orientation.x() << ", "
-                          << "y: " << setpoint.orientation.y() << ", "
-                          << "z: " << setpoint.orientation.z() << ", "
-                          << "w: " << setpoint.orientation.w() << std::endl;
-                std::cout << "thrust :" << setpoint.thrust << std::endl;
+
                 // 发布输出
                 mavros_helper_.pub_attitude_setpoint(setpoint);
                 // 更新缓存
@@ -287,15 +271,12 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         // 清除掉五次项曲线的参数，然后重新填入
         quint_curve_.clear();
 
-        // 使用当前setpoint的输出position部分为轨迹的起点，保证setpoint的连续性
-        control_common::Mavros_SetpointLocal last_setpoint;
-        last_setpoint = mavros_helper_.get_target_local();
-        Eigen::Vector3d last_setpoint_position = last_setpoint.position;
-        quint_curve_.set_start_trajpoint(last_setpoint_position, Eigen::Vector3d::Zero());
-        // 使用当前位置的xy和地面高度+2作为轨迹的终点,速度使用0.1
+        // 使用当前里程计输出的position部分为轨迹的起点
+        quint_curve_.set_start_trajpoint(uav_odometry_.position, Eigen::Vector3d::Zero());
+        // 使用当前位置的xy和地面高度作为轨迹的终点,速度使用0.1
         Eigen::Vector3d land_position = Eigen::Vector3d(
-            uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height + 0.2);
-        Eigen::Vector3d land_vel = Eigen::Vector3d(0, 0, -0.2);
+            uav_odometry_.position.x(), uav_odometry_.position.y(), takeoff_ground_height);
+        Eigen::Vector3d land_vel = Eigen::Vector3d(0, 0, -0.1);
         // 设置轨迹的终点参数
         quint_curve_.set_end_trajpoint(land_position, land_vel);
         // 使用最大降落速度求解时间
@@ -304,14 +285,6 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         land_yaw_ = mavros_helper_.get_yaw_rad();
         // 更新时间戳
         start_land_time_ = now;
-        ROS_INFO("satrt_position x : %f,y : %f,z : %f",
-                 last_setpoint.position.x(),
-                 last_setpoint.position.y(),
-                 last_setpoint.position.z());
-        ROS_INFO("land_position x : %f,y : %f,z : %f",
-                 land_position.x(),
-                 land_position.y(),
-                 land_position.z());
     }
     if (land_near_ground_ == false) {
         // 得到五次项曲线输出
@@ -353,8 +326,9 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
 
         // 持续检查是否接触地面
         velocity_low = std::abs(uav_odometry_.velocity.z()) < 0.1;
+
         if (velocity_low == true) {
-            linear_input_state.velocity.z() -= 0.2;
+            linear_input_state.velocity.z() -= 99;
         }
         bool px4_land = px4_landed == control_common::LandedState::OnGround;
         if (velocity_low && px4_land) {  // 考虑传感器漂移，这里用||逻辑
@@ -380,6 +354,14 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         // 发布输出
         // 获取linear_control的输出
         Linear_AttitudeControl_Output_t output;
+        std::cout << "----------------------" << std::endl;
+        std::cout << "linear controller input :" << std::endl;
+        std::cout << "pos_x :" << linear_input_state.position.x() << ","
+                  << "pos_y :" << linear_input_state.position.y() << ","
+                  << "pos_z :" << linear_input_state.position.z() << "," << std::endl;
+        std::cout << "vel_x :" << linear_input_state.velocity.x() << ","
+                  << "vel_y :" << linear_input_state.velocity.y() << ","
+                  << "vel_z :" << linear_input_state.velocity.z() << "," << std::endl;
         output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data);
         control_common::Mavros_SetpointAttitude setpoint;
         setpoint.orientation = output.orientation;
@@ -392,26 +374,12 @@ bool PX4_LinearAttitude_Controller::hover() {
     // hover模式，设定当前里程计位置为期望位置，速度加速度加加速度置零
     controller_data_types::TargetTrajectoryPoint_t linear_input_state;
     linear_input_state.position = hover_point;
-    std::cout << "UAV Odometry: "
-              << "pos _x :" << uav_odometry_.position.x() << ","
-              << "pos _y :" << uav_odometry_.position.y() << ","
-              << "pos _z :" << uav_odometry_.position.z() << ",";
     control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
     Linear_AttitudeControl_Output_t output;
-    std::cout << "linear controller input date: "
-              << "pos _x :" << linear_input_state.position.x() << ","
-              << "pos _y :" << linear_input_state.position.y() << ","
-              << "pos _z :" << linear_input_state.position.z() << ",";
     output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data);
     control_common::Mavros_SetpointAttitude setpoint;
     setpoint.orientation = output.orientation;
     setpoint.thrust = output.thrust;
-    std::cout << "setpoint orientation: "
-              << "x: " << setpoint.orientation.x() << ", "
-              << "y: " << setpoint.orientation.y() << ", "
-              << "z: " << setpoint.orientation.z() << ", "
-              << "w: " << setpoint.orientation.w() << std::endl;
-    std::cout << "thrust :" << setpoint.thrust << std::endl;
     mavros_helper_.pub_attitude_setpoint(setpoint);
     return false;
 }

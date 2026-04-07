@@ -23,19 +23,15 @@ Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
     Eigen::Vector3d Kp, Kv;
     Kp << param_.pos_gain.Kx, param_.pos_gain.Ky, param_.pos_gain.Kz;
     Kv << param_.vel_gain.Kx, param_.vel_gain.Ky, param_.vel_gain.Kz;
-    // std::cout << "gain state: "
-    //           << "pos_x :" << Kp.x() << ","
-    //           << "pos_y :" << Kp.y() << ","
-    //           << "pos_z :" << Kp.z() << ","
-    //           << "vel_x :" << Kv.x() << ","
-    //           << "vel_y :" << Kv.y() << ","
-    //           << "vel_z :" << Kv.z() << ",";
-    std::cout << " gravity: " << param_.gravity << std::endl;
     des_acc = des_state.acceleration +
               Kv.asDiagonal() * (des_state.velocity - current_odom.velocity) +
               Kp.asDiagonal() * (des_state.position - current_odom.position);
+    std::cout << "----------------------" << std::endl;
+    std::cout << " directly des_acc:" << des_acc.z() << std::endl;
     des_acc += Eigen::Vector3d(0, 0, param_.gravity);
+    std::cout << " gravity des_acc:" << des_acc.z() << std::endl;
     output.thrust = computeDesiredCollectiveThrustSignal(des_acc);  // 从加速度映射推力
+    std::cout << " acc to thrust :" << output.thrust << std::endl;
     double roll, pitch;
     double yaw_imu = fromQuaternion2yaw(imu.orientation);
     double yaw_odom = fromQuaternion2yaw(current_odom.orientation);
@@ -59,11 +55,25 @@ Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
 */
 double
 Linear_AttitudeControl::computeDesiredCollectiveThrustSignal(const Eigen::Vector3d& des_acc) {
-    double throttle_percentage(0.0);
+    double z_acc = des_acc(2);
 
-    /* compute throttle, thr2acc has been estimated before */
-    throttle_percentage = des_acc(2) / thr2acc_;
-    std::cout << "thr2acc_:" << thr2acc_ << std::endl;
+    // 1. 如果计算出的加速度连重力的一半都不到，说明控制器想急剧下降或已经撞地
+    // 我们可以引入一个阈值（假设 param_.gravity 是 9.8）
+    if (z_acc < 0.5 * 9.8) {
+        // 此时我们可以给一个更小的比例，或者直接压低输出
+        // 比如：让推力加速减小
+        z_acc *= 0.5;
+    }
+
+    double throttle_percentage = z_acc / thr2acc_;
+
+    // 2. 限制最小值（PX4上锁通常需要推力低于 0.1-0.15）
+    // 如果你保底给 0.05，PX4 一定会上锁
+    if (throttle_percentage < 0.05)
+        throttle_percentage = 0.05;
+    if (throttle_percentage > 1.0)
+        throttle_percentage = 1.0;
+
     return throttle_percentage;
 }
 

@@ -120,7 +120,7 @@ linear_attitude_controller_param:
         K2: 1.6942 # Needs precise calibration!
         K3: 0.6786 # Needs precise calibration! K3 equals THR_MDL_FAC in https://docs.px4.io/master/en/config_mc/pid_tuning_guide_multicopter.html.
         # approximate thrust mapping parameters
-        hover_percentage: 0.37 # Thrust percentage in Stabilize/Arco mode # *
+        hover_percentage: 0.374 # Thrust percentage in Stabilize/Arco mode # *
     gain:
         # 这里是一个简单的PD控制器增益参数
         # 我们为位置环引入P调节，为速度环引入PID调节, 不过速度环中的积分与微分项暂时没有使用到
