@@ -106,7 +106,11 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     const Eigen::Vector3d target_vel = des_state.velocity;
     const Eigen::Vector3d target_acc = des_state.acceleration;
     const Eigen::Vector3d target_jerk = des_state.jerk;
-    const double target_yaw = static_cast<double>(des_state.yaw.value_or(0.0f));
+    // 若上层显式设置了 yaw 则更新缓存；否则沿用上次的期望 yaw，避免默认归零
+    if (des_state.yaw.has_value()) {
+        last_desired_yaw_ = static_cast<double>(des_state.yaw.value());
+    }
+    const double target_yaw = last_desired_yaw_;
 
     // ── Z 轴积分：消除推力模型未标定导致的稳态悬停误差 ───────────────────
     // 仅在接近目标时积分（误差 < 1m），防止大幅运动时积分饱和

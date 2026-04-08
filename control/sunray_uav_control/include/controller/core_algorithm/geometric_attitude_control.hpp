@@ -153,6 +153,11 @@ class Geometric_AttitudeControl {
         integral_z_ = 0.0;
     }
 
+    // 初始化期望 yaw 缓存（起飞锁定 yaw 后调用，防止首次 move_point 时 yaw 跳变到 0）
+    void set_initial_yaw(double yaw_rad) {
+        last_desired_yaw_ = yaw_rad;
+    }
+
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   private:
@@ -163,6 +168,10 @@ class Geometric_AttitudeControl {
 
     // Z 轴位置积分状态（单位：m·s，乘以 pos_ki_z 后得到 m/s² 的加速度补偿量）
     double integral_z_{0.0};
+
+    // 期望 yaw 缓存：仅当上层显式设置 des_state.yaw 时更新，否则保持上次值
+    // 初始为 0，应在起飞锁定 yaw 后通过 set_initial_yaw() 同步
+    double last_desired_yaw_{0.0};
 
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法

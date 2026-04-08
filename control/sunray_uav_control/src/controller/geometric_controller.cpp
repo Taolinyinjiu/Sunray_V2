@@ -148,6 +148,8 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         // 锁存起飞时刻的 yaw 角和地面高度
         takeoff_yaw_ = mavros_helper_.get_yaw_rad();
         takeoff_ground_height_ = uav_odometry_.position.z();
+        // 将起飞 yaw 同步到核心算法缓存，防止后续 move_point 未显式设置 yaw 时默认归零
+        controller_.set_initial_yaw(takeoff_yaw_);
         // 注意：quint_curve_ 并不在此处记录开始时间，
         // 而是以第一次调用 get_result() 时的时刻作为曲线起点
     }
@@ -416,7 +418,10 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
     des_state.velocity = Eigen::Vector3d::Zero();
     des_state.acceleration = Eigen::Vector3d::Zero();
     des_state.jerk = Eigen::Vector3d::Zero();
-    des_state.yaw = point.yaw;
+    // 若上层未显式设置 yaw（KEEP_YAW 模式），则传入起飞锁定的 yaw，
+    // 核心算法中 last_desired_yaw_ 将保持该值，不会归零
+    des_state.yaw =
+        point.yaw.has_value() ? point.yaw : std::optional<float>(static_cast<float>(takeoff_yaw_));
     des_state.yaw_rate = 0.0;
 
     auto output = controller_.calculateControl(des_state, uav_odometry_);
@@ -459,6 +464,11 @@ bool Geometric_Controller::move_trajectory(
     // 几何控制器的核心运动接口。
     // 将完整的轨迹点（位置 / 速度 / 加速度 / 加加速度 / yaw）直接送入核心算法，
     // 由两级控制环（位置 PD + 姿态子控制器）输出 body rate 和归一化推力。
+
+    // 若轨迹点未携带 yaw，补入起飞锁定的 yaw，保持航向稳定
+    if (!trajpoint.yaw.has_value()) {
+        trajpoint.yaw = std::optional<float>(static_cast<float>(takeoff_yaw_));
+    }
     desired_state_ = trajpoint;
 
     auto output = controller_.calculateControl(trajpoint, uav_odometry_);
