@@ -260,7 +260,7 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
 void applyThrustShaping(double& thrust, bool near_ground, bool landed) {
     // 1. 确定当前的推力上限
     // 如果已经触地，给一个极小的维持压力；如果只是靠近地面，给一个略低于悬停的上限
-    double thrust_cap = landed ? 0.10 : (near_ground ? 0.32 : 1.0);
+    double thrust_cap = landed ? 0.05 : (near_ground ? 0.31 : 1.0);
 
     // 2. 核心限幅：确保推力在 [最小怠速, 动态上限] 之间
     thrust = std::clamp(thrust, 0.02, thrust_cap);
@@ -287,8 +287,8 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
             uav_odometry_.position;  // 使用当前里程计作为降落开始的点，锁定xy的位置
         Eigen::Vector3d landing_end_point_ = uav_odometry_.position;
         landing_end_point_.z() =
-            takeoff_ground_height - 0.2;  // 在这里减去0.2以防止传感器漂移产生的z轴偏差
-        Eigen::Vector3d landing_end_vel = Eigen::Vector3d(0, 0, -0.2);
+            takeoff_ground_height - 0.1;  // 在这里减去0.2以防止传感器漂移产生的z轴偏差
+        Eigen::Vector3d landing_end_vel = Eigen::Vector3d(0, 0, -0.1);
         land_yaw_ = mavros_helper_.get_yaw_rad();  // 获取当前的yaw角
         quint_curve_.clear();                      // 清除曲线参数
         quint_curve_.set_start_trajpoint(landing_start_point_,
@@ -336,11 +336,12 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
     setpoint.thrust = output.thrust;
 
     // 对推力进行整形
-    applyThrustShaping(setpoint.thrust, velocity_low, landed_by_velocity);
+    applyThrustShaping(setpoint.thrust, near_ground, landed_by_velocity);
     std::cout << "----------------------------------" << std::endl;
     std::cout << "setpoint thrust: " << setpoint.thrust << std::endl;
     std::cout << "velocity_low: " << velocity_low << std::endl;
     std::cout << "landed_by_velocity: " << landed_by_velocity << std::endl;
+    std::cout << "px4_land_status_: " << px4_land_status_ << std::endl;
     if (landed_detected && landed_by_velocity) {  // 考虑传感器漂移，这里用||逻辑
         if (land_touchground_time_ == ros::Time(0)) {
             land_touchground_time_ = now;

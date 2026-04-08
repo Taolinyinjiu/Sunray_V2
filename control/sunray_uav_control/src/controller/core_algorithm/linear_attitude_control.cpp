@@ -143,7 +143,7 @@ Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
     // 检查是否允许使用积分项
     for (uint8_t i = 0; i < 2; i++) {
         if (enable_integral &&
-            std::abs(pos_error[i]) < test_control_param_.position_integral_start_error_xy_m) {
+            std::abs(pos_error[i]) < test_control_param_.position_integral_error_xy_m) {
             test_control_param_.int_e_v_[i] += pos_error[i] / test_control_param_.controller_hz;
             test_control_param_.int_e_v_[i] =
                 clamp_symmetric(test_control_param_.int_e_v_[i], test_control_param_.int_max[i]);
@@ -152,7 +152,7 @@ Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
         }
     }
     if (enable_integral &&
-        std::abs(pos_error[2]) < test_control_param_.position_integral_start_error_z_m) {
+        std::abs(pos_error[2]) < test_control_param_.position_integral_error_z_m) {
         test_control_param_.int_e_v_[2] += pos_error[2] / test_control_param_.controller_hz;
         test_control_param_.int_e_v_[2] =
             clamp_symmetric(test_control_param_.int_e_v_[2], test_control_param_.int_max[2]);

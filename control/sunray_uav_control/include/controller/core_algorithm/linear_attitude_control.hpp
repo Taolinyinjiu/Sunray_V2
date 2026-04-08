@@ -30,8 +30,8 @@ struct ControlParam {
     Eigen::Vector3d Kvi{Eigen::Vector3d(0.3, 0.3, 0.3)};  // PID 增益
     double mass_kg = 1.0;                                 // 起飞全重
     double gravity_mps2{9.81};
-    double position_integral_start_error_xy_m{0.2};
-    double position_integral_start_error_z_m{1.0};
+    double position_integral_error_xy_m{0.2};
+    double position_integral_error_z_m{0.2};
     double gravity = 9.81;                      // 重力加速度
     double hover_percent = 0.37;                // 悬停时的推力百分比 (0.0~1.0)
     double max_pos_error = 0.3;                 // 位置误差截断 (米)
