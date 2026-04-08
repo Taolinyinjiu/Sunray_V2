@@ -51,6 +51,155 @@ Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
     return output;
 }
 
+double clamp_symmetric(double value, double limit_abs) {
+    const double limit = std::abs(limit_abs);
+    return std::max(-limit, std::min(limit, value));
+}
+
+bool is_finite_quaternion(const Eigen::Quaterniond& q) {
+    return std::isfinite(q.w()) && std::isfinite(q.x()) && std::isfinite(q.y()) &&
+           std::isfinite(q.z());
+}
+
+Eigen::Quaterniond normalized_or_identity(const Eigen::Quaterniond& q) {
+    if (!is_finite_quaternion(q)) {
+        return Eigen::Quaterniond::Identity();
+    }
+    Eigen::Quaterniond normalized = q;
+    if (normalized.norm() > 1e-9) {
+        normalized.normalize();
+        return normalized;
+    }
+    return Eigen::Quaterniond::Identity();
+}
+
+double yaw_from_quaternion(const Eigen::Quaterniond& q) {
+    const Eigen::Quaterniond normalized = normalized_or_identity(q);
+    const double siny_cosp =
+        2.0 * (normalized.w() * normalized.z() + normalized.x() * normalized.y());
+    const double cosy_cosp =
+        1.0 - 2.0 * (normalized.y() * normalized.y() + normalized.z() * normalized.z());
+    return std::atan2(siny_cosp, cosy_cosp);
+}
+
+Eigen::Quaterniond quaternion_from_force_yaw(const Eigen::Vector3d& force_world,
+                                             double yaw,
+                                             const Eigen::Quaterniond& fallback_attitude) {
+    if (!force_world.allFinite() || force_world.norm() < 1e-6) {
+        return normalized_or_identity(fallback_attitude);
+    }
+
+    Eigen::Vector3d b3_des = force_world.normalized();
+    Eigen::Vector3d b1_ref(std::cos(yaw), std::sin(yaw), 0.0);
+    if (b1_ref.norm() < 1e-6) {
+        b1_ref = Eigen::Vector3d::UnitX();
+    }
+
+    Eigen::Vector3d b2_des = b3_des.cross(b1_ref);
+    if (b2_des.norm() < 1e-6) {
+        const Eigen::Matrix3d fallback_rotation =
+            normalized_or_identity(fallback_attitude).toRotationMatrix();
+        b2_des = b3_des.cross(fallback_rotation.col(0));
+        if (b2_des.norm() < 1e-6) {
+            b2_des = b3_des.cross(Eigen::Vector3d::UnitX());
+        }
+        if (b2_des.norm() < 1e-6) {
+            b2_des = b3_des.cross(Eigen::Vector3d::UnitY());
+        }
+    }
+    b2_des.normalize();
+
+    Eigen::Vector3d b1_des = b2_des.cross(b3_des);
+    if (b1_des.norm() < 1e-6) {
+        return normalized_or_identity(fallback_attitude);
+    }
+    b1_des.normalize();
+
+    Eigen::Matrix3d desired_rotation;
+    desired_rotation.col(0) = b1_des;
+    desired_rotation.col(1) = b2_des;
+    desired_rotation.col(2) = b3_des;
+    return normalized_or_identity(Eigen::Quaterniond(desired_rotation));
+}
+
+Linear_AttitudeControl_Output_t Linear_AttitudeControl::calculateControl(
+    const controller_data_types::TargetTrajectoryPoint_t des_state,
+    const control_common::UAVStateEstimate& current_odom,
+    const control_common::Mavros_IMU& imu,
+    bool enable_integral) {
+    Linear_AttitudeControl_Output_t output;
+    // 计算误差
+    Eigen::Vector3d pos_error = des_state.position - current_odom.position;
+    Eigen::Vector3d vel_error = des_state.velocity - current_odom.velocity;
+    // 对误差进行限幅
+    for (uint8_t i = 0; i < 3; i++) {
+        if (std::abs(pos_error[i]) > test_control_param_.max_pos_error) {
+            pos_error[i] = clamp_symmetric(pos_error[i], test_control_param_.max_pos_error);
+        }
+        if (std::abs(vel_error[i]) > test_control_param_.max_vel_error) {
+            vel_error[i] = clamp_symmetric(vel_error[i], test_control_param_.max_vel_error);
+        }
+    }
+    // 检查是否允许使用积分项
+    for (uint8_t i = 0; i < 2; i++) {
+        if (enable_integral &&
+            std::abs(pos_error[i]) < test_control_param_.position_integral_start_error_xy_m) {
+            test_control_param_.int_e_v_[i] += pos_error[i] / test_control_param_.controller_hz;
+            test_control_param_.int_e_v_[i] =
+                clamp_symmetric(test_control_param_.int_e_v_[i], test_control_param_.int_max[i]);
+        } else {
+            test_control_param_.int_e_v_[i] = 0.0;
+        }
+    }
+    if (enable_integral &&
+        std::abs(pos_error[2]) < test_control_param_.position_integral_start_error_z_m) {
+        test_control_param_.int_e_v_[2] += pos_error[2] / test_control_param_.controller_hz;
+        test_control_param_.int_e_v_[2] =
+            clamp_symmetric(test_control_param_.int_e_v_[2], test_control_param_.int_max[2]);
+    } else {
+        test_control_param_.int_e_v_[2] = 0;
+    }
+    // 当输入期望状态有速度时，积分项清零
+    if (std::abs(des_state.velocity.x()) > 1e-9 || std::abs(des_state.velocity.y()) > 1e-9 ||
+        std::abs(des_state.velocity.z()) > 1e-9) {
+        test_control_param_.int_e_v_[0] = 0.0;
+        test_control_param_.int_e_v_[1] = 0.0;
+    }
+    const Eigen::Vector3d des_acc =
+        des_state.acceleration + test_control_param_.Kp.cwiseProduct(pos_error) +
+        test_control_param_.Kv.cwiseProduct(vel_error) +
+        test_control_param_.Kvi.cwiseProduct(test_control_param_.int_e_v_);
+
+    Eigen::Vector3d f_des = des_acc * test_control_param_.mass_kg;
+    f_des.z() += test_control_param_.mass_kg * test_control_param_.gravity_mps2;
+
+    const double nominal_weight = test_control_param_.mass_kg * test_control_param_.gravity_mps2;
+    if (f_des.z() < 0.5 * nominal_weight && std::abs(f_des.z()) > 1e-6) {
+        f_des = f_des / f_des.z() * (0.5 * nominal_weight);
+    } else if (f_des.z() > 2.0 * nominal_weight && std::abs(f_des.z()) > 1e-6) {
+        f_des = f_des / f_des.z() * (2.0 * nominal_weight);
+    }
+
+    const double tilt_tan = std::tan(test_control_param_.tilt_angle_max_rad);
+    const double max_horizontal_force = std::abs(f_des.z()) * tilt_tan;
+    const double horizontal_force_norm = f_des.head<2>().norm();
+    if (horizontal_force_norm > max_horizontal_force && horizontal_force_norm > 1e-6) {
+        const double scale = max_horizontal_force / horizontal_force_norm;
+        f_des.x() *= scale;
+        f_des.y() *= scale;
+    }
+    const double yaw = des_state.yaw.value();
+    const Eigen::Quaterniond desired_attitude =
+        quaternion_from_force_yaw(f_des, yaw, normalized_or_identity(current_odom.orientation));
+    const Eigen::Matrix3d desired_rotation = desired_attitude.toRotationMatrix();
+    const double u1 = std::max(0.0, f_des.dot(desired_rotation.col(2)));
+    const double full_thrust = nominal_weight / std::max(1e-6, test_control_param_.hover_percent);
+    output.orientation = desired_attitude;
+    output.thrust =
+        std::max(test_control_param_.min_command_thrust, std::min(1.0, u1 / full_thrust));
+    return output;
+}
+
 /*
   compute throttle percentage
 */

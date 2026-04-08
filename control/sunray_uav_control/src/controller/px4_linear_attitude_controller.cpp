@@ -191,7 +191,7 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
                 linear_input = get_rotor_speed_up_des(now);
 
                 control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
-                output = controller.calculateControl(linear_input, uav_odometry_, imu_data);
+                output = controller.calculateControl(linear_input, uav_odometry_, imu_data, false);
                 setpoint.orientation = output.orientation;
                 setpoint.thrust = output.thrust;
                 mavros_helper_.pub_attitude_setpoint(setpoint);
@@ -211,7 +211,8 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
                 linear_input_state.acceleration = curve_result.acceleration;
                 linear_input_state.yaw = takeoff_yaw_;  // yaw角使用之前锁存的yaw
                 control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
-                output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data);
+                output =
+                    controller.calculateControl(linear_input_state, uav_odometry_, imu_data, false);
                 control_common::Mavros_SetpointAttitude setpoint;
                 setpoint.orientation = output.orientation;
                 setpoint.thrust = output.thrust;
@@ -255,7 +256,18 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
     }
     return false;
 }
+
+void applyThrustShaping(double& thrust, bool near_ground, bool landed) {
+    // 1. 确定当前的推力上限
+    // 如果已经触地，给一个极小的维持压力；如果只是靠近地面，给一个略低于悬停的上限
+    double thrust_cap = landed ? 0.10 : (near_ground ? 0.32 : 1.0);
+
+    // 2. 核心限幅：确保推力在 [最小怠速, 动态上限] 之间
+    thrust = std::clamp(thrust, 0.02, thrust_cap);
+};
+
 bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocity) {
+    // 首先，我们要求检查land_type ，当land_type==1切换为px4的auto_land
     if (land_type == 1) {
         // 切换为px4的auto land模式
         mavros_helper_.set_px4_mode(control_common::FlightMode::AutoLand);
@@ -264,38 +276,72 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
         return land_state;
     }
     ros::Time now = ros::Time::now();
+    // 其次我们检查land是否已经成功(本函数会被反复调用)
     if (land_complete_ == true) {
         return true;
     }
-    // 降落的基本思路是，要求以一个稳定的，小的速度到达地面，这样能够保证imu数据是稳定的，基于imu映射的推力也是稳定的
-    // 所以我们使用递归时间降落，也就是，记录进入land函数的时间戳，然后构造一个kp用于递减当前的pos z
+    // 最后我们检查是否为第一次进入本函数
     if (landing_time_ == ros::Time(0)) {
         landing_time_ = now;
-        land_point_ = uav_odometry_.position;
-        land_yaw_ = mavros_helper_.get_yaw_rad();
+        Eigen::Vector3d landing_start_point_ =
+            uav_odometry_.position;  // 使用当前里程计作为降落开始的点，锁定xy的位置
+        Eigen::Vector3d landing_end_point_ = uav_odometry_.position;
+        landing_end_point_.z() =
+            takeoff_ground_height - 0.2;  // 在这里减去0.2以防止传感器漂移产生的z轴偏差
+        Eigen::Vector3d landing_end_vel = Eigen::Vector3d(0, 0, -0.2);
+        land_yaw_ = mavros_helper_.get_yaw_rad();  // 获取当前的yaw角
+        quint_curve_.clear();                      // 清除曲线参数
+        quint_curve_.set_start_trajpoint(landing_start_point_,
+                                         Eigen::Vector3d::Zero());  // 设置起点为当前位置，速度为零
+        quint_curve_.set_end_trajpoint(landing_end_point_, landing_end_vel);  // 设置终点参数
+        quint_curve_.set_curve_maxvel(max_land_velocity);  // 根据最大速度反推时间
     }
+    // 首先我们讨论这样一个问题，我们要一个怎样的下降？
+    // 1. 匀速下降(恒定速度)
+    // 2. 非匀速的下降，速度平滑变化的下降，在离地的时候速度正好到0(曲线规划)
+    // 假设我们使用后者，我们就需要在上面的函数中，对曲线参数进行初始化
+    bool near_ground = uav_odometry_.position.z() <= takeoff_ground_height + 0.05;
+    bool landed_by_velocity = false;
+    const bool velocity_low = std::abs(uav_odometry_.velocity.x()) < 0.1 &&
+                              std::abs(uav_odometry_.velocity.y()) < 0.1 &&
+                              std::abs(uav_odometry_.velocity.z()) < 0.1;
+    if (near_ground && velocity_low) {
+        if (start_land_time_ == ros::Time(0)) {
+            start_land_time_ = now;
+        } else {
+            if ((now - start_land_time_).toSec() > 2.0) {
+                landed_by_velocity = true;
+            }
+        }
+    } else {
+        start_land_time_ = ros::Time(0);
+        landed_by_velocity = false;
+    }
+    // 获取五次项曲线的输出
+    control_common::LandedState px4_land_state = mavros_helper_.get_state().landed_state;
+    bool px4_land_status_ = px4_land_state == control_common::LandedState::OnGround;
+    const bool landed_detected = px4_land_status_ || landed_by_velocity;
     controller_data_types::TargetTrajectoryPoint_t linear_input_state;
-    linear_input_state.position = land_point_;
-
-    linear_input_state.position.z() -= 0.5 * (now - landing_time_).toSec();
-
-    linear_input_state.velocity.z() = -0.1;
-    linear_input_state.yaw = land_yaw_;
     Linear_AttitudeControl_Output_t output;
+    curve::QuinticCurveState curve_result;
+    curve_result = quint_curve_.get_result();
+    linear_input_state.position = curve_result.position;
+    linear_input_state.velocity = curve_result.velocity;
+    linear_input_state.acceleration = curve_result.acceleration;
+    linear_input_state.yaw = takeoff_yaw_;  // yaw角使用之前锁存的yaw
     control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
-    output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data);
+    output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data, false);
     control_common::Mavros_SetpointAttitude setpoint;
     setpoint.orientation = output.orientation;
     setpoint.thrust = output.thrust;
-    // 发布输出
-    mavros_helper_.pub_attitude_setpoint(setpoint);
-    // 更新缓存
-    last_setpoint_ = setpoint;
-    // 到位检查
-    bool velocity_low = (uav_odometry_.velocity.norm() < 0.15);
-    control_common::LandedState px4_landed = mavros_helper_.get_state().landed_state;
-    bool px4_land = px4_landed == control_common::LandedState::OnGround;
-    if (velocity_low && px4_land) {  // 考虑传感器漂移，这里用||逻辑
+
+    // 对推力进行整形
+    applyThrustShaping(setpoint.thrust, velocity_low, landed_by_velocity);
+    std::cout << "----------------------------------" << std::endl;
+    std::cout << "setpoint thrust: " << setpoint.thrust << std::endl;
+    std::cout << "velocity_low: " << velocity_low << std::endl;
+    std::cout << "landed_by_velocity: " << landed_by_velocity << std::endl;
+    if (landed_detected && landed_by_velocity) {  // 考虑传感器漂移，这里用||逻辑
         if (land_touchground_time_ == ros::Time(0)) {
             land_touchground_time_ = now;
         }
@@ -316,15 +362,83 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
     } else {
         land_touchground_time_ = ros::Time(0);
     }
+    mavros_helper_.pub_attitude_setpoint(setpoint);
+    last_setpoint_ = setpoint;
     return false;
 }
+
+// bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocity) {
+//     if (land_type == 1) {
+//         // 切换为px4的auto land模式
+//         mavros_helper_.set_px4_mode(control_common::FlightMode::AutoLand);
+//         bool land_state =
+//             mavros_helper_.get_state().landed_state == control_common::LandedState::OnGround;
+//         return land_state;
+//     }
+//     ros::Time now = ros::Time::now();
+//     if (land_complete_ == true) {
+//         return true;
+//     }
+//     //
+//     降落的基本思路是，要求以一个稳定的，小的速度到达地面，这样能够保证imu数据是稳定的，基于imu映射的推力也是稳定的
+//     //
+//     所以我们使用递归时间降落，也就是，记录进入land函数的时间戳，然后构造一个kp用于递减当前的pos z
+//     if (landing_time_ == ros::Time(0)) {
+//         landing_time_ = now;
+//         land_point_ = uav_odometry_.position;
+//         land_yaw_ = mavros_helper_.get_yaw_rad();
+//     }
+//     controller_data_types::TargetTrajectoryPoint_t linear_input_state;
+//     linear_input_state.position = land_point_;
+
+//     linear_input_state.position.z() -= 0.5 * (now - landing_time_).toSec();
+
+//     linear_input_state.velocity.z() = -0.1;
+//     linear_input_state.yaw = land_yaw_;
+//     Linear_AttitudeControl_Output_t output;
+//     control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
+//     output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data, false);
+//     control_common::Mavros_SetpointAttitude setpoint;
+//     setpoint.orientation = output.orientation;
+//     setpoint.thrust = output.thrust;
+//     // 发布输出
+//     mavros_helper_.pub_attitude_setpoint(setpoint);
+//     // 更新缓存
+//     last_setpoint_ = setpoint;
+//     // 到位检查
+//     bool velocity_low = (uav_odometry_.velocity.norm() < 0.15);
+//     control_common::LandedState px4_landed = mavros_helper_.get_state().landed_state;
+//     bool px4_land = px4_landed == control_common::LandedState::OnGround;
+//     if (velocity_low && px4_land) {  // 考虑传感器漂移，这里用||逻辑
+//         if (land_touchground_time_ == ros::Time(0)) {
+//             land_touchground_time_ = now;
+//         }
+//         if ((now - land_touchground_time_).toSec() > 1.0) {
+//             mavros_helper_.set_arm(false);  // 上锁
+//             if (mavros_helper_.get_state().armed == false) {
+//                 // 上锁成功，清理上下文
+//                 land_complete_ = true;
+//                 takeoff_complete_ = false;
+//                 quint_curve_.clear();
+//                 start_land_time_ = ros::Time(0);
+//                 land_near_ground_ = false;
+//                 land_touchground_time_ = ros::Time(0);
+//                 landing_time_ = ros::Time(0);
+//             }
+//             return land_complete_;
+//         }
+//     } else {
+//         land_touchground_time_ = ros::Time(0);
+//     }
+//     return false;
+// }
 bool PX4_LinearAttitude_Controller::hover() {
     // hover模式，设定当前里程计位置为期望位置，速度加速度加加速度置零
     controller_data_types::TargetTrajectoryPoint_t linear_input_state;
     linear_input_state.position = hover_point;
     control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
     Linear_AttitudeControl_Output_t output;
-    output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data);
+    output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data, true);
     control_common::Mavros_SetpointAttitude setpoint;
     setpoint.orientation = output.orientation;
     setpoint.thrust = output.thrust;
@@ -337,7 +451,59 @@ bool PX4_LinearAttitude_Controller::emergency_kill() {
     return false;
 }
 bool PX4_LinearAttitude_Controller::move_point(controller_data_types::TargetPoint_t point) {
-    return false;
+    // 记录当前时间戳
+    ros::Time now = ros::Time::now();
+
+    // 新目标判据，使用==会由于数值漂移导致异常情况(虽然很少出现)
+    constexpr double kNewTargetPosEps = 1e-3;
+    // 新目标状态
+    bool is_new_target = false;
+    // 检查是否为新目标
+    const double dp = (point.position - last_point_.position).norm();
+    // 位置误差大于常量误差，为新值
+    if (dp > kNewTargetPosEps) {
+        is_new_target = true;
+    }
+    // 如果为新目标，则清除一些上下文参数
+    if (is_new_target) {
+        move_point_arrive_state_ = false;
+        start_move_arrive_time_ = ros::Time(0);
+        last_point_ = point;
+    }
+
+    controller_data_types::TargetTrajectoryPoint_t linear_input_state;
+    linear_input_state.position = point.position;
+    linear_input_state.yaw = point.yaw;
+    control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
+    Linear_AttitudeControl_Output_t output;
+    output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data);
+    control_common::Mavros_SetpointAttitude setpoint;
+    setpoint.orientation = output.orientation;
+    setpoint.thrust = output.thrust;
+    mavros_helper_.pub_attitude_setpoint(setpoint);
+    // 更新缓存
+    last_setpoint_ = setpoint;
+    // 检查误差
+    Eigen::Vector3d pos_err_vec = uav_odometry_.position - point.position;
+    double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
+    Eigen::Vector3d vel_err_vec = uav_odometry_.velocity - Eigen::Vector3d::Zero();
+    double vel_err = vel_err_vec.norm();  // 推荐：速度误差标量
+    ROS_INFO("pos_err : %f", pos_err);
+    ROS_INFO("vel_err : %f", vel_err);
+    if (pos_err < 0.15 && vel_err < 0.15) {
+        if (start_move_arrive_time_ == ros::Time(0)) {
+            start_move_arrive_time_ = now;
+        }
+        if ((now - start_move_arrive_time_).toSec() > 0.5) {
+            move_point_arrive_state_ = true;
+            point_complete_ = true;
+            hover_point = last_point_.position;
+        }
+    } else {
+        start_move_arrive_time_ = ros::Time(0);
+        point_complete_ = false;
+    }
+    return move_point_arrive_state_;
 }
 bool PX4_LinearAttitude_Controller::move_velocity(
     controller_data_types::TargetVelocity_t velocity) {
