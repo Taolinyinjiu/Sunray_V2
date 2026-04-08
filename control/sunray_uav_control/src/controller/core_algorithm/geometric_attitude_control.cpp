@@ -229,15 +229,28 @@ void Geometric_AttitudeControl::computeBodyRateCmd(Eigen::Vector4d& bodyrate_cmd
 Eigen::Vector4d Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector3d& vector_acc,
                                                           double yaw) {
 
-    // 期望机体 z 轴（推力方向）= 归一化的加速度向量
-    const Eigen::Vector3d zb_des = vector_acc / vector_acc.norm();
+    // 保护：加速度向量模过小时（接近自由落体）无法定义推力方向，回退到竖直向上
+    const double acc_norm = vector_acc.norm();
+    const Eigen::Vector3d zb_des =
+        (acc_norm > 1e-3) ? (vector_acc / acc_norm) : Eigen::Vector3d(0.0, 0.0, 1.0);
 
     // 期望 x 轴方向在水平面的参考投影（由偏航角决定）
     const Eigen::Vector3d proj_xb_des(std::cos(yaw), std::sin(yaw), 0.0);
 
-    // 利用 zb_des 和 x 轴参考向量，通过叉积正交化构造旋转矩阵的三个轴
-    const Eigen::Vector3d yb_des = zb_des.cross(proj_xb_des) / (zb_des.cross(proj_xb_des)).norm();
-    const Eigen::Vector3d xb_des = yb_des.cross(zb_des) / (yb_des.cross(zb_des)).norm();
+    // 奇异性检测：zb_des 与 proj_xb_des 近似平行时叉积趋零（例如 yaw=0 且需要大 x 向推力）
+    // 此时改用 y 方向作为参考向量，绕开奇异点
+    Eigen::Vector3d cross_check = zb_des.cross(proj_xb_des);
+    Eigen::Vector3d yb_des;
+    if (cross_check.norm() > 1e-3) {
+        yb_des = cross_check / cross_check.norm();
+    } else {
+        // 退化情况：用全局 y 轴作为备用参考重新构造
+        const Eigen::Vector3d proj_yb_fallback(-std::sin(yaw), std::cos(yaw), 0.0);
+        Eigen::Vector3d cross_fallback = zb_des.cross(proj_yb_fallback);
+        yb_des = (cross_fallback.norm() > 1e-6) ? (cross_fallback / cross_fallback.norm())
+                                                : Eigen::Vector3d(0.0, 1.0, 0.0);
+    }
+    const Eigen::Vector3d xb_des = (yb_des.cross(zb_des)).normalized();
 
     // 组装旋转矩阵（列向量为机体坐标系的三个轴在世界系下的方向）
     Eigen::Matrix3d rotmat;
