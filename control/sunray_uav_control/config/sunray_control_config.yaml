@@ -7,7 +7,7 @@ basic_param:
     # 重力加速度
     gravity: 9.8
     # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
-    controller_types: 1
+    controller_types: 2
     # 控制器更新频率(Hz)
     controller_update_frequency: 100
     # 状态机低频监督循环频率(Hz)
@@ -133,3 +133,34 @@ linear_attitude_controller_param:
         KAngR: 20.0
         KAngP: 20.0
         KAngY: 20.0
+
+# -------------------几何控制器参数-----------------------
+# 对应 Geometric_Controller，输出为 BodyRate + 归一化推力
+# drone_mass 从 basic_param.mass_kg 读取，不在此处重复定义
+geometric_controller_param:
+    # 姿态子控制器类型：0 = 四元数误差法（简单，推荐）  1 = 几何SO3法（更精确）
+    ctrl_mode: 0
+    # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5
+    attctrl_tau: 0.3
+    # 位置环加速度输出限幅(m/s²)
+    max_acc: 5.0
+    # 推力归一化映射公式：thrust_normalized = norm_thrust_const * (mass * acc_z) + norm_thrust_offset
+    # !! 以下两个参数与机型强相关，更换机型时必须重新标定 !!
+    # 默认值来自 ecbf_bodyrate 对 Iris 机型的实验拟合
+    norm_thrust_const: 0.029
+    norm_thrust_offset: 0.1
+    # 控制器运行频率(Hz)，需要与状态机调用频率保持一致，用于计算积分步长
+    controller_hz: 100.0
+    gain:
+        # 位置比例增益 [x, y, z]，增大可提高位置跟踪速度，过大会超调
+        Kpos: [6.0, 6.0, 10.0]
+        # 速度比例增益 [x, y, z]，增大可提高阻尼，过大会振荡
+        Kvel: [5.0, 5.0, 10.0]
+        # Z 轴位置积分增益，用于消除推力模型未标定时的稳态悬停误差
+        # 若推力模型已精确标定可设为 0.0 禁用；未标定时建议从 0.2 开始调节
+        pos_ki_z: 0.2
+        # Z 轴积分项加速度输出限幅 (m/s²)，防止积分饱和
+        int_max_z: 2.0
+    drag:
+        # 转子阻力补偿系数 [x, y, z]，不确定时保持零向量
+        D: [0.0, 0.0, 0.0]

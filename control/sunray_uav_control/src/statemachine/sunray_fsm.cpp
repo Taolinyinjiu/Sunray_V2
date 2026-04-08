@@ -7,6 +7,7 @@
 #include <sunray_msgs/UAVControlFSMState.h>
 #include "controller/px4_origin_controller.hpp"
 #include "controller/px4_linear_attitude_controller.hpp"
+#include "controller/geometric_controller.hpp"
 #include <sunray_msgs/OdomStatus.h>
 #include "utils/orientation_utils.hpp"
 // Sunray_FSM更新路径
@@ -439,6 +440,12 @@ void Sunray_FSM::register_controller() {
         break;
     }
     case 2: {
+        sunray_controller_ = std::make_shared<Geometric_Controller>(nh_);
+        // 在这里做控制器的初始化,可以不用在外面判断控制器的类型再写报错异常信息
+        if (sunray_controller_->init() == false) {
+            // 如果控制器初始化失败，抛出异常
+            throw std::runtime_error("{Geometric_Controller initialization failed");
+        }
         break;
     }
         // 这里没有default分支，因为load_param()界定了fsm_config_.basic_param.controller_types只会有0，1，2三个值，不可能有其他值被传入
