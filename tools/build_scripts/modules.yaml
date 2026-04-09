@@ -14,6 +14,16 @@ modules:
         source_path: "control/control_tools"
         build_path: "build/control_tools"
         dependencies: []
+    planner_adaptor:
+        description: "各类planner转换兼容层"
+        source_path: "planning/planner_adaptor"
+        build_path: "build/planner_adaptor"
+        dependencies: []
+    super_planner:
+        description: "MARS LAB Planner"
+        source_path: "planning/source/SUPER"
+        build_path: "build/SUPER"
+        dependencies: []
     # Sunray 重构中的 PX4_Bridge
     px4_bridge:
         description: "Sunray 重构中的uav_control"
