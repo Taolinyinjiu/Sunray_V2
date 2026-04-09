@@ -374,6 +374,10 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
 }
 
 bool Geometric_Controller::hover() {
+    if((hover_point - uav_odometry_.position).norm() > 0.3) {
+        // 需要重新设置hover点
+        hover_point = uav_odometry_.position;
+    }
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = hover_point;
     des_state.velocity = Eigen::Vector3d::Zero();

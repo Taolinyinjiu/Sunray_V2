@@ -1,0 +1,9 @@
+<launch>
+  <node name="pointcloud_remap_directly_node" pkg="pointcloud_remap" type="pointcloud_remap_directly_node" output="screen">
+    <param name="input_point_topic" value="/uav1/livox/lidar" />
+    <param name="output_point_topic" value="/uav1/global_points" />
+    <param name="odom_topic" value="/uav1/sunray/gazebo_pose" />
+    <param name="frame_id" value="world" />
+    <param name="child_frame_id" value="uav1/base_link" />
+  </node>
+</launch>
