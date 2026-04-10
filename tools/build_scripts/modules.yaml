@@ -20,6 +20,12 @@ modules:
     source_path: "planning/adaptor/pointcloud_remap"
     build_path: "build/pointcloud_remap"
     dependencies: []
+  # 规划模块功能包
+  ego_planner_swarm:
+    description: "ego_planner_swarm 功能包"
+    source_path: "planning/source/ego_planner_swarm"
+    build_path: "build/ego_planner_swarm"
+    dependencies: []
 
   diff_planner_adaptor:
     description: "Diff Planner Adaptor"
@@ -122,12 +128,6 @@ modules:
     description: "sunray_viobot 功能包"
     source_path: "localization/sunray_viobot"
     build_path: "build/sunray_viobot"
-    dependencies: []
-  # 规划模块功能包
-  ego-planner-swarm:
-    description: "ego_planner_swarm 功能包"
-    source_path: "planning/source/ego-planner-swarm"
-    build_path: "build/ego-planner-swarm"
     dependencies: []
 
 # ========== 预定义组 ==========
