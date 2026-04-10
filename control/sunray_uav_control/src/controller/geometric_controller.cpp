@@ -373,17 +373,19 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     return false;
 }
 
+bool Geometric_Controller::set_hover_point(control_common::UAVStateEstimate current_odom) {
+    hover_point = current_odom.position;
+    hover_yaw_ = current_odom.get_yaw();
+    return true;
+}
+
 bool Geometric_Controller::hover() {
-    if((hover_point - uav_odometry_.position).norm() > 0.3) {
-        // 需要重新设置hover点
-        hover_point = uav_odometry_.position;
-    }
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = hover_point;
     des_state.velocity = Eigen::Vector3d::Zero();
     des_state.acceleration = Eigen::Vector3d::Zero();
     des_state.jerk = Eigen::Vector3d::Zero();
-    des_state.yaw = takeoff_yaw_;
+    des_state.yaw = hover_yaw_;
     des_state.yaw_rate = 0.0;
 
     auto output = controller_.calculateControl(des_state, uav_odometry_);

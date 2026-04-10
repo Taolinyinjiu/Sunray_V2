@@ -56,7 +56,9 @@ class PX4_OriginController : public Controller_Interface {
     bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) override;
     // 触发降落，参数为降落类型和最大降落速度
     bool land(bool land_type, double max_land_velocity) override;
-    // 在当前点悬停(运动过程触发立即停止并进入悬停)
+    // 设置悬停点
+    bool set_hover_point(control_common::UAVStateEstimate current_odom) override;
+    // 进入悬停状态
     bool hover() override;
     // 紧急上锁
     bool emergency_kill() override;
@@ -134,7 +136,8 @@ class PX4_OriginController : public Controller_Interface {
     control_common::Mavros_SetpointLocal last_setpoint_{};
     controller_data_types::TargetPoint_t last_point_;
     controller_data_types::TargetPoint_t last_point_body_;
-
+    Eigen::Vector3d hover_point_{Eigen::Vector3d::Zero()};  // hover 悬停点（与 linear 对齐）
+    double hover_yaw_{0.0};
     // -------------------起降状态标志位--------------
     bool takeoff_complete_{false};
     bool land_complete_{false};

@@ -7,7 +7,7 @@ basic_param:
   # 重力加速度
   gravity: 9.8
   # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
-  controller_types: 2
+  controller_types: 0
   # 控制器更新频率(Hz)
   controller_update_frequency: 200
   # 状态机低频监督循环频率(Hz)

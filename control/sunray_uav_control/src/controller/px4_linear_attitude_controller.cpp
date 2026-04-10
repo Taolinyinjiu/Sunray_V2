@@ -238,8 +238,9 @@ bool PX4_LinearAttitude_Controller::takeoff(double relative_takeoff_height,
                     if ((now - start_checkout_takeoff_success_time_).toSec() >
                         takeoff_success_keep_time_s) {
                         takeoff_complete_ = true;
-                        hover_point = quint_curve_.get_start_position();
-                        hover_point.z() += relative_takeoff_height;
+                        hover_point_ = quint_curve_.get_start_position();
+                        hover_point_.z() += relative_takeoff_height;
+                        hover_yaw_ = takeoff_yaw_;
                         // 清理上下文
                         start_checkout_offboard_time_ = ros::Time(0);
                         last_checkout_offboard_time_ = ros::Time(0);
@@ -433,10 +434,22 @@ bool PX4_LinearAttitude_Controller::land(bool land_type, double max_land_velocit
 //     }
 //     return false;
 // }
+//
+
+
+bool PX4_LinearAttitude_Controller::set_hover_point(control_common::UAVStateEstimate current_odom) {
+    hover_point_ = current_odom.position;
+    hover_yaw_ = current_odom.get_yaw();
+    return true;
+}
+
+
+
 bool PX4_LinearAttitude_Controller::hover() {
     // hover模式，设定当前里程计位置为期望位置，速度加速度加加速度置零
     controller_data_types::TargetTrajectoryPoint_t linear_input_state;
-    linear_input_state.position = hover_point;
+    linear_input_state.position = hover_point_;
+    linear_input_state.yaw = hover_yaw_;
     control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
     Linear_AttitudeControl_Output_t output;
     output = controller.calculateControl(linear_input_state, uav_odometry_, imu_data, true);
@@ -498,7 +511,7 @@ bool PX4_LinearAttitude_Controller::move_point(controller_data_types::TargetPoin
         if ((now - start_move_arrive_time_).toSec() > 0.5) {
             move_point_arrive_state_ = true;
             point_complete_ = true;
-            hover_point = last_point_.position;
+            hover_point_ = last_point_.position;
         }
     } else {
         start_move_arrive_time_ = ros::Time(0);

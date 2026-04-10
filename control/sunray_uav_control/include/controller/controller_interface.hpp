@@ -18,7 +18,9 @@ class Controller_Interface {
     virtual bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) = 0;
     // 触发降落，参数为降落类型和最大降落速度
     virtual bool land(bool land_type, double max_land_velocity) = 0;
-    // 在当前点悬停(运动过程触发立即停止并进入悬停)
+    // 设置悬停点，参数为当前位置
+    virtual bool set_hover_point(control_common::UAVStateEstimate current_odom) = 0;
+    // 切换为悬停状态
     virtual bool hover() = 0;
     // 紧急上锁
     virtual bool emergency_kill() = 0;

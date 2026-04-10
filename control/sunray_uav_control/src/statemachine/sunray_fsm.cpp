@@ -117,7 +117,7 @@ void Sunray_FSM::init_transition_table() {
                                             sunray_fsm::SunrayEvent::TAKEOFF_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            always});
+                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
 
     // HOVER -> MOVE (POINT)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::HOVER,
@@ -179,34 +179,34 @@ void Sunray_FSM::init_transition_table() {
                                             sunray_fsm::SunrayEvent::HOVER_REQUEST,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            always});
+                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
     // MOVE -> HOVER (POINT_COMPLETED)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::POINT_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            always});
+                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
 
     // MOVE -> HOVER (VELOCITY_COMPLETED)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::VELOCITY_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            always});
+                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
 
     // MOVE -> HOVER (TRAJECTORY_COMPLETED)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::TRAJECTORY_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            always});
+                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
 
     // MOVE -> HOVER (POINT_WGS84_COMPLETED)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::POINT_WGS84_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            always});
+                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
     // HOVER -> RETURN
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::HOVER,
                                             sunray_fsm::SunrayEvent::RETURN_REQUEST,

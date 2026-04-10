@@ -302,6 +302,9 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 if ((now - start_checkout_takeoff_success_time_).toSec() >
                     takeoff_success_keep_time_s) {
                     takeoff_complete_ = true;
+                    hover_point_ = quint_curve_.get_start_position();
+                    hover_point_.z() += relative_takeoff_height;
+                    hover_yaw_ = takeoff_yaw_;
                     // 清理上下文
                     start_checkout_offboard_time_ = ros::Time(0);
                     last_checkout_offboard_time_ = ros::Time(0);
@@ -440,6 +443,12 @@ bool PX4_OriginController::is_land_complete() {
     return land_complete_;
 }
 
+bool PX4_OriginController::set_hover_point(control_common::UAVStateEstimate current_odom) {
+    hover_point_ = current_odom.position;
+    hover_yaw_ = current_odom.get_yaw();
+    return true;
+}
+
 bool PX4_OriginController::hover() {
     // hover 阶段，我们认为使用上一次的setpoint中的position值用于悬停
     control_common::Mavros_SetpointLocal hover_setpoint;
@@ -451,10 +460,8 @@ bool PX4_OriginController::hover() {
                           control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
                           control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
                           control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
-    control_common::Mavros_SetpointLocal current_setpoint;
-    current_setpoint = mavros_helper_.get_target_local();
-    hover_setpoint.position = current_setpoint.position;
-    hover_setpoint.yaw = current_setpoint.yaw;
+    hover_setpoint.position = hover_point_;
+    hover_setpoint.yaw = hover_yaw_;
     mavros_helper_.pub_local_setpoint(hover_setpoint);
     // 是否应当分析误差来确定返回值为true or false呢
     return true;
@@ -568,6 +575,8 @@ bool PX4_OriginController::move_trajectory(
     } else {
         trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
     }
+    // 这里怎么缺少了发布
+    mavros_helper_.pub_local_setpoint(trajpoint_setpoint);
     // 我们如何设置轨迹的反馈呢？这里的问题是，拿到了轨迹的反馈，有什么用呢？
     // 轨迹是一个高频变化的值，因此拿到轨迹的反馈，其实没有什么用，so
     // 返回的是true表示接受到了o.o

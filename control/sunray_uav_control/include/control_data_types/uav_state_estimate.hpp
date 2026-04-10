@@ -21,6 +21,7 @@
 // 考虑的简单一点，不分析里程计也不分析有效性，也不去关心这个值合不合理
 
 namespace control_common {
+
 struct UAVStateEstimate {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     // 填充时间
@@ -35,7 +36,14 @@ struct UAVStateEstimate {
     // 构造函数
     UAVStateEstimate() = default;
     UAVStateEstimate(const nav_msgs::Odometry& msg);
+    // 提取yaw角
+    double get_yaw();
 };
+
+inline double UAVStateEstimate::get_yaw() {
+    return atan2(2.0 * (orientation.w() * orientation.z() + orientation.x() * orientation.y()),
+                 1.0 - 2.0 * (orientation.y() * orientation.y() + orientation.z() * orientation.z()));
+}
 
 inline UAVStateEstimate::UAVStateEstimate(const nav_msgs::Odometry& msg) {
     // 首先提取时间戳

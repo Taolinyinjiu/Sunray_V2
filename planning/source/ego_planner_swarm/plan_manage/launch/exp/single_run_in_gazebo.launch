@@ -13,8 +13,8 @@
   <arg name="target_z" default="1" />
 
   <!-- 无人机最大速度及最大加速度 -->
-  <arg name="max_vel" default="0.5" />
-  <arg name="max_acc" default="2.0" />
+  <arg name="max_vel" default="1.5" />
+  <arg name="max_acc" default="3.0" />
 
   <arg name="planning_horizon" default="7.5" />
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Eigen/Dense"
 #include "controller/controller_interface.hpp"
 #include "mavros_helper/mavros_helper.hpp"
 #include <px4_param_manager/px4_param_manager.h>
@@ -24,7 +25,9 @@ class PX4_LinearAttitude_Controller : public Controller_Interface {
     bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) override;
     // 触发降落，参数为降落类型和最大降落速度
     bool land(bool land_type, double max_land_velocity) override;
-    // 在当前点悬停(运动过程触发立即停止并进入悬停)
+    // 设置悬停点
+    bool set_hover_point(control_common::UAVStateEstimate current_odom) override;
+    // 进入悬停状态
     bool hover() override;
     // 紧急上锁
     bool emergency_kill() override;
@@ -110,7 +113,8 @@ class PX4_LinearAttitude_Controller : public Controller_Interface {
     controller_data_types::TargetPoint_t last_point_;
     controller_data_types::TargetPoint_t last_point_body_;
     Eigen::Vector3d land_point_;
-    Eigen::Vector3d hover_point;
+    Eigen::Vector3d hover_point_{Eigen::Vector3d::Zero()};
+    double hover_yaw_{0.0};
     // -------------------起降状态与move_point到位标志位--------------
     bool takeoff_complete_{false};
     bool land_complete_{false};
