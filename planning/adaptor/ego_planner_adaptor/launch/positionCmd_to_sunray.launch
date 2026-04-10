@@ -1,0 +1,11 @@
+<launch>
+  <!-- 订阅Diff_Planner输出的为diff_planner_msgs::PositionCommand -->
+  <arg name="cmd_sub_topic" default="/uav1/pos_cmd" />
+  <!-- 发布Sunray_FSM所需要的sunray_msgs::UAVControlCMD -->
+  <arg name="control_pub_topic" default="/uav1/sunray/uav_control_cmd" />
+
+  <node name="positionCmd_to_sunray_node" pkg="ego_planner_adaptor" type="positionCmd_to_sunray_node" output="screen">
+    <param name="cmd_sub_topic" value="$(arg cmd_sub_topic)" />
+    <param name="control_pub_topic" value="$(arg control_pub_topic)" />
+  </node>
+</launch>

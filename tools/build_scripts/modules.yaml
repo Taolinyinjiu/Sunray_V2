@@ -21,6 +21,16 @@ modules:
     build_path: "build/pointcloud_remap"
     dependencies: []
   # 规划模块功能包
+  ego_planner_adaptor:
+    description: "Ego Planner Adaptor"
+    source_path: "planning/adaptor/ego_planner_adaptor"
+    build_path: "build/ego_planner_adaptor"
+    dependencies: []
+  ego_planner_msgs:
+    description: "Ego Planner Messages"
+    source_path: "planning/adaptor/ego_planner_msgs"
+    build_path: "build/ego_planner_msgs"
+    dependencies: []
   ego_planner_swarm:
     description: "ego_planner_swarm 功能包"
     source_path: "planning/source/ego_planner_swarm"
