@@ -3,9 +3,9 @@
   <arg name="drone_id" default="0" />
 
   <!-- size of map, change the size inflate x, y, z according to your application -->
-  <arg name="map_size_x" default="42.0" />
-  <arg name="map_size_y" default="30.0" />
-  <arg name="map_size_z" default=" 5.0" />
+  <arg name="map_size_x" default="40.0" />
+  <arg name="map_size_y" default="40.0" />
+  <arg name="map_size_z" default=" 2.0" />
 
   <!-- 无人机目标点位置，用于规划器 -->
   <arg name="target_x" default="20.0" />
@@ -13,29 +13,28 @@
   <arg name="target_z" default="1" />
 
   <!-- 无人机最大速度及最大加速度 -->
-  <arg name="max_vel" default="2.0" />
-  <arg name="max_acc" default="3.0" />
+  <arg name="max_vel" default="0.5" />
+  <arg name="max_acc" default="0.5" />
 
-  <arg name="planning_horizon" default="7.5" />
+  <arg name="planning_horizon" default="5.0" />
+
+  <!-- 转换出来的世界坐标系下的点云话题 -->
+  <arg name="global_pointcloud_topic" default="/sunray/pointCloud" />
 
   <!-- topic of your odometry such as VIO or LIO -->
   <arg name="odom_topic" default="/sunray/odometry" />
-  <!-- 点云信息，仿真中由map_generator产生 -->
-  <arg name="cloud_topic" default="/sunray/pointCloud" />
+
   <!-- 相机及深度信息仿真中没有使用，此处可忽略(真机中使用) -->
   <arg name="camera_pose_topic" default="pcl_render_node/camera_pose" />
   <arg name="depth_topic" default="pcl_render_node/depth" />
 
   <!-- number of moving objects -->
-  <arg name="obj_num" default="10" />
-
-  <!-- RVIZ -->
-  <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(find ego_planner)/launch_sunray/single.rviz" required="true" /> -->
+  <arg name="obj_num" default="0" />
 
   <!-- EGO-Planner主节点 -->
   <node pkg="ego_planner" name="drone_$(arg drone_id)_ego_planner_node" type="ego_planner_node" output="screen">
     <!-- 无人机里程计话题 -->
-    <remap from="~odom_world" to="/drone_$(arg drone_id)_$(arg odom_topic)" />
+    <remap from="~odom_world" to="$(arg odom_topic)" />
     <!-- 发布的B样条话题 -->
     <remap from="~planning/bspline" to="/drone_$(arg drone_id)_planning/bspline" />
     <!-- 显示话题 -->
@@ -45,20 +44,20 @@
     <!-- 发布 本无人机广播的B样条 -->
     <remap from="~planning/broadcast_bspline_to_planner" to="/broadcast_bspline" />
     <!-- 地图中的odom话题 -->
-    <remap from="~grid_map/odom" to="/drone_$(arg drone_id)_$(arg odom_topic)" />
+    <remap from="~grid_map/odom" to="$(arg odom_topic)" />
     <!-- 地图中点云话题 -->
-    <remap from="~grid_map/cloud" to="/drone_$(arg drone_id)_$(arg cloud_topic)" />
+    <remap from="~grid_map/cloud" to="$(arg global_pointcloud_topic)" />
     <!-- 地图中相机位姿话题 -->
-    <remap from="~grid_map/pose" to="/drone_$(arg drone_id)_$(arg camera_pose_topic)" />
+    <remap from="~grid_map/pose" to="$(arg camera_pose_topic)" />
     <!-- 地图中相机深度话题 -->
-    <remap from="~grid_map/depth" to="/drone_$(arg drone_id)_$(arg depth_topic)" />
+    <remap from="~grid_map/depth" to="$(arg depth_topic)" />
     <!-- 手动目标点话题 -->
-    <remap from="~move_base_simple/goal" to="/move_base_sample/goal" />
+    <remap from="~move_base_simple/goal" to="/goal_1" />
 
     <!-- 规划器状态机参数-->
     <!-- 1 MANUAL_TARGET: use 2D Nav Goal to select goal  -->
     <!-- 2 PRESET_TARGET: use global waypoints below  -->
-    <param name="fsm/flight_type" value="2" type="int" />
+    <param name="fsm/flight_type" value="4" type="int" />
     <!-- 重规划时间间隔，如果要增大规划频率，则减小该数值 -->
     <param name="fsm/thresh_replan_time" value="1.0" type="double" />
     <!-- 重规划阈值：距离终点小于该阈值时，停止规划 -->
@@ -80,7 +79,7 @@
     <param name="fsm/waypoint0_z" value="$(arg target_z)" type="double" />
     <!-- GridMap参数 -->
     <!-- 分辨率、地图尺寸 -->
-    <param name="grid_map/resolution" value="0.1" />
+    <param name="grid_map/resolution" value="0.12" />
     <param name="grid_map/map_size_x" value="$(arg map_size_x)" />
     <param name="grid_map/map_size_y" value="$(arg map_size_y)" />
     <param name="grid_map/map_size_z" value="$(arg map_size_z)" />
@@ -90,13 +89,13 @@
     <param name="grid_map/local_update_range_y" value="5.5" />
     <param name="grid_map/local_update_range_z" value="4.5" />
     <!-- 膨胀距离 -->
-    <param name="grid_map/obstacles_inflation" value="0.099" />
+    <param name="grid_map/obstacles_inflation" value="0.25" />
     <param name="grid_map/local_map_margin" value="10" />
     <!-- 地面高度 -->
-    <param name="grid_map/ground_height" value="-0.01" />
+    <param name="grid_map/ground_height" value="0.5" />
     <!-- 虚拟天花板高度 -->
-    <param name="grid_map/virtual_ceil_height" value="2.9" />
-    <param name="grid_map/visualization_truncate_height" value="1.8" />
+    <param name="grid_map/virtual_ceil_height" value="1.4" />
+    <param name="grid_map/visualization_truncate_height" value="1.2" />
     <param name="grid_map/show_occ_time" value="false" />
     <!-- 不使用depth -->
     <param name="grid_map/pose_type" value="1" />
@@ -139,9 +138,9 @@
     <param name="manager/use_distinctive_trajs" value="true" type="bool" />
 
     <!-- B样条优化参数 -->
-    <!-- 平滑系数 -->
-    <param name="optimization/lambda_smooth" value="1.0" type="double" />
-    <!-- 避障系数 -->
+    <!-- 平滑系数:较高的‌lambda_smooth‌值会使轨迹更加平滑，减少急剧的转向和加速，从而提高行驶的稳定性和舒适性 -->
+    <param name="optimization/lambda_smooth" value="2.0" type="double" />
+    <!-- 避障系数:较低的‌lambda_smooth‌值可能会使轨迹更接近障碍物，但有助于更好地避开障碍物，尤其是在复杂环境中 -->
     <param name="optimization/lambda_collision" value="0.5" type="double" />
     <!-- 可行性系数 -->
     <param name="optimization/lambda_feasibility" value="0.1" type="double" />
@@ -157,11 +156,27 @@
     <param name="bspline/limit_ratio" value="1.1" type="double" />
   </node>
 
-  <!-- trajectory server -->
+  <!-- trajectory server : 将ego输出的B样条转换为position_cmd类型发布 -->
   <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
-    <remap from="position_cmd" to="drone_$(arg drone_id)_planning/pos_cmd" />
+    <remap from="position_cmd" to="/uav1/pos_cmd" />
     <remap from="~planning/bspline" to="drone_$(arg drone_id)_planning/bspline" />
-
     <param name="traj_server/time_forward" value="1.0" type="double" />
   </node>
+
+  <!-- 监听move_base_simple/goal (rviz中的2D Nav Goal) 将其转为多个平行的目标点发送到ego中的每个规划器-->
+  <arg name="goal_topic" default="/goal" />
+  <node name="goal2swarm" pkg="sunray_planner_utils" type="goal2swarm" output="screen">
+    <param name="uav_num" value="1" />
+    <param name="goal_type" value="1" />
+    <param name="offset" value="1.1" />
+    <param name="goal_topic" value="$(arg goal_topic)" />
+    <param name="use_hight" value="true" />
+    <param name="z_height" value="1.0" />
+  </node>
+
+  <arg name="enable_rviz" default="true" />
+  <arg name="rivz_config" default="$(find sunray_planner_utils)/config/sunray.rviz" />
+  <group if="$(arg enable_rviz)">
+    <node type="rviz" name="rviz_sim" pkg="rviz" args="-d $(arg rivz_config)" />
+  </group>
 </launch>
