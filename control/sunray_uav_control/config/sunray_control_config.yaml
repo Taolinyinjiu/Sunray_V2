@@ -2,67 +2,67 @@
 
 # -------------------基本参数-----------------------
 basic_param:
-    # 无人机质量
-    mass_kg: 0.96
-    # 重力加速度
-    gravity: 9.8
-    # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
-    controller_types: 2
-    # 控制器更新频率(Hz)
-    controller_update_frequency: 100
-    # 状态机低频监督循环频率(Hz)
-    supervisor_update_frequency: 10
-    # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符uav1之类的
-    odom_topic_name: "${uav_ns}/sunray/localization/local_odom"
-    # 里程计融合类型 0: disable 1：vision_pose 2:odometry 建议在当前里程计没有协方差时选择vision_pose
-    fuse_odom_type: 1
-    # 里程计融合的频率(需要根据外部里程计的更新频率决定，融合频率应当低于或者等于外部里程计更新频率)
-    fuse_odom_frequency: 50
-    # 轨迹参考类型 0:flat_output(微分平坦轨迹) 1:se3(全位姿轨迹)
-    trajectory_type: 0
+  # 无人机质量
+  mass_kg: 0.96
+  # 重力加速度
+  gravity: 9.8
+  # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
+  controller_types: 2
+  # 控制器更新频率(Hz)
+  controller_update_frequency: 200
+  # 状态机低频监督循环频率(Hz)
+  supervisor_update_frequency: 10
+  # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符uav1之类的
+  odom_topic_name: "${uav_ns}/sunray/localization/local_odom"
+  # 里程计融合类型 0: disable 1：vision_pose 2:odometry 建议在当前里程计没有协方差时选择vision_pose
+  fuse_odom_type: 1
+  # 里程计融合的频率(需要根据外部里程计的更新频率决定，融合频率应当低于或者等于外部里程计更新频率)
+  fuse_odom_frequency: 50
+  # 轨迹参考类型 0:flat_output(微分平坦轨迹) 1:se3(全位姿轨迹)
+  trajectory_type: 0
 
 # -------------------保护参数-----------------------
 protect_param:
-    # 最低电压
-    low_voltage: 13.2 # 4S battery
-    # 达到最低电压时执行的操作 0:无操作 1:立即降落 2：返航并降落
-    low_voltage_operate: 0
-    # 是否允许在无遥控器连接时启动无人机
-    control_with_no_rc: false
-    # 当遥控器状态从连接变成丢失连接时，执行什么操作 0:无操作 1:降落 2:返回
-    lost_with_rc: 1
-    # 是否允许代码解锁无人机，如果为false需要通过遥控器的按键进行解锁
-    arm_with_code: true
-    # 是否允许代码起飞，如果为false需要通过推动遥控器的油门摇杆，发出起飞指令
-    takeoff_with_code: true
-    # 是否进行倾倒检测：当无人机姿态发生大幅度反转时上锁无人机
-    check_flip: false
-    # 最大倾斜角度(角度制)
-    tilt_angle_max: 20
-    # 当msg超时执行的操作，请注意，由于mavros超时必然导致setpoint无法得到有效的执行，也就是说mavros连接丢失，则无人机控制回到px4自身而非sunray控制节点，因此此处并不包含mavros的丢失
-    # 0:无操作 1:立即降落 2：返航并降落
-    msg_timeout_operate: 1
+  # 最低电压
+  low_voltage: 13.2 # 4S battery
+  # 达到最低电压时执行的操作 0:无操作 1:立即降落 2：返航并降落
+  low_voltage_operate: 0
+  # 是否允许在无遥控器连接时启动无人机
+  control_with_no_rc: false
+  # 当遥控器状态从连接变成丢失连接时，执行什么操作 0:无操作 1:降落 2:返回
+  lost_with_rc: 1
+  # 是否允许代码解锁无人机，如果为false需要通过遥控器的按键进行解锁
+  arm_with_code: true
+  # 是否允许代码起飞，如果为false需要通过推动遥控器的油门摇杆，发出起飞指令
+  takeoff_with_code: true
+  # 是否进行倾倒检测：当无人机姿态发生大幅度反转时上锁无人机
+  check_flip: false
+  # 最大倾斜角度(角度制)
+  tilt_angle_max: 20
+  # 当msg超时执行的操作，请注意，由于mavros超时必然导致setpoint无法得到有效的执行，也就是说mavros连接丢失，则无人机控制回到px4自身而非sunray控制节点，因此此处并不包含mavros的丢失
+  # 0:无操作 1:立即降落 2：返航并降落
+  msg_timeout_operate: 1
 
 # -------------------消息超时参数-----------------------
 # 此处均指正常工作，也就是持续有数据后丢失或者数据超时
 msg_timeout_param: # 单位为秒(s)
-    # 里程计
-    local_odometry: 0.5
-    # mavros链路(由于所有与px4有关的数据都是从mavros链路拿到的，因此这里直接判断链路稳定性)
-    mavros_connect: 0.5
-    # TODO：地面站链路(不工作则不会考虑)
-    sunray_station: 0.5
+  # 里程计
+  local_odometry: 0.5
+  # mavros链路(由于所有与px4有关的数据都是从mavros链路拿到的，因此这里直接判断链路稳定性)
+  mavros_connect: 0.5
+  # TODO：地面站链路(不工作则不会考虑)
+  sunray_station: 0.5
 
 # -------------------起飞降落参数-----------------------
 takeoff_land_param:
-    # 相对当前位置的起飞高度(米)
-    takeoff_relative_height: 0.6
-    # 起飞过程中的最大速度(m/s)
-    takeoff_max_velocity: 0.5
-    # 指定降落模式 0：sunray land 1:px4.auto_land
-    land_type: 0
-    # 降落过程中的最大速度
-    land_max_velocity: 0.5
+  # 相对当前位置的起飞高度(米)
+  takeoff_relative_height: 0.6
+  # 起飞过程中的最大速度(m/s)
+  takeoff_max_velocity: 0.5
+  # 指定降落模式 0：sunray land 1:px4.auto_land
+  land_type: 0
+  # 降落过程中的最大速度
+  land_max_velocity: 0.5
 
 # -------------------运动误差与超时参数-----------------------
 # 这里提到的运动超时参数可以这样来理解
@@ -73,94 +73,94 @@ takeoff_land_param:
 # takeoff和move_point表示的是运动的类型
 # timeout
 mission_error_param:
-    takeoff: #takeoff表示运动类型
-        timeout_s: 5.0 # timeout_s表示运动超时参数
-        judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
-        pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
-        vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
+  takeoff: #takeoff表示运动类型
+    timeout_s: 5.0 # timeout_s表示运动超时参数
+    judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
+    pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
+    vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
 
-    move_point: #move_point表示运动类型
-        timeout_s: 5.0 # timeout_s表示运动超时参数
-        judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
-        pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
-        vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
+  move_point: #move_point表示运动类型
+    timeout_s: 5.0 # timeout_s表示运动超时参数
+    judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
+    pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
+    vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
 
 # -------------------电子围栏参数-----------------------
 # local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上
 local_fence_param:
-    x_max: 4.0
-    x_min: -4.0
-    y_max: 4.0
-    y_min: -4.0
-    z_max: 2.0
-    z_min: 0.0 #如果你的使用场景中，起飞点并不是最低点，可以考虑酌情修改
+  x_max: 4.0
+  x_min: -4.0
+  y_max: 4.0
+  y_min: -4.0
+  z_max: 2.0
+  z_min: 0.0 #如果你的使用场景中，起飞点并不是最低点，可以考虑酌情修改
 # TODO：添加经纬高地理围栏参数
 
 # -------------------飞行速度参数-----------------------
 velocity_param:
-    # 最大飞行速度(m/s)
-    max_velocity:
-        x_vel: 3.0
-        y_vel: 3.0
-        z_vel: 1.0
-    # 遥控器控制时的最大速度
-    max_velocity_with_rc:
-        x_vel: 1.0
-        y_vel: 1.0
-        z_vel: 1.0
-    # 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
-    yaw_rate: 30
+  # 最大飞行速度(m/s)
+  max_velocity:
+    x_vel: 3.0
+    y_vel: 3.0
+    z_vel: 1.0
+  # 遥控器控制时的最大速度
+  max_velocity_with_rc:
+    x_vel: 1.0
+    y_vel: 1.0
+    z_vel: 1.0
+  # 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
+  yaw_rate: 30
 # ------------------- Controller Param -----------
 linear_attitude_controller_param:
-    output_type: 0 # 0:attitude+thrust  1:bodyrate+thrust
-    thrust_model: # The model that maps thrust signal u(0~1) to real thrust force F(Unit:N): F=K1*Voltage^K2*(K3*u^2+(1-K3)*u).
-        accurate_thrust_model: false # This can always enabled if don't require accurate control performance :-)
-        # accurate thrust mapping parameters
-        K1: 0.7583 # Needs precise calibration!
-        K2: 1.6942 # Needs precise calibration!
-        K3: 0.6786 # Needs precise calibration! K3 equals THR_MDL_FAC in https://docs.px4.io/master/en/config_mc/pid_tuning_guide_multicopter.html.
-        # approximate thrust mapping parameters
-        hover_percentage: 0.374 # Thrust percentage in Stabilize/Arco mode # *
-    gain:
-        # 这里是一个简单的PD控制器增益参数
-        # 我们为位置环引入P调节，为速度环引入PID调节, 不过速度环中的积分与微分项暂时没有使用到
-        pos_kp: [1.5, 1.5, 1.5]
-        vel_kp: [1.5, 1.5, 1.5]
-        # ↓↓↓ No use now --
-        vel_ki: [0.0, 0.0, 0.0]
-        vel_kd: [0.0, 0.0, 0.0]
-        # 当我们使用bodyrate+推力作为输出量的时候，我们使用下面的参数对电机模型进行估计
-        KAngR: 20.0
-        KAngP: 20.0
-        KAngY: 20.0
+  output_type: 0 # 0:attitude+thrust  1:bodyrate+thrust
+  thrust_model: # The model that maps thrust signal u(0~1) to real thrust force F(Unit:N): F=K1*Voltage^K2*(K3*u^2+(1-K3)*u).
+    accurate_thrust_model: false # This can always enabled if don't require accurate control performance :-)
+    # accurate thrust mapping parameters
+    K1: 0.7583 # Needs precise calibration!
+    K2: 1.6942 # Needs precise calibration!
+    K3: 0.6786 # Needs precise calibration! K3 equals THR_MDL_FAC in https://docs.px4.io/master/en/config_mc/pid_tuning_guide_multicopter.html.
+    # approximate thrust mapping parameters
+    hover_percentage: 0.374 # Thrust percentage in Stabilize/Arco mode # *
+  gain:
+    # 这里是一个简单的PD控制器增益参数
+    # 我们为位置环引入P调节，为速度环引入PID调节, 不过速度环中的积分与微分项暂时没有使用到
+    pos_kp: [1.5, 1.5, 1.5]
+    vel_kp: [1.5, 1.5, 1.5]
+    # ↓↓↓ No use now --
+    vel_ki: [0.0, 0.0, 0.0]
+    vel_kd: [0.0, 0.0, 0.0]
+    # 当我们使用bodyrate+推力作为输出量的时候，我们使用下面的参数对电机模型进行估计
+    KAngR: 20.0
+    KAngP: 20.0
+    KAngY: 20.0
 
 # -------------------几何控制器参数-----------------------
 # 对应 Geometric_Controller，输出为 BodyRate + 归一化推力
 # drone_mass 从 basic_param.mass_kg 读取，不在此处重复定义
 geometric_controller_param:
-    # 姿态子控制器类型：0 = 四元数误差法（简单，推荐）  1 = 几何SO3法（更精确）
-    ctrl_mode: 1
-    # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5
-    attctrl_tau: 0.3
-    # 位置环加速度输出限幅(m/s²)
-    max_acc: 5.0
-    # 推力归一化映射公式：thrust_normalized = norm_thrust_const * (mass * acc_z) + norm_thrust_offset
-    # !! 以下两个参数与机型强相关，更换机型时必须重新标定 !!
-    # 默认值来自 ecbf_bodyrate 对 Iris 机型的实验拟合
-    norm_thrust_const: 0.031
-    norm_thrust_offset: 0.1
-    # 控制器运行频率(Hz)，需要与状态机调用频率保持一致，用于计算积分步长
-    controller_hz: 100.0
-    gain:
-        # 位置比例增益 [x, y, z]，增大可提高位置跟踪速度，过大会超调
-        Kpos: [2.0, 2.0, 5.0]
-        # 速度比例增益 [x, y, z]，增大可提高阻尼，过大会振荡
-        Kvel: [3.0, 3.0, 7.0]
-        # Z 轴位置积分增益，用于消除推力模型未标定时的稳态悬停误差
-        # 若推力模型已精确标定可设为 0.0 禁用；未标定时建议从 0.2 开始调节
-        pos_ki_z: 0.2
-        # Z 轴积分项加速度输出限幅 (m/s²)，防止积分饱和
-        int_max_z: 2.0
-    drag:
-        # 转子阻力补偿系数 [x, y, z]，不确定时保持零向量
-        D: [0.0, 0.0, 0.0]
+  # 姿态子控制器类型：0 = 四元数误差法（简单，推荐）  1 = 几何SO3法（更精确）
+  ctrl_mode: 1
+  # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5
+  attctrl_tau: 0.3
+  # 位置环加速度输出限幅(m/s²)
+  max_acc: 5.0
+  # 推力归一化映射公式：thrust_normalized = norm_thrust_const * (mass * acc_z) + norm_thrust_offset
+  # !! 以下两个参数与机型强相关，更换机型时必须重新标定 !!
+  # 默认值来自 ecbf_bodyrate 对 Iris 机型的实验拟合
+  norm_thrust_const: 0.031
+  norm_thrust_offset: 0.1
+  # 控制器运行频率(Hz)，需要与状态机调用频率保持一致，用于计算积分步长
+  controller_hz: 200.0
+  gain:
+    # 位置比例增益 [x, y, z]，增大可提高位置跟踪速度，过大会超调
+    Kpos: [1.5, 1.5, 1.5]
+    # 速度比例增益 [x, y, z]，增大可提高阻尼，过大会振荡
+    Kvel: [1.5, 1.5, 1.5]
+    # Z 轴位置积分增益，用于消除推力模型未标定时的稳态悬停误差
+    # 若推力模型已精确标定可设为 0.0 禁用；未标定时建议从 0.2 开始调节
+    pos_ki_z: 0.2
+    # Z 轴积分项加速度输出限幅 (m/s²)，防止积分饱和
+    int_max_z: 2.0
+  drag:
+    # 转子阻力补偿系数 [x, y, z]，不确定时保持零向量
+    D: [0.0, 0.0, 0.0]

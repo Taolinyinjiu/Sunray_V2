@@ -13,8 +13,8 @@
   <arg name="target_z" default="1" />
 
   <!-- 无人机最大速度及最大加速度 -->
-  <arg name="max_vel" default="2.5" />
-  <arg name="max_acc" default="2.5" />
+  <arg name="max_vel" default="0.5" />
+  <arg name="max_acc" default="2.0" />
 
   <arg name="planning_horizon" default="7.5" />
 
@@ -64,7 +64,7 @@
     <!-- 2 PRESET_TARGET: use global waypoints below  -->
     <param name="fsm/flight_type" value="1" type="int" />
     <!-- 重规划时间间隔，如果要增大规划频率，则减小该数值 -->
-    <param name="fsm/thresh_replan_time" value="0.5" type="double" />
+    <param name="fsm/thresh_replan_time" value="0.2" type="double" />
     <!-- 重规划阈值：距离终点小于该阈值时，停止规划 -->
     <param name="fsm/thresh_no_replan_meter" value="0.2" type="double" />
     <!-- 规划的范围，一般设置为感知范围的1.5倍 -->
@@ -84,7 +84,7 @@
     <param name="fsm/waypoint0_z" value="$(arg target_z)" type="double" />
     <!-- GridMap参数 -->
     <!-- 分辨率、地图尺寸 -->
-    <param name="grid_map/resolution" value="0.14" />
+    <param name="grid_map/resolution" value="0.15" />
     <param name="grid_map/map_size_x" value="$(arg map_size_x)" />
     <param name="grid_map/map_size_y" value="$(arg map_size_y)" />
     <param name="grid_map/map_size_z" value="$(arg map_size_z)" />
@@ -94,7 +94,7 @@
     <param name="grid_map/local_update_range_y" value="5.5" />
     <param name="grid_map/local_update_range_z" value="4.5" />
     <!-- 膨胀距离 -->
-    <param name="grid_map/obstacles_inflation" value="0.09" />
+    <param name="grid_map/obstacles_inflation" value="0.15" />
     <param name="grid_map/local_map_margin" value="10" />
     <!-- 地面高度 -->
     <param name="grid_map/ground_height" value="-0.01" />

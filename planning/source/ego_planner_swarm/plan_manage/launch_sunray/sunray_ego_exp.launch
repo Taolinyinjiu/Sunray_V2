@@ -13,8 +13,8 @@
   <arg name="target_z" default="1" />
 
   <!-- 无人机最大速度及最大加速度 -->
-  <arg name="max_vel" default="0.5" />
-  <arg name="max_acc" default="0.5" />
+  <arg name="max_vel" default="2" />
+  <arg name="max_acc" default="2" />
 
   <arg name="planning_horizon" default="5.0" />
 
@@ -57,7 +57,7 @@
     <!-- 规划器状态机参数-->
     <!-- 1 MANUAL_TARGET: use 2D Nav Goal to select goal  -->
     <!-- 2 PRESET_TARGET: use global waypoints below  -->
-    <param name="fsm/flight_type" value="4" type="int" />
+    <param name="fsm/flight_type" value="1" type="int" />
     <!-- 重规划时间间隔，如果要增大规划频率，则减小该数值 -->
     <param name="fsm/thresh_replan_time" value="1.0" type="double" />
     <!-- 重规划阈值：距离终点小于该阈值时，停止规划 -->
@@ -89,12 +89,12 @@
     <param name="grid_map/local_update_range_y" value="5.5" />
     <param name="grid_map/local_update_range_z" value="4.5" />
     <!-- 膨胀距离 -->
-    <param name="grid_map/obstacles_inflation" value="0.25" />
+    <param name="grid_map/obstacles_inflation" value="0.09" />
     <param name="grid_map/local_map_margin" value="10" />
     <!-- 地面高度 -->
-    <param name="grid_map/ground_height" value="0.5" />
+    <param name="grid_map/ground_height" value="0.1" />
     <!-- 虚拟天花板高度 -->
-    <param name="grid_map/virtual_ceil_height" value="1.4" />
+    <param name="grid_map/virtual_ceil_height" value="3" />
     <param name="grid_map/visualization_truncate_height" value="1.2" />
     <param name="grid_map/show_occ_time" value="false" />
     <!-- 不使用depth -->
@@ -163,19 +163,8 @@
     <param name="traj_server/time_forward" value="1.0" type="double" />
   </node>
 
-  <!-- 监听move_base_simple/goal (rviz中的2D Nav Goal) 将其转为多个平行的目标点发送到ego中的每个规划器-->
-  <arg name="goal_topic" default="/goal" />
-  <node name="goal2swarm" pkg="sunray_planner_utils" type="goal2swarm" output="screen">
-    <param name="uav_num" value="1" />
-    <param name="goal_type" value="1" />
-    <param name="offset" value="1.1" />
-    <param name="goal_topic" value="$(arg goal_topic)" />
-    <param name="use_hight" value="true" />
-    <param name="z_height" value="1.0" />
-  </node>
-
   <arg name="enable_rviz" default="true" />
-  <arg name="rivz_config" default="$(find sunray_planner_utils)/config/sunray.rviz" />
+  <arg name="rivz_config" default="$(find ego_planner)/launch_sunray/single.rviz" />
   <group if="$(arg enable_rviz)">
     <node type="rviz" name="rviz_sim" pkg="rviz" args="-d $(arg rivz_config)" />
   </group>
