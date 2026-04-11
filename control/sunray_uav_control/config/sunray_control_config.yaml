@@ -6,20 +6,20 @@ basic_param:
   mass_kg: 0.96
   # 重力加速度
   gravity: 9.8
+  # 悬停推力估计
+  hover_thrust: 0.31
   # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
   controller_types: 0
-  # 控制器更新频率(Hz)
-  controller_update_frequency: 200
+  # 控制器更新频率(Hz)，应小于或等于外部里程计算法的更新频率
+  controller_update_frequency: 100
   # 状态机低频监督循环频率(Hz)
   supervisor_update_frequency: 10
-  # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符uav1之类的
+  # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符如uav1/uav2
   odom_topic_name: "${uav_ns}/sunray/localization/local_odom"
   # 里程计融合类型 0: disable 1：vision_pose 2:odometry 建议在当前里程计没有协方差时选择vision_pose
   fuse_odom_type: 1
   # 里程计融合的频率(需要根据外部里程计的更新频率决定，融合频率应当低于或者等于外部里程计更新频率)
   fuse_odom_frequency: 50
-  # 轨迹参考类型 0:flat_output(微分平坦轨迹) 1:se3(全位姿轨迹)
-  trajectory_type: 0
 
 # -------------------保护参数-----------------------
 protect_param:
@@ -65,25 +65,16 @@ takeoff_land_param:
   land_max_velocity: 0.5
 
 # -------------------运动误差与超时参数-----------------------
-# 这里提到的运动超时参数可以这样来理解
-# 当我们设置了一个点(x = 1,y = 1,z = 1)时，无人机会朝着目标飞去，但是未必能够精准的在(1,1,1)处悬停
-# 他可能在(1.1,1.2,1.1)这样的周围平衡点悬停
-# 运动超时参数描述的是，当误差大于本文件规定的运动误差参数，但是小于两倍的运动误差参数的时候
-# 保持在稳定点悬停多长时间，认为运动结束
-# takeoff和move_point表示的是运动的类型
-# timeout
-mission_error_param:
-  takeoff: #takeoff表示运动类型
-    timeout_s: 5.0 # timeout_s表示运动超时参数
-    judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
-    pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
-    vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
+# 本节提到的运动超时参数可以这样来理解
+# 当我们设置了一个目标点(x = 1,y = 1,z = 1)时，无人机会朝着目标点飞去，但是未必能够精准的在(1,1,1)处悬停
+# 他可能在(1.1,1.2,1.1)这样的目标点周围的平衡点悬停，实际的位置可能会有微小的误差
+# 运动超时参数描述的是，当位置误差大于pos_stabile_err_m参数，但是小于两倍的pos_stabile_err_m参数的时候
+# 保持在稳定点悬停时间大于judge_stabile_time_s参数，认为运动结束
 
-  move_point: #move_point表示运动类型
-    timeout_s: 5.0 # timeout_s表示运动超时参数
-    judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
-    pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
-    vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
+mission_error_param:
+  judge_stabile_time_s: 0.5 # 表示进入到运动误差死区时，判断达到稳定的时间
+  pos_stabile_err_m: 0.10 # 表示稳定状态下三轴位置允许的误差
+  vel_stabile_err_mps: 0.05 # 表示稳定状态下三轴速度允许的误差
 
 # -------------------电子围栏参数-----------------------
 # local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上
@@ -153,14 +144,32 @@ geometric_controller_param:
   controller_hz: 200.0
   gain:
     # 位置比例增益 [x, y, z]，增大可提高位置跟踪速度，过大会超调
-    Kpos: [1.5, 1.5, 1.5]
+    Kpos: [8, 8, 10]
     # 速度比例增益 [x, y, z]，增大可提高阻尼，过大会振荡
-    Kvel: [1.5, 1.5, 1.5]
+    Kvel: [1.5, 1.5, 3]
     # Z 轴位置积分增益，用于消除推力模型未标定时的稳态悬停误差
     # 若推力模型已精确标定可设为 0.0 禁用；未标定时建议从 0.2 开始调节
-    pos_ki_z: 0.2
+    pos_ki_z: 0.0
     # Z 轴积分项加速度输出限幅 (m/s²)，防止积分饱和
     int_max_z: 2.0
   drag:
     # 转子阻力补偿系数 [x, y, z]，不确定时保持零向量
     D: [0.0, 0.0, 0.0]
+
+# ------------------- [ETH] Tracking Controller Param -----------
+tracking_controller_param:
+  # 控制器输出量 0:accelection 1:attitude+thrust  2:bodyrate+thrust
+  output_type: 0
+
+  # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5
+  attitude_tau: 0.3
+  # 控制器增益参数
+  gain:
+    # 位置环
+    pos_kp: [1.5, 1.5, 1.5]
+    pos_ki: [0.0, 0.0, 0.0]
+    pos_kd: [0.0, 0.0, 0.0]
+    # 速度环
+    vel_kp: [1.5, 1.5, 1.5]
+    vel_ki: [0.0, 0.0, 0.0]
+    vel_kd: [0.0, 0.0, 0.0]

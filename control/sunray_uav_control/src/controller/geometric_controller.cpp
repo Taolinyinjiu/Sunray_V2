@@ -145,8 +145,8 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
                                        Eigen::Vector3d::Zero());
         // 由最大起飞速度反推运动时间，使曲线平滑且有速度上限
         quint_curve_.set_curve_maxvel(max_takeoff_velocity);
-        // 锁存起飞时刻的 yaw 角和地面高度
-        takeoff_yaw_ = mavros_helper_.get_yaw_rad();
+        // 锁存起飞时刻的 yaw 角和地面高度，这里从uav_odometry_获取yaw角，可以不向px4融合里程计
+        takeoff_yaw_ = uav_odometry_.get_yaw();
         takeoff_ground_height_ = uav_odometry_.position.z();
         // 将起飞 yaw 同步到核心算法缓存，防止后续 move_point 未显式设置 yaw 时默认归零
         controller_.set_initial_yaw(takeoff_yaw_);

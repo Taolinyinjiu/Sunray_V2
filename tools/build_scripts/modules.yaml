@@ -15,6 +15,13 @@ modules:
     build_path: "build/control_tools"
     dependencies: []
 
+  # uav_control_example
+  sunray_uav_example:
+    description: "sunray项目中uav控制示例"
+    source_path: "examples/sunray_uav_example"
+    build_path: "build/sunray_uav_example"
+    dependencies: []
+
   pointcloud_remap:
     description: "Pointcloud Remap"
     source_path: "planning/adaptor/pointcloud_remap"

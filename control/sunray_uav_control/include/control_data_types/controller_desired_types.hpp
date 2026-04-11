@@ -28,25 +28,42 @@
 
 namespace controller_data_types {
 
-// 单个时刻的平坦轨迹参考点，供高层轨迹跟踪控制器使用。
+// ═══════════════════════════════════════════════════════════
+// 微分平坦轨迹点 结构体
+// 1.使用Optional包装，允许字段缺省
+//   - jerk 目前暂未有控制器使用
+//   - acceleration 缺省则控制器不使用轨迹加速度作为前馈项
+//   - velocity 缺省则控制器退化为纯位置轨迹控制
+// 2. 允许yaw以及yaw_rate缺省，缺省则保持上一时刻的yaw值
+// ═══════════════════════════════════════════════════════════
 struct TargetTrajectoryPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    Eigen::Vector3d position;      // 期望位置，世界坐标系
-    Eigen::Vector3d velocity;      // 期望速度，世界坐标系
-    Eigen::Vector3d acceleration;  // 期望加速度
-    Eigen::Vector3d jerk;          // 期望加加速度(原生控制器不支持)
+    Eigen::Vector3d position;                     // 期望位置，世界坐标系
+    std::optional<Eigen::Vector3d> velocity;      // 期望速度，世界坐标系
+    std::optional<Eigen::Vector3d> acceleration;  // 期望加速度
+    std::optional<Eigen::Vector3d> jerk;          // 期望加加速度(原生控制器不支持)
 
     std::optional<float> yaw = 0.0;       // 期望偏航角
     std::optional<float> yaw_rate = 0.0;  // 期望偏航角速度
 };
 
+// ═══════════════════════════════════════════════════════════
+// 期望位置点结构体
+// 1. 使用Optional包装，允许yaw缺省，缺省则保持上一时刻的yaw值
+// ═══════════════════════════════════════════════════════════
 struct TargetPoint_t {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Eigen::Vector3d position;
     std::optional<float> yaw;
 };
 
+// ═══════════════════════════════════════════════════════════
+// 期望速度结构体
+// 1. 使用Optional包装，允许yaw以及yaw_rate缺省，缺省则保持上一时刻的yaw值
+// ═══════════════════════════════════════════════════════════
 struct TargetVelocity_t {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Eigen::Vector3d velocity;
     std::optional<float> yaw;
     std::optional<float> yaw_rate;

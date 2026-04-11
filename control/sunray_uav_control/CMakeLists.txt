@@ -12,7 +12,7 @@ find_package(yaml-cpp REQUIRED)
 
 set(Eigen3_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 set(Eigen3_LIBRARIES Eigen3::Eigen)
-set(yaml-cpp_INCLUDE_DIRS ${YAML_CPP_INCLUDE_DIR})
+set(yaml-cpp_INCLUDE_DIRS /usr/include)
 set(yaml-cpp_LIBRARIES yaml-cpp)
 
 find_package(catkin REQUIRED COMPONENTS

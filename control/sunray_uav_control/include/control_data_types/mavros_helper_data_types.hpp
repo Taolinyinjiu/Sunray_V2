@@ -75,13 +75,13 @@ struct Mavros_Estimator {  // Mavros_Estimator表示这个类型是从mavros的e
 };
 
 struct Mavros_Pose {
-    Eigen::Vector3d position;
-    Eigen::Quaterniond orientation;
+    Eigen::Vector3d position; // 位置
+    Eigen::Quaterniond orientation; // 姿态四元数
 };
 
 struct Mavros_Velocity {
-    Eigen::Vector3d linear;
-    Eigen::Vector3d angular;
+    Eigen::Vector3d linear; // 线速度
+    Eigen::Vector3d angular; // 角速度
 };
 
 struct Mavros_GPS {
@@ -97,9 +97,9 @@ struct Mavros_GPS {
 };
 
 struct Mavros_IMU {
-    Eigen::Quaterniond orientation;
-    Eigen::Vector3d bodyrate;
-    Eigen::Vector3d accelection;
+    Eigen::Quaterniond orientation; // 姿态四元数
+    Eigen::Vector3d bodyrate; // 机体角速度
+    Eigen::Vector3d accelection; // 机体加速度
 
     ros::Time stamp;
 };

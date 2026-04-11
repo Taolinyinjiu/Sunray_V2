@@ -1,0 +1,7 @@
+# -------------------基本参数-----------------------
+basic_param:
+  # 0: 麦克纳姆轮 1: 差速轮
+  ugv_types: 0
+  # 订阅的里程计话题名称,使用${ugv_ns}表示当前ugv标识符,如ugv1/ugv2
+  odom_topic_name: "${ugv_ns}/sunray/localization/local_odom"
+  
