@@ -12,10 +12,12 @@
  *		2.3 综上，我们认为高阶轨迹作为参考层次，每个控制器从参考层映射到自己的输入中去，也就是从高阶轨迹总取出自己所需要的那部分
  *	3. 由于后续我们并不准备实现SE3 Control以及对应的求解器，因此选择使用微分平坦轨迹作为后续所有控制器的参考输入，也就是期望状态，并修改命名，将Desired_State_t修改为FlatTrajectoryPoint
  *  4. 使用命名空间包裹，和sunray_uav_control现有语义一致
-		5. 由于引入了C++ 17的语法糖，因此可以不使用mask掩码来判断是否有值被填入
-		6. 修正5,我们只对yaw以及yaw_rate使用optional特性
+		4.1. 由于引入了C++ 17的语法糖，因此可以不使用mask掩码来判断是否有值被填入
+		4.2. 我们只对yaw以及yaw_rate使用optional特性
+	5. 修正,移除std::optional语法特性，我们认为这并没有给控制器带来良好的可维护性，同时反而引入了不必要的复杂性
+	6. UAVControl的回调函数，应该结合消息中的掩码，来做一些合理的处理
  *
- * @version 0.1
+ * @version 0.2
  * @date 2026-03-16
  *
  * @copyright Copyright (c) 2026
@@ -40,12 +42,12 @@ struct TargetTrajectoryPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     Eigen::Vector3d position;                     // 期望位置，世界坐标系
-    std::optional<Eigen::Vector3d> velocity;      // 期望速度，世界坐标系
-    std::optional<Eigen::Vector3d> acceleration;  // 期望加速度
-    std::optional<Eigen::Vector3d> jerk;          // 期望加加速度(原生控制器不支持)
+    Eigen::Vector3d velocity;      // 期望速度，世界坐标系
+    Eigen::Vector3d acceleration;  // 期望加速度
+    Eigen::Vector3d jerk;          // 期望加加速度(原生控制器不支持)
 
-    std::optional<float> yaw = 0.0;       // 期望偏航角
-    std::optional<float> yaw_rate = 0.0;  // 期望偏航角速度
+    double yaw = 0.0;       // 期望偏航角
+    double yaw_rate = 0.0;  // 期望偏航角速度
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -55,7 +57,7 @@ struct TargetTrajectoryPoint_t {
 struct TargetPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Eigen::Vector3d position;
-    std::optional<float> yaw;
+    double yaw;
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -65,8 +67,8 @@ struct TargetPoint_t {
 struct TargetVelocity_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     Eigen::Vector3d velocity;
-    std::optional<float> yaw;
-    std::optional<float> yaw_rate;
+    double yaw;
+    double yaw_rate;
 };
 
 }  // namespace controller_data_types

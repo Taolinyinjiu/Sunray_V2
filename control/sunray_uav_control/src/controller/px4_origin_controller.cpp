@@ -562,9 +562,20 @@ bool PX4_OriginController::move_trajectory(
     control_common::Mavros_SetpointLocal trajpoint_setpoint;
     trajpoint_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
     trajpoint_setpoint.position = trajpoint.position;
-    trajpoint_setpoint.velocity = trajpoint.velocity;
-    trajpoint_setpoint.accel_or_force = trajpoint.acceleration;
-
+    if (trajpoint.velocity.has_value()) {
+        trajpoint_setpoint.velocity = trajpoint.velocity.value();
+    } else {
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVx;
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVy;
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVz;
+    }
+    if (trajpoint.acceleration.has_value()) {
+        trajpoint_setpoint.accel_or_force = trajpoint.acceleration.value();
+    } else {
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfx;
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfy;
+        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    }
     if (trajpoint.yaw.has_value()) {
         trajpoint_setpoint.yaw = trajpoint.yaw.value();
     } else {

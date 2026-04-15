@@ -1,6 +1,6 @@
 /**
  * @file geometric_attitude_control.hpp
- * @brief 几何控制器核心算法
+ * @brief Sunray控制器核心算法
  *
  * 与 ROS 无关，输入为轨迹点 + 里程计，输出为归一化推力 + BodyRate。
  * 移植自 ecbf_bodyrate/geometric_controller，保留位置环、姿态环两级结构。
@@ -17,9 +17,13 @@
 #include <memory>
 
 // ═══════════════════════════════════════════════════════════
-// 参数结构体
+// 控制类型枚举
 // ═══════════════════════════════════════════════════════════
+enum class Control_Type : uint8_t { Undefine_ = 0, Point_, Velocity_, Trajectory_ };
 
+// ═══════════════════════════════════════════════════════════
+// 控制器参数结构体
+// ═══════════════════════════════════════════════════════════
 struct Geometric_AttitudeControl_Param_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -64,7 +68,7 @@ struct Geometric_AttitudeControl_Param_t {
 struct Geometric_AttitudeControl_Output_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()};  // 期望姿态（用于可视化/调试）
+    Eigen::Quaterniond orientation{Eigen::Quaterniond::Identity()};  // 期望姿态
     Eigen::Vector3d bodyrates{Eigen::Vector3d::Zero()};  // 机体角速度 [ωx, ωy, ωz] (rad/s)
     double thrust{0.0};                                  // 归一化推力，范围 [0, 0.95]
 };
@@ -85,6 +89,8 @@ class GeometricAttitudeSubCtrl {
                         const Eigen::Vector4d& ref_att,
                         const Eigen::Vector3d& ref_acc,
                         const Eigen::Vector3d& ref_jerk) = 0;
+
+
 
     Eigen::Vector3d get_desired_rate() const {
         return desired_rate_;

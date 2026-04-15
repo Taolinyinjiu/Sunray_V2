@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "eigen_helper.hpp"
 #include <ros/time.h>
 #include <nav_msgs/Odometry.h>
 #include <Eigen/Dense>
@@ -37,13 +38,10 @@ struct UAVStateEstimate {
     UAVStateEstimate() = default;
     UAVStateEstimate(const nav_msgs::Odometry& msg);
     // 提取yaw角
-    double get_yaw();
+    double get_yaw(){
+        return eigen_helper::get_yaw_from_orientation(orientation);
+    }
 };
-
-inline double UAVStateEstimate::get_yaw() {
-    return atan2(2.0 * (orientation.w() * orientation.z() + orientation.x() * orientation.y()),
-                 1.0 - 2.0 * (orientation.y() * orientation.y() + orientation.z() * orientation.z()));
-}
 
 inline UAVStateEstimate::UAVStateEstimate(const nav_msgs::Odometry& msg) {
     // 首先提取时间戳

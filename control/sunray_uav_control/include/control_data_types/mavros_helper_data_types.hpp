@@ -30,6 +30,8 @@ enum class FlightMode : uint8_t {
     AutoTakeoff
 };
 
+std::string flightmode_to_string(control_common::FlightMode flight);
+
 // LandedState 与mavros消息定义对应，用于表示px4的着地检测器状态
 enum class LandedState : uint8_t {
     Undefined = 0,
@@ -38,6 +40,8 @@ enum class LandedState : uint8_t {
     Takeoff,
     Landing
 };
+
+std::string landed_to_string(control_common::LandedState land_state);
 
 enum class VisionFuseType : uint8_t{
     Undefined = 0,
