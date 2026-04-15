@@ -11,69 +11,9 @@
 
 #include "controller/core_algorithm/geometric_attitude_control.hpp"
 #include "controller/core_algorithm/geometric_ctrl_math.hpp"
+#include <ros/console.h>
 #include <algorithm>
 #include <cmath>
-
-// ═══════════════════════════════════════════════════════════════════════════
-// QuaternionAttitudeCtrl 实现
-// 四元数误差法，参考：Brescianini et al., ETH Zurich, 2013
-// ═══════════════════════════════════════════════════════════════════════════
-
-QuaternionAttitudeCtrl::QuaternionAttitudeCtrl(double attctrl_tau) : attctrl_tau_(attctrl_tau) {}
-
-void QuaternionAttitudeCtrl::update(const Eigen::Vector4d& curr_att,
-                                    const Eigen::Vector4d& ref_att,
-                                    const Eigen::Vector3d& ref_acc,
-                                    const Eigen::Vector3d& /*ref_jerk*/) {
-    // 计算姿态误差四元数：q_err = q_curr^{-1} ⊗ q_ref
-    // q_curr 的共轭（即逆，因为单位四元数）通过对 xyz 分量取反得到
-    const Eigen::Vector4d inverse(1.0, -1.0, -1.0, -1.0);
-    const Eigen::Vector4d q_inv = inverse.asDiagonal() * curr_att;
-    const Eigen::Vector4d qe = quatMultiplication(q_inv, ref_att);
-
-    // 期望角速度：(2 / tau) * sign(qe_w) * qe_xyz
-    // sign(qe_w) 确保取短弧，避免绕远路旋转
-    desired_rate_(0) = (2.0 / attctrl_tau_) * std::copysign(1.0, qe(0)) * qe(1);
-    desired_rate_(1) = (2.0 / attctrl_tau_) * std::copysign(1.0, qe(0)) * qe(2);
-    desired_rate_(2) = (2.0 / attctrl_tau_) * std::copysign(1.0, qe(0)) * qe(3);
-
-    // 推力方向：期望加速度在当前机体 z 轴上的投影
-    const Eigen::Matrix3d rotmat = quat2RotMatrix(curr_att);
-    const Eigen::Vector3d zb = rotmat.col(2);
-    desired_thrust_(0) = 0.0;
-    desired_thrust_(1) = 0.0;
-    desired_thrust_(2) = ref_acc.dot(zb);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SO3AttitudeCtrl 实现
-// 几何 SO3 法，参考：Lee et al., CDC 2010
-// ═══════════════════════════════════════════════════════════════════════════
-
-SO3AttitudeCtrl::SO3AttitudeCtrl(double attctrl_tau) : attctrl_tau_(attctrl_tau) {}
-
-void SO3AttitudeCtrl::update(const Eigen::Vector4d& curr_att,
-                             const Eigen::Vector4d& ref_att,
-                             const Eigen::Vector3d& ref_acc,
-                             const Eigen::Vector3d& /*ref_jerk*/) {
-    // 计算当前姿态与期望姿态的旋转矩阵
-    const Eigen::Matrix3d rotmat = quat2RotMatrix(curr_att);
-    const Eigen::Matrix3d rotmat_d = quat2RotMatrix(ref_att);
-
-    // SO3 姿态误差：e_R = 0.5 * vee(R_d^T * R - R^T * R_d)
-    // vee() 即 matrix_hat_inv()，从反对称矩阵中提取向量
-    const Eigen::Vector3d error_att =
-        0.5 * matrix_hat_inv(rotmat_d.transpose() * rotmat - rotmat.transpose() * rotmat_d);
-
-    // 期望角速度
-    desired_rate_ = (2.0 / attctrl_tau_) * error_att;
-
-    // 推力方向：期望加速度在当前机体 z 轴上的投影
-    const Eigen::Vector3d zb = rotmat.col(2);
-    desired_thrust_(0) = 0.0;
-    desired_thrust_(1) = 0.0;
-    desired_thrust_(2) = ref_acc.dot(zb);
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Geometric_AttitudeControl 实现
@@ -82,46 +22,74 @@ void SO3AttitudeCtrl::update(const Eigen::Vector4d& curr_att,
 void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param_t& param) {
     param_ = param;
 
-    // 根据 ctrl_mode 实例化对应的姿态子控制器
-    if (param_.ctrl_mode == 0) {
-        att_controller_ = std::make_shared<QuaternionAttitudeCtrl>(param_.attctrl_tau);
+    // 根据 attitude_type 实例化对应的姿态子控制器
+    if (param_.attitude_type == 0) {
+        att_controller_ = std::make_shared<Quaternion_Solver>(param_.attitude_tau);
     } else {
-        att_controller_ = std::make_shared<SO3AttitudeCtrl>(param_.attctrl_tau);
+        att_controller_ = std::make_shared<SO3_Solver>(param_.attitude_tau);
     }
+
+    // 悬停推力估计器由 core 持有，默认沿用 controller 侧现有配置语义。
+    switch (param_.hover_thrust_estimator_type) {
+    case 0:
+        hover_thrust_estimator_ = std::make_unique<thrust_estimator::LowPass_HoverThrustEstimator>();
+        break;
+    case 2:
+        hover_thrust_estimator_ = std::make_unique<thrust_estimator::Kalman_HoverThrustEstimator>();
+        break;
+    case 1:
+    default:
+        hover_thrust_estimator_ = std::make_unique<thrust_estimator::RLS_HoverThrustEstimator>();
+        break;
+    }
+
+    thrust_estimator::Param_t estimator_param;
+    estimator_param.gravity = param_.gravity;
+    estimator_param.hover_thrust = param_.hover_thrust_init;
+    hover_thrust_estimator_->load_param(estimator_param);
+
+    last_thrust_cmd_ = 0.0;
+    pending_thrust_cmd_ = 0.0;
+    has_pending_thrust_cmd_ = false;
+}
+
+void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::Input_t& input) {
+    if (!hover_thrust_estimator_) {
+        return;
+    }
+
+    thrust_estimator::Input_t estimator_input = input;
+    estimator_input.thrust_cmd = (last_thrust_cmd_ > 0.0)
+                                     ? last_thrust_cmd_
+                                     : (has_pending_thrust_cmd_ ? pending_thrust_cmd_ : 0.0);
+    hover_thrust_estimator_->update(estimator_input);
 }
 
 Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     const controller_data_types::TargetTrajectoryPoint_t& des_state,
-    const control_common::UAVStateEstimate& current_odom) {
+    const control_common::UAVStateEstimate& current_odom,
+    ThrustCommandPolicy thrust_policy) {
+
+    if (last_control_type_ == Control_Type::Velocity_) {
+        reset_integral();
+    }
+    last_control_type_ = Control_Type::Trajectory_;
+
+    advance_thrust_command_history();
 
     // ── 提取当前状态 ──────────────────────────────────────────────────────
     const Eigen::Vector3d mav_pos = current_odom.position;
     const Eigen::Vector3d mav_vel = current_odom.velocity;
-    // Eigen::Quaterniond → Vector4d(qw, qx, qy, qz)（内部数学约定）
-    const Eigen::Quaterniond& q_eig = current_odom.orientation;
-    const Eigen::Vector4d curr_att_vec(q_eig.w(), q_eig.x(), q_eig.y(), q_eig.z());
+    const Eigen::Quaterniond& curr_att = current_odom.orientation;
 
     // ── 提取期望状态 ──────────────────────────────────────────────────────
     const Eigen::Vector3d target_pos = des_state.position;
     const Eigen::Vector3d target_vel = des_state.velocity;
     const Eigen::Vector3d target_acc = des_state.acceleration;
-    const Eigen::Vector3d target_jerk = des_state.jerk;
-    // 若上层显式设置了 yaw 则更新缓存；否则沿用上次的期望 yaw，避免默认归零
-    if (des_state.yaw.has_value()) {
-        last_desired_yaw_ = static_cast<double>(des_state.yaw.value());
-    }
-    const double target_yaw = last_desired_yaw_;
-
-    // ── Z 轴积分：消除推力模型未标定导致的稳态悬停误差 ───────────────────
-    // 仅在接近目标时积分（误差 < 1m），防止大幅运动时积分饱和
-    const double pos_error_z = target_pos.z() - mav_pos.z();
-    if (param_.pos_ki_z > 0.0 && std::abs(pos_error_z) < 1.0) {
-        const double dt = 1.0 / param_.controller_hz;
-        integral_z_ += pos_error_z * dt;
-        // 限幅：将积分折算为加速度后不超过 int_max_z
-        const double int_limit = param_.int_max_z / std::max(param_.pos_ki_z, 1e-6);
-        integral_z_ = std::max(-int_limit, std::min(int_limit, integral_z_));
-    }
+    // TargetTrajectoryPoint_t 已改为原始类型，直接使用 yaw
+    // 同步缓存值，兼容其他路径依赖 last_desired_yaw_ 的语义
+    last_desired_yaw_ = des_state.yaw;
+    const double target_yaw = des_state.yaw;
 
     // ── 位置环：轨迹点 → 期望加速度 ──────────────────────────────────────
     const Eigen::Vector3d a_des =
@@ -129,16 +97,203 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
 
     // ── 姿态环：期望加速度 → body rate + 归一化推力 ───────────────────────
     Eigen::Vector4d bodyrate_cmd;
-    computeBodyRateCmd(bodyrate_cmd, a_des, curr_att_vec, target_yaw, target_jerk);
+    computeBodyRateCmd(bodyrate_cmd, a_des, curr_att, target_yaw);
 
     // ── 填充输出 ──────────────────────────────────────────────────────────
     Geometric_AttitudeControl_Output_t output;
     output.bodyrates = bodyrate_cmd.head(3);
-    output.thrust = bodyrate_cmd(3);
+    output.thrust = compose_thrust_command(bodyrate_cmd(3), thrust_policy);
+    pending_thrust_cmd_ = output.thrust;
+    has_pending_thrust_cmd_ = true;
     // 期望姿态由期望加速度方向 + 偏航角决定（主要用于可视化/调试）
-    const Eigen::Vector4d q_des_vec = acc2quaternion(a_des, target_yaw);
-    output.orientation = Eigen::Quaterniond(q_des_vec(0), q_des_vec(1), q_des_vec(2), q_des_vec(3));
+    output.orientation = acc2quaternion(a_des, target_yaw);
+#ifdef DEBUG
+    const double axy_norm = a_des.head<2>().norm();
+    const double pos_xy_err = (target_pos - mav_pos).head<2>().norm();
+    const double vel_xy_err = (target_vel - mav_vel).head<2>().norm();
+    if (axy_norm > 0.3 || pos_xy_err > 0.05 || vel_xy_err > 0.05) {
+        const double tilt_cur = curr_att.toRotationMatrix()(2, 2);
+        const double tilt_des = output.orientation.toRotationMatrix()(2, 2);
+        ROS_INFO_THROTTLE(0.5,
+                          "ctrl ez=%.2f vz=%.2f adz=%.2f axy=%.2f tc=%.3f td=%.3f ta=%.2f u=%.3f",
+                          target_pos.z() - mav_pos.z(),
+                          target_vel.z() - mav_vel.z(),
+                          a_des.z(),
+                          axy_norm,
+                          tilt_cur,
+                          tilt_des,
+                          bodyrate_cmd(3),
+                          output.thrust);
+    }
+#endif
     return output;
+}
+
+Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityControl(
+    const controller_data_types::TargetVelocity_t& des_state,
+    const control_common::UAVStateEstimate& current_odom,
+    ThrustCommandPolicy thrust_policy) {
+
+    if (last_control_type_ != Control_Type::Velocity_) {
+        reset_integral();
+    }
+    last_control_type_ = Control_Type::Velocity_;
+
+    advance_thrust_command_history();
+
+    const Eigen::Vector3d mav_vel = current_odom.velocity;
+    const Eigen::Quaterniond& curr_att = current_odom.orientation;
+
+    const Eigen::Vector3d target_vel = des_state.velocity;
+    last_desired_yaw_ = des_state.yaw;
+    const double target_yaw = des_state.yaw;
+
+    const Eigen::Vector3d a_des = controlVelocity(target_vel, mav_vel, target_yaw);
+
+    Eigen::Vector4d bodyrate_cmd;
+    computeBodyRateCmd(bodyrate_cmd, a_des, curr_att, target_yaw);
+
+    Geometric_AttitudeControl_Output_t output;
+    output.bodyrates = bodyrate_cmd.head(3);
+    output.thrust = compose_thrust_command(bodyrate_cmd(3), thrust_policy);
+    pending_thrust_cmd_ = output.thrust;
+    has_pending_thrust_cmd_ = true;
+    output.orientation = acc2quaternion(a_des, target_yaw);
+#ifdef DEBUG
+    const double vel_err = (target_vel - mav_vel).norm();
+    if (vel_err > 0.05) {
+        ROS_INFO_THROTTLE(0.5,
+                          "ctrl vel ex=%.2f ey=%.2f ez=%.2f adz=%.2f axy=%.2f ta=%.2f u=%.3f",
+                          target_vel.x() - mav_vel.x(),
+                          target_vel.y() - mav_vel.y(),
+                          target_vel.z() - mav_vel.z(),
+                          a_des.z(),
+                          a_des.head<2>().norm(),
+                          bodyrate_cmd(3),
+                          output.thrust);
+    }
+#endif
+    return output;
+}
+
+void Geometric_AttitudeControl::advance_thrust_command_history() {
+    if (!has_pending_thrust_cmd_) {
+        return;
+    }
+    last_thrust_cmd_ = pending_thrust_cmd_;
+}
+
+double Geometric_AttitudeControl::map_thrust_acc_to_hover_anchor(double thrust_acc) const {
+    double hover_anchor = param_.hover_thrust_init;
+    if (hover_thrust_estimator_) {
+        const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
+        if (std::isfinite(hover_thrust) && hover_thrust > 0.0) {
+            hover_anchor = hover_thrust;
+        }
+    }
+
+    const double gravity = std::max(param_.gravity, 1e-6);
+    return std::clamp(hover_anchor * (thrust_acc / gravity), 0.0, 0.95);
+}
+
+Geometric_AttitudeControl::ThrustModelMode Geometric_AttitudeControl::get_hover_estimator_mode() const {
+    switch (param_.hover_thrust_estimator_type) {
+    case 0:
+        return ThrustModelMode::LowPassEstimator;
+    case 2:
+        return ThrustModelMode::KalmanEstimator;
+    case 1:
+    default:
+        return ThrustModelMode::RLSEstimator;
+    }
+}
+
+const char* Geometric_AttitudeControl::thrust_model_mode_name(ThrustModelMode mode) {
+    switch (mode) {
+    case ThrustModelMode::LinearFallback:
+        return "LIN_FB";
+    case ThrustModelMode::LinearForced:
+        return "LIN_FORCE";
+    case ThrustModelMode::LowPassEstimator:
+        return "LP";
+    case ThrustModelMode::KalmanEstimator:
+        return "KF";
+    case ThrustModelMode::RLSEstimator:
+    default:
+        return "RLS";
+    }
+}
+
+void Geometric_AttitudeControl::log_thrust_model_usage(ThrustModelMode mode,
+                                                       double thrust_cmd,
+                                                       double hover_thrust) {
+    const char* mode_name = thrust_model_mode_name(mode);
+
+    if (!thrust_model_mode_initialized_ || last_thrust_model_mode_ != mode) {
+#ifdef DEBUG
+        if (mode == ThrustModelMode::LinearFallback) {
+            ROS_WARN("thrust->%s u=%.3f", mode_name, thrust_cmd);
+        } else if (mode == ThrustModelMode::LinearForced) {
+            ROS_INFO("thrust->%s u=%.3f", mode_name, thrust_cmd);
+        } else {
+            ROS_INFO("thrust->%s ht=%.3f u=%.3f", mode_name, hover_thrust, thrust_cmd);
+        }
+#else
+        if (mode == ThrustModelMode::LinearFallback) {
+            ROS_WARN("thrust->%s", mode_name);
+        } else if (mode == ThrustModelMode::LinearForced) {
+            ROS_INFO("thrust->%s", mode_name);
+        } else {
+            ROS_INFO("thrust->%s", mode_name);
+        }
+#endif
+        last_thrust_model_mode_ = mode;
+        thrust_model_mode_initialized_ = true;
+    }
+
+#ifdef DEBUG
+    if (mode == ThrustModelMode::LinearFallback) {
+        ROS_WARN_THROTTLE(2.0, "thrust:%s u=%.3f", mode_name, thrust_cmd);
+    } else if (mode == ThrustModelMode::LinearForced) {
+        ROS_INFO_THROTTLE(2.0, "thrust:%s u=%.3f", mode_name, thrust_cmd);
+    } else {
+        ROS_INFO_THROTTLE(2.0, "thrust:%s ht=%.3f u=%.3f", mode_name, hover_thrust, thrust_cmd);
+    }
+#else
+    if (mode == ThrustModelMode::LinearFallback) {
+        ROS_WARN_THROTTLE(2.0, "thrust:%s", mode_name);
+    } else if (mode == ThrustModelMode::LinearForced) {
+        ROS_INFO_THROTTLE(2.0, "thrust:%s", mode_name);
+    } else {
+        ROS_INFO_THROTTLE(2.0, "thrust:%s", mode_name);
+    }
+#endif
+}
+
+double Geometric_AttitudeControl::compose_thrust_command(double thrust_acc,
+                                                         ThrustCommandPolicy thrust_policy) {
+    const double linear_fallback = map_thrust_acc_to_hover_anchor(thrust_acc);
+    if (thrust_policy == ThrustCommandPolicy::ForceLinear) {
+        log_thrust_model_usage(ThrustModelMode::LinearForced, linear_fallback, 0.0);
+        return linear_fallback;
+    }
+
+    if (!hover_thrust_estimator_) {
+        log_thrust_model_usage(ThrustModelMode::LinearFallback, linear_fallback, 0.0);
+        return linear_fallback;
+    }
+
+    const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
+    if (!std::isfinite(hover_thrust) || hover_thrust <= 0.0) {
+        log_thrust_model_usage(ThrustModelMode::LinearFallback, linear_fallback, hover_thrust);
+        return linear_fallback;
+    }
+
+    const double gravity = std::max(param_.gravity, 1e-6);
+    const double thrust_cmd = hover_thrust * (thrust_acc / gravity);
+    const double clamped_thrust_cmd = std::clamp(thrust_cmd, 0.0, 0.95);
+    log_thrust_model_usage(get_hover_estimator_mode(), clamped_thrust_cmd, hover_thrust);
+    return clamped_thrust_cmd;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -147,11 +302,42 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
 // ─────────────────────────────────────────────────────────────────────────
 Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& pos_error,
                                                          const Eigen::Vector3d& vel_error) {
+    const double dt = 1.0 / std::max(1.0, param_.controller_hz);
 
-    // Z 轴积分补偿叠加到加速度反馈上
-    Eigen::Vector3d a_fb =
-        param_.Kpos.asDiagonal() * pos_error + param_.Kvel.asDiagonal() * vel_error;
-    a_fb.z() += param_.pos_ki_z * integral_z_;
+    // 三轴积分项（I）：支持位置环与速度环全量 PID
+    integral_pos_ += pos_error * dt;
+    integral_vel_ += vel_error * dt;
+
+    // 将积分状态按“输出加速度上限”做等效限幅，避免积分饱和
+    for (int i = 0; i < 3; ++i) {
+        if (std::abs(param_.pos_ki[i]) > 1e-6) {
+            const double lim = param_.int_max_pos[i] / std::max(std::abs(param_.pos_ki[i]), 1e-6);
+            integral_pos_[i] = std::max(-lim, std::min(lim, integral_pos_[i]));
+        } else {
+            integral_pos_[i] = 0.0;
+        }
+
+        if (std::abs(param_.vel_ki[i]) > 1e-6) {
+            const double lim = param_.int_max_vel[i] / std::max(std::abs(param_.vel_ki[i]), 1e-6);
+            integral_vel_[i] = std::max(-lim, std::min(lim, integral_vel_[i]));
+        } else {
+            integral_vel_[i] = 0.0;
+        }
+    }
+
+    // 三轴微分项（D）
+    const Eigen::Vector3d pos_error_dot = (pos_error - last_pos_error_) / dt;
+    const Eigen::Vector3d vel_error_dot = (vel_error - last_vel_error_) / dt;
+    last_pos_error_ = pos_error;
+    last_vel_error_ = vel_error;
+
+    // 三轴全量 PID 反馈（位置环 + 速度环）
+    Eigen::Vector3d a_fb = param_.pos_kp.asDiagonal() * pos_error +
+                           param_.pos_ki.asDiagonal() * integral_pos_ +
+                           param_.pos_kd.asDiagonal() * pos_error_dot +
+                           param_.vel_kp.asDiagonal() * vel_error +
+                           param_.vel_ki.asDiagonal() * integral_vel_ +
+                           param_.vel_kd.asDiagonal() * vel_error_dot;
 
     // 对输出加速度进行球形限幅，保持方向不变
     if (a_fb.norm() > param_.max_acc) {
@@ -176,8 +362,8 @@ Eigen::Vector3d Geometric_AttitudeControl::controlPosition(const Eigen::Vector3d
 
     // 参考旋转矩阵：由参考加速度方向（去除重力）和偏航角构成
     // 用于计算转子阻力补偿项
-    const Eigen::Vector4d q_ref = acc2quaternion(target_acc - gravity_vec, mav_yaw);
-    const Eigen::Matrix3d R_ref = quat2RotMatrix(q_ref);
+    const Eigen::Quaterniond q_ref = acc2quaternion(target_acc - gravity_vec, mav_yaw);
+    const Eigen::Matrix3d R_ref = q_ref.toRotationMatrix();
 
     // 位置和速度误差（Sunray 约定：target - current）
     const Eigen::Vector3d pos_error = target_pos - mav_pos;
@@ -193,41 +379,77 @@ Eigen::Vector3d Geometric_AttitudeControl::controlPosition(const Eigen::Vector3d
     return a_fb + target_acc - a_rd - gravity_vec;
 }
 
+Eigen::Vector3d Geometric_AttitudeControl::controlVelocity(const Eigen::Vector3d& target_vel,
+                                                           const Eigen::Vector3d& mav_vel,
+                                                           double target_yaw) {
+
+    const Eigen::Vector3d gravity_vec(0.0, 0.0, -param_.gravity);
+    const Eigen::Quaterniond q_ref = acc2quaternion(-gravity_vec, target_yaw);
+    const Eigen::Matrix3d R_ref = q_ref.toRotationMatrix();
+    const Eigen::Vector3d vel_error = target_vel - mav_vel;
+    const double dt = 1.0 / std::max(1.0, param_.controller_hz);
+
+    // 纯速度模式下不使用位置环，避免旧的位置积分残留影响输出。
+    integral_pos_.setZero();
+    last_pos_error_.setZero();
+
+    integral_vel_ += vel_error * dt;
+    for (int i = 0; i < 3; ++i) {
+        if (std::abs(param_.vel_ki[i]) > 1e-6) {
+            const double lim = param_.int_max_vel[i] / std::max(std::abs(param_.vel_ki[i]), 1e-6);
+            integral_vel_[i] = std::max(-lim, std::min(lim, integral_vel_[i]));
+        } else {
+            integral_vel_[i] = 0.0;
+        }
+    }
+
+    const Eigen::Vector3d vel_error_dot = (vel_error - last_vel_error_) / dt;
+    last_vel_error_ = vel_error;
+
+    Eigen::Vector3d a_fb = param_.vel_kp.asDiagonal() * vel_error +
+                           param_.vel_ki.asDiagonal() * integral_vel_ +
+                           param_.vel_kd.asDiagonal() * vel_error_dot;
+
+    if (a_fb.norm() > param_.max_acc) {
+        a_fb = (param_.max_acc / a_fb.norm()) * a_fb;
+    }
+
+    const Eigen::Vector3d a_rd = R_ref * param_.D.asDiagonal() * R_ref.transpose() * target_vel;
+    return a_fb - a_rd - gravity_vec;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // computeBodyRateCmd
-// 期望加速度 → 期望姿态 → 调用姿态子控制器 → body rate + 归一化推力
+// 期望加速度 → 期望姿态 → 调用姿态子控制器 → body rate + thrust_acc
 // ─────────────────────────────────────────────────────────────────────────
 void Geometric_AttitudeControl::computeBodyRateCmd(Eigen::Vector4d& bodyrate_cmd,
                                                    const Eigen::Vector3d& a_des,
-                                                   const Eigen::Vector4d& curr_att_vec,
-                                                   double mav_yaw,
-                                                   const Eigen::Vector3d& target_jerk) {
+                                                   const Eigen::Quaterniond& curr_att,
+                                                   double mav_yaw) {
 
     // 由期望加速度方向 + 偏航角计算期望姿态四元数
-    const Eigen::Vector4d q_des = acc2quaternion(a_des, mav_yaw);
+    const Eigen::Quaterniond q_des = acc2quaternion(a_des, mav_yaw);
 
-    // 调用姿态子控制器，计算期望角速度和推力分量
-    att_controller_->update(curr_att_vec, q_des, a_des, target_jerk);
+    // 调用姿态求解器，只计算期望角速度
+    att_controller_->update(curr_att, q_des, a_des);
 
     // 填充 body rate（前三分量）
     bodyrate_cmd.head(3) = att_controller_->get_desired_rate();
 
-    // 推力归一化：thrust_norm = clamp(k * (m * acc_z) + offset, 0.0, 0.95)
-    // norm_thrust_const 和 norm_thrust_offset 为机型相关的标定值
-    const double thrust_acc = att_controller_->get_desired_thrust().z();
-    bodyrate_cmd(3) =
-        std::max(0.0,
-                 std::min(0.95,
-                          param_.norm_thrust_const * (param_.drone_mass * thrust_acc) +
-                              param_.norm_thrust_offset));
+    // 输出 collective thrust 对应的总加速度需求。
+    // 这里优先匹配世界系 z 轴加速度：u * zb.z = a_des.z。
+    // 相比 a_des·zb，在横向机动且姿态尚未到位时能更好抑制先升后降的高度瞬态。
+    const Eigen::Vector3d zb = curr_att.toRotationMatrix().col(2);
+    const double zb_z = std::clamp(zb.z(), 0.1, 1.0);
+    bodyrate_cmd(3) = a_des.z() / zb_z;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // acc2quaternion
 // 由期望加速度方向（即期望推力方向）和偏航角构造期望姿态四元数
 // ─────────────────────────────────────────────────────────────────────────
-Eigen::Vector4d Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector3d& vector_acc,
-                                                          double yaw) {
+Eigen::Quaterniond Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector3d& vector_acc,
+                                                             double yaw) {
 
     // 保护：加速度向量模过小时（接近自由落体）无法定义推力方向，回退到竖直向上
     const double acc_norm = vector_acc.norm();
@@ -258,5 +480,6 @@ Eigen::Vector4d Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector3d&
         yb_des(2), zb_des(2);
 
     // 旋转矩阵 → 四元数（Shepperd 方法，避免数值奇异）
-    return rot2Quaternion(rotmat);
+    const Eigen::Vector4d q_vec = rot2Quaternion(rotmat);
+    return Eigen::Quaterniond(q_vec(0), q_vec(1), q_vec(2), q_vec(3));
 }

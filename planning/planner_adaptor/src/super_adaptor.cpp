@@ -37,7 +37,9 @@ class PositionCommandConverter {
         // 速度 / 加速度 / jerk
         out.desired_vel = msg->velocity;
         out.desired_acc = msg->acceleration;
-        out.desired_jerk = msg->jerk;
+        out.desired_jerk.x = 0.0;
+        out.desired_jerk.y = 0.0;
+        out.desired_jerk.z = 0.0;
 
         // yaw / yaw_rate
         out.desired_yaw = static_cast<float>(msg->yaw);
@@ -51,12 +53,12 @@ class PositionCommandConverter {
             out.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
 
         // WGS84 在 PositionCommand 中没有，置零
-        out.wgs84_pos.latitude = 0.0;
-        out.wgs84_pos.longitude = 0.0;
-        out.wgs84_pos.altitude = 0.0;
+        out.desired_wgs84_pos.latitude = 0.0;
+        out.desired_wgs84_pos.longitude = 0.0;
+        out.desired_wgs84_pos.altitude = 0.0;
 
-        // mode flag: 默认非固定高度
-        out.fixed_height = false;
+        // body系命令未使用，默认高度字段置零
+        out.fixed_height = 0.0;
 
         pub_.publish(out);
     }

@@ -27,6 +27,7 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <ros/time.h>
 
 namespace controller_data_types {
 
@@ -56,8 +57,8 @@ struct TargetTrajectoryPoint_t {
 // ═══════════════════════════════════════════════════════════
 struct TargetPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Eigen::Vector3d position;
-    double yaw;
+    Eigen::Vector3d position{Eigen::Vector3d::Zero()};
+    double yaw{0.0};
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -66,9 +67,34 @@ struct TargetPoint_t {
 // ═══════════════════════════════════════════════════════════
 struct TargetVelocity_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    Eigen::Vector3d velocity;
-    double yaw;
-    double yaw_rate;
+    ros::Time stamp{ros::Time(0)};
+    Eigen::Vector3d velocity{Eigen::Vector3d::Zero()};
+    double yaw{0.0};
+    double yaw_rate{0.0};
+};
+
+// ═══════════════════════════════════════════════════════════
+// body系位置控制结构体
+// 机体系仅描述水平面位移，z轴使用世界系固定高度
+// ═══════════════════════════════════════════════════════════
+struct TargetBodyPoint_t {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    Eigen::Vector2d position_xy{Eigen::Vector2d::Zero()};
+    double fixed_height{0.0};
+    double yaw{0.0};
+};
+
+// ═══════════════════════════════════════════════════════════
+// body系速度控制结构体
+// 机体系仅描述水平面速度，z轴使用世界系固定高度
+// ═══════════════════════════════════════════════════════════
+struct TargetBodyVelocity_t {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    ros::Time stamp{ros::Time(0)};
+    Eigen::Vector2d velocity_xy{Eigen::Vector2d::Zero()};
+    double fixed_height{0.0};
+    double yaw{0.0};
+    double yaw_rate{0.0};
 };
 
 }  // namespace controller_data_types

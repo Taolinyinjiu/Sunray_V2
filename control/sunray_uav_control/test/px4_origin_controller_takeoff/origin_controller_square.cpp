@@ -108,7 +108,6 @@ class OriginControllerSquareTest {
         }
 
         if (phase_ == Phase::SquareMove) {
-            controller_data_types::TargetPoint_t target;
             bool arrived = false;
 
             if (move_frame_ == "body") {
@@ -118,10 +117,13 @@ class OriginControllerSquareTest {
                 Eigen::Vector3d delta_b = vertices_body_abs_[current_vertex_idx_] - p_cur_b0;
                 delta_b.z() = 0.0;  // 方形平面运动
 
-                target.position = delta_b;
+                controller_data_types::TargetBodyPoint_t target;
+                target.position_xy = delta_b.head<2>();
+                target.fixed_height = square_center_w_.z();
                 target.yaw = 0.0;  // 相对yaw增量=0，保持朝向
                 arrived = controller_.move_point_body(target);
             } else {
+                controller_data_types::TargetPoint_t target;
                 target.position = vertices_local_[current_vertex_idx_];
                 target.yaw = vertex_yaw_;
                 arrived = controller_.move_point(target);

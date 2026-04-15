@@ -6,7 +6,6 @@
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
 #include <sunray_msgs/UAVControlFSMState.h>
 #include "controller/px4_origin_controller.hpp"
-#include "controller/px4_linear_attitude_controller.hpp"
 #include "controller/geometric_controller.hpp"
 #include <sunray_msgs/OdomStatus.h>
 #include "utils/orientation_utils.hpp"
@@ -375,13 +374,22 @@ void Sunray_FSM::load_param() {
     }
     // 顺利读取，取出各个字段对应的部分
     // 由于这里会写的很长，所以将他们分为几个不同的函数用来填充结构体
+    ROS_INFO("Loading sunray_control_config.yaml from %s start", config_yamlfile_path_.c_str());
+    ROS_INFO("basic");
     loadBasicParam(root["basic_param"], fsm_config_.basic_param);
+    ROS_INFO("protect");
     loadProtectParam(root["protect_param"], fsm_config_.protect_param);
+    ROS_INFO("msg_timeout");
     loadMsgTimeoutParam(root["msg_timeout_param"], fsm_config_.msg_timeout_param);
+    ROS_INFO("takeoff_land");
     loadTakeoffLandParam(root["takeoff_land_param"], fsm_config_.takeoff_land_param);
+    ROS_INFO("mission");
     loadMissionErrorParam(root["mission_error_param"], fsm_config_.mission_error_param);
+    ROS_INFO("local_fence");
     loadLocalFenceParam(root["local_fence_param"], fsm_config_.local_fence_param);
+    ROS_INFO("velocity");
     loadVelocityParam(root["velocity_param"], fsm_config_.velocity_param);
+    ROS_INFO("Loading sunray_control_config.yaml from %s end", config_yamlfile_path_.c_str());
 
     fsm_config_.basic_param.odom_topic_name =
         sunray_common::replace_uav_ns(fsm_config_.basic_param.odom_topic_name, uav_ns_);
@@ -418,8 +426,8 @@ void Sunray_FSM::register_controller() {
     // 根据调用的顺序来看，对controller_type的检查已经在load_param()函数中被进行了，因此这里我们不进行检查，直接使用就好
     // 根据sunray_control_config.yaml中的定义，控制器的类型分别为
     // 0: px4_origin_controller px4原生控制器
-    // 1: sunray_attitude_controller sunray项目的姿态推力控制器
-    // 2: rl_raptor_controller 基于raptor的强化学习控制器
+    // 1: sunray_attitude_controller 预留
+    // 2: geometric_controller Sunray 几何控制器
     switch (fsm_config_.basic_param.controller_types) {
     case 0: {
         sunray_controller_ = std::make_shared<PX4_OriginController>(nh_);
@@ -431,15 +439,16 @@ void Sunray_FSM::register_controller() {
         break;
     }
     case 1: {
-        sunray_controller_ = std::make_shared<PX4_LinearAttitude_Controller>(nh_);
+        sunray_controller_ = std::make_shared<Geometric_Controller>(nh_);
         // 在这里做控制器的初始化,可以不用在外面判断控制器的类型再写报错异常信息
         if (sunray_controller_->init() == false) {
             // 如果控制器初始化失败，抛出异常
-            throw std::runtime_error("{Px4 Original Controller initialization failed");
+            throw std::runtime_error("{Geometric_Controller initialization failed");
         }
         break;
     }
     case 2: {
+        // TODO:将2修改为RL_RAPTOR控制器
         sunray_controller_ = std::make_shared<Geometric_Controller>(nh_);
         // 在这里做控制器的初始化,可以不用在外面判断控制器的类型再写报错异常信息
         if (sunray_controller_->init() == false) {
@@ -713,39 +722,89 @@ bool Sunray_FSM::emergency_kill() {
     return sunray_controller_->emergency_kill();
 }
 bool Sunray_FSM::move_point(control_common::UavControlCmd cmd) {
-    // 提取move_point的类型
-    controller_data_types::TargetPoint_t point;
-    point.position = cmd.position;
-    point.yaw = cmd.yaw;
-    // 根据loal系还是body系决定调用的函数
+    control_common::UAVStateEstimate odom_snapshot;
+    {
+        std::lock_guard<std::mutex> lk(odom_mutex_);
+        odom_snapshot = last_odometry_;
+    }
+    const double current_yaw = quaternion_to_yaw_rad(odom_snapshot.orientation);
+
+    // 根据local系还是body系决定调用的函数
     if (cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT) {
+        controller_data_types::TargetPoint_t point;
+        point.position = cmd.position;
+        point.yaw = (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAW)
+                        ? cmd.yaw
+                        : current_yaw;
         return sunray_controller_->move_point(point);
     } else {
+        controller_data_types::TargetBodyPoint_t point;
+        point.position_xy = cmd.body_position_xy;
+        point.fixed_height = cmd.fixed_height;
+        if (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAW) {
+            point.yaw = cmd.yaw - current_yaw;
+        } else {
+            point.yaw = 0.0;
+        }
         return sunray_controller_->move_point_body(point);
     }
 }
 bool Sunray_FSM::move_velocity(control_common::UavControlCmd cmd) {
-    // 提取速度类型
-    controller_data_types::TargetVelocity_t velocity;
-    velocity.velocity = cmd.velocity;
-    velocity.yaw = cmd.yaw;
-    velocity.yaw_rate = cmd.yaw_rate;
+    control_common::UAVStateEstimate odom_snapshot;
+    {
+        std::lock_guard<std::mutex> lk(odom_mutex_);
+        odom_snapshot = last_odometry_;
+    }
+    const double current_yaw = quaternion_to_yaw_rad(odom_snapshot.orientation);
+
     // 根据local系和body系决定调用的函数
     if (cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY) {
+        controller_data_types::TargetVelocity_t velocity;
+        velocity.stamp = cmd.timestamp;
+        velocity.velocity = cmd.velocity;
+        velocity.yaw = (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAW)
+                           ? cmd.yaw
+                           : current_yaw;
+        velocity.yaw_rate = (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAWRATE)
+                                ? cmd.yaw_rate
+                                : 0.0;
         return sunray_controller_->move_velocity(velocity);
     } else {
+        controller_data_types::TargetBodyVelocity_t velocity;
+        velocity.stamp = cmd.timestamp;
+        velocity.velocity_xy = cmd.body_velocity_xy;
+        velocity.fixed_height = cmd.fixed_height;
+        if (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAW) {
+            velocity.yaw = cmd.yaw - current_yaw;
+        } else {
+            velocity.yaw = 0.0;
+        }
+        velocity.yaw_rate = (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAWRATE)
+                                ? cmd.yaw_rate
+                                : 0.0;
         return sunray_controller_->move_velocity_body(velocity);
     }
 }
 bool Sunray_FSM::move_trajectory(control_common::UavControlCmd cmd) {
+    control_common::UAVStateEstimate odom_snapshot;
+    {
+        std::lock_guard<std::mutex> lk(odom_mutex_);
+        odom_snapshot = last_odometry_;
+    }
+    const double current_yaw = quaternion_to_yaw_rad(odom_snapshot.orientation);
+
     // 提取轨迹类型
     controller_data_types::TargetTrajectoryPoint_t traj_point;
     traj_point.position = cmd.position;
     traj_point.velocity = cmd.velocity;
     traj_point.acceleration = cmd.acceleration;
     traj_point.jerk = cmd.jerk;
-    traj_point.yaw = cmd.yaw;
-    traj_point.yaw_rate = cmd.yaw_rate;
+    traj_point.yaw = (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAW)
+                         ? cmd.yaw
+                         : current_yaw;
+    traj_point.yaw_rate = (cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAWRATE)
+                              ? cmd.yaw_rate
+                              : 0.0;
     return sunray_controller_->move_trajectory(traj_point);
 }
 bool Sunray_FSM::move_point_wgs84(control_common::UavControlCmd cmd) {

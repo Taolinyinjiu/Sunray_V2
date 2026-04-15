@@ -45,6 +45,8 @@ struct UavControlCmd {
     Eigen::Vector3d velocity{Eigen::Vector3d::Zero()};
     Eigen::Vector3d acceleration{Eigen::Vector3d::Zero()};
     Eigen::Vector3d jerk{Eigen::Vector3d::Zero()};
+    Eigen::Vector2d body_position_xy{Eigen::Vector2d::Zero()};
+    Eigen::Vector2d body_velocity_xy{Eigen::Vector2d::Zero()};
     // ------------这个特殊一点，经纬高---------------
     // wgs84_position = [latitude_deg, longitude_deg, altitude_m]
     geographic_msgs::GeoPoint wgs84_position;
@@ -52,8 +54,8 @@ struct UavControlCmd {
     YawMode yaw_mode{YawMode::KEEP_YAW};
     double yaw{0.0};
     double yaw_rate{0.0};
-    // ---------------是否固定当前高度----------------
-    bool fixed_height{false};
+    // body系控制时，z轴使用世界系固定高度语义
+    double fixed_height{0.0};
     // 设计一个辅助的构造函数，用来快速的提取控制话题中的数据
     UavControlCmd() = default;
     UavControlCmd(const sunray_msgs::UAVControlCMD& msg);
@@ -144,30 +146,38 @@ inline UavControlCmd::UavControlCmd(const sunray_msgs::UAVControlCMD& msg) {
         // 实际上，这里需要添加打印到日志，然后打印当前的msg.yaw_mode
         break;
     }
-    // 提取位置数据
+    // 默认提取惯性系数据
     position.x() = msg.desired_pos.x;
     position.y() = msg.desired_pos.y;
     position.z() = msg.desired_pos.z;
-    // 提取速度数据
+
     velocity.x() = msg.desired_vel.x;
     velocity.y() = msg.desired_vel.y;
     velocity.z() = msg.desired_vel.z;
-    // 提取加速度数据
+
     acceleration.x() = msg.desired_acc.x;
     acceleration.y() = msg.desired_acc.y;
     acceleration.z() = msg.desired_acc.z;
-    // 提取加加速度数据
+
     jerk.x() = msg.desired_jerk.x;
     jerk.y() = msg.desired_jerk.y;
     jerk.z() = msg.desired_jerk.z;
+
+    // body系控制单独携带 body-xy + fixed_height，需要覆盖默认解析结果
+    if (control_cmd == ControlCmd::MOVE_POINT_BODY) {
+        body_position_xy.x() = msg.desired_body_xy_pos.x;
+        body_position_xy.y() = msg.desired_body_xy_pos.y;
+    } else if (control_cmd == ControlCmd::MOVE_VELOCITY_BODY) {
+        body_velocity_xy.x() = msg.desired_body_xy_vel.x;
+        body_velocity_xy.y() = msg.desired_body_xy_vel.y;
+    }
     // 提取yaw角数据
     yaw = msg.desired_yaw;
     yaw_rate = msg.desired_yaw_rate;
     // 提取 wgs84 格式数据
-    wgs84_position.altitude = msg.wgs84_pos.altitude;
-    wgs84_position.latitude = msg.wgs84_pos.latitude;
-    wgs84_position.longitude = msg.wgs84_pos.longitude;
-    // 提取 固定当前高度参数(需要思考这个参数有什么用)
+    wgs84_position.altitude = msg.desired_wgs84_pos.altitude;
+    wgs84_position.latitude = msg.desired_wgs84_pos.latitude;
+    wgs84_position.longitude = msg.desired_wgs84_pos.longitude;
     fixed_height = msg.fixed_height;
 };
 

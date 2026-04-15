@@ -19,13 +19,13 @@ namespace sunray_fsm {
 struct basic_param_t {
     double mass_kg{0.0};
     double gravity{0.0};
+    double hover_thrust_precent{0.0};
     uint8_t controller_types{0};
     double controller_update_frequency{0.0};
     double supervisor_update_frequency{0.0};
     std::string odom_topic_name{"null"};
     uint8_t fuse_odom_type{0};
     double fuse_odom_frequency{0.0};
-    uint8_t trajectory_type{0};
 };
 // -------------------保护参数-----------------------
 struct protect_param_t {

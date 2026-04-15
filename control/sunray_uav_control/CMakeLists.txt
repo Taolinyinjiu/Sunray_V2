@@ -50,12 +50,12 @@ catkin_package(
 # -----------------------------
 add_library(sunray_uav_control_lib
   src/mavros_helper/mavros_helper.cpp
-  src/controller/utils.cpp
+  src/mavros_helper/mavros_helper_data_types.cpp
   src/controller/px4_origin_controller.cpp
-  src/controller/px4_linear_attitude_controller.cpp
-  src/controller/core_algorithm/linear_attitude_control.cpp
+  src/controller/core_algorithm/hoverthrust_estimator.cpp
   src/controller/geometric_controller.cpp
   src/controller/core_algorithm/geometric_attitude_control.cpp
+  src/controller/core_algorithm/attitude_slover.cpp
   src/statemachine/sunray_fsm_loadparam.cpp
   src/statemachine/sunray_fsm.cpp
 )
@@ -71,6 +71,12 @@ target_link_libraries(sunray_uav_control_lib
   PUBLIC
     ${catkin_LIBRARIES}
     yaml-cpp
+)
+
+# Enable detailed controller / estimator debug logs guarded by #ifdef DEBUG.
+target_compile_definitions(sunray_uav_control_lib
+  PRIVATE
+    DEBUG
 )
 
 # -----------------------------
@@ -111,6 +117,15 @@ add_executable(origin_controller_square_test_velocity
 )
 
 target_link_libraries(origin_controller_square_test_velocity
+  PRIVATE
+    sunray_uav_control_lib
+)
+
+add_executable(hoverthrust_estimator_ros_test_node
+  test/hoverthrust_estimator/hoverthrust_estimator_ros_test_node.cpp
+)
+
+target_link_libraries(hoverthrust_estimator_ros_test_node
   PRIVATE
     sunray_uav_control_lib
 )
@@ -159,6 +174,7 @@ install(TARGETS
   origin_controller_takeoff_test
   origin_controller_square_test
   origin_controller_square_test_velocity
+  hoverthrust_estimator_ros_test_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

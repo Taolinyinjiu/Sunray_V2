@@ -27,3 +27,13 @@ target_link_libraries(terminal_control_node
 )
 
 add_dependencies(terminal_control_node ${catkin_EXPORTED_TARGETS})
+
+add_executable(triangle_velocity_test
+  src/velocity_test/triangle_velocity_test.cpp
+)
+
+target_link_libraries(triangle_velocity_test
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(triangle_velocity_test ${catkin_EXPORTED_TARGETS})

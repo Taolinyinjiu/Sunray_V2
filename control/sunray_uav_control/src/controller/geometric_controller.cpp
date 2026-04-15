@@ -106,20 +106,33 @@ bool Geometric_Controller::is_ready() {
 void Geometric_Controller::set_current_odom(const control_common::UAVStateEstimate& odom) {
     uav_odometry_ = odom;
     has_uav_odometry_ = true;
+    has_imu_ = has_valid_imu_data();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 运动相关接口
 // ─────────────────────────────────────────────────────────────────────────────
 void Geometric_Controller::on_ground_keep_setpoint() {
+    reset_velocity_trajectory_state();
     control_common::Mavros_SetpointAttitude current_setpoint;
-    current_setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-    current_setpoint.body_rate = Eigen::Vector3d::Zero();
+    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+        current_setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                                control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                                control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+        current_setpoint.orientation =
+            has_uav_odometry_ ? uav_odometry_.orientation : Eigen::Quaterniond::Identity();
+        current_setpoint.body_rate = Eigen::Vector3d::Zero();
+    } else {
+        current_setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+        current_setpoint.body_rate = Eigen::Vector3d::Zero();
+    }
     current_setpoint.thrust = 0.0;
     mavros_helper_.pub_attitude_setpoint(current_setpoint);
+    last_setpoint_ = current_setpoint;
 }
 
 bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
+    reset_velocity_trajectory_state();
     // 如果本轮之前已经降落，清除降落标志
     if (land_complete_ == true) {
         land_complete_ = false;
@@ -160,8 +173,17 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
     if (px4_state.flight_mode != control_common::FlightMode::Offboard) {
         // 切换前持续发送零指令以满足 Offboard 2 Hz 最低频率要求
         control_common::Mavros_SetpointAttitude setpoint_cmd;
-        setpoint_cmd.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-        setpoint_cmd.body_rate = Eigen::Vector3d::Zero();
+        if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+            setpoint_cmd.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                                control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                                control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+            setpoint_cmd.orientation =
+                has_uav_odometry_ ? uav_odometry_.orientation : Eigen::Quaterniond::Identity();
+            setpoint_cmd.body_rate = Eigen::Vector3d::Zero();
+        } else {
+            setpoint_cmd.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+            setpoint_cmd.body_rate = Eigen::Vector3d::Zero();
+        }
         setpoint_cmd.thrust = 0.0;
         mavros_helper_.pub_attitude_setpoint(setpoint_cmd);
 
@@ -206,11 +228,28 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         des_state.yaw = takeoff_yaw_;
         des_state.yaw_rate = 0.0;
 
-        auto output = controller_.calculateControl(des_state, uav_odometry_);
+        // 起飞暖机阶段强制使用线性推力模型，同时不更新推力估计器。
+        auto output = controller_.calculateControl(des_state,
+                                                   uav_odometry_,
+                                                   ThrustCommandPolicy::ForceLinear);
+#ifdef DEBUG
+        ROS_INFO_THROTTLE(1.0, "est:skip tk0 z=%.2f vz=%.2f u=%.3f",
+                          uav_odometry_.position.z(),
+                          uav_odometry_.velocity.z(),
+                          output.thrust);
+#endif
 
         control_common::Mavros_SetpointAttitude setpoint;
-        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-        setpoint.body_rate = output.bodyrates;
+        if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+            setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                            control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                            control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+            setpoint.orientation = output.orientation;
+            setpoint.body_rate = Eigen::Vector3d::Zero();
+        } else {
+            setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+            setpoint.body_rate = output.bodyrates;
+        }
         setpoint.thrust = output.thrust;
         mavros_helper_.pub_attitude_setpoint(setpoint);
         last_setpoint_ = setpoint;
@@ -231,11 +270,29 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         des_state.yaw = takeoff_yaw_;
         des_state.yaw_rate = 0.0;
 
-        auto output = controller_.calculateControl(des_state, uav_odometry_);
+        // 起飞爬升阶段强制使用线性推力模型，同时不更新推力估计器。
+        auto output = controller_.calculateControl(des_state,
+                                                   uav_odometry_,
+                                                   ThrustCommandPolicy::ForceLinear);
+#ifdef DEBUG
+        ROS_INFO_THROTTLE(1.0, "est:skip tk1 z=%.2f vz=%.2f az_ref=%.2f u=%.3f",
+                          uav_odometry_.position.z(),
+                          uav_odometry_.velocity.z(),
+                          curve_result.acceleration.z(),
+                          output.thrust);
+#endif
 
         control_common::Mavros_SetpointAttitude setpoint;
-        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-        setpoint.body_rate = output.bodyrates;
+        if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+            setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                            control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                            control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+            setpoint.orientation = output.orientation;
+            setpoint.body_rate = Eigen::Vector3d::Zero();
+        } else {
+            setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+            setpoint.body_rate = output.bodyrates;
+        }
         setpoint.thrust = output.thrust;
         mavros_helper_.pub_attitude_setpoint(setpoint);
         last_setpoint_ = setpoint;
@@ -272,6 +329,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
 }
 
 bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
+    reset_velocity_trajectory_state();
     // 进入降落流程时重置积分，防止下降阶段因残留积分产生额外推力
     if (landing_time_ == ros::Time(0)) {
         controller_.reset_integral();
@@ -312,11 +370,28 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     des_state.yaw = land_yaw_;
     des_state.yaw_rate = 0.0;
 
-    auto output = controller_.calculateControl(des_state, uav_odometry_);
+    // 降落阶段强制使用线性推力模型，同时不更新推力估计器。
+    auto output = controller_.calculateControl(des_state,
+                                               uav_odometry_,
+                                               ThrustCommandPolicy::ForceLinear);
+#ifdef DEBUG
+    ROS_INFO_THROTTLE(1.0, "est:skip land z=%.2f vz=%.2f u=%.3f",
+                      uav_odometry_.position.z(),
+                      uav_odometry_.velocity.z(),
+                      output.thrust);
+#endif
 
     control_common::Mavros_SetpointAttitude setpoint;
-    setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-    setpoint.body_rate = output.bodyrates;
+    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                        control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                        control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+        setpoint.orientation = output.orientation;
+        setpoint.body_rate = Eigen::Vector3d::Zero();
+    } else {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+        setpoint.body_rate = output.bodyrates;
+    }
     setpoint.thrust = output.thrust;
 
     // 触地判断：靠近地面 + 三轴速度均低
@@ -380,6 +455,7 @@ bool Geometric_Controller::set_hover_point(control_common::UAVStateEstimate curr
 }
 
 bool Geometric_Controller::hover() {
+    reset_velocity_trajectory_state();
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = hover_point;
     des_state.velocity = Eigen::Vector3d::Zero();
@@ -388,11 +464,34 @@ bool Geometric_Controller::hover() {
     des_state.yaw = hover_yaw_;
     des_state.yaw_rate = 0.0;
 
-    auto output = controller_.calculateControl(des_state, uav_odometry_);
+    auto output =
+        controller_.calculateControl(des_state, uav_odometry_, ThrustCommandPolicy::Auto);
+    if (has_valid_imu_data()) {
+        thrust_estimator::Input_t estimator_input;
+        estimator_input.stamp = mavros_helper_.get_imu_data().stamp;
+        estimator_input.attitude = uav_odometry_.orientation;
+        estimator_input.velocity_w = uav_odometry_.velocity;
+        estimator_input.acceleration_w = get_world_acc_from_imu();
+#ifdef DEBUG
+        ROS_INFO_THROTTLE(1.0, "est:feed hover az=%.2f vz=%.2f u=%.3f",
+                          estimator_input.acceleration_w.z(),
+                          estimator_input.velocity_w.z(),
+                          output.thrust);
+#endif
+        controller_.feed_thrust_estimator(estimator_input);
+    }
 
     control_common::Mavros_SetpointAttitude setpoint;
-    setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-    setpoint.body_rate = output.bodyrates;
+    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                        control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                        control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+        setpoint.orientation = output.orientation;
+        setpoint.body_rate = Eigen::Vector3d::Zero();
+    } else {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+        setpoint.body_rate = output.bodyrates;
+    }
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
     last_setpoint_ = setpoint;
@@ -400,10 +499,12 @@ bool Geometric_Controller::hover() {
 }
 
 bool Geometric_Controller::emergency_kill() {
+    reset_velocity_trajectory_state();
     return mavros_helper_.emergency_kill();
 }
 
 bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point) {
+    reset_velocity_trajectory_state();
     ros::Time now = ros::Time::now();
 
     // 新目标检测
@@ -416,6 +517,7 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
     if (is_new_target) {
         move_point_arrive_state_ = false;
         start_move_arrive_time_ = ros::Time(0);
+        controller_.reset_vertical_integral();
         last_point_ = point;
     }
 
@@ -424,17 +526,23 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
     des_state.velocity = Eigen::Vector3d::Zero();
     des_state.acceleration = Eigen::Vector3d::Zero();
     des_state.jerk = Eigen::Vector3d::Zero();
-    // 若上层未显式设置 yaw（KEEP_YAW 模式），则传入起飞锁定的 yaw，
-    // 核心算法中 last_desired_yaw_ 将保持该值，不会归零
-    des_state.yaw =
-        point.yaw.has_value() ? point.yaw : std::optional<float>(static_cast<float>(takeoff_yaw_));
+    des_state.yaw = point.yaw;
     des_state.yaw_rate = 0.0;
 
-    auto output = controller_.calculateControl(des_state, uav_odometry_);
+    auto output =
+        controller_.calculateControl(des_state, uav_odometry_, ThrustCommandPolicy::Auto);
 
     control_common::Mavros_SetpointAttitude setpoint;
-    setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-    setpoint.body_rate = output.bodyrates;
+    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                        control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                        control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+        setpoint.orientation = output.orientation;
+        setpoint.body_rate = Eigen::Vector3d::Zero();
+    } else {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+        setpoint.body_rate = output.bodyrates;
+    }
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
     last_setpoint_ = setpoint;
@@ -442,8 +550,8 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
     // 到位检查：位置误差 < 0.15m 且速度误差 < 0.1m/s，持续 0.5s
     double pos_err = (uav_odometry_.position - point.position).norm();
     double vel_err = uav_odometry_.velocity.norm();
-    ROS_INFO("pos_err : %f", pos_err);
-    ROS_INFO("vel_err : %f", vel_err);
+    // ROS_INFO("pos_err : %f", pos_err);
+    // ROS_INFO("vel_err : %f", vel_err);
 
     if (pos_err < 0.15 && vel_err < 0.1) {
         if (start_move_arrive_time_ == ros::Time(0)) {
@@ -462,38 +570,91 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
 }
 
 bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t velocity) {
-    return false;
-}
+    reset_velocity_trajectory_state();
 
-bool Geometric_Controller::move_trajectory(
-    controller_data_types::TargetTrajectoryPoint_t trajpoint) {
-    // 几何控制器的核心运动接口。
-    // 将完整的轨迹点（位置 / 速度 / 加速度 / 加加速度 / yaw）直接送入核心算法，
-    // 由两级控制环（位置 PD + 姿态子控制器）输出 body rate 和归一化推力。
-
-    // 若轨迹点未携带 yaw，补入起飞锁定的 yaw，保持航向稳定
-    if (!trajpoint.yaw.has_value()) {
-        trajpoint.yaw = std::optional<float>(static_cast<float>(takeoff_yaw_));
-    }
-    desired_state_ = trajpoint;
-
-    auto output = controller_.calculateControl(trajpoint, uav_odometry_);
+    auto output =
+        controller_.calculateVelocityControl(velocity, uav_odometry_, ThrustCommandPolicy::Auto);
 
     control_common::Mavros_SetpointAttitude setpoint;
-    setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-    setpoint.body_rate = output.bodyrates;
+    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                        control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                        control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+        setpoint.orientation = output.orientation;
+        setpoint.body_rate = Eigen::Vector3d::Zero();
+    } else {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+        setpoint.body_rate = output.bodyrates;
+    }
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
     last_setpoint_ = setpoint;
     return true;
 }
 
-bool Geometric_Controller::move_point_body(controller_data_types::TargetPoint_t point) {
-    return false;
+bool Geometric_Controller::move_trajectory(
+    controller_data_types::TargetTrajectoryPoint_t trajpoint) {
+    reset_velocity_trajectory_state();
+    // 几何控制器的核心运动接口。
+    // 将完整的轨迹点（位置 / 速度 / 加速度 / 加加速度 / yaw）直接送入核心算法，
+    // 由两级控制环（位置 PD + 姿态子控制器）输出 body rate 和归一化推力。
+    return publish_trajectory_setpoint(trajpoint, ThrustCommandPolicy::Auto);
 }
 
-bool Geometric_Controller::move_velocity_body(controller_data_types::TargetVelocity_t velocity) {
-    return false;
+bool Geometric_Controller::move_point_body(controller_data_types::TargetBodyPoint_t point) {
+    reset_velocity_trajectory_state();
+    constexpr double kPosEps = 1e-3;
+    constexpr double kYawEps = 1e-3;
+    bool is_new_body_target = false;
+
+    const double dxy = (point.position_xy - last_point_body_.position_xy).norm();
+    if (dxy > kPosEps || std::abs(point.fixed_height - last_point_body_.fixed_height) > kPosEps) {
+        is_new_body_target = true;
+    }
+    if (!is_new_body_target && std::abs(point.yaw - last_point_body_.yaw) > kYawEps) {
+        is_new_body_target = true;
+    }
+
+    if (is_new_body_target) {
+        const double yaw = uav_odometry_.get_yaw();
+        const double c = std::cos(yaw);
+        const double s = std::sin(yaw);
+
+        const Eigen::Vector2d p_b = point.position_xy;
+        Eigen::Vector2d delta_w;
+        delta_w.x() = c * p_b.x() - s * p_b.y();
+        delta_w.y() = s * p_b.x() + c * p_b.y();
+
+        controller_data_types::TargetPoint_t world_point;
+        world_point.position.x() = uav_odometry_.position.x() + delta_w.x();
+        world_point.position.y() = uav_odometry_.position.y() + delta_w.y();
+        world_point.position.z() = point.fixed_height;
+        world_point.yaw = yaw + point.yaw;
+
+        last_point_ = world_point;
+        last_point_body_ = point;
+    }
+
+    return move_point(last_point_);
+}
+
+bool Geometric_Controller::move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) {
+    const double yaw = uav_odometry_.get_yaw();
+    const double c = std::cos(yaw);
+    const double s = std::sin(yaw);
+
+    Eigen::Vector2d v_w_xy;
+    v_w_xy.x() = c * velocity.velocity_xy.x() - s * velocity.velocity_xy.y();
+    v_w_xy.y() = s * velocity.velocity_xy.x() + c * velocity.velocity_xy.y();
+
+    const auto trajpoint = update_velocity_trajectory_reference(
+        Eigen::Vector3d(v_w_xy.x(), v_w_xy.y(), 0.0),
+        yaw + velocity.yaw,
+        velocity.yaw_rate,
+        velocity.stamp,
+        true,
+        velocity.fixed_height);
+    return publish_trajectory_setpoint(trajpoint, ThrustCommandPolicy::Auto);
 }
 
 bool Geometric_Controller::move_point_wgs84(geographic_msgs::GeoPoint point) {
@@ -525,6 +686,234 @@ void Geometric_Controller::pub_controller_state() {
 // ═════════════════════════════════════════════════════════════════════════════
 // 私有函数
 // ═════════════════════════════════════════════════════════════════════════════
+
+void Geometric_Controller::reset_velocity_trajectory_state() {
+    velocity_traj_state_.active = false;
+    velocity_traj_state_.hold_fixed_height = false;
+    velocity_traj_state_.fixed_height = 0.0;
+    velocity_traj_state_.last_cmd_stamp = ros::Time(0);
+    velocity_traj_state_.segment_start_time = ros::Time(0);
+    velocity_traj_state_.segment_duration = 0.0;
+    velocity_traj_state_.segment_start = controller_data_types::TargetTrajectoryPoint_t{};
+    velocity_traj_state_.segment_end = controller_data_types::TargetTrajectoryPoint_t{};
+}
+
+controller_data_types::TargetTrajectoryPoint_t
+Geometric_Controller::update_velocity_trajectory_reference(
+    const Eigen::Vector3d& target_velocity_world,
+    double target_yaw,
+    double target_yaw_rate,
+    const ros::Time& cmd_stamp,
+    bool hold_fixed_height,
+    double fixed_height) {
+
+    const ros::Time now = ros::Time::now();
+    Eigen::Vector3d desired_velocity = target_velocity_world;
+    if (hold_fixed_height) {
+        desired_velocity.z() = 0.0;
+    }
+    const double default_dt =
+        std::clamp(1.0 / std::max(1.0, geometric_controller_param_.controller_hz), 0.02, 0.05);
+    const bool mode_changed = velocity_traj_state_.hold_fixed_height != hold_fixed_height;
+    const auto limit_velocity_step =
+        [&](const Eigen::Vector3d& current_velocity, const Eigen::Vector3d& target_velocity, double dt) {
+            Eigen::Vector3d velocity_delta = target_velocity - current_velocity;
+
+            Eigen::Vector2d velocity_delta_xy = velocity_delta.head<2>();
+            const double max_dv_xy = std::max(0.05, velocity_ref_acc_xy_) * dt;
+            const double dv_xy_norm = velocity_delta_xy.norm();
+            if (dv_xy_norm > max_dv_xy && dv_xy_norm > 1e-6) {
+                velocity_delta_xy *= max_dv_xy / dv_xy_norm;
+            }
+            velocity_delta.head<2>() = velocity_delta_xy;
+
+            const double max_dv_z = std::max(0.05, velocity_ref_acc_z_) * dt;
+            velocity_delta.z() = std::clamp(velocity_delta.z(), -max_dv_z, max_dv_z);
+            return current_velocity + velocity_delta;
+        };
+
+    const auto eval_segment = [&](const ros::Time& query_time) {
+        controller_data_types::TargetTrajectoryPoint_t ref = velocity_traj_state_.segment_start;
+        ref.yaw = target_yaw;
+        ref.yaw_rate = target_yaw_rate;
+
+        const double duration = velocity_traj_state_.segment_duration;
+        const double hold_time = std::max(duration, default_dt);
+        if (!std::isfinite(duration) || duration <= 1e-4 ||
+            velocity_traj_state_.segment_start_time.isZero()) {
+            ref.position = velocity_traj_state_.segment_end.position;
+            ref.velocity = Eigen::Vector3d::Zero();
+            ref.acceleration = Eigen::Vector3d::Zero();
+            ref.jerk = Eigen::Vector3d::Zero();
+            ref.yaw_rate = 0.0;
+            return ref;
+        }
+
+        const double elapsed = (query_time - velocity_traj_state_.segment_start_time).toSec();
+        if (elapsed <= 0.0) {
+            ref.acceleration =
+                (velocity_traj_state_.segment_end.velocity -
+                 velocity_traj_state_.segment_start.velocity) /
+                duration;
+            ref.jerk = Eigen::Vector3d::Zero();
+            return ref;
+        }
+        if (elapsed >= duration + hold_time) {
+            ref.position = velocity_traj_state_.segment_end.position;
+            ref.velocity = Eigen::Vector3d::Zero();
+            ref.acceleration = Eigen::Vector3d::Zero();
+            ref.jerk = Eigen::Vector3d::Zero();
+            ref.yaw_rate = 0.0;
+            return ref;
+        }
+        if (elapsed >= duration) {
+            const double coast_time = elapsed - duration;
+            ref.position =
+                velocity_traj_state_.segment_end.position +
+                velocity_traj_state_.segment_end.velocity * coast_time;
+            ref.velocity = velocity_traj_state_.segment_end.velocity;
+            ref.acceleration = Eigen::Vector3d::Zero();
+            ref.jerk = Eigen::Vector3d::Zero();
+            if (hold_fixed_height) {
+                ref.position.z() = velocity_traj_state_.fixed_height;
+                ref.velocity.z() = 0.0;
+            }
+            return ref;
+        }
+
+        const Eigen::Vector3d a =
+            (velocity_traj_state_.segment_end.velocity -
+             velocity_traj_state_.segment_start.velocity) /
+            duration;
+        ref.position = velocity_traj_state_.segment_start.position +
+                       velocity_traj_state_.segment_start.velocity * elapsed +
+                       0.5 * a * elapsed * elapsed;
+        ref.velocity = velocity_traj_state_.segment_start.velocity + a * elapsed;
+        ref.acceleration = a;
+        ref.jerk = Eigen::Vector3d::Zero();
+        if (hold_fixed_height) {
+            ref.position.z() = velocity_traj_state_.fixed_height;
+            ref.velocity.z() = 0.0;
+            ref.acceleration.z() = 0.0;
+        }
+        return ref;
+    };
+
+    if (!velocity_traj_state_.active || mode_changed) {
+        velocity_traj_state_.active = true;
+        velocity_traj_state_.hold_fixed_height = hold_fixed_height;
+        velocity_traj_state_.fixed_height =
+            hold_fixed_height ? fixed_height : uav_odometry_.position.z();
+        velocity_traj_state_.last_cmd_stamp = cmd_stamp.isZero() ? now : cmd_stamp;
+        velocity_traj_state_.segment_start_time = now;
+        velocity_traj_state_.segment_duration = default_dt;
+        velocity_traj_state_.segment_start.position = uav_odometry_.position;
+        velocity_traj_state_.segment_start.velocity = uav_odometry_.velocity;
+        velocity_traj_state_.segment_start.acceleration = Eigen::Vector3d::Zero();
+        velocity_traj_state_.segment_start.jerk = Eigen::Vector3d::Zero();
+        velocity_traj_state_.segment_start.yaw = target_yaw;
+        velocity_traj_state_.segment_start.yaw_rate = target_yaw_rate;
+        velocity_traj_state_.segment_end = velocity_traj_state_.segment_start;
+        if (hold_fixed_height) {
+            velocity_traj_state_.segment_start.position.z() = velocity_traj_state_.fixed_height;
+            velocity_traj_state_.segment_start.velocity.z() = 0.0;
+        }
+        velocity_traj_state_.segment_end.velocity = limit_velocity_step(
+            velocity_traj_state_.segment_start.velocity, desired_velocity, default_dt);
+        velocity_traj_state_.segment_end.position =
+            velocity_traj_state_.segment_start.position +
+            0.5 * (velocity_traj_state_.segment_start.velocity +
+                   velocity_traj_state_.segment_end.velocity) *
+                default_dt;
+        velocity_traj_state_.segment_end.acceleration =
+            (velocity_traj_state_.segment_end.velocity -
+             velocity_traj_state_.segment_start.velocity) /
+            default_dt;
+        velocity_traj_state_.segment_end.jerk = Eigen::Vector3d::Zero();
+        velocity_traj_state_.segment_end.yaw = target_yaw;
+        velocity_traj_state_.segment_end.yaw_rate = target_yaw_rate;
+        if (hold_fixed_height) {
+            velocity_traj_state_.segment_end.position.z() = velocity_traj_state_.fixed_height;
+            velocity_traj_state_.segment_end.velocity.z() = 0.0;
+            velocity_traj_state_.segment_end.acceleration.z() = 0.0;
+        }
+        controller_.reset_vertical_integral();
+        desired_state_ = eval_segment(now);
+        return desired_state_;
+    }
+
+    const bool has_new_cmd =
+        !cmd_stamp.isZero() &&
+        (velocity_traj_state_.last_cmd_stamp.isZero() || cmd_stamp > velocity_traj_state_.last_cmd_stamp);
+
+    if (has_new_cmd) {
+        controller_data_types::TargetTrajectoryPoint_t start_ref = eval_segment(now);
+        double dt = (cmd_stamp - velocity_traj_state_.last_cmd_stamp).toSec();
+        if (!std::isfinite(dt) || dt <= 1e-4) {
+            dt = default_dt;
+        }
+        dt = std::clamp(dt, 0.01, 0.20);
+
+        velocity_traj_state_.fixed_height =
+            hold_fixed_height ? fixed_height : uav_odometry_.position.z();
+        velocity_traj_state_.segment_start_time = now;
+        velocity_traj_state_.segment_duration = dt;
+        velocity_traj_state_.segment_start = start_ref;
+        velocity_traj_state_.segment_start.yaw = target_yaw;
+        velocity_traj_state_.segment_start.yaw_rate = target_yaw_rate;
+        velocity_traj_state_.segment_end = velocity_traj_state_.segment_start;
+        velocity_traj_state_.segment_end.velocity =
+            limit_velocity_step(velocity_traj_state_.segment_start.velocity, desired_velocity, dt);
+        velocity_traj_state_.segment_end.position =
+            velocity_traj_state_.segment_start.position +
+            0.5 * (velocity_traj_state_.segment_start.velocity +
+                   velocity_traj_state_.segment_end.velocity) *
+                dt;
+        velocity_traj_state_.segment_end.acceleration =
+            (velocity_traj_state_.segment_end.velocity -
+             velocity_traj_state_.segment_start.velocity) /
+            dt;
+        velocity_traj_state_.segment_end.jerk = Eigen::Vector3d::Zero();
+        velocity_traj_state_.segment_end.yaw = target_yaw;
+        velocity_traj_state_.segment_end.yaw_rate = target_yaw_rate;
+        if (hold_fixed_height) {
+            velocity_traj_state_.segment_start.position.z() = velocity_traj_state_.fixed_height;
+            velocity_traj_state_.segment_end.position.z() = velocity_traj_state_.fixed_height;
+            velocity_traj_state_.segment_start.velocity.z() = 0.0;
+            velocity_traj_state_.segment_end.velocity.z() = 0.0;
+            velocity_traj_state_.segment_start.acceleration.z() = 0.0;
+            velocity_traj_state_.segment_end.acceleration.z() = 0.0;
+        }
+        velocity_traj_state_.last_cmd_stamp = cmd_stamp;
+    }
+
+    desired_state_ = eval_segment(now);
+    return desired_state_;
+}
+
+bool Geometric_Controller::publish_trajectory_setpoint(
+    const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
+    ThrustCommandPolicy thrust_policy) {
+    desired_state_ = trajpoint;
+
+    auto output = controller_.calculateControl(trajpoint, uav_odometry_, thrust_policy);
+
+    control_common::Mavros_SetpointAttitude setpoint;
+    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                        control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                        control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+        setpoint.orientation = output.orientation;
+        setpoint.body_rate = Eigen::Vector3d::Zero();
+    } else {
+        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+        setpoint.body_rate = output.bodyrates;
+    }
+    setpoint.thrust = output.thrust;
+    mavros_helper_.pub_attitude_setpoint(setpoint);
+    last_setpoint_ = setpoint;
+    return true;
+}
 
 void Geometric_Controller::load_and_validate_config_or_throw() {
     YAML::Node root;
@@ -568,89 +957,138 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     }
     geometric_controller_param_.drone_mass = basic_param["mass_kg"].as<double>();
 
-    // ──── geometric_controller_param ──────────────────────────────────────────
-    const YAML::Node geo_param = root["geometric_controller_param"];
+    const YAML::Node hover_thrust_node =
+        basic_param["hover_thrust_precent"] ? basic_param["hover_thrust_precent"]
+                                             : basic_param["hover_thrust_percent"];
+    const bool has_basic_hover_thrust = static_cast<bool>(hover_thrust_node);
+    if (has_basic_hover_thrust) {
+        geometric_controller_param_.hover_thrust_init =
+            std::clamp(hover_thrust_node.as<double>(), 0.05, 0.80);
+    }
+
+    // ──── sunray_controller_param ─────────────────────────────────────────────
+    const YAML::Node geo_param = root["sunray_controller_param"];
     if (!geo_param || !geo_param.IsMap()) {
         throw std::runtime_error("yaml '" + config_yamlfile_path_ +
-                                 "' is missing a valid 'geometric_controller_param' map");
+                                 "' is missing a valid 'sunray_controller_param' map");
     }
 
-    if (!geo_param["ctrl_mode"]) {
-        throw std::runtime_error("missing param 'ctrl_mode'");
+    if (!geo_param["control_type"]) {
+        throw std::runtime_error("missing param 'control_type'");
     }
-    geometric_controller_param_.ctrl_mode = geo_param["ctrl_mode"].as<int>();
-    if (geometric_controller_param_.ctrl_mode != 0 && geometric_controller_param_.ctrl_mode != 1) {
-        throw std::runtime_error("param 'ctrl_mode' must be 0 (quaternion) or 1 (SO3)");
-    }
-
-    if (!geo_param["attctrl_tau"]) {
-        throw std::runtime_error("missing param 'attctrl_tau'");
-    }
-    geometric_controller_param_.attctrl_tau = geo_param["attctrl_tau"].as<double>();
-
-    if (!geo_param["norm_thrust_const"]) {
-        throw std::runtime_error("missing param 'norm_thrust_const'");
-    }
-    geometric_controller_param_.norm_thrust_const = geo_param["norm_thrust_const"].as<double>();
-
-    if (!geo_param["norm_thrust_offset"]) {
-        throw std::runtime_error("missing param 'norm_thrust_offset'");
-    }
-    geometric_controller_param_.norm_thrust_offset = geo_param["norm_thrust_offset"].as<double>();
-
-    // controller_hz 可选，缺省保持结构体默认值 100.0
-    if (geo_param["controller_hz"]) {
-        geometric_controller_param_.controller_hz = geo_param["controller_hz"].as<double>();
-    }
-
-    if (!geo_param["max_acc"]) {
-        throw std::runtime_error("missing param 'max_acc'");
-    }
-    geometric_controller_param_.max_acc = geo_param["max_acc"].as<double>();
-
-    // ──── gain ────────────────────────────────────────────────────────────────
-    const YAML::Node gain_param = geo_param["gain"];
-    if (!gain_param || !gain_param.IsMap()) {
-        throw std::runtime_error("missing valid 'gain' map under 'geometric_controller_param'");
-    }
-
-    if (!gain_param["Kpos"] || !gain_param["Kpos"].IsSequence() || gain_param["Kpos"].size() != 3) {
+    const int control_type = geo_param["control_type"].as<int>();
+    if (control_type != 0 && control_type != 1) {
         throw std::runtime_error(
-            "missing or invalid param 'gain/Kpos' (expected sequence of 3 values)");
+            "param 'control_type' must be 0 (attitude+thrust) or 1 (bodyrate+thrust) for "
+            "Geometric_Controller");
     }
-    geometric_controller_param_.Kpos.x() = gain_param["Kpos"][0].as<double>();
-    geometric_controller_param_.Kpos.y() = gain_param["Kpos"][1].as<double>();
-    geometric_controller_param_.Kpos.z() = gain_param["Kpos"][2].as<double>();
+    attitude_command_mode_ = (control_type == 0) ? AttitudeCommandMode::Attitude
+                                                 : AttitudeCommandMode::BodyRate;
 
-    if (!gain_param["Kvel"] || !gain_param["Kvel"].IsSequence() || gain_param["Kvel"].size() != 3) {
-        throw std::runtime_error(
-            "missing or invalid param 'gain/Kvel' (expected sequence of 3 values)");
+    if (!geo_param["attitude_type"]) {
+        throw std::runtime_error("missing param 'attitude_type'");
     }
-    geometric_controller_param_.Kvel.x() = gain_param["Kvel"][0].as<double>();
-    geometric_controller_param_.Kvel.y() = gain_param["Kvel"][1].as<double>();
-    geometric_controller_param_.Kvel.z() = gain_param["Kvel"][2].as<double>();
-
-    // Z 轴积分参数（可选，缺省时使用结构体默认值 0.0，即禁用积分）
-    if (gain_param["pos_ki_z"]) {
-        geometric_controller_param_.pos_ki_z = gain_param["pos_ki_z"].as<double>();
-    }
-    if (gain_param["int_max_z"]) {
-        geometric_controller_param_.int_max_z = gain_param["int_max_z"].as<double>();
+    geometric_controller_param_.attitude_type = geo_param["attitude_type"].as<int>();
+    if (geometric_controller_param_.attitude_type != 0 &&
+        geometric_controller_param_.attitude_type != 1) {
+        throw std::runtime_error("param 'attitude_type' must be 0 (quaternion) or 1 (SO3)");
     }
 
-    // ──── drag ────────────────────────────────────────────────────────────────
-    const YAML::Node drag_param = geo_param["drag"];
-    if (!drag_param || !drag_param.IsMap()) {
-        throw std::runtime_error("missing valid 'drag' map under 'geometric_controller_param'");
+    if (!geo_param["attitude_tau"]) {
+        throw std::runtime_error("missing param 'attitude_tau'");
+    }
+    geometric_controller_param_.attitude_tau = geo_param["attitude_tau"].as<double>();
+
+    // 配置与运行频率保持一致，供 PID 积分/微分计算 dt 使用
+    if (basic_param["controller_update_frequency"]) {
+        geometric_controller_param_.controller_hz =
+            basic_param["controller_update_frequency"].as<double>();
     }
 
-    if (!drag_param["D"] || !drag_param["D"].IsSequence() || drag_param["D"].size() != 3) {
-        throw std::runtime_error(
-            "missing or invalid param 'drag/D' (expected sequence of 3 values)");
+    const auto load_vec3 = [&](const char* key, Eigen::Vector3d& out) {
+        if (!geo_param[key] || !geo_param[key].IsSequence() || geo_param[key].size() != 3) {
+            throw std::runtime_error(std::string("missing or invalid param '") + key +
+                                     "' (expected sequence of 3 values)");
+        }
+        out.x() = geo_param[key][0].as<double>();
+        out.y() = geo_param[key][1].as<double>();
+        out.z() = geo_param[key][2].as<double>();
+    };
+
+    load_vec3("pos_kp", geometric_controller_param_.pos_kp);
+    load_vec3("pos_ki", geometric_controller_param_.pos_ki);
+    load_vec3("pos_kd", geometric_controller_param_.pos_kd);
+    load_vec3("vel_kp", geometric_controller_param_.vel_kp);
+    load_vec3("vel_ki", geometric_controller_param_.vel_ki);
+    load_vec3("vel_kd", geometric_controller_param_.vel_kd);
+
+    // 兼容：允许在新配置中按需覆盖以下进阶参数
+    if (geo_param["max_acc"]) {
+        geometric_controller_param_.max_acc = geo_param["max_acc"].as<double>();
     }
-    geometric_controller_param_.D.x() = drag_param["D"][0].as<double>();
-    geometric_controller_param_.D.y() = drag_param["D"][1].as<double>();
-    geometric_controller_param_.D.z() = drag_param["D"][2].as<double>();
+    if (geo_param["velocity_ref_acc_xy"]) {
+        velocity_ref_acc_xy_ = std::max(0.05, geo_param["velocity_ref_acc_xy"].as<double>());
+    }
+    if (geo_param["velocity_ref_acc_z"]) {
+        velocity_ref_acc_z_ = std::max(0.05, geo_param["velocity_ref_acc_z"].as<double>());
+    }
+    if (!has_basic_hover_thrust && geo_param["hover_thrust_init"]) {
+        geometric_controller_param_.hover_thrust_init =
+            std::clamp(geo_param["hover_thrust_init"].as<double>(), 0.05, 0.80);
+    }
+    if (geo_param["hover_thrust_estimator_type"]) {
+        geometric_controller_param_.hover_thrust_estimator_type =
+            geo_param["hover_thrust_estimator_type"].as<int>();
+        if (geometric_controller_param_.hover_thrust_estimator_type < 0 ||
+            geometric_controller_param_.hover_thrust_estimator_type > 2) {
+            throw std::runtime_error("param 'hover_thrust_estimator_type' must be 0, 1 or 2");
+        }
+    }
+    if (geo_param["imu_acc_is_specific_force"]) {
+        imu_acc_is_specific_force_ = geo_param["imu_acc_is_specific_force"].as<bool>();
+    }
+    if (geo_param["int_max_pos"] && geo_param["int_max_pos"].IsSequence() &&
+        geo_param["int_max_pos"].size() == 3) {
+        geometric_controller_param_.int_max_pos.x() = geo_param["int_max_pos"][0].as<double>();
+        geometric_controller_param_.int_max_pos.y() = geo_param["int_max_pos"][1].as<double>();
+        geometric_controller_param_.int_max_pos.z() = geo_param["int_max_pos"][2].as<double>();
+    }
+    if (geo_param["int_max_vel"] && geo_param["int_max_vel"].IsSequence() &&
+        geo_param["int_max_vel"].size() == 3) {
+        geometric_controller_param_.int_max_vel.x() = geo_param["int_max_vel"][0].as<double>();
+        geometric_controller_param_.int_max_vel.y() = geo_param["int_max_vel"][1].as<double>();
+        geometric_controller_param_.int_max_vel.z() = geo_param["int_max_vel"][2].as<double>();
+    }
+    if (geo_param["drag"] && geo_param["drag"].IsSequence() && geo_param["drag"].size() == 3) {
+        geometric_controller_param_.D.x() = geo_param["drag"][0].as<double>();
+        geometric_controller_param_.D.y() = geo_param["drag"][1].as<double>();
+        geometric_controller_param_.D.z() = geo_param["drag"][2].as<double>();
+    }
+}
+
+bool Geometric_Controller::has_valid_imu_data()  {
+    control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
+    if (imu_data.stamp.isZero()) {
+        return false;
+    }
+    const bool fresh = (ros::Time::now() - imu_data.stamp).toSec() < 0.15;
+    if (!fresh) {
+        return false;
+    }
+    return std::isfinite(imu_data.accelection.x()) && std::isfinite(imu_data.accelection.y()) &&
+           std::isfinite(imu_data.accelection.z());
+}
+
+Eigen::Vector3d Geometric_Controller::get_world_acc_from_imu()  {
+    const control_common::Mavros_IMU imu_data = mavros_helper_.get_imu_data();
+    const Eigen::Matrix3d Rwb = uav_odometry_.orientation.toRotationMatrix();
+    const Eigen::Vector3d acc_body = imu_data.accelection;
+    if (imu_acc_is_specific_force_) {
+        // specific force f = a - g -> a = R*f + g_w, g_w=(0,0,-g)
+        return Rwb * acc_body + Eigen::Vector3d(0.0, 0.0, -geometric_controller_param_.gravity);
+    }
+    // 已去重力的 linear acceleration，直接旋转到世界系
+    return Rwb * acc_body;
 }
 
 void Geometric_Controller::ensure_fusion_param_ready_or_throw() {

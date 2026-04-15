@@ -37,11 +37,11 @@ void positionCmdCallback(const ego_planner_msgs::PositionCommand::ConstPtr& msg)
         control_cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
     }
 
-    control_cmd.wgs84_pos.latitude = 0.0;
-    control_cmd.wgs84_pos.longitude = 0.0;
-    control_cmd.wgs84_pos.altitude = 0.0;
+    control_cmd.desired_wgs84_pos.latitude = 0.0;
+    control_cmd.desired_wgs84_pos.longitude = 0.0;
+    control_cmd.desired_wgs84_pos.altitude = 0.0;
 
-    control_cmd.fixed_height = false;
+    control_cmd.fixed_height = 0.0;
 
     if (msg->trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_EMPTY ||
         msg->trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTROY_STATUS_ABORT ||

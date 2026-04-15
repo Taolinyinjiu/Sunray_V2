@@ -17,7 +17,7 @@
  * 符合 Sunray 框架接口规范的控制器。
  *
  * 与 PX4_LinearAttitude_Controller 的最大差异：
- *   - 发布 AttitudeTarget 时使用 BodyRate 模式（mask = IgnoreAttitude）
+ *   - 发布 AttitudeTarget，可按配置选择 Attitude 或 BodyRate 模式
  *   - calculateControl 不需要 IMU 输入
  *   - move_trajectory 真正实现（直接将 trajpoint 传入核心算法）
  *   - takeoff 不依赖 QuinticCurve，直接以目标高度点跟踪
@@ -58,9 +58,9 @@ class Geometric_Controller : public Controller_Interface {
     // 跟踪轨迹点（几何控制器的核心运动接口，真正实现）
     bool move_trajectory(controller_data_types::TargetTrajectoryPoint_t trajpoint) override;
     // 运动到机体系某点（stub）
-    bool move_point_body(controller_data_types::TargetPoint_t point) override;
+    bool move_point_body(controller_data_types::TargetBodyPoint_t point) override;
     // 以机体系速度运动（stub）
-    bool move_velocity_body(controller_data_types::TargetVelocity_t velocity) override;
+    bool move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) override;
     // 移动到 WGS84 坐标（stub）
     bool move_point_wgs84(geographic_msgs::GeoPoint point) override;
 
@@ -73,13 +73,32 @@ class Geometric_Controller : public Controller_Interface {
     void pub_controller_state() override;  // stub，暂返回
 
   private:
+    enum class AttitudeCommandMode : uint8_t {
+        Attitude = 0,
+        BodyRate = 1,
+    };
+
+    struct VelocityTrajectoryState {
+        bool active{false};
+        bool hold_fixed_height{false};
+        double fixed_height{0.0};
+        ros::Time last_cmd_stamp{ros::Time(0)};
+        ros::Time segment_start_time{ros::Time(0)};
+        double segment_duration{0.0};
+        controller_data_types::TargetTrajectoryPoint_t segment_start;
+        controller_data_types::TargetTrajectoryPoint_t segment_end;
+    };
+
     // ----------------------配置相关-----------------------
     std::string config_yamlfile_path_;
     std::string uav_ns_;
     Geometric_AttitudeControl_Param_t geometric_controller_param_;
     Geometric_AttitudeControl controller_;
+    AttitudeCommandMode attitude_command_mode_{AttitudeCommandMode::BodyRate};
     int fuse_odom_type{0};
     double fuse_odom_frequency{0.0};
+    double velocity_ref_acc_xy_{1.5};
+    double velocity_ref_acc_z_{0.8};
 
     // ----------------------检查相关-----------------------
     // void 类型 + throw 后缀 = 整个启动过程只执行一次，抛出异常则终止启动
@@ -92,6 +111,19 @@ class Geometric_Controller : public Controller_Interface {
     bool check_odom_freshness();       // 检查外部里程计数据是否新鲜
     bool check_odom_for_fusion(
         control_common::UAVStateEstimate& fuse_odom);  // 检查本次融合里程计是否有效
+    bool has_valid_imu_data() ;
+    Eigen::Vector3d get_world_acc_from_imu() ;
+    void reset_velocity_trajectory_state();
+    controller_data_types::TargetTrajectoryPoint_t
+    update_velocity_trajectory_reference(const Eigen::Vector3d& target_velocity_world,
+                                         double target_yaw,
+                                         double target_yaw_rate,
+                                         const ros::Time& cmd_stamp,
+                                         bool hold_fixed_height = false,
+                                         double fixed_height = 0.0);
+    bool publish_trajectory_setpoint(
+        const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
+        ThrustCommandPolicy thrust_policy = ThrustCommandPolicy::Auto);
 
     bool controller_ready_{false};
 
@@ -145,7 +177,7 @@ class Geometric_Controller : public Controller_Interface {
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointAttitude last_setpoint_;
     controller_data_types::TargetPoint_t last_point_;       // move_point 上次目标
-    controller_data_types::TargetPoint_t last_point_body_;  // move_point_body 上次目标
+    controller_data_types::TargetBodyPoint_t last_point_body_;  // move_point_body 上次目标
     Eigen::Vector3d land_point_{Eigen::Vector3d::Zero()};   // 降落时锁定的 xy 位置
     Eigen::Vector3d hover_point{Eigen::Vector3d::Zero()};  // hover 悬停点（与 linear 对齐）
     double hover_yaw_{0.0};
@@ -158,9 +190,12 @@ class Geometric_Controller : public Controller_Interface {
     // --------------------里程计状态---------------------
     control_common::UAVStateEstimate uav_odometry_;
     bool has_uav_odometry_{false};
+    bool has_imu_{false};
+    bool imu_acc_is_specific_force_{true};
 
     // --------------------期望状态（用于调试/日志）--------------------
     controller_data_types::TargetTrajectoryPoint_t desired_state_;
+    VelocityTrajectoryState velocity_traj_state_;
 
     // ----------------------ros 话题发布者-----------------------
     ros::Publisher controller_state_pub_;

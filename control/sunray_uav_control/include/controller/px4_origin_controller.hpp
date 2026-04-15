@@ -69,9 +69,9 @@ class PX4_OriginController : public Controller_Interface {
     // 控制无人机跟踪轨迹点
     bool move_trajectory(controller_data_types::TargetTrajectoryPoint_t trajpoint) override;
     // 运动到机体系的某一点
-    bool move_point_body(controller_data_types::TargetPoint_t point) override;
+    bool move_point_body(controller_data_types::TargetBodyPoint_t point) override;
     // 以机体系速度的方式运动
-    bool move_velocity_body(controller_data_types::TargetVelocity_t velocity) override;
+    bool move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) override;
     // 移动到WGS84下的某一点
     bool move_point_wgs84(geographic_msgs::GeoPoint point) override;
     // ---------------------起降状态查询接口-----------------------
@@ -135,7 +135,7 @@ class PX4_OriginController : public Controller_Interface {
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointLocal last_setpoint_{};
     controller_data_types::TargetPoint_t last_point_;
-    controller_data_types::TargetPoint_t last_point_body_;
+    controller_data_types::TargetBodyPoint_t last_point_body_;
     Eigen::Vector3d hover_point_{Eigen::Vector3d::Zero()};  // hover 悬停点（与 linear 对齐）
     double hover_yaw_{0.0};
     // -------------------起降状态标志位--------------

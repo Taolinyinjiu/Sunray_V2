@@ -90,14 +90,16 @@ class OriginControllerSquareTest {
         }
 
         if (phase_ == Phase::SquareMove) {
-            controller_data_types::TargetPoint_t target;
             bool arrived = false;
 
             if (move_frame_ == "body") {
-                target.position = body_steps_[current_vertex_idx_];
+                controller_data_types::TargetBodyPoint_t target;
+                target.position_xy = body_steps_[current_vertex_idx_].head<2>();
+                target.fixed_height = square_center_.z();
                 target.yaw = 0.0;  // body语义下作为相对yaw增量，0表示保持当前朝向
                 arrived = controller_.move_point_body(target);
             } else {
+                controller_data_types::TargetPoint_t target;
                 target.position = vertices_[current_vertex_idx_];
                 target.yaw = vertex_yaw_;
                 arrived = controller_.move_point(target);

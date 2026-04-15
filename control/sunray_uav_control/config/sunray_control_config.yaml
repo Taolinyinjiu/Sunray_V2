@@ -6,6 +6,8 @@ basic_param:
     mass_kg: 0.96
     # 重力加速度
     gravity: 9.8
+    # 归一化悬停推力 (从px4的日志中直接读取)
+    hover_thrust_precent: 0.375 
     # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
     controller_types: 1
     # 控制器更新频率(Hz)
@@ -18,8 +20,6 @@ basic_param:
     fuse_odom_type: 1
     # 里程计融合的频率(需要根据外部里程计的更新频率决定，融合频率应当低于或者等于外部里程计更新频率)
     fuse_odom_frequency: 50
-    # 轨迹参考类型 0:flat_output(微分平坦轨迹) 1:se3(全位姿轨迹)
-    trajectory_type: 0
 
 # -------------------保护参数-----------------------
 protect_param:
@@ -110,3 +110,26 @@ velocity_param:
         z_vel: 1.0
     # 在进行yaw(偏航)角的调整时最大的速度(角度/秒)(deg/s)
     yaw_rate: 30
+# ------------------- Sunray Controller Param -----------
+sunray_controller_param:
+  # 控制器输出类型， 0:attitude+thrust  1:bodyrate+thrust
+  # 使用attitude作为输出时，控制器的动态性能有所下降，误差增大
+  control_type: 0
+  # 姿态误差的表示方法 0 = 四元数误差法（简单，推荐）  1 = 几何SO3法（更精确）
+  # 在没有高速率大机动的情况下，两者效果近似
+  attitude_type: 1
+
+  # 悬停推力估计器类型 0: 低通滤波器 1: RLS最小二乘法估计 2:卡尓曼滤波估计
+  hover_thrust_estimator_type: 1
+  # 位置环PID参数
+  pos_kp: [1.5, 1.5, 1.5]
+  pos_ki: [0.0, 0.0, 0.2]
+  pos_kd: [0.0, 0.0, 0.0]
+  # 速度环PID参数
+  vel_kp: [2.0, 2.0, 1.5]
+  vel_ki: [0.0, 0.0, 0.0]
+  vel_kd: [0.0, 0.0, 0.0]
+  # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5
+  attitude_tau: 0.3
+  # 是否记录日志(存储在Sunray仓库根目录的log目录下)
+  log_enabled: false

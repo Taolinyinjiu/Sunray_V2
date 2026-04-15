@@ -18,6 +18,7 @@ add_message_files(
   FILES
   OdomStatus.msg
   Px4State.msg
+  Vector2.msg
   UAVControlCMD.msg
   UAVControlFSMState.msg
   UAVControllerState.msg

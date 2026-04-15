@@ -1,0 +1,24 @@
+<launch>
+  <arg name="estimator_type" default="rls"/>
+  <arg name="test_duration_s" default="20.0"/>
+  <arg name="true_hover_thrust" default="0.45"/>
+  <arg name="init_hover_thrust" default="0.30"/>
+  <arg name="pass_abs_error" default="0.05"/>
+
+  <node pkg="sunray_uav_control"
+        type="hoverthrust_estimator_ros_test_node"
+        name="hoverthrust_estimator_ros_test"
+        output="screen">
+    <param name="estimator_type" value="$(arg estimator_type)"/>
+    <param name="test_duration_s" value="$(arg test_duration_s)"/>
+    <param name="true_hover_thrust" value="$(arg true_hover_thrust)"/>
+    <param name="init_hover_thrust" value="$(arg init_hover_thrust)"/>
+    <param name="pass_abs_error" value="$(arg pass_abs_error)"/>
+    <param name="loop_hz" value="100.0"/>
+    <param name="gravity" value="9.81"/>
+    <param name="max_tilt_deg" value="15.0"/>
+    <param name="acc_noise_std" value="0.08"/>
+    <param name="acc_cmd_amp" value="0.6"/>
+    <param name="acc_cmd_freq_hz" value="0.35"/>
+  </node>
+</launch>

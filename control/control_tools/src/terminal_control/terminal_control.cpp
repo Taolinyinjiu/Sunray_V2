@@ -19,7 +19,8 @@ static void printMenu() {
     std::cout << "3 - RETURN" << std::endl;
     std::cout << "4 - MOVE_POINT 1 (local)" << std::endl;
     std::cout << "5 - MOVE_POINT 2 (body)" << std::endl;
-    std::cout << "6 - MOVE_POINT 3 (wgs84)" << std::endl;
+    std::cout << "6 - MOVE_VELOCITY (local, timed)" << std::endl;
+    std::cout << "7 - MOVE_VELOCITY_BODY (body, timed)" << std::endl;
     std::cout << "0 - quit" << std::endl;
     std::cout << "Please input: ";
 }
@@ -34,6 +35,78 @@ static bool readPoint(const std::string& title, double& x, double& y, double& z)
         return false;
     }
     return true;
+}
+
+static bool readBodyPoint(const std::string& title, double& x, double& y, double& height) {
+    std::cout << title << std::endl;
+    std::cout << "Enter desired body x y and fixed height: ";
+    if (!(std::cin >> x >> y >> height)) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        ROS_WARN("Invalid body point input");
+        return false;
+    }
+    return true;
+}
+
+static bool readVelocity(const std::string& title,
+                         double& vx,
+                         double& vy,
+                         double& vz,
+                         double& duration) {
+    std::cout << title << std::endl;
+    std::cout << "Enter desired velocity vx vy vz and duration(s): ";
+    if (!(std::cin >> vx >> vy >> vz >> duration) || duration <= 0.0) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        ROS_WARN("Invalid velocity input");
+        return false;
+    }
+    return true;
+}
+
+static bool readBodyVelocity(const std::string& title,
+                             double& vx,
+                             double& vy,
+                             double& height,
+                             double& duration) {
+    std::cout << title << std::endl;
+    std::cout << "Enter desired body vx vy fixed_height and duration(s): ";
+    if (!(std::cin >> vx >> vy >> height >> duration) || duration <= 0.0) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        ROS_WARN("Invalid body velocity input");
+        return false;
+    }
+    return true;
+}
+
+static void publishTimedVelocityCommand(ros::Publisher& control_pub,
+                                        const sunray_msgs::UAVControlCMD& cmd,
+                                        double duration_s) {
+    ros::Rate rate(20.0);
+    const ros::Time end_time = ros::Time::now() + ros::Duration(duration_s);
+
+    while (ros::ok() && ros::Time::now() < end_time) {
+        sunray_msgs::UAVControlCMD timed_cmd = cmd;
+        timed_cmd.header.stamp = ros::Time::now();
+        control_pub.publish(timed_cmd);
+        ros::spinOnce();
+        rate.sleep();
+    }
+
+    sunray_msgs::UAVControlCMD hover_cmd;
+    hover_cmd.header.stamp = ros::Time::now();
+    hover_cmd.cmd_source = sunray_msgs::UAVControlCMD::TERMINAL;
+    hover_cmd.control_cmd = sunray_msgs::UAVControlCMD::HOVER;
+    hover_cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
+    hover_cmd.desired_yaw = 0.0;
+    for (int i = 0; i < 5 && ros::ok(); ++i) {
+        hover_cmd.header.stamp = ros::Time::now();
+        control_pub.publish(hover_cmd);
+        ros::spinOnce();
+        rate.sleep();
+    }
 }
 
 int main(int argc, char** argv) {
@@ -68,7 +141,9 @@ int main(int argc, char** argv) {
         cmd.header.stamp = ros::Time::now();
         cmd.cmd_source = sunray_msgs::UAVControlCMD::TERMINAL;
         cmd.yaw_mode = sunray_msgs::UAVControlCMD::KEEP_YAW;
-        cmd.fixed_height = false;
+        cmd.fixed_height = 0.0;
+        bool timed_velocity_cmd = false;
+        double velocity_duration_s = 0.0;
 
         switch (input) {
         case 1:
@@ -99,25 +174,73 @@ int main(int argc, char** argv) {
         case 5: {
             double x, y, z;
             std::string title = "MOVE_POINT BODY" + std::to_string(input - 3);
-            if (!readPoint(title, x, y, z)) {
+            if (!readBodyPoint(title, x, y, z)) {
                 continue;
             }
             cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_POINT_BODY;
-            cmd.desired_pos.x = x;
-            cmd.desired_pos.y = y;
-            cmd.desired_pos.z = z;
+            cmd.desired_body_xy_pos.x = x;
+            cmd.desired_body_xy_pos.y = y;
+            cmd.fixed_height = z;
             ROS_INFO("Publish %s [%.2f, %.2f, %.2f]", title.c_str(), x, y, z);
             break;
         }
-        case 6:
+        case 6: {
+            double vx, vy, vz, duration;
+            const std::string title = "MOVE_VELOCITY LOCAL";
+            if (!readVelocity(title, vx, vy, vz, duration)) {
+                continue;
+            }
+            cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_VELOCITY;
+            cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
+            cmd.desired_yaw = 0.0;
+            cmd.desired_vel.x = vx;
+            cmd.desired_vel.y = vy;
+            cmd.desired_vel.z = vz;
+            timed_velocity_cmd = true;
+            velocity_duration_s = duration;
+            ROS_INFO("Publish %s [%.2f, %.2f, %.2f] yaw=0.00 for %.2fs",
+                     title.c_str(),
+                     vx,
+                     vy,
+                     vz,
+                     duration);
+            break;
+        }
+        case 7: {
+            double vx, vy, height, duration;
+            const std::string title = "MOVE_VELOCITY BODY";
+            if (!readBodyVelocity(title, vx, vy, height, duration)) {
+                continue;
+            }
+            cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_VELOCITY_BODY;
+            cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
+            cmd.desired_yaw = 0.0;
+            cmd.desired_body_xy_vel.x = vx;
+            cmd.desired_body_xy_vel.y = vy;
+            cmd.fixed_height = height;
+            timed_velocity_cmd = true;
+            velocity_duration_s = duration;
+            ROS_INFO("Publish %s [%.2f, %.2f, h=%.2f] yaw=0.00 for %.2fs",
+                     title.c_str(),
+                     vx,
+                     vy,
+                     height,
+                     duration);
+            break;
+        }
         default:
             ROS_WARN("Unsupported command: %d", input);
             continue;
         }
 
-        control_pub.publish(cmd);
-        ros::spinOnce();
-        ros::Duration(0.1).sleep();
+        if (timed_velocity_cmd) {
+            publishTimedVelocityCommand(control_pub, cmd, velocity_duration_s);
+            ROS_INFO("Velocity command finished, switched to HOVER");
+        } else {
+            control_pub.publish(cmd);
+            ros::spinOnce();
+            ros::Duration(0.1).sleep();
+        }
     }
 
     return 0;

@@ -502,11 +502,7 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
                          control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
     send_setpoint.position = point.position;
-    if (point.yaw.has_value()) {
-        send_setpoint.yaw = point.yaw.value();
-    } else {
-        send_setpoint.yaw = last_setpoint_.yaw;
-    }
+    send_setpoint.yaw = point.yaw;
     mavros_helper_.pub_local_setpoint(send_setpoint);
     // 更新缓存
     last_setpoint_ = send_setpoint;
@@ -543,16 +539,8 @@ bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t
                              control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
                              control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
     velocity_setpoint.velocity = velocity.velocity;
-    if (velocity.yaw.has_value()) {
-        velocity_setpoint.yaw = velocity.yaw.value();
-    } else {
-        velocity_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYaw;
-    }
-    if (velocity.yaw_rate.has_value()) {
-        velocity_setpoint.yaw_rate = velocity.yaw_rate.value();
-    } else {
-        velocity_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
-    }
+    velocity_setpoint.yaw = velocity.yaw;
+    velocity_setpoint.yaw_rate = velocity.yaw_rate;
     mavros_helper_.pub_local_setpoint(velocity_setpoint);
     return true;
 }
@@ -562,30 +550,10 @@ bool PX4_OriginController::move_trajectory(
     control_common::Mavros_SetpointLocal trajpoint_setpoint;
     trajpoint_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
     trajpoint_setpoint.position = trajpoint.position;
-    if (trajpoint.velocity.has_value()) {
-        trajpoint_setpoint.velocity = trajpoint.velocity.value();
-    } else {
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVx;
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVy;
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVz;
-    }
-    if (trajpoint.acceleration.has_value()) {
-        trajpoint_setpoint.accel_or_force = trajpoint.acceleration.value();
-    } else {
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfx;
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfy;
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
-    }
-    if (trajpoint.yaw.has_value()) {
-        trajpoint_setpoint.yaw = trajpoint.yaw.value();
-    } else {
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYaw;
-    }
-    if (trajpoint.yaw_rate.has_value()) {
-        trajpoint_setpoint.yaw_rate = trajpoint.yaw_rate.value();
-    } else {
-        trajpoint_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
-    }
+    trajpoint_setpoint.velocity = trajpoint.velocity;
+    trajpoint_setpoint.accel_or_force = trajpoint.acceleration;
+    trajpoint_setpoint.yaw = trajpoint.yaw;
+    trajpoint_setpoint.yaw_rate = trajpoint.yaw_rate;
     // 这里怎么缺少了发布
     mavros_helper_.pub_local_setpoint(trajpoint_setpoint);
     // 我们如何设置轨迹的反馈呢？这里的问题是，拿到了轨迹的反馈，有什么用呢？
@@ -595,22 +563,18 @@ bool PX4_OriginController::move_trajectory(
 }
 // BUG:
 // body系的函数存在一点小问题,主要表现在与move_point使用方式上不一致，body系在持续调用的时候，如果point不变，认为是原先不变的一个目标点
-bool PX4_OriginController::move_point_body(controller_data_types::TargetPoint_t point) {
+bool PX4_OriginController::move_point_body(controller_data_types::TargetBodyPoint_t point) {
     // 新期望点判断常量
     constexpr double kPosEps = 1e-3;
     constexpr double kYawEps = 1e-3;
     // 是否为新目标点状态
     bool is_new_body_target = false;
     // 计算差值
-    double dp = (point.position - last_point_body_.position).norm();
-    if (dp > kPosEps)
+    const double dxy = (point.position_xy - last_point_body_.position_xy).norm();
+    if (dxy > kPosEps || std::abs(point.fixed_height - last_point_body_.fixed_height) > kPosEps)
         is_new_body_target = true;
 
-    if (!is_new_body_target && point.yaw.has_value() && last_point_body_.yaw.has_value()) {
-        if (std::abs(point.yaw.value() - last_point_body_.yaw.value()) > kYawEps) {
-            is_new_body_target = true;
-        }
-    } else if (!is_new_body_target && (point.yaw.has_value() != last_point_body_.yaw.has_value())) {
+    if (!is_new_body_target && std::abs(point.yaw - last_point_body_.yaw) > kYawEps) {
         is_new_body_target = true;
     }
 
@@ -620,57 +584,53 @@ bool PX4_OriginController::move_point_body(controller_data_types::TargetPoint_t 
         const double c = std::cos(yaw);
         const double s = std::sin(yaw);
         // 做body系到local系的转换
-        const Eigen::Vector3d p_b = point.position;
-        Eigen::Vector3d delta_w;
+        const Eigen::Vector2d p_b = point.position_xy;
+        Eigen::Vector2d delta_w;
         delta_w.x() = c * p_b.x() - s * p_b.y();
         delta_w.y() = s * p_b.x() + c * p_b.y();
-        // z轴不进行转换
-        delta_w.z() = p_b.z();
         // 目标点 = 当前点 + 增量点
         controller_data_types::TargetPoint_t world_point;
         Eigen::Vector3d des_position = Eigen::Vector3d::Zero();
         des_position.x() = uav_odometry_.position.x() + delta_w.x();
         des_position.y() = uav_odometry_.position.y() + delta_w.y();
-        des_position.z() = delta_w.z();
+        des_position.z() = point.fixed_height;
         world_point.position = des_position;
-        // 但是z轴是直接
 
         // yaw语义：若给了yaw，按“相对机体yaw增量”处理；否则保持当前朝向
-        if (point.yaw.has_value()) {
-            world_point.yaw = yaw + point.yaw.value();
-        } else {
-            world_point.yaw = yaw;
-        }
+        world_point.yaw = yaw + point.yaw;
         last_point_ = world_point;
         last_point_body_ = point;
     }
     // 复用已有move_point逻辑（到点判定/缓存/停留判定）
     return move_point(last_point_);
 }
-bool PX4_OriginController::move_velocity_body(controller_data_types::TargetVelocity_t velocity) {
+bool PX4_OriginController::move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) {
 
     // 读取当前的yaw角
     const double yaw = mavros_helper_.get_yaw_rad();
     const double c = std::cos(yaw);
     const double s = std::sin(yaw);
     // 转换输入的body velocity -> world velocity
-    const Eigen::Vector3d v_b = velocity.velocity;
-    Eigen::Vector3d v_w;
-    v_w.x() = c * v_b.x() - s * v_b.y();
-    v_w.y() = s * v_b.x() + c * v_b.y();
-    v_w.z() = v_b.z();
-    // 转换为world下的速度
-    controller_data_types::TargetVelocity_t world_vel;
-    world_vel.velocity = v_w;
-    // yaw语义：
-    // - 若输入yaw有值：按“相对机体yaw增量”解释
-    // - 否则保持当前yaw
-    if (velocity.yaw.has_value()) {
-        world_vel.yaw = yaw + velocity.yaw.value();
-    } else {
-        world_vel.yaw = yaw;
-    }
-    return move_velocity(world_vel);
+    Eigen::Vector2d v_w_xy;
+    v_w_xy.x() = c * velocity.velocity_xy.x() - s * velocity.velocity_xy.y();
+    v_w_xy.y() = s * velocity.velocity_xy.x() + c * velocity.velocity_xy.y();
+
+    control_common::Mavros_SetpointLocal velocity_setpoint;
+    velocity_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    velocity_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
+                             control_common::Mavros_SetpointLocal::Mask::IgnorePy |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    velocity_setpoint.position.z() = velocity.fixed_height;
+    velocity_setpoint.velocity.x() = v_w_xy.x();
+    velocity_setpoint.velocity.y() = v_w_xy.y();
+    velocity_setpoint.velocity.z() = 0.0;
+    velocity_setpoint.yaw = yaw + velocity.yaw;
+    velocity_setpoint.yaw_rate = velocity.yaw_rate;
+    mavros_helper_.pub_local_setpoint(velocity_setpoint);
+    return true;
 }
 // WGS84不知道怎么测试，先放一边
 bool PX4_OriginController::move_point_wgs84(geographic_msgs::GeoPoint point) {

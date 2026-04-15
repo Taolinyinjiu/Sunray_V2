@@ -28,6 +28,19 @@ void loadBasicParam(const YAML::Node& node, sunray_fsm::basic_param_t& param) {
             throw std::runtime_error("the sunray_control_config.yaml param 'gravity' must > 0");
         }
     }
+    // -----------------------归一化悬停推力----------------------
+    const YAML::Node hover_thrust_node =
+        node["hover_thrust_precent"] ? node["hover_thrust_precent"] : node["hover_thrust_percent"];
+    if (!hover_thrust_node) {
+        throw std::runtime_error(
+            "the sunray_control_config.yaml miss param 'hover_thrust_precent'");
+    } else {
+        param.hover_thrust_precent = hover_thrust_node.as<double>();
+        if (param.hover_thrust_precent <= 0.0 || param.hover_thrust_precent >= 1.0) {
+            throw std::runtime_error(
+                "the sunray_control_config.yaml param 'hover_thrust_precent' must in (0, 1)");
+        }
+    }
     // -----------------------控制器类型----------------------
     if (!node["controller_types"]) {
         throw std::runtime_error("the sunray_control_config.yaml miss param 'controller_types'");
@@ -89,16 +102,6 @@ void loadBasicParam(const YAML::Node& node, sunray_fsm::basic_param_t& param) {
         if (param.fuse_odom_frequency <= 0) {
             throw std::runtime_error(
                 "the sunray_control_config.yaml param 'fuse_odom_frequency' must > 0");
-        }
-    }
-    // -----------------------控制器轨迹类型----------------------
-    if (!node["trajectory_type"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'trajectory_type'");
-    } else {
-        param.trajectory_type = node["trajectory_type"].as<int>();
-        if (param.trajectory_type != 0 && param.trajectory_type != 1) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param 'trajectory_type' only can 0, 1");
         }
     }
 }

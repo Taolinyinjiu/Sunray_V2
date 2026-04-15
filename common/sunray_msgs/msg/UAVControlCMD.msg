@@ -7,7 +7,7 @@ uint8 UNDEFINE=0 					# 未定义的来源
 # ----------- 命令来源枚举 -------------
 uint8 SUNRAY_STATION=1  	# SUNRAY地面站
 uint8 RC_CONTROLLER=2    	# RC遥控器控制
-uint8 TERMINAL=3  				# 终端TUI/命令行控制
+uint8 TERMINAL=3  		    # 终端TUI/命令行控制
 uint8 CONTROL_CMD=4    		# Sunray系列代码控制
 # 命令来源
 uint8 cmd_source
@@ -30,15 +30,22 @@ uint8 control_cmd
 
 # ---------- control data  ----------
 # ----------- 控制数据 ----------------
+# 惯性系
 geometry_msgs/Vector3 desired_pos
 geometry_msgs/Vector3 desired_vel
 geometry_msgs/Vector3 desired_acc
 geometry_msgs/Vector3 desired_jerk
 
+# 机体系
+Vector2 desired_body_xy_pos
+Vector2 desired_body_xy_vel
+# 机体系控制时使用fixed_height 设置期望的z轴高度
+float32 fixed_height
+
 float32 desired_yaw
 float32 desired_yaw_rate
 
-geographic_msgs/GeoPoint wgs84_pos # 经纬高
+geographic_msgs/GeoPoint desired_wgs84_pos # 经纬高
 
 # ---------- yaw mode ----------
 # ------------偏航角控制模式---------
@@ -46,6 +53,3 @@ uint8 KEEP_YAW=0 # 保持当前的yaw角不变
 uint8 SET_YAW=1     # 控制yaw角
 uint8 SET_YAWRATE=2 # 控制yaw_rate
 uint8 yaw_mode
-
-# ---------- mode flag ----------
-bool fixed_height

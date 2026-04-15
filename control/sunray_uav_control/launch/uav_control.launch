@@ -1,11 +1,6 @@
 <launch>
   <arg name="config_yamlfile_path"
        default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
-  <arg name="uav_name" default="uav" />
-  <arg name="uav_id" default="1" />
-
-  <param name="/uav_name" value="$(arg uav_name)" />
-  <param name="/uav_id" value="$(arg uav_id)" />
 
   <node pkg="sunray_uav_control"
         type="uav_control_node"

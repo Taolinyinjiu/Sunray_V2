@@ -7,7 +7,6 @@
 #include <mavros_msgs/CommandBool.h>
 
 #include <sunray_msgs/Px4State.h>
-#include <controller/utils.hpp>
 // 构造函数
 MavrosHelper::MavrosHelper(ros::NodeHandle& nh) {
     // 缓存句柄
