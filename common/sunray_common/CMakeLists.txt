@@ -3,10 +3,13 @@ project(sunray_common)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(catkin REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+  geometry_msgs
+)
 
 catkin_package(
   INCLUDE_DIRS include
+  CATKIN_DEPENDS geometry_msgs
 )
 
 include_directories(

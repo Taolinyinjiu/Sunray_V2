@@ -174,22 +174,37 @@ bool MavrosHelper::pub_vision_pose(control_common::UAVStateEstimate uav_state) {
     if (config_cache_.uav_control_handle == false) {
         return false;
     }
+    const ros::Time stamp = uav_state.timestamp.isZero() ? ros::Time::now() : uav_state.timestamp;
     // 根据fuse_odom_type 构造类型
     if (fuse_vision_type_ == control_common::VisionFuseType::Vision_pose) {
         geometry_msgs::PoseStamped vision_pose_data;
         // 填充数据
-        vision_pose_data.header.stamp = ros::Time::now();
-        vision_pose_data.pose.position.x = uav_state.position.x();
-        vision_pose_data.pose.position.y = uav_state.position.y();
-        vision_pose_data.pose.position.z = uav_state.position.z();
-        vision_pose_data.pose.orientation.x = uav_state.orientation.x();
-        vision_pose_data.pose.orientation.y = uav_state.orientation.y();
-        vision_pose_data.pose.orientation.z = uav_state.orientation.z();
-        vision_pose_data.pose.orientation.w = uav_state.orientation.w();
+        vision_pose_data.header.stamp = stamp;
+        vision_pose_data.header.frame_id = "odom";
+        vision_pose_data.pose.position = eigen_helper::to_ros_point(uav_state.position);
+        vision_pose_data.pose.orientation = eigen_helper::to_ros_quaternion(uav_state.orientation);
         // 发布
         vision_pose_pub_.publish(vision_pose_data);
-    }  // TODO: 实现odometry通道的融合
-    return true;
+        return true;
+    }
+
+    if (fuse_vision_type_ == control_common::VisionFuseType::Odometry) {
+        nav_msgs::Odometry vision_odometry_data;
+        vision_odometry_data.header.stamp = stamp;
+        // UAVStateEstimate 当前不携带 frame 信息，这里与 MAVROS 默认 odometry 配置保持一致。
+        vision_odometry_data.header.frame_id = "odom";
+        vision_odometry_data.child_frame_id = "base_link";
+        vision_odometry_data.pose.pose.position = eigen_helper::to_ros_point(uav_state.position);
+        vision_odometry_data.pose.pose.orientation = eigen_helper::to_ros_quaternion(uav_state.orientation);
+        vision_odometry_data.twist.twist.linear = eigen_helper::to_ros_vector3(uav_state.velocity);
+        vision_odometry_data.twist.twist.angular = eigen_helper::to_ros_vector3(uav_state.bodyrate);
+        // 当前抽象类型不携带协方差信息，这里保留消息默认值，避免注入未经验证的虚假置信度。
+        vision_odometry_pub_.publish(vision_odometry_data);
+        return true;
+    }
+
+    ROS_WARN_THROTTLE(1.0, "[mavros_helper] vision fuse type is undefined, skip publishing external odometry.");
+    return false;
 }
 
 bool MavrosHelper::set_px4_mode(control_common::FlightMode flight_mode) {
@@ -331,6 +346,9 @@ bool MavrosHelper::pub_local_setpoint(control_common::Mavros_SetpointLocal setpo
     // 偏航角
     position_target_msg.yaw = setpoint_local.yaw;
     position_target_msg.yaw_rate = setpoint_local.yaw_rate;
+    mavros_setpoint_local_data_ = setpoint_local;
+    mavros_setpoint_local_data_.timestamp = position_target_msg.header.stamp;
+    mavros_setpoint_local_data_.valid = true;
     // 发布数据
     setpoint_local_pub_.publish(position_target_msg);
     return true;
@@ -359,6 +377,9 @@ bool MavrosHelper::pub_attitude_setpoint(
     attitude_target_msg.body_rate.z = setpoint_attitude.body_rate.z();
     // 推力
     attitude_target_msg.thrust = setpoint_attitude.thrust;
+    mavros_setpoint_attitude_data_ = setpoint_attitude;
+    mavros_setpoint_attitude_data_.timestamp = attitude_target_msg.header.stamp;
+    mavros_setpoint_attitude_data_.valid = true;
     // 发布
     setpoint_attitude_pub_.publish(attitude_target_msg);
     return true;
@@ -600,6 +621,7 @@ void MavrosHelper::mavros_imu_callback(const sensor_msgs::Imu& msg) {
 void MavrosHelper::mavros_setpoint_local_callback(const mavros_msgs::PositionTarget& msg) {
     // 填时间戳
     mavros_setpoint_local_data_.timestamp = msg.header.stamp;
+    mavros_setpoint_local_data_.valid = true;
     // 转换坐标系
     switch (msg.coordinate_frame) {
     case mavros_msgs::PositionTarget::FRAME_LOCAL_NED:
@@ -643,6 +665,7 @@ void MavrosHelper::mavros_setpoint_local_callback(const mavros_msgs::PositionTar
 void MavrosHelper::mavros_setpoint_attitude_callback(const mavros_msgs::AttitudeTarget& msg) {
     // 填时间戳
     mavros_setpoint_attitude_data_.timestamp = msg.header.stamp;
+    mavros_setpoint_attitude_data_.valid = true;
     // 掩码
     mavros_setpoint_attitude_data_.mask = msg.type_mask;
     // 目标姿态

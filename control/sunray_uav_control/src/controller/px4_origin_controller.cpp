@@ -1,12 +1,83 @@
 #include "controller/px4_origin_controller.hpp"
 #include "Eigen/src/Core/Matrix.h"
 #include "control_data_types/mavros_helper_data_types.hpp"
+#include "eigen_helper.hpp"
 #include "string_uav_namespace_utils.hpp"
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
 #include <sunray_msgs/UAVControllerState.h>
 #include <px4_param_manager/px4_param_types.h>
 #include <px4_param_manager/px4_param_decode.h>
+
+namespace {
+
+controller_data_types::TargetTrajectoryPoint_t
+desired_state_from_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint,
+                                  const control_common::UAVStateEstimate& current_odom) {
+    controller_data_types::TargetTrajectoryPoint_t desired;
+    desired.position = current_odom.position;
+    desired.velocity = Eigen::Vector3d::Zero();
+    desired.acceleration = Eigen::Vector3d::Zero();
+    desired.jerk = Eigen::Vector3d::Zero();
+
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnorePx) == 0) {
+        desired.position.x() = setpoint.position.x();
+    }
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnorePy) == 0) {
+        desired.position.y() = setpoint.position.y();
+    }
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnorePz) == 0) {
+        desired.position.z() = setpoint.position.z();
+    }
+
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreVx) == 0) {
+        desired.velocity.x() = setpoint.velocity.x();
+    }
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreVy) == 0) {
+        desired.velocity.y() = setpoint.velocity.y();
+    }
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreVz) == 0) {
+        desired.velocity.z() = setpoint.velocity.z();
+    }
+
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreAfx) == 0) {
+        desired.acceleration.x() = setpoint.accel_or_force.x();
+    }
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreAfy) == 0) {
+        desired.acceleration.y() = setpoint.accel_or_force.y();
+    }
+    if ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreAfz) == 0) {
+        desired.acceleration.z() = setpoint.accel_or_force.z();
+    }
+
+    desired.yaw = ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreYaw) == 0)
+                      ? setpoint.yaw
+                      : eigen_helper::get_yaw_from_orientation(current_odom.orientation);
+    desired.yaw_rate = ((setpoint.mask & control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate) == 0)
+                           ? setpoint.yaw_rate
+                           : 0.0;
+    return desired;
+}
+
+Eigen::Vector3d quaternion_error_to_vector(const Eigen::Quaterniond& current,
+                                           const Eigen::Quaterniond& reference) {
+    const Eigen::Quaterniond q_err = current.inverse() * reference;
+    return std::copysign(1.0, q_err.w()) * Eigen::Vector3d(q_err.x(), q_err.y(), q_err.z());
+}
+
+uint8_t controller_reference_frame(const control_common::Mavros_SetpointLocal& setpoint) {
+    switch (setpoint.frame) {
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Body_Ned:
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Body_Offset_Ned:
+        return sunray_msgs::UAVControllerState::FRAME_BODY;
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned:
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Offset_Ned:
+    default:
+        return sunray_msgs::UAVControllerState::FRAME_LOCAL;
+    }
+}
+
+}  // namespace
 
 // 构造函数，读取参数
 PX4_OriginController::PX4_OriginController(ros::NodeHandle& nh)
@@ -110,6 +181,13 @@ void PX4_OriginController::set_current_odom(const control_common::UAVStateEstima
     has_uav_odometry_ = true;
 }
 
+void PX4_OriginController::cache_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint) {
+    last_setpoint_ = setpoint;
+    last_setpoint_.timestamp = ros::Time::now();
+    last_setpoint_.valid = true;
+    desired_state_ = desired_state_from_local_setpoint(setpoint, uav_odometry_);
+}
+
 // -------------运动相关接口------------
 
 void PX4_OriginController::on_ground_keep_setpoint() {
@@ -129,6 +207,7 @@ void PX4_OriginController::on_ground_keep_setpoint() {
                             control_common::Mavros_SetpointLocal::Mask::IgnoreYaw;
     current_setpoint.accel_or_force.z() = -100;
     mavros_helper_.pub_local_setpoint(current_setpoint);
+    cache_local_setpoint(current_setpoint);
 }
 
 bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
@@ -162,6 +241,7 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
         current_setpoint.position = current_odom.position;
         current_setpoint.yaw = mavros_helper_.get_yaw_rad();
         mavros_helper_.pub_local_setpoint(current_setpoint);
+        cache_local_setpoint(current_setpoint);
 
         ROS_INFO("satrt_position x : %f,y : %f,z : %f",
                  current_setpoint.position.x(),
@@ -208,6 +288,7 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
         setpoint_cmd.yaw = takeoff_yaw_;
         // 发送
         mavros_helper_.pub_local_setpoint(setpoint_cmd);
+        cache_local_setpoint(setpoint_cmd);
         // // 开始进入 offboard 检查窗口
         if (start_checkout_offboard_time_ == ros::Time(0)) {
             // 记录开始触发的时间
@@ -256,6 +337,7 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
                 setpoint_cmd.yaw = takeoff_yaw_;
                 // 发送
                 mavros_helper_.pub_local_setpoint(setpoint_cmd);
+                cache_local_setpoint(setpoint_cmd);
                 // 设置轨迹点
                 ROS_INFO("uav_odometry z : %f", uav_odometry_.position.z());
                 ROS_INFO("takeoff_ground_height : %f", takeoff_ground_height);
@@ -285,8 +367,7 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             setpoint_cmd.yaw = takeoff_yaw_;
             // 发布setpotin_cmd
             mavros_helper_.pub_local_setpoint(setpoint_cmd);
-            // 缓存状态
-            last_setpoint_ = setpoint_cmd;
+            cache_local_setpoint(setpoint_cmd);
             // 在这里判断是否到达期望的起飞目标点
             Eigen::Vector3d pos_err_vec = uav_odometry_.position - quint_curve_.get_end_position();
             double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
@@ -389,6 +470,7 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
         setpoint_cmd.yaw = land_yaw_;
         // 发布setpotin_cmd
         mavros_helper_.pub_local_setpoint(setpoint_cmd);
+        cache_local_setpoint(setpoint_cmd);
     }
     // 检查轨迹是否执行到目标点，也就是近地段
     bool near_ground = (uav_odometry_.position.z() - quint_curve_.get_end_position().z() < 0.05);
@@ -436,6 +518,7 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
             land_touchground_time_ = ros::Time(0);
         }
         mavros_helper_.pub_local_setpoint(setpoint_cmd);
+        cache_local_setpoint(setpoint_cmd);
     }
     return false;
 }
@@ -464,6 +547,7 @@ bool PX4_OriginController::hover() {
     hover_setpoint.position = hover_point_;
     hover_setpoint.yaw = hover_yaw_;
     mavros_helper_.pub_local_setpoint(hover_setpoint);
+    cache_local_setpoint(hover_setpoint);
     // 是否应当分析误差来确定返回值为true or false呢
     return true;
 }
@@ -506,8 +590,7 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
     send_setpoint.position = point.position;
     send_setpoint.yaw = point.yaw;
     mavros_helper_.pub_local_setpoint(send_setpoint);
-    // 更新缓存
-    last_setpoint_ = send_setpoint;
+    cache_local_setpoint(send_setpoint);
     // 检查误差
     Eigen::Vector3d pos_err_vec = uav_odometry_.position - point.position;
     double pos_err = pos_err_vec.norm();  // 推荐：位置误差标量
@@ -544,6 +627,7 @@ bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t
     velocity_setpoint.yaw = velocity.yaw;
     velocity_setpoint.yaw_rate = velocity.yaw_rate;
     mavros_helper_.pub_local_setpoint(velocity_setpoint);
+    cache_local_setpoint(velocity_setpoint);
     return true;
 }
 bool PX4_OriginController::move_trajectory(
@@ -558,6 +642,8 @@ bool PX4_OriginController::move_trajectory(
     trajpoint_setpoint.yaw_rate = trajpoint.yaw_rate;
     // 这里怎么缺少了发布
     mavros_helper_.pub_local_setpoint(trajpoint_setpoint);
+    cache_local_setpoint(trajpoint_setpoint);
+    desired_state_ = trajpoint;
     // 我们如何设置轨迹的反馈呢？这里的问题是，拿到了轨迹的反馈，有什么用呢？
     // 轨迹是一个高频变化的值，因此拿到轨迹的反馈，其实没有什么用，so
     // 返回的是true表示接受到了o.o
@@ -632,6 +718,7 @@ bool PX4_OriginController::move_velocity_body(controller_data_types::TargetBodyV
     velocity_setpoint.yaw = yaw + velocity.yaw;
     velocity_setpoint.yaw_rate = velocity.yaw_rate;
     mavros_helper_.pub_local_setpoint(velocity_setpoint);
+    cache_local_setpoint(velocity_setpoint);
     return true;
 }
 // WGS84不知道怎么测试，先放一边
@@ -641,7 +728,62 @@ bool PX4_OriginController::move_point_wgs84(geographic_msgs::GeoPoint point) {
 // -------------起降状态查询接口------------
 
 void PX4_OriginController::pub_controller_state() {
-    return;
+    if (!has_uav_odometry_) {
+        return;
+    }
+
+    const control_common::Mavros_SetpointLocal px4_local_target = mavros_helper_.get_target_local();
+    const control_common::Mavros_SetpointAttitude px4_attitude_target =
+        mavros_helper_.get_target_attitude();
+    const control_common::Mavros_SetpointLocal controller_local_output =
+        last_setpoint_.valid ? last_setpoint_ : px4_local_target;
+
+    sunray_msgs::UAVControllerState msg;
+    msg.header.stamp = uav_odometry_.timestamp.isZero() ? ros::Time::now() : uav_odometry_.timestamp;
+    msg.reference_frame = controller_reference_frame(controller_local_output);
+    msg.controller_type = sunray_msgs::UAVControllerState::PX4_ORIGINAL_CONTROLLER;
+
+    msg.desired_pos = eigen_helper::to_ros_point(desired_state_.position);
+    msg.desired_vel = eigen_helper::to_ros_vector3(desired_state_.velocity);
+    msg.desired_acc = eigen_helper::to_ros_vector3(desired_state_.acceleration);
+    msg.desired_yaw = desired_state_.yaw;
+    msg.desired_yawrate = desired_state_.yaw_rate;
+
+    msg.current_pos = eigen_helper::to_ros_point(uav_odometry_.position);
+    msg.current_vel = eigen_helper::to_ros_vector3(uav_odometry_.velocity);
+    msg.current_attitude = eigen_helper::to_ros_quaternion(uav_odometry_.orientation);
+    msg.current_bodyrate = eigen_helper::to_ros_vector3(uav_odometry_.bodyrate);
+    msg.current_yaw = eigen_helper::get_yaw_from_orientation(uav_odometry_.orientation);
+
+    msg.pos_error = eigen_helper::to_ros_vector3(desired_state_.position - uav_odometry_.position);
+    msg.vel_error = eigen_helper::to_ros_vector3(desired_state_.velocity - uav_odometry_.velocity);
+    msg.yaw_error = eigen_helper::wrap_angle(desired_state_.yaw - msg.current_yaw);
+    if (px4_attitude_target.valid) {
+        msg.attitude_error =
+            eigen_helper::to_ros_vector3(quaternion_error_to_vector(uav_odometry_.orientation,
+                                                                    px4_attitude_target.orientation));
+    }
+
+    msg.position_from_ctrl = eigen_helper::to_ros_vector3(controller_local_output.position);
+    msg.velocity_from_ctrl = eigen_helper::to_ros_vector3(controller_local_output.velocity);
+    msg.acceleration_from_ctrl = eigen_helper::to_ros_vector3(controller_local_output.accel_or_force);
+    msg.yaw_from_ctrl = controller_local_output.yaw;
+    msg.yawrate_from_ctrl = controller_local_output.yaw_rate;
+    // PX4 原生控制器的姿态/角速度/推力输出由 PX4 内环生成，这里使用回读值对齐消息语义。
+    msg.attitude_from_ctrl = eigen_helper::to_ros_quaternion(px4_attitude_target.orientation);
+    msg.bodyrate_from_ctrl = eigen_helper::to_ros_vector3(px4_attitude_target.body_rate);
+    msg.thrust_from_ctrl = px4_attitude_target.thrust;
+
+    msg.position_from_px4 = eigen_helper::to_ros_vector3(px4_local_target.position);
+    msg.velocity_from_px4 = eigen_helper::to_ros_vector3(px4_local_target.velocity);
+    msg.acceleration_from_px4 = eigen_helper::to_ros_vector3(px4_local_target.accel_or_force);
+    msg.yaw_from_px4 = px4_local_target.yaw;
+    msg.yawrate_from_px4 = px4_local_target.yaw_rate;
+    msg.attitude_from_px4 = eigen_helper::to_ros_quaternion(px4_attitude_target.orientation);
+    msg.bodyrate_from_px4 = eigen_helper::to_ros_vector3(px4_attitude_target.body_rate);
+    msg.thrust_from_px4 = px4_attitude_target.thrust;
+
+    controller_state_pub_.publish(msg);
 }
 // clang-format off
 void PX4_OriginController::load_and_validate_config_or_throw() {

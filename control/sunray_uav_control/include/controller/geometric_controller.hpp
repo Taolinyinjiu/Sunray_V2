@@ -70,7 +70,7 @@ class Geometric_Controller : public Controller_Interface {
     bool is_point_complete() override;
 
     // ----------------------控制器状态话题更新函数-----------------
-    void pub_controller_state() override;  // stub，暂返回
+    void pub_controller_state() override;  // 发布控制器参考量/反馈量/误差与输出
 
   private:
     enum class AttitudeCommandMode : uint8_t {

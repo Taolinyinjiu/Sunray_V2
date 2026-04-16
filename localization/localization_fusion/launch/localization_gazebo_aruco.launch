@@ -1,0 +1,15 @@
+<launch>
+  <!--
+    GAZEBO_ARUCO定位源启动栈
+    source_id=4
+  -->
+
+  <!-- 参数预留区 -->
+  <!-- <arg name="example_arg" default="value" /> -->
+
+  <!-- 节点/子launch预留区 -->
+  <!--
+  <include file="$(find some_pkg)/launch/some.launch" />
+  <node pkg="some_pkg" type="some_node" name="some_node" output="screen" />
+  -->
+</launch>

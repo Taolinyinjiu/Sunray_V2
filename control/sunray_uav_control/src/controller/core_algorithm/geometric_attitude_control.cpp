@@ -51,6 +51,7 @@ void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param
     last_thrust_cmd_ = 0.0;
     pending_thrust_cmd_ = 0.0;
     has_pending_thrust_cmd_ = false;
+    last_debug_state_ = Geometric_AttitudeControl_DebugState_t{};
 }
 
 void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::Input_t& input) {
@@ -63,6 +64,49 @@ void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::In
                                      ? last_thrust_cmd_
                                      : (has_pending_thrust_cmd_ ? pending_thrust_cmd_ : 0.0);
     hover_thrust_estimator_->update(estimator_input);
+}
+
+double Geometric_AttitudeControl::wrap_angle(double angle_rad) {
+    return std::atan2(std::sin(angle_rad), std::cos(angle_rad));
+}
+
+Eigen::Vector3d Geometric_AttitudeControl::compute_attitude_error(
+    const Eigen::Quaterniond& curr_att,
+    const Eigen::Quaterniond& ref_att) const {
+    if (param_.attitude_type == 0) {
+        const Eigen::Quaterniond q_err = curr_att.inverse() * ref_att;
+        return std::copysign(1.0, q_err.w()) * Eigen::Vector3d(q_err.x(), q_err.y(), q_err.z());
+    }
+
+    const Eigen::Matrix3d R = curr_att.toRotationMatrix();
+    const Eigen::Matrix3d R_d = ref_att.toRotationMatrix();
+    const Eigen::Matrix3d e_R_hat = 0.5 * (R.transpose() * R_d - R_d.transpose() * R);
+    return Eigen::Vector3d(e_R_hat(2, 1), e_R_hat(0, 2), e_R_hat(1, 0));
+}
+
+void Geometric_AttitudeControl::update_debug_state(
+    const controller_data_types::TargetTrajectoryPoint_t& des_state,
+    const control_common::UAVStateEstimate& current_odom,
+    const Eigen::Vector3d& desired_acc,
+    const Geometric_AttitudeControl_Output_t& output,
+    Control_Type control_type) {
+    const Eigen::Quaterniond& q = current_odom.orientation;
+    const double current_yaw =
+        std::atan2(2.0 * (q.w() * q.z() + q.x() * q.y()), 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
+
+    last_debug_state_.valid = true;
+    last_debug_state_.stamp = current_odom.timestamp.isZero() ? ros::Time::now() : current_odom.timestamp;
+    last_debug_state_.control_type = control_type;
+    last_debug_state_.reference = des_state;
+    last_debug_state_.odom = current_odom;
+    last_debug_state_.position_error = des_state.position - current_odom.position;
+    last_debug_state_.velocity_error = des_state.velocity - current_odom.velocity;
+    last_debug_state_.yaw_error = wrap_angle(des_state.yaw - current_yaw);
+    last_debug_state_.attitude_error = compute_attitude_error(current_odom.orientation, output.orientation);
+    last_debug_state_.desired_acceleration = desired_acc;
+    last_debug_state_.desired_orientation = output.orientation;
+    last_debug_state_.desired_bodyrates = output.bodyrates;
+    last_debug_state_.desired_thrust = output.thrust;
 }
 
 Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
@@ -107,6 +151,7 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     has_pending_thrust_cmd_ = true;
     // 期望姿态由期望加速度方向 + 偏航角决定（主要用于可视化/调试）
     output.orientation = acc2quaternion(a_des, target_yaw);
+    update_debug_state(des_state, current_odom, a_des, output, Control_Type::Trajectory_);
 #ifdef DEBUG
     const double axy_norm = a_des.head<2>().norm();
     const double pos_xy_err = (target_pos - mav_pos).head<2>().norm();
@@ -159,6 +204,14 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     pending_thrust_cmd_ = output.thrust;
     has_pending_thrust_cmd_ = true;
     output.orientation = acc2quaternion(a_des, target_yaw);
+    controller_data_types::TargetTrajectoryPoint_t debug_state;
+    debug_state.position = current_odom.position;
+    debug_state.velocity = target_vel;
+    debug_state.acceleration = Eigen::Vector3d::Zero();
+    debug_state.jerk = Eigen::Vector3d::Zero();
+    debug_state.yaw = target_yaw;
+    debug_state.yaw_rate = des_state.yaw_rate;
+    update_debug_state(debug_state, current_odom, a_des, output, Control_Type::Velocity_);
 #ifdef DEBUG
     const double vel_err = (target_vel - mav_vel).norm();
     if (vel_err > 0.05) {

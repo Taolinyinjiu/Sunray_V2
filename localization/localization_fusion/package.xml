@@ -22,6 +22,8 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>message_filters</depend>
   <depend>yaml-cpp</depend>
+  <exec_depend>sunray_mocap</exec_depend>
+  <exec_depend>vrpn_client_ros</exec_depend>
 
   <export>
   </export>

@@ -96,6 +96,7 @@ class PX4_OriginController : public Controller_Interface {
     bool check_odom_freshness();       // 检查外部里程计数据是否新鲜
     bool check_odom_for_fusion(
         control_common::UAVStateEstimate& fuse_odom);  // 检查本次用于融合的里程计是否有效
+    void cache_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint);
     bool controller_ready_ = false;
     // ---------------------定时器回调函数---------------------
     void pub_px4_state_timer_cb(const ros::TimerEvent&);    // 发布PX4State话题

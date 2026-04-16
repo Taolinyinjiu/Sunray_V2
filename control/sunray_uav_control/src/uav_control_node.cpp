@@ -1,12 +1,12 @@
 #include "statemachine/sunray_fsm.hpp"
+#include <atomic>
 #include <csignal>  // 捕获中断信号头文件
 // 这里有一个全局变量，用来指示节点的while循环什么时候停止
 std::atomic<bool> stop_request{false};
 
 // 捕获中断信号
-void mySigintHandler(int sig) {
+void mySigintHandler(int /*sig*/) {
     stop_request.store(true, std::memory_order_relaxed);
-    exit(0);
 }
 
 // main函数
@@ -34,7 +34,12 @@ int main(int argc, char** argv) {
 
     // 获取状态机更新频率
     double update_hz = sunray_fsm.get_update_frequency();
-    ros::Rate rate(100);
+    if (update_hz <= 0.0) {
+        ROS_FATAL("invalid supervisor update frequency: %.3f Hz", update_hz);
+        ros::shutdown();
+        return 1;
+    }
+    ros::Rate rate(update_hz);
     while (ros::ok() && !stop_request) {
         // 状态机更新
         sunray_fsm.process();
@@ -43,6 +48,7 @@ int main(int argc, char** argv) {
     }
     // 打印退出日志
     ROS_INFO("uav control node shutdown now");
+    spinner.stop();
     ros::shutdown();
     return 0;
 }

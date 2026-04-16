@@ -2,6 +2,10 @@
     <arg name="uav_id" default="1"/>
     <arg name="uav_name" default="uav"/>
     <arg name="ip" default="0.0.0.0" />
+    <!-- 向ROS全局参数空间中设置 /uav_id 与 /uav_name -->
+    <param name="uav_id" type="int" value="$(arg uav_id)" />
+    <param name="uav_name" value="$(arg uav_name)" />
+    <!-- 将mavros节点放置在 /uav_name+/uav_id 的命名空间下-->
     <group ns="$(arg uav_name)$(arg uav_id)">
         <arg name="fcu_url" default="/dev/ttyACM0:921600" />
         <arg name="gcs_url" default="udp://:14556@$(arg ip):14551" />
@@ -12,8 +16,8 @@
         <arg name="respawn_mavros" default="false" />
 
         <include file="$(find mavros)/launch/node.launch">
-            <arg name="pluginlists_yaml" value="$(find sunray_mavros)/config/px4_pluginlists.yaml" />
-            <arg name="config_yaml" value="$(find sunray_mavros)/config/px4_config.yaml" />
+            <arg name="pluginlists_yaml" value="$(find sunray_mavros)/config/exp_px4_pluginlists.yaml" />
+            <arg name="config_yaml" value="$(find sunray_mavros)/config/exp_px4_config.yaml" />
             <arg name="fcu_url" value="$(arg fcu_url)" />
             <arg name="gcs_url" value="$(arg gcs_url)" />
             <arg name="tgt_system" value="$(arg tgt_system)" />

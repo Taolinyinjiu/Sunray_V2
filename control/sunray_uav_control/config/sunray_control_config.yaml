@@ -130,7 +130,7 @@ velocity_param:
 sunray_controller_param:
   # 控制器输出类型， 0:attitude+thrust  1:bodyrate+thrust
   # 使用attitude作为输出时，控制器的动态性能有所下降，误差增大
-  control_type: 0
+  control_type: 1
   # 姿态误差的表示方法 0 = 四元数误差法（简单，推荐）  1 = 几何SO3法（更精确）
   # 在没有高速率大机动的情况下，两者效果近似
   attitude_type: 1

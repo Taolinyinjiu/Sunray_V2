@@ -79,6 +79,27 @@ struct Geometric_AttitudeControl_Output_t {
     double thrust{0.0};                                  // 归一化推力，范围 [0, 0.95]
 };
 
+struct Geometric_AttitudeControl_DebugState_t {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    bool valid{false};
+    ros::Time stamp{ros::Time(0)};
+    Control_Type control_type{Control_Type::Undefine_};
+
+    controller_data_types::TargetTrajectoryPoint_t reference{};
+    control_common::UAVStateEstimate odom{};
+
+    Eigen::Vector3d position_error{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error{Eigen::Vector3d::Zero()};
+    double yaw_error{0.0};
+    Eigen::Vector3d attitude_error{Eigen::Vector3d::Zero()};
+
+    Eigen::Vector3d desired_acceleration{Eigen::Vector3d::Zero()};
+    Eigen::Quaterniond desired_orientation{Eigen::Quaterniond::Identity()};
+    Eigen::Vector3d desired_bodyrates{Eigen::Vector3d::Zero()};
+    double desired_thrust{0.0};
+};
+
 enum class ThrustCommandPolicy : uint8_t {
     Auto = 0,
     ForceLinear,
@@ -114,6 +135,11 @@ class Geometric_AttitudeControl {
 
     // 向悬停推力估计器注入观测数据
     void feed_thrust_estimator(const thrust_estimator::Input_t& input);
+
+    // 获取最近一次控制计算的调试快照，供 controller 层发布状态分析话题。
+    const Geometric_AttitudeControl_DebugState_t& get_last_debug_state() const {
+        return last_debug_state_;
+    }
 
     // 重置三轴积分状态（起飞/降落/切换模式时调用，防止积分饱和残留）
     void reset_integral() {
@@ -174,6 +200,7 @@ class Geometric_AttitudeControl {
     bool has_pending_thrust_cmd_{false};
     ThrustModelMode last_thrust_model_mode_{ThrustModelMode::LinearFallback};
     bool thrust_model_mode_initialized_{false};
+    Geometric_AttitudeControl_DebugState_t last_debug_state_{};
 
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法
@@ -185,6 +212,14 @@ class Geometric_AttitudeControl {
     ThrustModelMode get_hover_estimator_mode() const;
     static const char* thrust_model_mode_name(ThrustModelMode mode);
     void log_thrust_model_usage(ThrustModelMode mode, double thrust_cmd, double hover_thrust);
+    static double wrap_angle(double angle_rad);
+    Eigen::Vector3d compute_attitude_error(const Eigen::Quaterniond& curr_att,
+                                           const Eigen::Quaterniond& ref_att) const;
+    void update_debug_state(const controller_data_types::TargetTrajectoryPoint_t& des_state,
+                            const control_common::UAVStateEstimate& current_odom,
+                            const Eigen::Vector3d& desired_acc,
+                            const Geometric_AttitudeControl_Output_t& output,
+                            Control_Type control_type);
 
     // 位置 PD 控制器：由位置误差和速度误差计算加速度反馈量，并对输出限幅
     Eigen::Vector3d poscontroller(const Eigen::Vector3d& pos_error,

@@ -1,28 +1,41 @@
 <launch>
-	<!-- 当前使用的定位源配置 -->
-	<arg name="source_id" default="3" />
-	<!-- 配置文件路径 -->
-	<arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
-	<!-- OdomStatus输出的频率 -->
-	<arg name="health_rate_hz" default="10.0" />
-	<!-- 是否使用localization_fusion节点接收时刻时间戳替代定位源发送时刻时间戳-->
-    <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />	<!-- 单机测试 -->
-	<arg name="test" default="true" />
-	<arg name="test_uav_name" default="uav" />
-	<arg name="test_uav_id" default="1" />
-	<!-- 如果是测试，则向全局设置参数uav_name+uav_id -->
-	<group if="$(arg test)">
-		<param name="/uav_name" value="$(arg test_uav_name)" />
-		<param name="/uav_id" type="int" value="$(arg test_uav_id)" />
-	</group>
+  <!-- 当前使用的定位源配置 -->
+  <arg name="source_id" default="3" />
+  <!-- 配置文件路径 -->
+  <arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
+  <!-- OdomStatus输出的频率 -->
+  <arg name="health_rate_hz" default="10.0" />
+  <!-- 是否使用localization_fusion节点接收时刻时间戳替代定位源发送时刻时间戳 -->
+  <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
 
-	<!-- 启动节点 -->
-	<node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion" output="screen" >
-		<!-- 将参数设置为节点私有参数-->
-		<param name="source_id" value="$(arg source_id)" />
-		<param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-		<param name="health_rate_hz" value="$(arg health_rate_hz)" />
-		<param name="use_receive_time" value="$(arg use_receive_time)" />
-	</node>
+  <!-- 根据不同的定位源，启动不同的子launch -->
+  <group if="$(eval int(arg('source_id')) == 0)">
+    <include file="$(find localization_fusion)/launch/localization_viobot.launch" />
+  </group>
 
+  <group if="$(eval int(arg('source_id')) == 1)">
+    <include file="$(find localization_fusion)/launch/localization_mocap.launch" />
+  </group>
+
+  <group if="$(eval int(arg('source_id')) == 2)">
+    <include file="$(find localization_fusion)/launch/localization_vins.launch" />
+  </group>
+
+  <group if="$(eval int(arg('source_id')) == 3)">
+  <!-- 单独的gazebo仿真实际上不需要启动什么东西，但是这里为了保持形式上的统一，以及后续可能会有什么想要增加的，就在这里也放了一行 -->
+    <include file="$(find localization_fusion)/launch/localization_gazebo.launch" />
+  </group>
+
+  <group if="$(eval int(arg('source_id')) == 4)">
+    <include file="$(find localization_fusion)/launch/localization_gazebo_aruco.launch" />
+  </group>
+
+  <!-- 启动融合节点 -->
+  <node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion" output="screen">
+    <!-- 将参数设置为节点私有参数 -->
+    <param name="source_id" value="$(arg source_id)" />
+    <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <param name="health_rate_hz" value="$(arg health_rate_hz)" />
+    <param name="use_receive_time" value="$(arg use_receive_time)" />
+  </node>
 </launch>

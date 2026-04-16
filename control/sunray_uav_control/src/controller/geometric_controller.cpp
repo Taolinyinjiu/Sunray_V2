@@ -1,5 +1,6 @@
 #include "controller/geometric_controller.hpp"
 #include "string_uav_namespace_utils.hpp"
+#include "eigen_helper.hpp"
 #include <sunray_msgs/UAVControllerState.h>
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>
@@ -914,10 +915,86 @@ bool Geometric_Controller::is_point_complete() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 控制器状态话题更新（stub，待后续填充）
+// 控制器状态话题更新
 // ─────────────────────────────────────────────────────────────────────────────
 void Geometric_Controller::pub_controller_state() {
-    return;
+    if (!has_uav_odometry_) {
+        return;
+    }
+
+    sunray_msgs::UAVControllerState msg;
+    msg.header.stamp = ros::Time::now();
+    msg.reference_frame = sunray_msgs::UAVControllerState::FRAME_LOCAL;
+    msg.controller_type = sunray_msgs::UAVControllerState::GEOMETRIC_CONTROLLER;
+
+    msg.desired_pos = eigen_helper::to_ros_point(desired_state_.position);
+    msg.desired_vel = eigen_helper::to_ros_vector3(desired_state_.velocity);
+    msg.desired_acc = eigen_helper::to_ros_vector3(desired_state_.acceleration);
+    msg.desired_yaw = desired_state_.yaw;
+    msg.desired_yawrate = desired_state_.yaw_rate;
+
+    msg.current_pos = eigen_helper::to_ros_point(uav_odometry_.position);
+    msg.current_vel = eigen_helper::to_ros_vector3(uav_odometry_.velocity);
+    msg.current_attitude = eigen_helper::to_ros_quaternion(uav_odometry_.orientation);
+    msg.current_bodyrate = eigen_helper::to_ros_vector3(uav_odometry_.bodyrate);
+    msg.current_yaw = eigen_helper::get_yaw_from_orientation(uav_odometry_.orientation);
+
+    msg.pos_error = eigen_helper::to_ros_vector3(desired_state_.position - uav_odometry_.position);
+    msg.vel_error = eigen_helper::to_ros_vector3(desired_state_.velocity - uav_odometry_.velocity);
+    msg.yaw_error = eigen_helper::wrap_angle(desired_state_.yaw - msg.current_yaw);
+
+    msg.position_from_ctrl = eigen_helper::to_ros_vector3(desired_state_.position);
+    msg.velocity_from_ctrl = eigen_helper::to_ros_vector3(desired_state_.velocity);
+    msg.yaw_from_ctrl = desired_state_.yaw;
+    msg.yawrate_from_ctrl = desired_state_.yaw_rate;
+    msg.attitude_from_ctrl = eigen_helper::to_ros_quaternion(last_setpoint_.orientation);
+    msg.bodyrate_from_ctrl = eigen_helper::to_ros_vector3(last_setpoint_.body_rate);
+    msg.thrust_from_ctrl = last_setpoint_.thrust;
+
+    const auto& debug_state = controller_.get_last_debug_state();
+    if (debug_state.valid) {
+        msg.header.stamp = debug_state.stamp;
+        msg.desired_pos = eigen_helper::to_ros_point(debug_state.reference.position);
+        msg.desired_vel = eigen_helper::to_ros_vector3(debug_state.reference.velocity);
+        msg.desired_acc = eigen_helper::to_ros_vector3(debug_state.reference.acceleration);
+        msg.desired_yaw = debug_state.reference.yaw;
+        msg.desired_yawrate = debug_state.reference.yaw_rate;
+
+        msg.current_pos = eigen_helper::to_ros_point(debug_state.odom.position);
+        msg.current_vel = eigen_helper::to_ros_vector3(debug_state.odom.velocity);
+        msg.current_attitude = eigen_helper::to_ros_quaternion(debug_state.odom.orientation);
+        msg.current_bodyrate = eigen_helper::to_ros_vector3(debug_state.odom.bodyrate);
+        msg.current_yaw = eigen_helper::get_yaw_from_orientation(debug_state.odom.orientation);
+
+        msg.pos_error = eigen_helper::to_ros_vector3(debug_state.position_error);
+        msg.vel_error = eigen_helper::to_ros_vector3(debug_state.velocity_error);
+        msg.yaw_error = debug_state.yaw_error;
+        msg.attitude_error = eigen_helper::to_ros_vector3(debug_state.attitude_error);
+
+        msg.position_from_ctrl = eigen_helper::to_ros_vector3(debug_state.reference.position);
+        msg.velocity_from_ctrl = eigen_helper::to_ros_vector3(debug_state.reference.velocity);
+        msg.acceleration_from_ctrl = eigen_helper::to_ros_vector3(debug_state.desired_acceleration);
+        msg.yaw_from_ctrl = debug_state.reference.yaw;
+        msg.yawrate_from_ctrl = debug_state.reference.yaw_rate;
+        msg.attitude_from_ctrl = eigen_helper::to_ros_quaternion(debug_state.desired_orientation);
+        msg.bodyrate_from_ctrl = eigen_helper::to_ros_vector3(debug_state.desired_bodyrates);
+        msg.thrust_from_ctrl = debug_state.desired_thrust;
+    }
+
+    const control_common::Mavros_SetpointLocal px4_local_target = mavros_helper_.get_target_local();
+    msg.position_from_px4 = eigen_helper::to_ros_vector3(px4_local_target.position);
+    msg.velocity_from_px4 = eigen_helper::to_ros_vector3(px4_local_target.velocity);
+    msg.acceleration_from_px4 = eigen_helper::to_ros_vector3(px4_local_target.accel_or_force);
+    msg.yaw_from_px4 = px4_local_target.yaw;
+    msg.yawrate_from_px4 = px4_local_target.yaw_rate;
+
+    const control_common::Mavros_SetpointAttitude px4_attitude_target =
+        mavros_helper_.get_target_attitude();
+    msg.attitude_from_px4 = eigen_helper::to_ros_quaternion(px4_attitude_target.orientation);
+    msg.bodyrate_from_px4 = eigen_helper::to_ros_vector3(px4_attitude_target.body_rate);
+    msg.thrust_from_px4 = px4_attitude_target.thrust;
+
+    controller_state_pub_.publish(msg);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
