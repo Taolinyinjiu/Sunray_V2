@@ -59,10 +59,28 @@ takeoff_land_param:
     takeoff_relative_height: 0.6
     # 起飞过程中的最大速度(m/s)
     takeoff_max_velocity: 0.5
+    # 兼容旧配置：未显式指定 takeoff_ramp_time 时，作为缓升阶段时长
+    motors_speedup_time: 4.0
+    # 起飞预警阶段的怠速推力
+    takeoff_idle_thrust: 0.08
+    # 保持怠速推力用于警告的时长(s)
+    takeoff_idle_hold_time: 2.0
+    # 从怠速缓慢提升到可离地推力的时间(s)
+    takeoff_ramp_time: 4.0
+    # 起飞推力 RC 滤波时间常数(s)，用于抑制每拍目标抖动
+    takeoff_thrust_filter_tau: 0.40
+    # 离开暖机后继续平滑接管的时间(s)
+    takeoff_thrust_handoff_time: 0.30
     # 指定降落模式 0：sunray land 1:px4.auto_land
     land_type: 0
     # 降落过程中的最大速度
     land_max_velocity: 0.5
+    # 降落近地阶段推力 RC 滤波时间常数(s)
+    land_thrust_filter_tau: 0.20
+    # 近地阶段允许的最大推力
+    land_near_ground_thrust_max: 0.31
+    # 触地确认阶段允许的最大推力
+    land_touchdown_thrust_max: 0.05
 
 # -------------------运动误差与超时参数-----------------------
 # 这里提到的运动超时参数可以这样来理解
@@ -129,6 +147,8 @@ sunray_controller_param:
   vel_kp: [2.0, 2.0, 1.5]
   vel_ki: [0.0, 0.0, 0.0]
   vel_kd: [0.0, 0.0, 0.0]
+  # 位置/速度环反馈加速度限幅；太小会让控制器看起来“对误差不敏感”
+  max_acc: 9.0
   # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5
   attitude_tau: 0.3
   # 是否记录日志(存储在Sunray仓库根目录的log目录下)

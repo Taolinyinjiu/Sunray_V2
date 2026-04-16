@@ -179,6 +179,7 @@ class Geometric_AttitudeControl {
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法
 
     void advance_thrust_command_history();
+    void maybe_seed_estimator_from_last_linear_command(double thrust_acc);
     double map_thrust_acc_to_hover_anchor(double thrust_acc) const;
     double compose_thrust_command(double thrust_acc, ThrustCommandPolicy thrust_policy);
     ThrustModelMode get_hover_estimator_mode() const;

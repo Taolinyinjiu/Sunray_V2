@@ -183,6 +183,33 @@ void Geometric_AttitudeControl::advance_thrust_command_history() {
     last_thrust_cmd_ = pending_thrust_cmd_;
 }
 
+void Geometric_AttitudeControl::maybe_seed_estimator_from_last_linear_command(double thrust_acc) {
+    if (!hover_thrust_estimator_ || !thrust_model_mode_initialized_) {
+        return;
+    }
+    if (last_thrust_model_mode_ != ThrustModelMode::LinearForced) {
+        return;
+    }
+
+    const double gravity = std::max(param_.gravity, 1e-6);
+    const double thrust_acc_ratio = thrust_acc / gravity;
+    if (!std::isfinite(last_thrust_cmd_) || last_thrust_cmd_ <= 0.0) {
+        return;
+    }
+    if (!std::isfinite(thrust_acc_ratio) || std::abs(thrust_acc_ratio - 1.0) > 0.2) {
+        return;
+    }
+
+    const double hover_seed = std::clamp(last_thrust_cmd_, 0.05, 0.80);
+    hover_thrust_estimator_->seed_hover_thrust(hover_seed);
+#ifdef DEBUG
+    ROS_INFO("thrust seed ht=%.3f from LIN_FORCE u=%.3f ta=%.2f",
+             hover_seed,
+             last_thrust_cmd_,
+             thrust_acc);
+#endif
+}
+
 double Geometric_AttitudeControl::map_thrust_acc_to_hover_anchor(double thrust_acc) const {
     double hover_anchor = param_.hover_thrust_init;
     if (hover_thrust_estimator_) {
@@ -282,6 +309,8 @@ double Geometric_AttitudeControl::compose_thrust_command(double thrust_acc,
         log_thrust_model_usage(ThrustModelMode::LinearFallback, linear_fallback, 0.0);
         return linear_fallback;
     }
+
+    maybe_seed_estimator_from_last_linear_command(thrust_acc);
 
     const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
     if (!std::isfinite(hover_thrust) || hover_thrust <= 0.0) {

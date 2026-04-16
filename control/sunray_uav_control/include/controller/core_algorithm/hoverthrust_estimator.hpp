@@ -30,6 +30,8 @@ class HoverThrustEstimator {
     virtual ~HoverThrustEstimator() = default;
     // 导入参数
     virtual void load_param(const Param_t& param);
+    // 用外部提供的悬停油门估计值显式重置当前锚点
+    virtual void seed_hover_thrust(double hover_thrust);
     // 返回估计器是否仅支持在悬停状态下进行悬停推力估计
     // 如果返回 true，则外层只在悬停时调用 update()
     // 如果返回 false，则外层在所有时刻都调用 update()
@@ -60,6 +62,7 @@ class LowPass_HoverThrustEstimator : public HoverThrustEstimator {
         onlyhover_estimate_ = true;
     }
 
+    void seed_hover_thrust(double hover_thrust) override;
     void update(const Input_t& input) override;
     double get_hover_thrust() const override;
 
@@ -78,6 +81,7 @@ class RLS_HoverThrustEstimator : public HoverThrustEstimator {
         onlyhover_estimate_ = true;
     }
 
+    void seed_hover_thrust(double hover_thrust) override;
     void update(const Input_t& input) override;
     double get_hover_thrust() const override;
 
@@ -99,6 +103,7 @@ class Kalman_HoverThrustEstimator : public HoverThrustEstimator {
         onlyhover_estimate_ = true;
     }
 
+    void seed_hover_thrust(double hover_thrust) override;
     void update(const Input_t& input) override;
     double get_hover_thrust() const override;
 

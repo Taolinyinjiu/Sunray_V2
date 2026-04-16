@@ -89,6 +89,12 @@ class Geometric_Controller : public Controller_Interface {
         controller_data_types::TargetTrajectoryPoint_t segment_end;
     };
 
+    struct RCThrustFilterState {
+        bool initialized{false};
+        double thrust{0.0};
+        ros::Time last_update{ros::Time(0)};
+    };
+
     // ----------------------配置相关-----------------------
     std::string config_yamlfile_path_;
     std::string uav_ns_;
@@ -121,6 +127,14 @@ class Geometric_Controller : public Controller_Interface {
                                          const ros::Time& cmd_stamp,
                                          bool hold_fixed_height = false,
                                          double fixed_height = 0.0);
+    void seed_rc_thrust_filter(RCThrustFilterState& state, double thrust, const ros::Time& now);
+    double update_rc_thrust_filter(RCThrustFilterState& state,
+                                   double target_thrust,
+                                   double tau_s,
+                                   const ros::Time& now);
+    double get_takeoff_warmup_duration() const;
+    double compute_takeoff_warmup_target_thrust(double target_thrust, double elapsed_s) const;
+    void reset_stage_thrust_filters();
     bool publish_trajectory_setpoint(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
         ThrustCommandPolicy thrust_policy = ThrustCommandPolicy::Auto);
@@ -154,7 +168,13 @@ class Geometric_Controller : public Controller_Interface {
 
     // 解锁后电机暖机阶段计时
     ros::Time last_arm_time_{ros::Time(0)};
-    double motors_speedup_time_{2.0};  // 暖机持续时间（s）
+    double motors_speedup_time_{2.0};  // 兼容旧配置：未显式指定 ramp_time 时作为缓升阶段时长
+    double takeoff_idle_thrust_{0.08};
+    double takeoff_idle_hold_time_{0.0};
+    double takeoff_ramp_time_{2.0};
+    double takeoff_thrust_filter_tau_{0.40};
+    double takeoff_thrust_handoff_time_{0.30};
+    RCThrustFilterState takeoff_thrust_filter_;
 
     // 五次项起飞曲线（平滑爬升，避免直接发送目标位置引起的阶跃响应）
     curve::QuinticCurve quint_curve_;
@@ -169,6 +189,10 @@ class Geometric_Controller : public Controller_Interface {
     bool land_near_ground_{false};
     ros::Time land_touchground_time_{ros::Time(0)};  // 触地并等待上锁的计时
     double land_max_velocity_{0.3};  // 降落最大速度（首次进入 land() 时由参数写入）
+    double land_thrust_filter_tau_{0.20};
+    double land_near_ground_thrust_max_{0.31};
+    double land_touchdown_thrust_max_{0.05};
+    RCThrustFilterState land_thrust_filter_;
 
     // move_point 到位计时
     ros::Time start_move_arrive_time_{ros::Time(0)};

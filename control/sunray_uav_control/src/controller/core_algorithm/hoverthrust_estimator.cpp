@@ -11,6 +11,15 @@ void HoverThrustEstimator::load_param(const Param_t& param) {
     hover_thrust_ = std::clamp(param.hover_thrust, hover_thrust_min_, hover_thrust_max_);
 }
 
+void HoverThrustEstimator::seed_hover_thrust(double hover_thrust) {
+    hover_thrust_ = std::clamp(hover_thrust, hover_thrust_min_, hover_thrust_max_);
+}
+
+void LowPass_HoverThrustEstimator::seed_hover_thrust(double hover_thrust) {
+    HoverThrustEstimator::seed_hover_thrust(hover_thrust);
+    last_stamp_ = ros::Time(0);
+}
+
 void LowPass_HoverThrustEstimator::update(const Input_t& input) {
     if (input.stamp.isZero()) {
         return;
@@ -36,6 +45,12 @@ void LowPass_HoverThrustEstimator::update(const Input_t& input) {
 
 double LowPass_HoverThrustEstimator::get_hover_thrust() const {
     return hover_thrust_;
+}
+
+void RLS_HoverThrustEstimator::seed_hover_thrust(double hover_thrust) {
+    HoverThrustEstimator::seed_hover_thrust(hover_thrust);
+    thr2acc_ = gravity_ / std::max(hover_thrust_, 1e-3);
+    input_history_.clear();
 }
 
 void RLS_HoverThrustEstimator::update(const Input_t& input) {
@@ -112,6 +127,11 @@ void RLS_HoverThrustEstimator::update(const Input_t& input) {
 
 double RLS_HoverThrustEstimator::get_hover_thrust() const {
     return hover_thrust_;
+}
+
+void Kalman_HoverThrustEstimator::seed_hover_thrust(double hover_thrust) {
+    HoverThrustEstimator::seed_hover_thrust(hover_thrust);
+    last_stamp_ = ros::Time(0);
 }
 
 void Kalman_HoverThrustEstimator::update(const Input_t& input) {

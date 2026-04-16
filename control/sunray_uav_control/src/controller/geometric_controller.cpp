@@ -114,6 +114,8 @@ void Geometric_Controller::set_current_odom(const control_common::UAVStateEstima
 // ─────────────────────────────────────────────────────────────────────────────
 void Geometric_Controller::on_ground_keep_setpoint() {
     reset_velocity_trajectory_state();
+    reset_stage_thrust_filters();
+    land_near_ground_ = false;
     control_common::Mavros_SetpointAttitude current_setpoint;
     if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
         current_setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
@@ -129,6 +131,69 @@ void Geometric_Controller::on_ground_keep_setpoint() {
     current_setpoint.thrust = 0.0;
     mavros_helper_.pub_attitude_setpoint(current_setpoint);
     last_setpoint_ = current_setpoint;
+}
+
+void Geometric_Controller::seed_rc_thrust_filter(RCThrustFilterState& state,
+                                                 double thrust,
+                                                 const ros::Time& now) {
+    state.initialized = true;
+    state.thrust = std::clamp(thrust, 0.0, 0.95);
+    state.last_update = now;
+}
+
+double Geometric_Controller::update_rc_thrust_filter(RCThrustFilterState& state,
+                                                     double target_thrust,
+                                                     double tau_s,
+                                                     const ros::Time& now) {
+    const double clamped_target = std::clamp(target_thrust, 0.0, 0.95);
+    if (tau_s <= 1e-4) {
+        seed_rc_thrust_filter(state, clamped_target, now);
+        return clamped_target;
+    }
+
+    if (!state.initialized) {
+        seed_rc_thrust_filter(state, clamped_target, now);
+        return state.thrust;
+    }
+
+    if (state.last_update.isZero()) {
+        state.last_update = now;
+        return state.thrust;
+    }
+
+    const double dt = (now - state.last_update).toSec();
+    state.last_update = now;
+    if (dt <= 1e-6) {
+        return state.thrust;
+    }
+
+    const double alpha = std::clamp(dt / (tau_s + dt), 0.0, 1.0);
+    state.thrust = std::clamp(state.thrust + alpha * (clamped_target - state.thrust), 0.0, 0.95);
+    return state.thrust;
+}
+
+double Geometric_Controller::get_takeoff_warmup_duration() const {
+    return std::max(0.0, takeoff_idle_hold_time_) + std::max(0.0, takeoff_ramp_time_);
+}
+
+double Geometric_Controller::compute_takeoff_warmup_target_thrust(double target_thrust,
+                                                                  double elapsed_s) const {
+    const double idle_thrust = std::clamp(takeoff_idle_thrust_, 0.0, 0.95);
+    const double climb_target = std::clamp(std::max(target_thrust, idle_thrust), 0.0, 0.95);
+
+    if (elapsed_s <= takeoff_idle_hold_time_) {
+        return idle_thrust;
+    }
+
+    const double ramp_time = std::max(1e-3, takeoff_ramp_time_);
+    const double ramp_elapsed = elapsed_s - takeoff_idle_hold_time_;
+    const double blend = std::clamp(ramp_elapsed / ramp_time, 0.0, 1.0);
+    return idle_thrust + blend * (climb_target - idle_thrust);
+}
+
+void Geometric_Controller::reset_stage_thrust_filters() {
+    takeoff_thrust_filter_ = RCThrustFilterState{};
+    land_thrust_filter_ = RCThrustFilterState{};
 }
 
 bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
@@ -171,6 +236,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
 
     // ── 阶段 1：切换 Offboard 模式 ──────────────────────────────────────────
     if (px4_state.flight_mode != control_common::FlightMode::Offboard) {
+        reset_stage_thrust_filters();
         // 切换前持续发送零指令以满足 Offboard 2 Hz 最低频率要求
         control_common::Mavros_SetpointAttitude setpoint_cmd;
         if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
@@ -208,6 +274,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
     last_checkout_offboard_time_ = ros::Time(0);
 
     if (px4_state.armed == false) {
+        reset_stage_thrust_filters();
         mavros_helper_.set_arm(true);
         return false;
     }
@@ -216,8 +283,11 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
     // 在无人机离地前保持在地面高度，等待推力建立，避免曲线计时提前开始
     if (last_arm_time_ == ros::Time(0)) {
         last_arm_time_ = now;
+        seed_rc_thrust_filter(takeoff_thrust_filter_, takeoff_idle_thrust_, now);
     }
-    if ((now - last_arm_time_).toSec() < motors_speedup_time_) {
+    const double takeoff_elapsed = (now - last_arm_time_).toSec();
+    const double takeoff_warmup_duration = get_takeoff_warmup_duration();
+    if (takeoff_elapsed < takeoff_warmup_duration) {
         controller_data_types::TargetTrajectoryPoint_t des_state;
         des_state.position = Eigen::Vector3d(quint_curve_.get_start_position().x(),
                                              quint_curve_.get_start_position().y(),
@@ -250,7 +320,12 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
             setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
             setpoint.body_rate = output.bodyrates;
         }
-        setpoint.thrust = output.thrust;
+        const double warmup_target_thrust =
+            compute_takeoff_warmup_target_thrust(output.thrust, takeoff_elapsed);
+        setpoint.thrust = update_rc_thrust_filter(takeoff_thrust_filter_,
+                                                  warmup_target_thrust,
+                                                  takeoff_thrust_filter_tau_,
+                                                  now);
         mavros_helper_.pub_attitude_setpoint(setpoint);
         last_setpoint_ = setpoint;
         return false;
@@ -293,7 +368,18 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
             setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
             setpoint.body_rate = output.bodyrates;
         }
-        setpoint.thrust = output.thrust;
+        const bool use_takeoff_handoff_filter =
+            takeoff_thrust_filter_.initialized &&
+            takeoff_elapsed < takeoff_warmup_duration + takeoff_thrust_handoff_time_;
+        if (use_takeoff_handoff_filter) {
+            setpoint.thrust = update_rc_thrust_filter(takeoff_thrust_filter_,
+                                                      output.thrust,
+                                                      takeoff_thrust_filter_tau_,
+                                                      now);
+        } else {
+            takeoff_thrust_filter_ = RCThrustFilterState{};
+            setpoint.thrust = output.thrust;
+        }
         mavros_helper_.pub_attitude_setpoint(setpoint);
         last_setpoint_ = setpoint;
 
@@ -316,6 +402,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
                 last_checkout_offboard_time_ = ros::Time(0);
                 last_arm_time_ = ros::Time(0);
                 start_checkout_takeoff_success_time_ = ros::Time(0);
+                reset_stage_thrust_filters();
                 // 起飞完成后重置积分，避免残留量影响后续 hover/move
                 controller_.reset_integral();
                 quint_curve_.clear();
@@ -330,12 +417,14 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
 
 bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     reset_velocity_trajectory_state();
+    takeoff_thrust_filter_ = RCThrustFilterState{};
     // 进入降落流程时重置积分，防止下降阶段因残留积分产生额外推力
     if (landing_time_ == ros::Time(0)) {
         controller_.reset_integral();
     }
     // land_type == 1：切换为 PX4 自带 AutoLand 模式
     if (land_type == 1) {
+        reset_stage_thrust_filters();
         mavros_helper_.set_px4_mode(control_common::FlightMode::AutoLand);
         bool land_state =
             mavros_helper_.get_state().landed_state == control_common::LandedState::OnGround;
@@ -354,6 +443,8 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
         land_point_ = uav_odometry_.position;
         land_yaw_ = mavros_helper_.get_yaw_rad();
         land_max_velocity_ = max_land_velocity;
+        land_near_ground_ = false;
+        land_thrust_filter_ = RCThrustFilterState{};
     }
 
     // 时基降落：目标 z 随时间线性下降
@@ -415,11 +506,22 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     bool px4_landed = (px4_land_state == control_common::LandedState::OnGround);
     const bool landed_detected = px4_landed || landed_by_velocity;
 
-    // 靠近地面或已触地时压制推力上限，防止弹跳
-    if (landed_by_velocity) {
-        setpoint.thrust = std::clamp(setpoint.thrust, 0.02, 0.05);
-    } else if (near_ground) {
-        setpoint.thrust = std::clamp(setpoint.thrust, 0.02, 0.31);
+    if (near_ground && !land_near_ground_) {
+        land_near_ground_ = true;
+        const double seed_thrust =
+            (last_setpoint_.thrust > 0.0) ? last_setpoint_.thrust : setpoint.thrust;
+        seed_rc_thrust_filter(land_thrust_filter_, seed_thrust, now);
+    }
+
+    // 靠近地面或已触地时对推力做 RC 平滑收敛，减少压地/反弹时的突变。
+    if (land_near_ground_ || landed_by_velocity) {
+        const double thrust_cap =
+            landed_by_velocity ? land_touchdown_thrust_max_ : land_near_ground_thrust_max_;
+        const double thrust_target = std::clamp(setpoint.thrust, 0.02, thrust_cap);
+        setpoint.thrust = update_rc_thrust_filter(land_thrust_filter_,
+                                                  thrust_target,
+                                                  land_thrust_filter_tau_,
+                                                  now);
     }
 
     if (landed_detected && landed_by_velocity) {
@@ -436,6 +538,7 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
                 land_near_ground_ = false;
                 land_touchground_time_ = ros::Time(0);
                 landing_time_ = ros::Time(0);
+                reset_stage_thrust_filters();
             }
             return land_complete_;
         }
@@ -964,6 +1067,52 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     if (has_basic_hover_thrust) {
         geometric_controller_param_.hover_thrust_init =
             std::clamp(hover_thrust_node.as<double>(), 0.05, 0.80);
+    }
+
+    const YAML::Node takeoff_land_param = root["takeoff_land_param"];
+    if (takeoff_land_param && takeoff_land_param.IsMap()) {
+        bool has_takeoff_ramp_time = false;
+        if (takeoff_land_param["motors_speedup_time"]) {
+            motors_speedup_time_ = std::max(0.0, takeoff_land_param["motors_speedup_time"].as<double>());
+        }
+        if (takeoff_land_param["takeoff_idle_thrust"]) {
+            takeoff_idle_thrust_ =
+                std::clamp(takeoff_land_param["takeoff_idle_thrust"].as<double>(), 0.0, 0.95);
+        }
+        if (takeoff_land_param["takeoff_idle_hold_time"]) {
+            takeoff_idle_hold_time_ =
+                std::max(0.0, takeoff_land_param["takeoff_idle_hold_time"].as<double>());
+        }
+        if (takeoff_land_param["takeoff_ramp_time"]) {
+            takeoff_ramp_time_ =
+                std::max(1e-3, takeoff_land_param["takeoff_ramp_time"].as<double>());
+            has_takeoff_ramp_time = true;
+        }
+        if (takeoff_land_param["takeoff_thrust_filter_tau"]) {
+            takeoff_thrust_filter_tau_ =
+                std::max(1e-3, takeoff_land_param["takeoff_thrust_filter_tau"].as<double>());
+        }
+        if (takeoff_land_param["takeoff_thrust_handoff_time"]) {
+            takeoff_thrust_handoff_time_ =
+                std::max(0.0, takeoff_land_param["takeoff_thrust_handoff_time"].as<double>());
+        }
+        if (takeoff_land_param["land_thrust_filter_tau"]) {
+            land_thrust_filter_tau_ =
+                std::max(1e-3, takeoff_land_param["land_thrust_filter_tau"].as<double>());
+        }
+        if (takeoff_land_param["land_near_ground_thrust_max"]) {
+            land_near_ground_thrust_max_ =
+                std::clamp(takeoff_land_param["land_near_ground_thrust_max"].as<double>(), 0.02, 0.95);
+        }
+        if (takeoff_land_param["land_touchdown_thrust_max"]) {
+            land_touchdown_thrust_max_ =
+                std::clamp(takeoff_land_param["land_touchdown_thrust_max"].as<double>(), 0.02, 0.95);
+        }
+        if (!has_takeoff_ramp_time) {
+            takeoff_ramp_time_ = std::max(1e-3, motors_speedup_time_);
+        }
+        land_touchdown_thrust_max_ =
+            std::min(land_touchdown_thrust_max_, land_near_ground_thrust_max_);
     }
 
     // ──── sunray_controller_param ─────────────────────────────────────────────
