@@ -295,12 +295,13 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             double vel_err = vel_err_vec.norm();  // 推荐：速度误差标量
             ROS_INFO("pos_err : %f", pos_err);
             ROS_INFO("vel_err : %f", vel_err);
-            if (pos_err < 0.3 && vel_err < 0.15) {
+            if (pos_err < arrival_pos_stabile_err_m_ &&
+                vel_err < arrival_vel_stabile_err_mps_) {
                 if (start_checkout_takeoff_success_time_ == ros::Time(0)) {
                     start_checkout_takeoff_success_time_ = now;
                 }
                 if ((now - start_checkout_takeoff_success_time_).toSec() >
-                    takeoff_success_keep_time_s) {
+                    arrival_judge_stabile_time_s_) {
                     takeoff_complete_ = true;
                     hover_point_ = quint_curve_.get_start_position();
                     hover_point_.z() += relative_takeoff_height;
@@ -489,6 +490,7 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
     // 如果为新目标，则清除一些上下文参数
     if (is_new_target) {
         move_point_arrive_state_ = false;
+        point_complete_ = false;
         start_move_arrive_time_ = ros::Time(0);
         last_point_ = point;
     }
@@ -514,11 +516,11 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
     double vel_err = vel_err_vec.norm();  // 推荐：速度误差标量
     ROS_INFO("pos_err : %f", pos_err);
     ROS_INFO("vel_err : %f", vel_err);
-    if (pos_err < 0.15 && vel_err < 0.15) {
+    if (pos_err < arrival_pos_stabile_err_m_ && vel_err < arrival_vel_stabile_err_mps_) {
         if (start_move_arrive_time_ == ros::Time(0)) {
             start_move_arrive_time_ = now;
         }
-        if ((now - start_move_arrive_time_).toSec() > 0.5) {
+        if ((now - start_move_arrive_time_).toSec() > arrival_judge_stabile_time_s_) {
             move_point_arrive_state_ = true;
             point_complete_ = true;
         }
@@ -675,6 +677,35 @@ void PX4_OriginController::load_and_validate_config_or_throw() {
     // 限制融合的频率
     config_param_.fuse_odom_frequency = std::max(10.0, config_param_.fuse_odom_frequency);
     config_param_.fuse_odom_frequency = std::min(200.0, config_param_.fuse_odom_frequency);
+
+    const YAML::Node arrival_judge_param = root["arrival_judge_param"];
+    if (!arrival_judge_param || !arrival_judge_param.IsMap()) {
+        throw std::runtime_error("the yaml file '" + config_yamlfile_path_ +
+                                 "' is missing a valid arrival_judge_param map");
+    }
+    if (!arrival_judge_param["judge_stabile_time_s"]) {
+        throw std::runtime_error("miss param 'arrival_judge_param.judge_stabile_time_s'");
+    }
+    if (!arrival_judge_param["pos_stabile_err_m"]) {
+        throw std::runtime_error("miss param 'arrival_judge_param.pos_stabile_err_m'");
+    }
+    if (!arrival_judge_param["vel_stabile_err_mps"]) {
+        throw std::runtime_error("miss param 'arrival_judge_param.vel_stabile_err_mps'");
+    }
+
+    arrival_judge_stabile_time_s_ = arrival_judge_param["judge_stabile_time_s"].as<double>();
+    arrival_pos_stabile_err_m_ = arrival_judge_param["pos_stabile_err_m"].as<double>();
+    arrival_vel_stabile_err_mps_ = arrival_judge_param["vel_stabile_err_mps"].as<double>();
+
+    if (arrival_judge_stabile_time_s_ <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");
+    }
+    if (arrival_pos_stabile_err_m_ <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.pos_stabile_err_m' must > 0");
+    }
+    if (arrival_vel_stabile_err_mps_ <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.vel_stabile_err_mps' must > 0");
+    }
 }
 // clang-format on
 

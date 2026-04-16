@@ -122,8 +122,10 @@ class PX4_OriginController : public Controller_Interface {
     ros::Time last_checkout_offboard_time_{ros::Time(0)};
     // arm解锁成功的触发时间
     ros::Time last_arm_time_{ros::Time(0)};
-    // 起飞成功判断阈值,保持至少2s的稳定，算到达期望位置
-    double takeoff_success_keep_time_s = 2;
+    // 到达稳定判定参数
+    double arrival_judge_stabile_time_s_{0.5};
+    double arrival_pos_stabile_err_m_{0.15};
+    double arrival_vel_stabile_err_mps_{0.15};
     ros::Time start_checkout_takeoff_success_time_{ros::Time(0)};
     // 降落阶段开始的时间
     ros::Time start_land_time_{ros::Time(0)};

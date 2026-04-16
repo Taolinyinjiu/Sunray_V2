@@ -224,6 +224,39 @@ void Geometric_Controller::maybe_rebase_takeoff_curve_start() {
     takeoff_curve_started_ = true;
 }
 
+void Geometric_Controller::update_hover_reference(const Eigen::Vector3d& hover_point_target,
+                                                 double hover_yaw_target,
+                                                 const char* reason) {
+    const Eigen::Vector3d old_hover_point = hover_point;
+    const double old_hover_yaw = hover_yaw_;
+    hover_point = hover_point_target;
+    hover_yaw_ = hover_yaw_target;
+
+    const Eigen::Vector3d dp = hover_point - old_hover_point;
+    const double dyaw = hover_yaw_ - old_hover_yaw;
+    const Eigen::Vector3d pos_err = hover_point - uav_odometry_.position;
+    ROS_INFO("hover_ref[%s] old=(%.3f, %.3f, %.3f, yaw=%.3f) new=(%.3f, %.3f, %.3f, yaw=%.3f) d=(%.3f, %.3f, %.3f, dyaw=%.3f) cur=(%.3f, %.3f, %.3f) err=(%.3f, %.3f, %.3f)",
+             reason,
+             old_hover_point.x(),
+             old_hover_point.y(),
+             old_hover_point.z(),
+             old_hover_yaw,
+             hover_point.x(),
+             hover_point.y(),
+             hover_point.z(),
+             hover_yaw_,
+             dp.x(),
+             dp.y(),
+             dp.z(),
+             dyaw,
+             uav_odometry_.position.x(),
+             uav_odometry_.position.y(),
+             uav_odometry_.position.z(),
+             pos_err.x(),
+             pos_err.y(),
+             pos_err.z());
+}
+
 void Geometric_Controller::reset_stage_thrust_filters() {
     takeoff_thrust_filter_ = RCThrustFilterState{};
     land_thrust_filter_ = RCThrustFilterState{};
@@ -420,19 +453,21 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         mavros_helper_.pub_attitude_setpoint(setpoint);
         last_setpoint_ = setpoint;
 
-        // 到位判断：与曲线终点的位置误差 < 0.3m 且速度 < 0.15m/s，持续稳定才算成功
+        // 到位判断：使用统一的到达稳定参数，而不是为 takeoff / move_point 分别写死阈值
         const double pos_err = (uav_odometry_.position - quint_curve_.get_end_position()).norm();
         const double vel_err = uav_odometry_.velocity.norm();
 
-        if (pos_err < 0.3 && vel_err < 0.15) {
+        if (pos_err < arrival_pos_stabile_err_m_ && vel_err < arrival_vel_stabile_err_mps_) {
             if (start_checkout_takeoff_success_time_ == ros::Time(0)) {
                 start_checkout_takeoff_success_time_ = now;
             }
             if ((now - start_checkout_takeoff_success_time_).toSec() >
-                takeoff_success_keep_time_s) {
+                arrival_judge_stabile_time_s_) {
                 takeoff_complete_ = true;
                 // hover_point 设为起飞轨迹终点，避免曲线起点重对齐后与终点语义脱节
-                hover_point = quint_curve_.get_end_position();
+                update_hover_reference(quint_curve_.get_end_position(),
+                                       takeoff_yaw_,
+                                       "takeoff_complete");
                 // 清理起飞上下文
                 start_checkout_offboard_time_ = ros::Time(0);
                 last_checkout_offboard_time_ = ros::Time(0);
@@ -589,8 +624,7 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
 }
 
 bool Geometric_Controller::set_hover_point(control_common::UAVStateEstimate current_odom) {
-    hover_point = current_odom.position;
-    hover_yaw_ = current_odom.get_yaw();
+    update_hover_reference(current_odom.position, current_odom.get_yaw(), "set_hover_point");
     return true;
 }
 
@@ -603,6 +637,22 @@ bool Geometric_Controller::hover() {
     des_state.jerk = Eigen::Vector3d::Zero();
     des_state.yaw = hover_yaw_;
     des_state.yaw_rate = 0.0;
+
+    ROS_INFO_THROTTLE(1.0,
+                      "hover track tgt=(%.3f, %.3f, %.3f, yaw=%.3f) cur=(%.3f, %.3f, %.3f) err=(%.3f, %.3f, %.3f) vel=(%.3f, %.3f, %.3f)",
+                      hover_point.x(),
+                      hover_point.y(),
+                      hover_point.z(),
+                      hover_yaw_,
+                      uav_odometry_.position.x(),
+                      uav_odometry_.position.y(),
+                      uav_odometry_.position.z(),
+                      hover_point.x() - uav_odometry_.position.x(),
+                      hover_point.y() - uav_odometry_.position.y(),
+                      hover_point.z() - uav_odometry_.position.z(),
+                      uav_odometry_.velocity.x(),
+                      uav_odometry_.velocity.y(),
+                      uav_odometry_.velocity.z());
 
     auto output =
         controller_.calculateControl(des_state, uav_odometry_, ThrustCommandPolicy::Auto);
@@ -656,6 +706,7 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
     }
     if (is_new_target) {
         move_point_arrive_state_ = false;
+        point_complete_ = false;
         start_move_arrive_time_ = ros::Time(0);
         controller_.reset_vertical_integral();
         last_point_ = point;
@@ -687,20 +738,20 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
     mavros_helper_.pub_attitude_setpoint(setpoint);
     last_setpoint_ = setpoint;
 
-    // 到位检查：位置误差 < 0.15m 且速度误差 < 0.1m/s，持续 0.5s
+    // 到位检查：与起飞共享统一的 arrival_judge_param
     double pos_err = (uav_odometry_.position - point.position).norm();
     double vel_err = uav_odometry_.velocity.norm();
     // ROS_INFO("pos_err : %f", pos_err);
     // ROS_INFO("vel_err : %f", vel_err);
 
-    if (pos_err < 0.15 && vel_err < 0.1) {
+    if (pos_err < arrival_pos_stabile_err_m_ && vel_err < arrival_vel_stabile_err_mps_) {
         if (start_move_arrive_time_ == ros::Time(0)) {
             start_move_arrive_time_ = now;
         }
-        if ((now - start_move_arrive_time_).toSec() > 0.5) {
+        if ((now - start_move_arrive_time_).toSec() > arrival_judge_stabile_time_s_) {
             move_point_arrive_state_ = true;
             point_complete_ = true;
-            hover_point = last_point_.position;
+            update_hover_reference(last_point_.position, last_point_.yaw, "move_point_arrive");
         }
     } else {
         start_move_arrive_time_ = ros::Time(0);
@@ -1150,6 +1201,37 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         }
         land_touchdown_thrust_max_ =
             std::min(land_touchdown_thrust_max_, land_near_ground_thrust_max_);
+    }
+
+    const YAML::Node arrival_judge_param = root["arrival_judge_param"];
+    if (!arrival_judge_param || !arrival_judge_param.IsMap()) {
+        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+                                 "' is missing a valid 'arrival_judge_param' map");
+    }
+    if (!arrival_judge_param["judge_stabile_time_s"]) {
+        throw std::runtime_error("missing param 'arrival_judge_param.judge_stabile_time_s'");
+    }
+    if (!arrival_judge_param["pos_stabile_err_m"]) {
+        throw std::runtime_error("missing param 'arrival_judge_param.pos_stabile_err_m'");
+    }
+    if (!arrival_judge_param["vel_stabile_err_mps"]) {
+        throw std::runtime_error("missing param 'arrival_judge_param.vel_stabile_err_mps'");
+    }
+
+    arrival_judge_stabile_time_s_ =
+        arrival_judge_param["judge_stabile_time_s"].as<double>();
+    arrival_pos_stabile_err_m_ = arrival_judge_param["pos_stabile_err_m"].as<double>();
+    arrival_vel_stabile_err_mps_ =
+        arrival_judge_param["vel_stabile_err_mps"].as<double>();
+
+    if (arrival_judge_stabile_time_s_ <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");
+    }
+    if (arrival_pos_stabile_err_m_ <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.pos_stabile_err_m' must > 0");
+    }
+    if (arrival_vel_stabile_err_mps_ <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.vel_stabile_err_mps' must > 0");
     }
 
     // ──── sunray_controller_param ─────────────────────────────────────────────

@@ -279,102 +279,44 @@ void loadTakeoffLandParam(const YAML::Node& node, sunray_fsm::takeoff_land_param
         }
     }
 }
-// 从yaml文件构造的节点中，读取mission_error_param字段的内容
-void loadMissionErrorParam(const YAML::Node& node, sunray_fsm::mission_error_param_t& param) {
+// 从yaml文件构造的节点中，读取arrival_judge_param字段的内容
+void loadArrivalJudgeParam(const YAML::Node& node, sunray_fsm::arrival_judge_param_t& param) {
     // 首先，如果传入的node为空，或者不是键值对的形式，则抛出异常
     if (!node || !node.IsMap()) {
-        throw std::runtime_error("the sunray_control_config.yaml mission_error_param is missing a "
-                                 "valid mission_error_param map");
+        throw std::runtime_error("the sunray_control_config.yaml arrival_judge_param is missing a "
+                                 "valid arrival_judge_param map");
     }
-    YAML::Node takeoff_error_node = node["takeoff"];
-    YAML::Node move_error_node = node["move_point"];
     // 先判断存在，再读取值
-    // -----------------------------------------起飞任务相关-------------------------------
-    if (!takeoff_error_node["timeout_s"]) {
+    if (!node["judge_stabile_time_s"]) {
         throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'mission_error_param : takeoff: timeout_s'");
+            "the sunray_control_config.yaml miss param 'arrival_judge_param: judge_stabile_time_s'");
     } else {
-        param.takeoff_error_param.timeout_s = takeoff_error_node["timeout_s"].as<double>();
-        if (param.takeoff_error_param.timeout_s <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: timeout_s' must > 0");
+        param.judge_stabile_time_s = node["judge_stabile_time_s"].as<double>();
+        if (param.judge_stabile_time_s <= 0) {
+            throw std::runtime_error("the sunray_control_config.yaml param "
+                                     "'arrival_judge_param: judge_stabile_time_s' must > 0");
         }
     }
-    if (!takeoff_error_node["judge_stabile_time_s"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'mission_error_param : "
-                                 "takeoff: judge_stabile_time_s'");
-    } else {
-        param.takeoff_error_param.judge_stabile_time_s =
-            takeoff_error_node["judge_stabile_time_s"].as<double>();
-        if (param.takeoff_error_param.judge_stabile_time_s <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: judge_stabile_time_s' must > 0");
-        }
-    }
-    if (!takeoff_error_node["pos_stabile_err_m"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'mission_error_param : "
-                                 "takeoff: pos_stabile_err_m'");
-    } else {
-        param.takeoff_error_param.pos_stabile_err_m =
-            takeoff_error_node["pos_stabile_err_m"].as<double>();
-        if (param.takeoff_error_param.pos_stabile_err_m <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: pos_stabile_err_m' must > 0");
-        }
-    }
-    if (!takeoff_error_node["vel_stabile_err_mps"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'mission_error_param : "
-                                 "takeoff: vel_stabile_err_mps'");
-    } else {
-        param.takeoff_error_param.vel_stabile_err_mps =
-            takeoff_error_node["vel_stabile_err_mps"].as<double>();
-        if (param.takeoff_error_param.vel_stabile_err_mps <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: vel_stabile_err_mps' must > 0");
-        }
-    }
-    // -----------------------------------------move_point相关-------------------------------
-    if (!move_error_node["timeout_s"]) {
+    if (!node["pos_stabile_err_m"]) {
         throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'mission_error_param : takeoff: timeout_s'");
+            "the sunray_control_config.yaml miss param 'arrival_judge_param: pos_stabile_err_m'");
     } else {
-        param.move_point_error_param.timeout_s = move_error_node["timeout_s"].as<double>();
-        if (param.move_point_error_param.timeout_s <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: timeout_s' must > 0");
+        param.pos_stabile_err_m = node["pos_stabile_err_m"].as<double>();
+        if (param.pos_stabile_err_m <= 0) {
+            throw std::runtime_error(
+                "the sunray_control_config.yaml param 'arrival_judge_param: pos_stabile_err_m' "
+                "must > 0");
         }
     }
-    if (!move_error_node["judge_stabile_time_s"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'mission_error_param : "
-                                 "takeoff: judge_stabile_time_s'");
+    if (!node["vel_stabile_err_mps"]) {
+        throw std::runtime_error(
+            "the sunray_control_config.yaml miss param 'arrival_judge_param: vel_stabile_err_mps'");
     } else {
-        param.move_point_error_param.judge_stabile_time_s =
-            move_error_node["judge_stabile_time_s"].as<double>();
-        if (param.move_point_error_param.judge_stabile_time_s <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: judge_stabile_time_s' must > 0");
-        }
-    }
-    if (!move_error_node["pos_stabile_err_m"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'mission_error_param : "
-                                 "takeoff: pos_stabile_err_m'");
-    } else {
-        param.move_point_error_param.pos_stabile_err_m =
-            move_error_node["pos_stabile_err_m"].as<double>();
-        if (param.move_point_error_param.pos_stabile_err_m <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: pos_stabile_err_m' must > 0");
-        }
-    }
-    if (!move_error_node["vel_stabile_err_mps"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'mission_error_param : "
-                                 "takeoff: vel_stabile_err_mps'");
-    } else {
-        param.move_point_error_param.vel_stabile_err_mps =
-            move_error_node["vel_stabile_err_mps"].as<double>();
-        if (param.move_point_error_param.vel_stabile_err_mps <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml  param 'mission_error_param : "
-                                     "takeoff: vel_stabile_err_mps' must > 0");
+        param.vel_stabile_err_mps = node["vel_stabile_err_mps"].as<double>();
+        if (param.vel_stabile_err_mps <= 0) {
+            throw std::runtime_error(
+                "the sunray_control_config.yaml param 'arrival_judge_param: vel_stabile_err_mps' "
+                "must > 0");
         }
     }
 }

@@ -135,6 +135,9 @@ class Geometric_Controller : public Controller_Interface {
     double get_takeoff_warmup_duration() const;
     double compute_takeoff_warmup_target_thrust(double target_thrust, double elapsed_s) const;
     void maybe_rebase_takeoff_curve_start();
+    void update_hover_reference(const Eigen::Vector3d& hover_point,
+                                double hover_yaw,
+                                const char* reason);
     void reset_stage_thrust_filters();
     bool publish_trajectory_setpoint(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
@@ -176,12 +179,14 @@ class Geometric_Controller : public Controller_Interface {
     double takeoff_thrust_filter_tau_{0.40};
     double takeoff_thrust_handoff_time_{0.30};
     RCThrustFilterState takeoff_thrust_filter_;
+    double arrival_judge_stabile_time_s_{0.5};
+    double arrival_pos_stabile_err_m_{0.15};
+    double arrival_vel_stabile_err_mps_{0.15};
 
     // 五次项起飞曲线（平滑爬升，避免直接发送目标位置引起的阶跃响应）
     curve::QuinticCurve quint_curve_;
 
-    // 起飞到位判断：连续稳定 takeoff_success_keep_time_s 秒才算成功
-    double takeoff_success_keep_time_s{2.0};
+    // 起飞到位判断开始计时
     ros::Time start_checkout_takeoff_success_time_{ros::Time(0)};
     bool takeoff_curve_started_{false};
 

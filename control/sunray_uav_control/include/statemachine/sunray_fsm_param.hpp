@@ -52,16 +52,11 @@ struct takeoff_land_param_t {
     uint8_t land_type{0};
     double land_max_velocity{0.0};
 };
-// -------------------运动误差与超时参数--------------
-struct mission_param_t {
-    double timeout_s{0.0};
+// -------------------到达稳定判定参数--------------
+struct arrival_judge_param_t {
     double judge_stabile_time_s{0.0};
     double pos_stabile_err_m{0.0};
     double vel_stabile_err_mps{0.0};
-};
-struct mission_error_param_t {
-    mission_param_t takeoff_error_param;
-    mission_param_t move_point_error_param;
 };
 // -------------------电子围栏参数-----------------------
 struct local_fence_param_t {
@@ -84,7 +79,7 @@ struct sunray_fsm_config_t {
     protect_param_t protect_param;              // 保护措施参数
     msg_timeout_param_t msg_timeout_param;      // 消息超时参数
     takeoff_land_param_t takeoff_land_param;    // 起飞降落参数
-    mission_error_param_t mission_error_param;  // 运动误差判断参数
+    arrival_judge_param_t arrival_judge_param;  // 到达稳定判定参数
     local_fence_param_t local_fence_param;      // local系电子围栏参数
     velocity_param_t velocity_param;            // 飞行速度参数
 };

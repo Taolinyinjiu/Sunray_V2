@@ -383,8 +383,8 @@ void Sunray_FSM::load_param() {
     loadMsgTimeoutParam(root["msg_timeout_param"], fsm_config_.msg_timeout_param);
     ROS_INFO("takeoff_land");
     loadTakeoffLandParam(root["takeoff_land_param"], fsm_config_.takeoff_land_param);
-    ROS_INFO("mission");
-    loadMissionErrorParam(root["mission_error_param"], fsm_config_.mission_error_param);
+    ROS_INFO("arrival_judge");
+    loadArrivalJudgeParam(root["arrival_judge_param"], fsm_config_.arrival_judge_param);
     ROS_INFO("local_fence");
     loadLocalFenceParam(root["local_fence_param"], fsm_config_.local_fence_param);
     ROS_INFO("velocity");

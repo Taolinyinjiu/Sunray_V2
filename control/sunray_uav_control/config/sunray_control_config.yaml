@@ -82,26 +82,14 @@ takeoff_land_param:
     # 触地确认阶段允许的最大推力
     land_touchdown_thrust_max: 0.05
 
-# -------------------运动误差与超时参数-----------------------
-# 这里提到的运动超时参数可以这样来理解
-# 当我们设置了一个点(x = 1,y = 1,z = 1)时，无人机会朝着目标飞去，但是未必能够精准的在(1,1,1)处悬停
-# 他可能在(1.1,1.2,1.1)这样的周围平衡点悬停
-# 运动超时参数描述的是，当误差大于本文件规定的运动误差参数，但是小于两倍的运动误差参数的时候
-# 保持在稳定点悬停多长时间，认为运动结束
-# takeoff和move_point表示的是运动的类型
-# timeout
-mission_error_param:
-    takeoff: #takeoff表示运动类型
-        timeout_s: 5.0 # timeout_s表示运动超时参数
-        judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
-        pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
-        vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
-
-    move_point: #move_point表示运动类型
-        timeout_s: 5.0 # timeout_s表示运动超时参数
-        judge_stabile_time_s: 0.5 # judge_stabile_time_s 表示进入到运动误差死区时，判断达到稳定的时间
-        pos_stabile_err_m: 0.15 # 表示稳定状态下位置的误差范数
-        vel_stabile_err_mps: 0.15 # 表示稳定状态下速度的误差范数
+# -------------------到达稳定判定参数-----------------------
+# 起飞到位和 move_point 到位统一使用这一组阈值
+# 当位置误差和速度误差同时进入稳定范围，并持续保持 judge_stabile_time_s 秒后，
+# 控制器认为当前任务已经到达目标
+arrival_judge_param:
+    judge_stabile_time_s: 0.5
+    pos_stabile_err_m: 0.15
+    vel_stabile_err_mps: 0.10
 
 # -------------------电子围栏参数-----------------------
 # local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上
