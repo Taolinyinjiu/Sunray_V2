@@ -116,7 +116,7 @@ void Sunray_FSM::init_transition_table() {
                                             sunray_fsm::SunrayEvent::TAKEOFF_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            [this] { return sunray_controller_->set_hover_point(last_odometry_); }});
+                                            always});
 
     // HOVER -> MOVE (POINT)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::HOVER,
