@@ -191,6 +191,39 @@ double Geometric_Controller::compute_takeoff_warmup_target_thrust(double target_
     return idle_thrust + blend * (climb_target - idle_thrust);
 }
 
+void Geometric_Controller::maybe_rebase_takeoff_curve_start() {
+    if (takeoff_curve_started_ || !quint_curve_.is_ready()) {
+        return;
+    }
+
+    const Eigen::Vector3d original_start = quint_curve_.get_start_position();
+    const Eigen::Vector3d original_end = quint_curve_.get_end_position();
+    const Eigen::Vector3d current_pos = uav_odometry_.position;
+    const Eigen::Vector3d current_vel = uav_odometry_.velocity;
+    const Eigen::Vector3d delta = current_pos - original_start;
+
+    if (delta.norm() > 0.03 || current_vel.norm() > 0.05) {
+        ROS_WARN("takeoff curve rebase dp=(%.3f, %.3f, %.3f) v=(%.3f, %.3f, %.3f) end=(%.3f, %.3f, %.3f)",
+                 delta.x(),
+                 delta.y(),
+                 delta.z(),
+                 current_vel.x(),
+                 current_vel.y(),
+                 current_vel.z(),
+                 original_end.x(),
+                 original_end.y(),
+                 original_end.z());
+    } else {
+        ROS_INFO("takeoff curve rebase dp=(%.3f, %.3f, %.3f)",
+                 delta.x(),
+                 delta.y(),
+                 delta.z());
+    }
+
+    quint_curve_.set_start_trajpoint(current_pos, current_vel);
+    takeoff_curve_started_ = true;
+}
+
 void Geometric_Controller::reset_stage_thrust_filters() {
     takeoff_thrust_filter_ = RCThrustFilterState{};
     land_thrust_filter_ = RCThrustFilterState{};
@@ -228,6 +261,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         takeoff_ground_height_ = uav_odometry_.position.z();
         // 将起飞 yaw 同步到核心算法缓存，防止后续 move_point 未显式设置 yaw 时默认归零
         controller_.set_initial_yaw(takeoff_yaw_);
+        takeoff_curve_started_ = false;
         // 注意：quint_curve_ 并不在此处记录开始时间，
         // 而是以第一次调用 get_result() 时的时刻作为曲线起点
     }
@@ -237,6 +271,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
     // ── 阶段 1：切换 Offboard 模式 ──────────────────────────────────────────
     if (px4_state.flight_mode != control_common::FlightMode::Offboard) {
         reset_stage_thrust_filters();
+        takeoff_curve_started_ = false;
         // 切换前持续发送零指令以满足 Offboard 2 Hz 最低频率要求
         control_common::Mavros_SetpointAttitude setpoint_cmd;
         if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
@@ -275,6 +310,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
 
     if (px4_state.armed == false) {
         reset_stage_thrust_filters();
+        takeoff_curve_started_ = false;
         mavros_helper_.set_arm(true);
         return false;
     }
@@ -335,6 +371,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
     // get_result() 在首次调用时开始计时，输出连续的位置/速度/加速度轨迹
     // 曲线结束后输出值保持在终点，控制器自然收敛悬停
     {
+        maybe_rebase_takeoff_curve_start();
         curve::QuinticCurveState curve_result = quint_curve_.get_result();
 
         controller_data_types::TargetTrajectoryPoint_t des_state;
@@ -394,14 +431,14 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
             if ((now - start_checkout_takeoff_success_time_).toSec() >
                 takeoff_success_keep_time_s) {
                 takeoff_complete_ = true;
-                // hover_point 设为起飞终点
-                hover_point = quint_curve_.get_start_position();
-                hover_point.z() += relative_takeoff_height;
+                // hover_point 设为起飞轨迹终点，避免曲线起点重对齐后与终点语义脱节
+                hover_point = quint_curve_.get_end_position();
                 // 清理起飞上下文
                 start_checkout_offboard_time_ = ros::Time(0);
                 last_checkout_offboard_time_ = ros::Time(0);
                 last_arm_time_ = ros::Time(0);
                 start_checkout_takeoff_success_time_ = ros::Time(0);
+                takeoff_curve_started_ = false;
                 reset_stage_thrust_filters();
                 // 起飞完成后重置积分，避免残留量影响后续 hover/move
                 controller_.reset_integral();

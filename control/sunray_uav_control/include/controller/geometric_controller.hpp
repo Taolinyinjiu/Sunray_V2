@@ -134,6 +134,7 @@ class Geometric_Controller : public Controller_Interface {
                                    const ros::Time& now);
     double get_takeoff_warmup_duration() const;
     double compute_takeoff_warmup_target_thrust(double target_thrust, double elapsed_s) const;
+    void maybe_rebase_takeoff_curve_start();
     void reset_stage_thrust_filters();
     bool publish_trajectory_setpoint(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
@@ -182,6 +183,7 @@ class Geometric_Controller : public Controller_Interface {
     // 起飞到位判断：连续稳定 takeoff_success_keep_time_s 秒才算成功
     double takeoff_success_keep_time_s{2.0};
     ros::Time start_checkout_takeoff_success_time_{ros::Time(0)};
+    bool takeoff_curve_started_{false};
 
     // 降落阶段相关状态
     ros::Time landing_time_{ros::Time(0)};     // 首次进入 land() 的时刻
