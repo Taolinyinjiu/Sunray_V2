@@ -85,7 +85,7 @@ class RLS_HoverThrustEstimator : public HoverThrustEstimator {
     std::deque<Input_t> input_history_;
 
     const double rho2_ = 0.998;  // 遗忘因子，决定动态性能
-    double thr2acc_; // thr2acc_ = param_.gravity / param_.hover_thrust;
+    double thr2acc_{0.0}; // thr2acc_ = param_.gravity / param_.hover_thrust;
     double P_ = 1e6;
 };
 

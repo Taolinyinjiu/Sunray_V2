@@ -57,8 +57,11 @@ void RLS_HoverThrustEstimator::update(const Input_t& input) {
             return;
         }
 
-        if (!(thr2acc_ > 0.0)) {
+        if (!std::isfinite(thr2acc_) || thr2acc_ <= 1e-6) {
             thr2acc_ = gravity_ / std::max(hover_thrust_, 1e-3);
+#ifdef DEBUG
+            ROS_WARN_THROTTLE(1.0, "rls:init thr2acc=%.3f ht=%.3f", thr2acc_, hover_thrust_);
+#endif
         }
 
         const double thrust_cmd = candidate.thrust_cmd;
