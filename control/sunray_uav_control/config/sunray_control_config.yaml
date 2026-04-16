@@ -74,11 +74,21 @@ takeoff_land_param:
     # 指定降落模式 0：sunray land 1:px4.auto_land
     land_type: 0
     # 降落过程中的最大速度
-    land_max_velocity: 0.5
+    land_max_velocity: 0.30
+    # 高于近地段时允许的缓降高度范围上边界
+    land_slow_height_m: 0.35
+    # 提前进入近地减速的高度
+    land_near_ground_height_m: 0.18
+    # 近地阶段的目标下降速度
+    land_near_ground_velocity: 0.10
+    # 最后贴地阶段的目标下降速度
+    land_touchdown_velocity: 0.04
+    # 降落位置参考前视时间，越小越不容易“往地里压”
+    land_position_lookahead_time: 0.35
     # 降落近地阶段推力 RC 滤波时间常数(s)
     land_thrust_filter_tau: 0.20
-    # 近地阶段允许的最大推力
-    land_near_ground_thrust_max: 0.31
+    # 近地阶段允许的最大推力，建议不要低于悬停推力
+    land_near_ground_thrust_max: 0.40
     # 触地确认阶段允许的最大推力
     land_touchdown_thrust_max: 0.05
 
@@ -132,7 +142,7 @@ sunray_controller_param:
   pos_ki: [0.0, 0.0, 0.2]
   pos_kd: [0.0, 0.0, 0.0]
   # 速度环PID参数
-  vel_kp: [2.0, 2.0, 1.5]
+  vel_kp: [2.0, 2.0, 3]
   vel_ki: [0.0, 0.0, 0.0]
   vel_kd: [0.0, 0.0, 0.0]
   # 位置/速度环反馈加速度限幅；太小会让控制器看起来“对误差不敏感”

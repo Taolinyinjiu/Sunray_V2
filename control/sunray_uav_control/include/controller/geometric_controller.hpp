@@ -196,6 +196,11 @@ class Geometric_Controller : public Controller_Interface {
     bool land_near_ground_{false};
     ros::Time land_touchground_time_{ros::Time(0)};  // 触地并等待上锁的计时
     double land_max_velocity_{0.3};  // 降落最大速度（首次进入 land() 时由参数写入）
+    double land_slow_height_m_{0.35};
+    double land_near_ground_height_m_{0.18};
+    double land_near_ground_velocity_{0.10};
+    double land_touchdown_velocity_{0.04};
+    double land_position_lookahead_time_{0.35};
     double land_thrust_filter_tau_{0.20};
     double land_near_ground_thrust_max_{0.31};
     double land_touchdown_thrust_max_{0.05};

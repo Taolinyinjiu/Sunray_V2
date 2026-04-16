@@ -516,18 +516,86 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
         land_yaw_ = mavros_helper_.get_yaw_rad();
         land_max_velocity_ = max_land_velocity;
         land_near_ground_ = false;
+        land_touchground_time_ = ros::Time(0);
+        start_land_time_ = ros::Time(0);
         land_thrust_filter_ = RCThrustFilterState{};
     }
 
-    // 时基降落：目标 z 随时间线性下降
-    double elapsed = (now - landing_time_).toSec();
-    double target_z = land_point_.z() - land_max_velocity_ * elapsed;
-    // 防止目标高度无限下降，限制在地面以下 0.2m
-    target_z = std::max(target_z, takeoff_ground_height_ - 0.2);
+    const double height_above_ground =
+        std::max(0.0, uav_odometry_.position.z() - takeoff_ground_height_);
+    const double slow_height =
+        std::max(land_slow_height_m_, land_near_ground_height_m_ + 0.05);
+    const double far_descent_speed =
+        std::max(land_touchdown_velocity_, std::max(0.05, land_max_velocity_));
+    const double near_descent_speed =
+        std::clamp(land_near_ground_velocity_, land_touchdown_velocity_, far_descent_speed);
+    const double touchdown_descent_speed =
+        std::clamp(land_touchdown_velocity_, 0.01, near_descent_speed);
+
+    double desired_descent_speed = far_descent_speed;
+    if (height_above_ground <= land_near_ground_height_m_) {
+        const double blend =
+            std::clamp(height_above_ground / std::max(land_near_ground_height_m_, 1e-3), 0.0, 1.0);
+        desired_descent_speed =
+            touchdown_descent_speed + blend * (near_descent_speed - touchdown_descent_speed);
+    } else if (height_above_ground <= slow_height) {
+        const double blend = std::clamp((height_above_ground - land_near_ground_height_m_) /
+                                            std::max(slow_height - land_near_ground_height_m_, 1e-3),
+                                        0.0,
+                                        1.0);
+        desired_descent_speed =
+            near_descent_speed + blend * (far_descent_speed - near_descent_speed);
+    }
+
+    const bool near_ground = height_above_ground <= land_near_ground_height_m_;
+    const bool xy_velocity_low = std::abs(uav_odometry_.velocity.x()) < 0.10 &&
+                                 std::abs(uav_odometry_.velocity.y()) < 0.10;
+    const bool z_velocity_low =
+        std::abs(uav_odometry_.velocity.z()) < std::max(0.08, touchdown_descent_speed + 0.04);
+    const bool velocity_low = xy_velocity_low && z_velocity_low;
+
+    bool landed_by_velocity = false;
+    const bool touchdown_window = height_above_ground <= 0.05;
+    if (touchdown_window && velocity_low) {
+        if (start_land_time_ == ros::Time(0)) {
+            start_land_time_ = now;
+        } else if ((now - start_land_time_).toSec() > 1.0) {
+            landed_by_velocity = true;
+        }
+    } else {
+        start_land_time_ = ros::Time(0);
+    }
+
+    const control_common::LandedState px4_land_state = mavros_helper_.get_state().landed_state;
+    const bool px4_landed = (px4_land_state == control_common::LandedState::OnGround);
+    const bool landed_detected = px4_landed || landed_by_velocity;
+
+    if (near_ground && !land_near_ground_) {
+        land_near_ground_ = true;
+        controller_.reset_vertical_integral();
+        const double seed_thrust =
+            (last_setpoint_.thrust > 0.0) ? last_setpoint_.thrust : geometric_controller_param_.hover_thrust_init;
+        seed_rc_thrust_filter(land_thrust_filter_, seed_thrust, now);
+        ROS_WARN("land near_ground h=%.3f vz=%.3f vz_ref=%.3f thrust_cap=%.3f hover=%.3f",
+                 height_above_ground,
+                 uav_odometry_.velocity.z(),
+                 desired_descent_speed,
+                 land_near_ground_thrust_max_,
+                 geometric_controller_param_.hover_thrust_init);
+    }
+
+    const double lookahead_time = std::max(0.05, land_position_lookahead_time_);
+    double target_z = std::max(uav_odometry_.position.z() - desired_descent_speed * lookahead_time,
+                               takeoff_ground_height_);
+    double target_vz = -desired_descent_speed;
+    if (landed_detected || land_touchground_time_ != ros::Time(0)) {
+        target_z = std::max(uav_odometry_.position.z(), takeoff_ground_height_);
+        target_vz = 0.0;
+    }
 
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = Eigen::Vector3d(land_point_.x(), land_point_.y(), target_z);
-    des_state.velocity = Eigen::Vector3d(0.0, 0.0, -land_max_velocity_);
+    des_state.velocity = Eigen::Vector3d(0.0, 0.0, target_vz);
     des_state.acceleration = Eigen::Vector3d::Zero();
     des_state.jerk = Eigen::Vector3d::Zero();
     des_state.yaw = land_yaw_;
@@ -557,38 +625,10 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     }
     setpoint.thrust = output.thrust;
 
-    // 触地判断：靠近地面 + 三轴速度均低
-    bool near_ground = uav_odometry_.position.z() <= takeoff_ground_height_ + 0.05;
-    const bool velocity_low = std::abs(uav_odometry_.velocity.x()) < 0.1 &&
-                              std::abs(uav_odometry_.velocity.y()) < 0.1 &&
-                              std::abs(uav_odometry_.velocity.z()) < 0.1;
-
-    bool landed_by_velocity = false;
-    if (near_ground && velocity_low) {
-        if (start_land_time_ == ros::Time(0)) {
-            start_land_time_ = now;
-        } else if ((now - start_land_time_).toSec() > 2.0) {
-            landed_by_velocity = true;
-        }
-    } else {
-        start_land_time_ = ros::Time(0);
-    }
-
-    control_common::LandedState px4_land_state = mavros_helper_.get_state().landed_state;
-    bool px4_landed = (px4_land_state == control_common::LandedState::OnGround);
-    const bool landed_detected = px4_landed || landed_by_velocity;
-
-    if (near_ground && !land_near_ground_) {
-        land_near_ground_ = true;
-        const double seed_thrust =
-            (last_setpoint_.thrust > 0.0) ? last_setpoint_.thrust : setpoint.thrust;
-        seed_rc_thrust_filter(land_thrust_filter_, seed_thrust, now);
-    }
-
     // 靠近地面或已触地时对推力做 RC 平滑收敛，减少压地/反弹时的突变。
-    if (land_near_ground_ || landed_by_velocity) {
+    if (land_near_ground_ || landed_detected) {
         const double thrust_cap =
-            landed_by_velocity ? land_touchdown_thrust_max_ : land_near_ground_thrust_max_;
+            landed_detected ? land_touchdown_thrust_max_ : land_near_ground_thrust_max_;
         const double thrust_target = std::clamp(setpoint.thrust, 0.02, thrust_cap);
         setpoint.thrust = update_rc_thrust_filter(land_thrust_filter_,
                                                   thrust_target,
@@ -596,9 +636,15 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
                                                   now);
     }
 
-    if (landed_detected && landed_by_velocity) {
+    if (landed_detected) {
         if (land_touchground_time_ == ros::Time(0)) {
             land_touchground_time_ = now;
+            controller_.reset_vertical_integral();
+            ROS_INFO("land touchdown_hold z=%.3f vz=%.3f px4=%d vel=%d",
+                     uav_odometry_.position.z(),
+                     uav_odometry_.velocity.z(),
+                     px4_landed ? 1 : 0,
+                     landed_by_velocity ? 1 : 0);
         }
         if ((now - land_touchground_time_).toSec() > 1.0) {
             mavros_helper_.set_arm(false);
@@ -1188,6 +1234,26 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
             land_thrust_filter_tau_ =
                 std::max(1e-3, takeoff_land_param["land_thrust_filter_tau"].as<double>());
         }
+        if (takeoff_land_param["land_slow_height_m"]) {
+            land_slow_height_m_ =
+                std::max(0.10, takeoff_land_param["land_slow_height_m"].as<double>());
+        }
+        if (takeoff_land_param["land_near_ground_height_m"]) {
+            land_near_ground_height_m_ =
+                std::max(0.05, takeoff_land_param["land_near_ground_height_m"].as<double>());
+        }
+        if (takeoff_land_param["land_near_ground_velocity"]) {
+            land_near_ground_velocity_ =
+                std::max(0.02, takeoff_land_param["land_near_ground_velocity"].as<double>());
+        }
+        if (takeoff_land_param["land_touchdown_velocity"]) {
+            land_touchdown_velocity_ =
+                std::max(0.01, takeoff_land_param["land_touchdown_velocity"].as<double>());
+        }
+        if (takeoff_land_param["land_position_lookahead_time"]) {
+            land_position_lookahead_time_ =
+                std::max(0.05, takeoff_land_param["land_position_lookahead_time"].as<double>());
+        }
         if (takeoff_land_param["land_near_ground_thrust_max"]) {
             land_near_ground_thrust_max_ =
                 std::clamp(takeoff_land_param["land_near_ground_thrust_max"].as<double>(), 0.02, 0.95);
@@ -1198,6 +1264,17 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         }
         if (!has_takeoff_ramp_time) {
             takeoff_ramp_time_ = std::max(1e-3, motors_speedup_time_);
+        }
+        land_slow_height_m_ = std::max(land_slow_height_m_, land_near_ground_height_m_ + 0.05);
+        land_near_ground_velocity_ =
+            std::min(land_near_ground_velocity_, std::max(0.05, land_max_velocity_));
+        land_touchdown_velocity_ =
+            std::min(land_touchdown_velocity_, land_near_ground_velocity_);
+        if (land_near_ground_thrust_max_ < geometric_controller_param_.hover_thrust_init) {
+            ROS_WARN("land_near_ground_thrust_max %.3f < hover_thrust %.3f, clamp to hover thrust",
+                     land_near_ground_thrust_max_,
+                     geometric_controller_param_.hover_thrust_init);
+            land_near_ground_thrust_max_ = geometric_controller_param_.hover_thrust_init;
         }
         land_touchdown_thrust_max_ =
             std::min(land_touchdown_thrust_max_, land_near_ground_thrust_max_);
