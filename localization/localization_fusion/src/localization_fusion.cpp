@@ -1,5 +1,6 @@
 #include "localization_fusion.hpp"
 #include "string_uav_namespace_utils.hpp"
+#include "uav_param_utils.hpp"
 #include <Eigen/Dense>
 #include <stdexcept>
 #include <sunray_msgs/OdomStatus.h>
@@ -33,21 +34,8 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
         // 读取失败，抛出异常
         throw std::runtime_error("missing param" + node_name + "/use_receive_time");
     }
-    // 读取全局参数
-    std::string uav_name;
-    int uav_id;
-    if (!nh_.getParam("/uav_name", uav_name)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param /uav_name");
-    }
-    if (!nh_.getParam("/uav_id", uav_id)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param /uav_id");
-    }
-    // 拼接uav_ns
-    uav_ns_ = uav_name + std::to_string(uav_id);
-    // 标准化
-    uav_ns_ = sunray_common::normalize_uav_ns(uav_ns_);
+    // 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
+    uav_ns_ = localization_fusion::load_uav_namespace_or_throw(nh_);
 }
 
 bool LocalizationFusion::load_param() {

@@ -1,0 +1,42 @@
+<launch>
+  <!-- 中文说明：ORCA 单机启动文件 -->
+  <!-- 可调参数范围：agent_id >=1，agent_num >=1，agent_name=uav/ugv -->
+  <!-- orca_params: neighborDist/timeHorizon/timeHorizonObst/radius/maxSpeed/time_step -->
+  <!-- geo_fence: 边界范围（米），建议覆盖飞行区域 -->
+
+  <arg name="agent_id" default="1"/>
+  <arg name="agent_num" default="1"/>
+  <arg name="agent_name" default="uav"/>
+
+  <arg name="neighborDist" default="1.5"/>
+  <arg name="timeHorizon" default="2.0"/>
+  <arg name="timeHorizonObst" default="2.0"/>
+  <arg name="radius" default="0.3"/>
+  <arg name="maxSpeed" default="0.5"/>
+  <arg name="time_step" default="0.1"/>
+
+  <arg name="geo_min_x" default="-5.0"/>
+  <arg name="geo_max_x" default="5.0"/>
+  <arg name="geo_min_y" default="-5.0"/>
+  <arg name="geo_max_y" default="5.0"/>
+
+  <arg name="node_name" default="orca_node"/>
+
+  <node pkg="sunray_swarm" type="orca_node" name="$(arg node_name)" output="screen">
+    <param name="agent_id" value="$(arg agent_id)"/>
+    <param name="agent_num" value="$(arg agent_num)"/>
+    <param name="agent_name" value="$(arg agent_name)"/>
+
+    <param name="orca_params/neighborDist" value="$(arg neighborDist)"/>
+    <param name="orca_params/timeHorizon" value="$(arg timeHorizon)"/>
+    <param name="orca_params/timeHorizonObst" value="$(arg timeHorizonObst)"/>
+    <param name="orca_params/radius" value="$(arg radius)"/>
+    <param name="orca_params/maxSpeed" value="$(arg maxSpeed)"/>
+    <param name="orca_params/time_step" value="$(arg time_step)"/>
+
+    <param name="geo_fence/min_x" value="$(arg geo_min_x)"/>
+    <param name="geo_fence/max_x" value="$(arg geo_max_x)"/>
+    <param name="geo_fence/min_y" value="$(arg geo_min_y)"/>
+    <param name="geo_fence/max_y" value="$(arg geo_max_y)"/>
+  </node>
+</launch>

@@ -1,0 +1,29 @@
+# Build and generated files
+build/
+devel/
+install/
+.catkin_workspace
+.catkin_tools/
+
+# ROS logs and data
+log/
+logs/
+*.log
+*.bag
+*.bag.active
+*.bag.orig
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db

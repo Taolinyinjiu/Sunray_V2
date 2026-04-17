@@ -1,6 +1,7 @@
 #include "statemachine/sunray_fsm.hpp"
 #include "statemachine/sunray_fsm_loadparam.hpp"
 #include "string_uav_namespace_utils.hpp"
+#include "utils/uav_param_utils.hpp"
 #include <stdexcept>
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
@@ -329,26 +330,8 @@ bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
 }
 // 从yaml文件中加载参数
 void Sunray_FSM::load_param() {
-    // 1. 读取uav_name 与 uav_id,拼接uav_ns并标准化
-    std::string uav_name;
-    int uav_id;
-    if (nh_.getParam("/uav_name", uav_name)) {
-        if (uav_name.empty()) {  // 如果为空，抛出异常
-            throw std::runtime_error("uav_name connot be empty");
-        }
-    } else {  // 如果读取失败，抛出异常
-        throw std::runtime_error("missing param /uav_name");
-    }
-    if (nh_.getParam("/uav_id", uav_id)) {
-        if (uav_id <= 0)
-            throw std::runtime_error("/uav_id cannot <= 0");
-    } else {
-        throw std::runtime_error("missing param /uav_id");
-    }
-    // 拼接uav_name+uav_id
-    std::string uav_ns = uav_name + std::to_string(uav_id);
-    // 标准化
-    uav_ns_ = sunray_common::normalize_uav_ns(uav_ns);
+    // 1. 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
+    uav_ns_ = sunray_control::load_uav_namespace_or_throw(nh_);
     // 2. 读取config.yaml路径
     // 读取节点名
     std::string node_name = ros::this_node::getName();

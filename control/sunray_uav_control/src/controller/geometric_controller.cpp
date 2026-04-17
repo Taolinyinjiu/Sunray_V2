@@ -1,6 +1,7 @@
 #include "controller/geometric_controller.hpp"
 #include "string_uav_namespace_utils.hpp"
 #include "eigen_helper.hpp"
+#include "utils/uav_param_utils.hpp"
 #include <sunray_msgs/UAVControllerState.h>
 #include <ros/ros.h>
 #include <yaml-cpp/yaml.h>
@@ -22,21 +23,7 @@ Geometric_Controller::Geometric_Controller(ros::NodeHandle& nh) : nh_(nh), mavro
         throw std::runtime_error("missing param " + node_name + "/config_yamlfile_path");
     }
 
-    std::string uav_name;
-    int uav_id;
-    if (nh_.getParam("/uav_name", uav_name)) {
-        if (uav_name.empty()) {
-            throw std::runtime_error("uav_name cannot be empty");
-        }
-    } else {
-        throw std::runtime_error("missing param /uav_name");
-    }
-    if (!nh_.getParam("/uav_id", uav_id)) {
-        throw std::runtime_error("missing param /uav_id");
-    }
-
-    uav_ns_ = uav_name + std::to_string(uav_id);
-    uav_ns_ = sunray_common::normalize_uav_ns(uav_ns_);
+    uav_ns_ = sunray_control::load_uav_namespace_or_throw(nh_);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

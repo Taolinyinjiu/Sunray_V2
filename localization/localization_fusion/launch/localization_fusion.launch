@@ -7,6 +7,14 @@
   <arg name="health_rate_hz" default="10.0" />
   <!-- 是否使用localization_fusion节点接收时刻时间戳替代定位源发送时刻时间戳 -->
   <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
+  <arg name="uav_name" default="uav" />
+  <arg name="uav_id" default="1" />
+  <arg name="node_name" default="localization_fusion" />
+  <arg name="set_global_params" default="true" />
+  <arg name="test" default="false" />
+
+  <param if="$(arg set_global_params)" name="/uav_name" value="$(arg uav_name)" />
+  <param if="$(arg set_global_params)" name="/uav_id" value="$(arg uav_id)" />
 
   <!-- 根据不同的定位源，启动不同的子launch -->
   <group if="$(eval int(arg('source_id')) == 0)">
@@ -31,11 +39,13 @@
   </group>
 
   <!-- 启动融合节点 -->
-  <node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion" output="screen">
+  <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg node_name)" output="screen">
     <!-- 将参数设置为节点私有参数 -->
     <param name="source_id" value="$(arg source_id)" />
     <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
     <param name="health_rate_hz" value="$(arg health_rate_hz)" />
     <param name="use_receive_time" value="$(arg use_receive_time)" />
+    <param name="uav_name" value="$(arg uav_name)" />
+    <param name="uav_id" value="$(arg uav_id)" />
   </node>
 </launch>

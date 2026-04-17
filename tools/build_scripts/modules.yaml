@@ -146,6 +146,12 @@ modules:
     source_path: "localization/sunray_viobot"
     build_path: "build/sunray_viobot"
     dependencies: []
+  # 集群功能包
+  sunray_swarm:
+    description: "sunray_swarm 功能包"
+    source_path: "swarm/"
+    build_path: "build/sunray_swarm"
+    dependencies: [sunray_msgs]
 
 # ========== 预定义组 ==========
 # 直接基于 build_deprecated 目录的脚本内容
@@ -201,6 +207,21 @@ groups:
         "sunray_mocap",
         "fast_lio",
         "sunray_gimbal",
+      ]
+
+  Swarm:
+    description: "集群功能包"
+    modules: 
+      [
+        "sunray_common",
+        "sunray_msgs",
+        "sunray_mavros",
+        "vrpn_client_ros",
+        "px4_bridge",
+        "localization_fusion",
+        "uav_control",
+        "sunray_swarm",
+        "sunray_simulator"
       ]
 
 # ========== 构建配置 ==========

@@ -1,5 +1,6 @@
 #include "mavros_helper/mavros_helper.hpp"
 #include "string_uav_namespace_utils.hpp"
+#include "utils/uav_param_utils.hpp"
 #include <stdexcept>
 
 #include <geometry_msgs/PoseStamped.h>
@@ -11,22 +12,8 @@
 MavrosHelper::MavrosHelper(ros::NodeHandle& nh) {
     // 缓存句柄
     nh_ = nh;
-    // 使用全局参数构造uav_ns_
-    std::string uav_name;
-    int uav_id;
-    if (!nh.getParam("/uav_name", uav_name)) {
-        // 抛出异常
-        throw std::runtime_error("missing param /uav_name");
-    }
-    if (!nh.getParam("/uav_id", uav_id)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param /uav_id");
-    }
-    // 拼接uav_ns
-    uav_ns_ = uav_name + std::to_string(uav_id);
-    // 标准化
-    uav_ns_ = sunray_common::normalize_uav_ns(uav_ns_);
-    // clang-format on
+    // 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
+    uav_ns_ = sunray_control::load_uav_namespace_or_throw(nh_);
 }
 
 bool MavrosHelper::init(MavrosHelper_ConfigList config_list) {

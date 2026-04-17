@@ -1,0 +1,6 @@
+<launch>
+  <!-- 中文说明：键盘控制节点启动文件 -->
+  <!-- 用途：人工发布 /sunray/formation_cmd 指令（切阵型/起降/悬停/返航） -->
+
+  <node pkg="sunray_swarm" type="uav_command_pub" name="formation_switch_node" output="screen" />
+</launch>

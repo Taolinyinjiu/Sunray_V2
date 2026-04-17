@@ -1,0 +1,4 @@
+<launch>
+  <!-- TUI formation tool with custom offsets -->
+  <node pkg="sunray_swarm" type="formation_tui" name="formation_tui" output="screen" />
+</launch>

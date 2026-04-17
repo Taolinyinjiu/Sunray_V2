@@ -16,12 +16,17 @@ find_package(catkin REQUIRED COMPONENTS
 ## Add message definitions after creating files under msg/
 add_message_files(
   FILES
+  FormationOffsets.msg
   OdomStatus.msg
+  OrcaCmd.msg
+  OrcaSetup.msg
   Px4State.msg
-  Vector2.msg
   UAVControlCMD.msg
   UAVControlFSMState.msg
   UAVControllerState.msg
+  UAVSwarmCMD.msg
+  UGVSwarmCMD.msg
+  Vector2.msg
 )
 
 ## Add service definitions after creating files under srv/
