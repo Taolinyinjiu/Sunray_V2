@@ -168,6 +168,8 @@ int main(int argc, char** argv) {
             cmd.desired_pos.x = x;
             cmd.desired_pos.y = y;
             cmd.desired_pos.z = z;
+            cmd.desired_yaw = 0.0;
+            cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
             ROS_INFO("Publish %s [%.2f, %.2f, %.2f]", title.c_str(), x, y, z);
             break;
         }

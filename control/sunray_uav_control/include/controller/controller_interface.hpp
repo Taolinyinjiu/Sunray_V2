@@ -3,6 +3,7 @@
 #include "control_data_types/uav_state_estimate.hpp"
 #include "control_data_types/controller_desired_types.hpp"
 #include <geographic_msgs/GeoPoint.h>
+
 class Controller_Interface {
   public:
     virtual ~Controller_Interface() = default;
@@ -11,9 +12,9 @@ class Controller_Interface {
     virtual bool is_ready() = 0;
     // -------------状态注入---------------
     virtual void set_current_odom(const control_common::UAVStateEstimate& odom) = 0;
+    // 模式切换,本函数在状态机为INIT模式时触发,要求切换px4的模式为position模式,切断setpoint流传输 
+    virtual void set_position_mode() = 0;
     // -------------运动相关接口-------------
-    // 在地面，保持setpoint流，该函数用于状态机INIT阶段保持setpoint流持续发布，设置为-100的z轴推力
-    virtual void on_ground_keep_setpoint() = 0;
     // 触发起飞，参数为起飞高度和最大起飞速度
     virtual bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) = 0;
     // 触发降落，参数为降落类型和最大降落速度
@@ -43,6 +44,7 @@ class Controller_Interface {
     // ---------------------控制器状态发布接口----------------------
     virtual void pub_controller_state() = 0;
     // 为了将Sunray_FSM与Mavros/PX4解耦，这里还是决定，参数由控制器自己读取yaml文件而不是函数传递
-
+    // ---------------------控制器日志流发布接口----------------------
+    virtual void printf_logs() = 0;
   protected:
 };

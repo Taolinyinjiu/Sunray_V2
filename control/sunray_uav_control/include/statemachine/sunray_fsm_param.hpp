@@ -19,7 +19,7 @@ namespace sunray_fsm {
 struct basic_param_t {
     double mass_kg{0.0};
     double gravity{0.0};
-    double hover_thrust_precent{0.0};
+    double hover_thrust_percent{0.0};
     uint8_t controller_types{0};
     double controller_update_frequency{0.0};
     double supervisor_update_frequency{0.0};
@@ -51,6 +51,7 @@ struct takeoff_land_param_t {
     double takeoff_max_velocity{0.0};
     uint8_t land_type{0};
     double land_max_velocity{0.0};
+    bool return_with_land{true};
 };
 // -------------------到达稳定判定参数--------------
 struct arrival_judge_param_t {

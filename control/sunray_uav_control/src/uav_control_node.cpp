@@ -43,7 +43,8 @@ int main(int argc, char** argv) {
     while (ros::ok() && !stop_request) {
         // 状态机更新
         sunray_fsm.process();
-        // 日志打印？
+        // 打印运行过程中的状态日志
+        sunray_fsm.show_logs();
         rate.sleep();
     }
     // 打印退出日志

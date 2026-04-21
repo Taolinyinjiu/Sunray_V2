@@ -101,8 +101,8 @@ struct Geometric_AttitudeControl_DebugState_t {
 };
 
 enum class ThrustCommandPolicy : uint8_t {
-    Auto = 0,
-    ForceLinear,
+    UseEstimatedAnchor = 0,
+    UseFixedAnchor,
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -123,7 +123,8 @@ class Geometric_AttitudeControl {
     Geometric_AttitudeControl_Output_t
     calculateControl(const controller_data_types::TargetTrajectoryPoint_t& des_state,
                      const control_common::UAVStateEstimate& current_odom,
-                     ThrustCommandPolicy thrust_policy = ThrustCommandPolicy::Auto);
+                     ThrustCommandPolicy thrust_policy =
+                         ThrustCommandPolicy::UseEstimatedAnchor);
 
     // 纯速度控制接口
     // 输入：期望速度 + 当前里程计
@@ -131,10 +132,12 @@ class Geometric_AttitudeControl {
     Geometric_AttitudeControl_Output_t
     calculateVelocityControl(const controller_data_types::TargetVelocity_t& des_state,
                              const control_common::UAVStateEstimate& current_odom,
-                             ThrustCommandPolicy thrust_policy = ThrustCommandPolicy::Auto);
+                             ThrustCommandPolicy thrust_policy =
+                                 ThrustCommandPolicy::UseEstimatedAnchor);
 
     // 向悬停推力估计器注入观测数据
     void feed_thrust_estimator(const thrust_estimator::Input_t& input);
+    void seed_hover_thrust_estimator(double hover_thrust);
 
     // 获取最近一次控制计算的调试快照，供 controller 层发布状态分析话题。
     const Geometric_AttitudeControl_DebugState_t& get_last_debug_state() const {
@@ -165,14 +168,6 @@ class Geometric_AttitudeControl {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   private:
-    enum class ThrustModelMode : uint8_t {
-        LinearFallback = 0,
-        LinearForced,
-        LowPassEstimator,
-        RLSEstimator,
-        KalmanEstimator,
-    };
-
     Geometric_AttitudeControl_Param_t param_;
 
     // 由 attitude_type 决定运行时实例类型（0: Quaternion_Solver, 1: SO3_Solver）
@@ -194,24 +189,15 @@ class Geometric_AttitudeControl {
     double last_desired_yaw_{0.0};
     Control_Type last_control_type_{Control_Type::Undefine_};
 
-    // 推力估计更新使用上一拍已输出的推力命令，保持与 controller 发布时序一致
-    double last_thrust_cmd_{0.0};
-    double pending_thrust_cmd_{0.0};
-    bool has_pending_thrust_cmd_{false};
-    ThrustModelMode last_thrust_model_mode_{ThrustModelMode::LinearFallback};
-    bool thrust_model_mode_initialized_{false};
     Geometric_AttitudeControl_DebugState_t last_debug_state_{};
 
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法
 
-    void advance_thrust_command_history();
-    void maybe_seed_estimator_from_last_linear_command(double thrust_acc);
-    double map_thrust_acc_to_hover_anchor(double thrust_acc) const;
-    double compose_thrust_command(double thrust_acc, ThrustCommandPolicy thrust_policy);
-    ThrustModelMode get_hover_estimator_mode() const;
-    static const char* thrust_model_mode_name(ThrustModelMode mode);
-    void log_thrust_model_usage(ThrustModelMode mode, double thrust_cmd, double hover_thrust);
+    double select_hover_anchor(ThrustCommandPolicy thrust_policy) const;
+    double normalize_collective_acc(double collective_acc, double hover_anchor) const;
+    double compose_thrust_command(double collective_acc,
+                                  ThrustCommandPolicy thrust_policy) const;
     static double wrap_angle(double angle_rad);
     Eigen::Vector3d compute_attitude_error(const Eigen::Quaterniond& curr_att,
                                            const Eigen::Quaterniond& ref_att) const;

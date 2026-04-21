@@ -74,16 +74,10 @@ void RLS_HoverThrustEstimator::update(const Input_t& input) {
 
         if (!std::isfinite(thr2acc_) || thr2acc_ <= 1e-6) {
             thr2acc_ = gravity_ / std::max(hover_thrust_, 1e-3);
-#ifdef DEBUG
-            ROS_WARN_THROTTLE(1.0, "rls:init thr2acc=%.3f ht=%.3f", thr2acc_, hover_thrust_);
-#endif
         }
 
         const double thrust_cmd = candidate.thrust_cmd;
         if (thrust_cmd <= 0.02 || thrust_cmd >= 0.95) {
-#ifdef DEBUG
-            ROS_WARN_THROTTLE(1.0, "rls:skip u=%.3f", thrust_cmd);
-#endif
             input_history_.pop_front();
             return;
         }
@@ -92,9 +86,6 @@ void RLS_HoverThrustEstimator::update(const Input_t& input) {
         const double tilt_cos = std::clamp(zb.dot(Eigen::Vector3d::UnitZ()), -1.0, 1.0);
         const double phi = thrust_cmd * tilt_cos;  // mapped z-axis collective thrust
         if (std::abs(phi) < 1e-3) {
-#ifdef DEBUG
-            ROS_WARN_THROTTLE(1.0, "rls:skip phi=%.4f", phi);
-#endif
             input_history_.pop_front();
             return;
         }
@@ -108,14 +99,6 @@ void RLS_HoverThrustEstimator::update(const Input_t& input) {
         thr2acc_ = std::max(thr2acc_ + K * (y - phi * thr2acc_), 1e-3);
         P_ = std::max((1.0 - K * phi) * P_ / rho2_, 1e-9);
         hover_thrust_ = std::clamp(gravity_ / thr2acc_, hover_thrust_min_, hover_thrust_max_);
-#ifdef DEBUG
-        ROS_INFO_THROTTLE(1.0, "rls ht=%.3f u=%.3f y=%.3f phi=%.3f k=%.3f",
-                          hover_thrust_,
-                          thrust_cmd,
-                          y,
-                          phi,
-                          K);
-#endif
 
         input_history_.pop_front();
         while (input_history_.size() > 100) {

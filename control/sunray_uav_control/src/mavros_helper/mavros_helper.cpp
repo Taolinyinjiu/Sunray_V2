@@ -8,6 +8,29 @@
 #include <mavros_msgs/CommandBool.h>
 
 #include <sunray_msgs/Px4State.h>
+
+namespace {
+
+constexpr uint8_t kPx4CustomMainModeAuto = 4;
+constexpr uint8_t kPx4CustomSubModeExternal1 = 11;
+
+uint32_t px4_external_mode_custom_mode(uint8_t external_mode_index) {
+    if (external_mode_index < 1 || external_mode_index > 8) {
+        return 0;
+    }
+
+    const uint8_t custom_sub_mode =
+        static_cast<uint8_t>(kPx4CustomSubModeExternal1 + external_mode_index - 1);
+    return (static_cast<uint32_t>(custom_sub_mode) << 24) |
+           (static_cast<uint32_t>(kPx4CustomMainModeAuto) << 16);
+}
+
+std::string px4_external_mode_string(uint8_t external_mode_index) {
+    return std::to_string(px4_external_mode_custom_mode(external_mode_index));
+}
+
+}  // namespace
+
 // 构造函数
 MavrosHelper::MavrosHelper(ros::NodeHandle& nh) {
     // 缓存句柄
@@ -246,11 +269,29 @@ bool MavrosHelper::set_px4_mode(control_common::FlightMode flight_mode) {
     case control_common::FlightMode::AutoTakeoff:
         px4_mode.request.custom_mode = "AUTO.TAKEOFF";
         break;
+    case control_common::FlightMode::Raptor:
+        return set_px4_external_mode(1);
     case control_common::FlightMode::Undefined:  // 检查是否传入了一个不合理的值
         return false;
     default:
         return false;
     }
+    return px4_mode_client_.call(px4_mode) && px4_mode.response.mode_sent;
+}
+
+bool MavrosHelper::set_px4_external_mode(uint8_t external_mode_index) {
+    if (config_cache_.uav_control_handle == false) {
+        return false;
+    }
+
+    const uint32_t custom_mode = px4_external_mode_custom_mode(external_mode_index);
+    if (custom_mode == 0) {
+        return false;
+    }
+
+    mavros_msgs::SetMode px4_mode;
+    px4_mode.request.base_mode = 0;
+    px4_mode.request.custom_mode = std::to_string(custom_mode);
     return px4_mode_client_.call(px4_mode) && px4_mode.response.mode_sent;
 }
 
@@ -386,6 +427,7 @@ bool MavrosHelper::pub_px4_state() {
     px4_state_msg.rc_available = mavros_state_data_.rc_input;
     px4_state_msg.armed = mavros_state_data_.armed;
     // 由于flight_mode与mavros_msgs中一一对应，这里使用类型转换来填充
+    // TODO：由于mavros的映射中不存在Rpator，因此这里的逻辑需要进行修改
     px4_state_msg.flight_mode = static_cast<uint8_t>(mavros_state_data_.flight_mode);
     px4_state_msg.flight_mode_name = flightmode_to_string(mavros_state_data_.flight_mode);
     px4_state_msg.system_status = mavros_state_data_.system_status;
@@ -508,6 +550,8 @@ void MavrosHelper::mavros_state_callback(const mavros_msgs::State& msg) {
         mavros_state_data_.flight_mode = control_common::FlightMode::AutoReady;
     } else if (msg.mode == mavros_msgs::State::MODE_PX4_TAKEOFF) {
         mavros_state_data_.flight_mode = control_common::FlightMode::AutoTakeoff;
+    } else if (msg.mode == "CMODE(" + px4_external_mode_string(1) + ")") {
+        mavros_state_data_.flight_mode = control_common::FlightMode::Raptor;
     } else {
         mavros_state_data_.flight_mode = control_common::FlightMode::Undefined;
     }

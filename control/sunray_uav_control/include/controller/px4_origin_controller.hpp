@@ -28,9 +28,12 @@
 #pragma once
 #include "controller/controller_interface.hpp"
 #include "mavros_helper/mavros_helper.hpp"
+#include "utils/arrival_helper.hpp"
 #include <px4_param_manager/px4_param_manager.h>
 #include <ros/node_handle.h>
 #include <string>
+#include <atomic>
+#include <mutex>
 #include "utils/quintic_curve.hpp"
 // 在这里构造参数结构体？对于原生控制器，要检查什么参数呢
 struct Original_Param {
@@ -51,7 +54,7 @@ class PX4_OriginController : public Controller_Interface {
     void set_current_odom(const control_common::UAVStateEstimate& odom) override;
     // -------------运动相关接口------------
     // 在地面，保持setpoint流，该函数用于状态机INIT阶段保持setpoint流持续发布，设置为-100的z轴推力
-    void on_ground_keep_setpoint() override;
+    void set_position_mode() override;
     // 触发起飞，参数为起飞高度和最大起飞速度
     bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) override;
     // 触发降落，参数为降落类型和最大降落速度
@@ -80,7 +83,28 @@ class PX4_OriginController : public Controller_Interface {
     bool is_point_complete() override;
     // ----------------------控制器状态话题更新函数-----------------
     void pub_controller_state() override;  // 发布controller_state
+    void printf_logs() override;           // 为 Sunray_FSM 提供同步日志输出
   private:
+    struct LogSnapshot {
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        bool controller_ready{false};
+        bool takeoff_complete{false};
+        bool land_complete{false};
+        bool point_complete{false};
+        bool has_uav_odometry{false};
+        bool can_fuse{false};
+
+        control_common::Mavros_State px4_state{};
+        control_common::UAVStateEstimate odom{};
+        control_common::Mavros_SetpointLocal px4_local_target{};
+        control_common::Mavros_SetpointAttitude px4_attitude_target{};
+        control_common::Mavros_SetpointLocal last_setpoint{};
+        controller_data_types::TargetTrajectoryPoint_t desired_state{};
+        Eigen::Vector3d hover_point{Eigen::Vector3d::Zero()};
+        double hover_yaw{0.0};
+    };
+
     // ----------------------配置相关-----------------------
     std::string config_yamlfile_path_;
     std::string uav_ns_;
@@ -93,11 +117,10 @@ class PX4_OriginController : public Controller_Interface {
 
     bool check_px4_basic_state();      // 检查px4飞控的状态
     bool check_mavros_stream_ready();  // 检查mavros_helper是否在稳定的更新数据
-    bool check_odom_freshness();       // 检查外部里程计数据是否新鲜
-    bool check_odom_for_fusion(
-        control_common::UAVStateEstimate& fuse_odom);  // 检查本次用于融合的里程计是否有效
     void cache_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint);
-    bool controller_ready_ = false;
+    void update_log_snapshot();
+    LogSnapshot get_log_snapshot() const;
+    std::atomic<bool> controller_ready_{false};
     // ---------------------定时器回调函数---------------------
     void pub_px4_state_timer_cb(const ros::TimerEvent&);    // 发布PX4State话题
     void pub_vision_fuse_timer_cb(const ros::TimerEvent&);  // 发布vision_fuse
@@ -124,17 +147,13 @@ class PX4_OriginController : public Controller_Interface {
     // arm解锁成功的触发时间
     ros::Time last_arm_time_{ros::Time(0)};
     // 到达稳定判定参数
-    double arrival_judge_stabile_time_s_{0.5};
-    double arrival_pos_stabile_err_m_{0.15};
-    double arrival_vel_stabile_err_mps_{0.15};
-    ros::Time start_checkout_takeoff_success_time_{ros::Time(0)};
+    arrival_helper::Config arrival_judge_config_{};
     // 降落阶段开始的时间
     ros::Time start_land_time_{ros::Time(0)};
     bool land_near_ground_ = false;
     ros::Time land_touchground_time_{ros::Time(0)};
-    // move稳定的时间
-    ros::Time start_move_arrive_time_{ros::Time(0)};
-    bool move_point_arrive_state_{false};
+    arrival_helper::State takeoff_arrival_state_{};
+    arrival_helper::State point_arrival_state_{};
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointLocal last_setpoint_{};
     controller_data_types::TargetPoint_t last_point_;
@@ -142,12 +161,14 @@ class PX4_OriginController : public Controller_Interface {
     Eigen::Vector3d hover_point_{Eigen::Vector3d::Zero()};  // hover 悬停点（与 linear 对齐）
     double hover_yaw_{0.0};
     // -------------------起降状态标志位--------------
-    bool takeoff_complete_{false};
-    bool land_complete_{false};
-    bool point_complete_{false};
+    std::atomic<bool> takeoff_complete_{false};
+    std::atomic<bool> land_complete_{false};
+    std::atomic<bool> point_complete_{false};
     // --------------------里程计状态---------------------
     control_common::UAVStateEstimate uav_odometry_;
-    bool has_uav_odometry_{false};
+    std::atomic<bool> has_uav_odometry_{false};
+    std::atomic<bool> can_fuse_{false};
+    ros::Time last_odom_timestamp_{ros::Time(0)};
     // --------------------期望状态--------------------
     controller_data_types::TargetTrajectoryPoint_t desired_state_;
     // ros话题发布者
@@ -155,4 +176,7 @@ class PX4_OriginController : public Controller_Interface {
     // ros定时器
     ros::Timer pub_px4_state_timer;     // 用于发布话题数据的定时器
     ros::Timer pub_vision_pose_timer_;  // 用于发布vision_pose的定时器
+
+    mutable std::mutex log_snapshot_mutex_;
+    LogSnapshot log_snapshot_{};
 };

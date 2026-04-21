@@ -34,6 +34,8 @@ std::string flightmode_to_string(control_common::FlightMode flight) {
         return "AUTO.READY";
     case control_common::FlightMode::AutoTakeoff:
         return "AUTO.TAKEOFF";
+    case control_common::FlightMode::Raptor:
+        return "RAPTOR";
     default:
         return "UNKNOWN";
     }

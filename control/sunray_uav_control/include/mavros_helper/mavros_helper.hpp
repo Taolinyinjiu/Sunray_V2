@@ -120,6 +120,8 @@ class MavrosHelper {
     bool pub_vision_pose(control_common::UAVStateEstimate uav_state);
     // 切换px4的模式，返回true并不表示切换成功，只是表示mavros或者px4接受到了这个服务的call并进行处理，需要结合其他话题数据来判断
     bool set_px4_mode(control_common::FlightMode flight_mode);
+    // 切换到 PX4 external mode 槽位，external_mode_index 从 1 开始计数。
+    bool set_px4_external_mode(uint8_t external_mode_index);
     // 解锁飞控,传入 true解锁，false上锁，返回值同上，并不表示结果，而表示这个触发的请求是否被处理
     bool set_arm(bool arm_state);
     // 紧急上锁

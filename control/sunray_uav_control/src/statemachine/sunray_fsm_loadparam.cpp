@@ -29,16 +29,14 @@ void loadBasicParam(const YAML::Node& node, sunray_fsm::basic_param_t& param) {
         }
     }
     // -----------------------归一化悬停推力----------------------
-    const YAML::Node hover_thrust_node =
-        node["hover_thrust_precent"] ? node["hover_thrust_precent"] : node["hover_thrust_percent"];
-    if (!hover_thrust_node) {
+    if (!node["hover_thrust_percent"]) {
         throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'hover_thrust_precent'");
+            "the sunray_control_config.yaml miss param 'hover_thrust_percent'");
     } else {
-        param.hover_thrust_precent = hover_thrust_node.as<double>();
-        if (param.hover_thrust_precent <= 0.0 || param.hover_thrust_precent >= 1.0) {
+        param.hover_thrust_percent = node["hover_thrust_percent"].as<double>();
+        if (param.hover_thrust_percent <= 0.0 || param.hover_thrust_percent >= 1.0) {
             throw std::runtime_error(
-                "the sunray_control_config.yaml param 'hover_thrust_precent' must in (0, 1)");
+                "the sunray_control_config.yaml param 'hover_thrust_percent' must in (0, 1)");
         }
     }
     // -----------------------控制器类型----------------------
@@ -260,12 +258,11 @@ void loadTakeoffLandParam(const YAML::Node& node, sunray_fsm::takeoff_land_param
     }
     // -----------------------指定降落模式----------------------
     if (!node["land_type"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'low_voltage_operate'");
+        throw std::runtime_error("the sunray_control_config.yaml miss param 'land_type'");
     } else {
         param.land_type = node["land_type"].as<int>();
         if (param.land_type != 0 && param.land_type != 1) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param low_voltage_operate only can 0, 1");
+            throw std::runtime_error("the sunray_control_config.yaml param 'land_type' only can 0, 1");
         }
     }
     // -----------------------降落过程中的最大速度----------------------
@@ -277,6 +274,12 @@ void loadTakeoffLandParam(const YAML::Node& node, sunray_fsm::takeoff_land_param
             throw std::runtime_error(
                 "the sunray_control_config.yaml param 'land_max_velocity' must > 0");
         }
+    }
+    // -----------------------返航到点后是否自动降落----------------------
+    if (!node["return_with_land"]) {
+        throw std::runtime_error("the sunray_control_config.yaml miss param 'return_with_land'");
+    } else {
+        param.return_with_land = node["return_with_land"].as<bool>();
     }
 }
 // 从yaml文件构造的节点中，读取arrival_judge_param字段的内容

@@ -27,7 +27,8 @@ enum class FlightMode : uint8_t {
     AutoLand,
     AutoRtgs,
     AutoReady,
-    AutoTakeoff
+    AutoTakeoff,
+    Raptor
 };
 
 std::string flightmode_to_string(control_common::FlightMode flight);

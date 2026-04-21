@@ -3,6 +3,7 @@
 build/
 devel/
 logs/
+.catkin_tools/
 
 # Media files
 *.mp4
@@ -59,3 +60,6 @@ __pycache__/
 .codex
 AGENTS.md
 CLAUDE.md
+
+# AI generated notes
+control/sunray_uav_control/ai_result/

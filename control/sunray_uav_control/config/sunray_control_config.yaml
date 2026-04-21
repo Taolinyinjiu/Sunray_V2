@@ -7,9 +7,9 @@ basic_param:
     # 重力加速度
     gravity: 9.8
     # 归一化悬停推力 (从px4的日志中直接读取)
-    hover_thrust_precent: 0.375 
-    # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller
-    controller_types: 1
+    hover_thrust_percent: 0.375 
+    # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller(不支持速度接口)
+    controller_types: 2
     # 控制器更新频率(Hz)
     controller_update_frequency: 100
     # 状态机低频监督循环频率(Hz)
@@ -53,53 +53,28 @@ msg_timeout_param: # 单位为秒(s)
     # TODO：地面站链路(不工作则不会考虑)
     sunray_station: 0.5
 
-# -------------------起飞降落参数-----------------------
+# -------------------起飞降落相关参数-----------------------
 takeoff_land_param:
     # 相对当前位置的起飞高度(米)
     takeoff_relative_height: 0.6
     # 起飞过程中的最大速度(m/s)
-    takeoff_max_velocity: 0.5
-    # 兼容旧配置：未显式指定 takeoff_ramp_time 时，作为缓升阶段时长
-    motors_speedup_time: 4.0
-    # 起飞预警阶段的怠速推力
-    takeoff_idle_thrust: 0.08
-    # 保持怠速推力用于警告的时长(s)
-    takeoff_idle_hold_time: 2.0
-    # 从怠速缓慢提升到可离地推力的时间(s)
-    takeoff_ramp_time: 4.0
-    # 起飞推力 RC 滤波时间常数(s)，用于抑制每拍目标抖动
-    takeoff_thrust_filter_tau: 0.40
-    # 离开暖机后继续平滑接管的时间(s)
-    takeoff_thrust_handoff_time: 0.30
+    takeoff_max_velocity: 0.3
     # 指定降落模式 0：sunray land 1:px4.auto_land
     land_type: 0
     # 降落过程中的最大速度
     land_max_velocity: 0.30
-    # 高于近地段时允许的缓降高度范围上边界
-    land_slow_height_m: 0.35
-    # 提前进入近地减速的高度
-    land_near_ground_height_m: 0.18
-    # 近地阶段的目标下降速度
-    land_near_ground_velocity: 0.10
-    # 最后贴地阶段的目标下降速度
-    land_touchdown_velocity: 0.04
-    # 降落位置参考前视时间，越小越不容易“往地里压”
-    land_position_lookahead_time: 0.35
-    # 降落近地阶段推力 RC 滤波时间常数(s)
-    land_thrust_filter_tau: 0.20
-    # 近地阶段允许的最大推力，建议不要低于悬停推力
-    land_near_ground_thrust_max: 0.40
-    # 触地确认阶段允许的最大推力
-    land_touchdown_thrust_max: 0.05
+    # 触发返航时，到达返航点后是否自动降落
+    return_with_land: true
 
 # -------------------到达稳定判定参数-----------------------
 # 起飞到位和 move_point 到位统一使用这一组阈值
 # 当位置误差和速度误差同时进入稳定范围，并持续保持 judge_stabile_time_s 秒后，
 # 控制器认为当前任务已经到达目标
+# 当速度误差达到允许的范围，并保持 3x judge_stabile_time_s 后，无论位置误差如何，都会认为达到目标
 arrival_judge_param:
-    judge_stabile_time_s: 0.5
-    pos_stabile_err_m: 0.15
-    vel_stabile_err_mps: 0.10
+    judge_stabile_time_s: 1
+    pos_stabile_err_m: 0.08
+    vel_stabile_err_mps: 0.12
 
 # -------------------电子围栏参数-----------------------
 # local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上
@@ -145,6 +120,9 @@ sunray_controller_param:
   vel_kp: [2.0, 2.0, 3]
   vel_ki: [0.0, 0.0, 0.0]
   vel_kd: [0.0, 0.0, 0.0]
+  # Sunray_Controller支持使用RC遥控器作为输入得到和PX4原生控制器一样的体验
+  # 机体系速度控制采用“body-xy速度 + fixed_height”混合语义：
+  # fixed_height 会复用 pos_kp.z 生成 z 方向速度指令，并使用 velocity_param.max_velocity.z_vel 限幅
   # 位置/速度环反馈加速度限幅；太小会让控制器看起来“对误差不敏感”
   max_acc: 9.0
   # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5

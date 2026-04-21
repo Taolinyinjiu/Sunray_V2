@@ -4,12 +4,35 @@ project(sunray_common)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
+  gazebo_msgs
   geometry_msgs
+  mavros_msgs
+  nav_msgs
+  roscpp
+  sensor_msgs
+  std_msgs
+  sunray_msgs
+  tf
+  tf2_geometry_msgs
+  tf2_ros
+  visualization_msgs
 )
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS geometry_msgs
+  CATKIN_DEPENDS
+    gazebo_msgs
+    geometry_msgs
+    mavros_msgs
+    nav_msgs
+    roscpp
+    sensor_msgs
+    std_msgs
+    sunray_msgs
+    tf
+    tf2_geometry_msgs
+    tf2_ros
+    visualization_msgs
 )
 
 include_directories(

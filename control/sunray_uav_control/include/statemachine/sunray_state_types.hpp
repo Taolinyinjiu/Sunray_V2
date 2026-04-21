@@ -23,6 +23,7 @@ enum class SunrayState {
     MOVE,           ///< 运动状态
     EMERGENCY_KILL  ///< 紧急锁桨
 };
+
 // 状态转移触发事件
 // 请注意：每一个事件只能对应一个状态，但是一个状态可以对应多个事件，这是状态转移的核心
 enum class SunrayEvent {
@@ -33,8 +34,6 @@ enum class SunrayEvent {
     LAND_COMPLETED,         ///< 降落完成。
     RETURN_REQUEST,         ///< 请求返航。
     RETURN_COMPLETED,       ///< 返航完成。
-    KILL_REQUEST,           ///< 请求紧急锁桨。
-    KILL_COMPLETED,         ///< 紧急锁桨完成。
     HOVER_REQUEST,          ///< 请求悬停。
     HOVER_COMPLETED,        ///< 悬停完成。
     POINT_REQUEST,          ///< 进入位置控制
@@ -43,9 +42,11 @@ enum class SunrayEvent {
     VELOCITY_COMPLETED,     ///< 速度控制完成
     TRAJECTORY_REQUEST,     ///< 进入轨迹控制
     TRAJECTORY_COMPLETED,   ///< 轨迹执行完成。
-    POINT_WGS84_REQUEST,    ///< 进入 WGS98位置控制
+    POINT_WGS84_REQUEST,    ///< 进入WGS98位置控制
     POINT_WGS84_COMPLETED,  ///< WGS98位置控制完成
+    KILL_REQUEST,           ///< 请求紧急锁桨 (Kill阶段没有完成态,因为我们不会切换到其他状态)
 };
+
 // 状态转移表结构体
 struct Transition {
     sunray_fsm::SunrayState current_state;   // 状态机当前状态

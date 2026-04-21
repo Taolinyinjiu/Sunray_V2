@@ -19,6 +19,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <string>
+
 // Sunray_FSM指的是Sunray项目框架中的无人机控制状态机，然而由于我们希望Sunray项目的框架能够实现的，兼容或者说具有强的扩展性，
 // 在实现的过程中，我们希望这个Sunray_FSM能够进行一定的抽象，因此SUnray_FSM与mavros进行解耦
 // 也就说是Sunray_FSM只涉及到状态机的实现，不涉及到具体的无人机控制逻辑
@@ -68,12 +70,17 @@ class Sunray_FSM {
     void init_subscriber();      // 初始化订阅者
     void init_publisher();       // 初始化发布者
     void register_controller();  // 注册控制器
+    void show_static_info();     // 打印一次性的静态配置和参数信息
 
     // 状态检查部分
     void check_controller_ready();  // 检查controller是否就绪，就绪则Sunray_FSM State: OFF -> INIT
     bool check_allow_takeoff();   // 检查是否允许起飞
     void check_rosmsg_timeout();  // 检查是否存在消息超时
     // bool check_allow_move();     // 检查是否允许运动,这个需要再细想一下
+    bool validate_odometry_sample(const control_common::UAVStateEstimate& odom,
+                                  std::string* invalid_reason = nullptr) const;
+    bool get_latest_valid_odometry(control_common::UAVStateEstimate& odom) const;
+    bool set_hover_point_from_latest_odom();
 
     // --------------------------话题回调函数------------------------
     // 为了保持话题的高频回调，基本上回调函数都只负责将收到的消息转换为结构体变量缓存，不做其他处理
@@ -89,18 +96,6 @@ class Sunray_FSM {
     // -------------------------控制指令执行函数------------------
     void controller_update_loop();  // 控制线程主循环
     void update_controller_output();
-    // ------------------特殊指令，单次触发--------------
-    // 这个由于还没想好，要不要把起飞降落的参数设置为可以通过话题的方式来修改，先设置为使用yaml文件的吧
-    bool takeoff();
-    bool land();
-    bool hover();        // hover也没有参数，因为控制器的hover就没有参数
-    bool return_home();  // return = move_point_local() + land()
-    bool emergency_kill();
-    // ------------------运动指令，持续触发--------------
-    bool move_point(control_common::UavControlCmd cmd);
-    bool move_velocity(control_common::UavControlCmd cmd);
-    bool move_trajectory(control_common::UavControlCmd cmd);
-    bool move_point_wgs84(control_common::UavControlCmd cmd);
 
     // 更新home点
     bool update_home_point();
@@ -126,22 +121,34 @@ class Sunray_FSM {
     // 控制器指针
     std::shared_ptr<Controller_Interface> sunray_controller_;  // 全局唯一的控制器实例
     // 里程计缓存
+    control_common::UAVStateEstimate last_raw_odometry_;
     control_common::UAVStateEstimate last_odometry_;
+    ros::Time last_raw_odom_receive_time_{ros::Time(0)};
+    ros::Time last_valid_odom_receive_time_{ros::Time(0)};
+    double odom_frequency_hz_{0.0};
+    bool odom_meets_rate_target_{false};
+    bool has_valid_odometry_{false};
     // 最新的控制指令
     control_common::UavControlCmd last_control_cmd_;
+    // 注意到当设置为Keep_YAW模式时,如果持续从里程计数据中提取yaw角,会导致yaw角缓慢漂移,因此我们直接缓存yaw角控制命令
+    double last_set_yaw_{0.0};  // 默认起飞时刻yaw为0.0,只有当Set_YAW后才会改变
+
     // 缓存相关状态
     bool allow_takeoff_{false};  // 允许起飞
     bool is_flip_{false};        // 当前是否出现姿态大幅偏转
     bool is_fence_{false};       // 当前是否超过地理围栏/电子围栏的限制
 
+    // 用于return返航阶段的返航点，在起飞阶段自动刷新
     Eigen::Vector3d home_point_{Eigen::Vector3d::Zero()};
+    bool return_height_initialized_{false};
 
-    // 用于判断状态or切换状态的变量
-    bool controller_ready_{false};
-    bool control_msg_lost_{false};
+    bool controller_ready_{false}; // controller_ready_ = true 则状态机由OFF -> INIT
+    bool control_msg_lost_{false}; // control_msg_lost_ = true 并且缓存的控制指令为velocity / trajectory 则状态机切换为 hover
+
     // 控制器循环的线程相关
     std::thread controller_update_thread_;
     std::atomic<bool> stop_controller_thread_{false};
+
     // 由于使用线程，因此给使用到的变量加一下锁
     mutable std::mutex state_mutex_;  // fsm当前状态
     mutable std::mutex odom_mutex_;
@@ -152,5 +159,5 @@ class Sunray_FSM {
     std::queue<sunray_fsm::SunrayEvent> fsm_event_queue_;              // 事件队列
     sunray_fsm::sunray_fsm_config_t fsm_config_;                       // 状态机参数结构体
     std::vector<sunray_fsm::Transition> sunray_state_transmit_table_;  // 成员变量
-    bool rc_connected{false};  // 遥控器连接状态，这里是从sunray_rc_joy_node节点传递
+    bool rc_connected{false};  // 遥控器连接状态，这里是从sunray_rc_joy_node节点传递？
 };

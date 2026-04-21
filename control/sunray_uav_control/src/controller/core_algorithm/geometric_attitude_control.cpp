@@ -48,9 +48,6 @@ void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param
     estimator_param.hover_thrust = param_.hover_thrust_init;
     hover_thrust_estimator_->load_param(estimator_param);
 
-    last_thrust_cmd_ = 0.0;
-    pending_thrust_cmd_ = 0.0;
-    has_pending_thrust_cmd_ = false;
     last_debug_state_ = Geometric_AttitudeControl_DebugState_t{};
 }
 
@@ -58,56 +55,22 @@ void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::In
     if (!hover_thrust_estimator_) {
         return;
     }
-
-    thrust_estimator::Input_t estimator_input = input;
-    estimator_input.thrust_cmd = (last_thrust_cmd_ > 0.0)
-                                     ? last_thrust_cmd_
-                                     : (has_pending_thrust_cmd_ ? pending_thrust_cmd_ : 0.0);
-    hover_thrust_estimator_->update(estimator_input);
-}
-
-double Geometric_AttitudeControl::wrap_angle(double angle_rad) {
-    return std::atan2(std::sin(angle_rad), std::cos(angle_rad));
-}
-
-Eigen::Vector3d Geometric_AttitudeControl::compute_attitude_error(
-    const Eigen::Quaterniond& curr_att,
-    const Eigen::Quaterniond& ref_att) const {
-    if (param_.attitude_type == 0) {
-        const Eigen::Quaterniond q_err = curr_att.inverse() * ref_att;
-        return std::copysign(1.0, q_err.w()) * Eigen::Vector3d(q_err.x(), q_err.y(), q_err.z());
+    if (!std::isfinite(input.thrust_cmd) || input.thrust_cmd <= 0.0) {
+        return;
     }
-
-    const Eigen::Matrix3d R = curr_att.toRotationMatrix();
-    const Eigen::Matrix3d R_d = ref_att.toRotationMatrix();
-    const Eigen::Matrix3d e_R_hat = 0.5 * (R.transpose() * R_d - R_d.transpose() * R);
-    return Eigen::Vector3d(e_R_hat(2, 1), e_R_hat(0, 2), e_R_hat(1, 0));
+    hover_thrust_estimator_->update(input);
 }
 
-void Geometric_AttitudeControl::update_debug_state(
-    const controller_data_types::TargetTrajectoryPoint_t& des_state,
-    const control_common::UAVStateEstimate& current_odom,
-    const Eigen::Vector3d& desired_acc,
-    const Geometric_AttitudeControl_Output_t& output,
-    Control_Type control_type) {
-    const Eigen::Quaterniond& q = current_odom.orientation;
-    const double current_yaw =
-        std::atan2(2.0 * (q.w() * q.z() + q.x() * q.y()), 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
-
-    last_debug_state_.valid = true;
-    last_debug_state_.stamp = current_odom.timestamp.isZero() ? ros::Time::now() : current_odom.timestamp;
-    last_debug_state_.control_type = control_type;
-    last_debug_state_.reference = des_state;
-    last_debug_state_.odom = current_odom;
-    last_debug_state_.position_error = des_state.position - current_odom.position;
-    last_debug_state_.velocity_error = des_state.velocity - current_odom.velocity;
-    last_debug_state_.yaw_error = wrap_angle(des_state.yaw - current_yaw);
-    last_debug_state_.attitude_error = compute_attitude_error(current_odom.orientation, output.orientation);
-    last_debug_state_.desired_acceleration = desired_acc;
-    last_debug_state_.desired_orientation = output.orientation;
-    last_debug_state_.desired_bodyrates = output.bodyrates;
-    last_debug_state_.desired_thrust = output.thrust;
+void Geometric_AttitudeControl::seed_hover_thrust_estimator(double hover_thrust) {
+    if (!hover_thrust_estimator_) {
+        return;
+    }
+    if (!std::isfinite(hover_thrust) || hover_thrust <= 0.0) {
+        return;
+    }
+    hover_thrust_estimator_->seed_hover_thrust(hover_thrust);
 }
+
 
 Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     const controller_data_types::TargetTrajectoryPoint_t& des_state,
@@ -118,8 +81,6 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
         reset_integral();
     }
     last_control_type_ = Control_Type::Trajectory_;
-
-    advance_thrust_command_history();
 
     // ── 提取当前状态 ──────────────────────────────────────────────────────
     const Eigen::Vector3d mav_pos = current_odom.position;
@@ -147,30 +108,9 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     Geometric_AttitudeControl_Output_t output;
     output.bodyrates = bodyrate_cmd.head(3);
     output.thrust = compose_thrust_command(bodyrate_cmd(3), thrust_policy);
-    pending_thrust_cmd_ = output.thrust;
-    has_pending_thrust_cmd_ = true;
     // 期望姿态由期望加速度方向 + 偏航角决定（主要用于可视化/调试）
     output.orientation = acc2quaternion(a_des, target_yaw);
     update_debug_state(des_state, current_odom, a_des, output, Control_Type::Trajectory_);
-#ifdef DEBUG
-    const double axy_norm = a_des.head<2>().norm();
-    const double pos_xy_err = (target_pos - mav_pos).head<2>().norm();
-    const double vel_xy_err = (target_vel - mav_vel).head<2>().norm();
-    if (axy_norm > 0.3 || pos_xy_err > 0.05 || vel_xy_err > 0.05) {
-        const double tilt_cur = curr_att.toRotationMatrix()(2, 2);
-        const double tilt_des = output.orientation.toRotationMatrix()(2, 2);
-        ROS_INFO_THROTTLE(0.5,
-                          "ctrl ez=%.2f vz=%.2f adz=%.2f axy=%.2f tc=%.3f td=%.3f ta=%.2f u=%.3f",
-                          target_pos.z() - mav_pos.z(),
-                          target_vel.z() - mav_vel.z(),
-                          a_des.z(),
-                          axy_norm,
-                          tilt_cur,
-                          tilt_des,
-                          bodyrate_cmd(3),
-                          output.thrust);
-    }
-#endif
     return output;
 }
 
@@ -183,8 +123,6 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
         reset_integral();
     }
     last_control_type_ = Control_Type::Velocity_;
-
-    advance_thrust_command_history();
 
     const Eigen::Vector3d mav_vel = current_odom.velocity;
     const Eigen::Quaterniond& curr_att = current_odom.orientation;
@@ -201,8 +139,6 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     Geometric_AttitudeControl_Output_t output;
     output.bodyrates = bodyrate_cmd.head(3);
     output.thrust = compose_thrust_command(bodyrate_cmd(3), thrust_policy);
-    pending_thrust_cmd_ = output.thrust;
-    has_pending_thrust_cmd_ = true;
     output.orientation = acc2quaternion(a_des, target_yaw);
     controller_data_types::TargetTrajectoryPoint_t debug_state;
     debug_state.position = current_odom.position;
@@ -212,170 +148,34 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     debug_state.yaw = target_yaw;
     debug_state.yaw_rate = des_state.yaw_rate;
     update_debug_state(debug_state, current_odom, a_des, output, Control_Type::Velocity_);
-#ifdef DEBUG
-    const double vel_err = (target_vel - mav_vel).norm();
-    if (vel_err > 0.05) {
-        ROS_INFO_THROTTLE(0.5,
-                          "ctrl vel ex=%.2f ey=%.2f ez=%.2f adz=%.2f axy=%.2f ta=%.2f u=%.3f",
-                          target_vel.x() - mav_vel.x(),
-                          target_vel.y() - mav_vel.y(),
-                          target_vel.z() - mav_vel.z(),
-                          a_des.z(),
-                          a_des.head<2>().norm(),
-                          bodyrate_cmd(3),
-                          output.thrust);
-    }
-#endif
     return output;
 }
 
-void Geometric_AttitudeControl::advance_thrust_command_history() {
-    if (!has_pending_thrust_cmd_) {
-        return;
-    }
-    last_thrust_cmd_ = pending_thrust_cmd_;
-}
-
-void Geometric_AttitudeControl::maybe_seed_estimator_from_last_linear_command(double thrust_acc) {
-    if (!hover_thrust_estimator_ || !thrust_model_mode_initialized_) {
-        return;
-    }
-    if (last_thrust_model_mode_ != ThrustModelMode::LinearForced) {
-        return;
+double Geometric_AttitudeControl::select_hover_anchor(ThrustCommandPolicy thrust_policy) const {
+    if (thrust_policy == ThrustCommandPolicy::UseFixedAnchor) {
+        return param_.hover_thrust_init;
     }
 
-    const double gravity = std::max(param_.gravity, 1e-6);
-    const double thrust_acc_ratio = thrust_acc / gravity;
-    if (!std::isfinite(last_thrust_cmd_) || last_thrust_cmd_ <= 0.0) {
-        return;
-    }
-    if (!std::isfinite(thrust_acc_ratio) || std::abs(thrust_acc_ratio - 1.0) > 0.2) {
-        return;
-    }
-
-    const double hover_seed = std::clamp(last_thrust_cmd_, 0.05, 0.80);
-    hover_thrust_estimator_->seed_hover_thrust(hover_seed);
-#ifdef DEBUG
-    ROS_INFO("thrust seed ht=%.3f from LIN_FORCE u=%.3f ta=%.2f",
-             hover_seed,
-             last_thrust_cmd_,
-             thrust_acc);
-#endif
-}
-
-double Geometric_AttitudeControl::map_thrust_acc_to_hover_anchor(double thrust_acc) const {
-    double hover_anchor = param_.hover_thrust_init;
     if (hover_thrust_estimator_) {
         const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
         if (std::isfinite(hover_thrust) && hover_thrust > 0.0) {
-            hover_anchor = hover_thrust;
+            return hover_thrust;
         }
     }
 
+    return param_.hover_thrust_init;
+}
+
+double Geometric_AttitudeControl::normalize_collective_acc(double collective_acc,
+                                                           double hover_anchor) const {
     const double gravity = std::max(param_.gravity, 1e-6);
-    return std::clamp(hover_anchor * (thrust_acc / gravity), 0.0, 0.95);
+    return std::clamp(hover_anchor * (collective_acc / gravity), 0.0, 0.95);
 }
 
-Geometric_AttitudeControl::ThrustModelMode Geometric_AttitudeControl::get_hover_estimator_mode() const {
-    switch (param_.hover_thrust_estimator_type) {
-    case 0:
-        return ThrustModelMode::LowPassEstimator;
-    case 2:
-        return ThrustModelMode::KalmanEstimator;
-    case 1:
-    default:
-        return ThrustModelMode::RLSEstimator;
-    }
-}
-
-const char* Geometric_AttitudeControl::thrust_model_mode_name(ThrustModelMode mode) {
-    switch (mode) {
-    case ThrustModelMode::LinearFallback:
-        return "LIN_FB";
-    case ThrustModelMode::LinearForced:
-        return "LIN_FORCE";
-    case ThrustModelMode::LowPassEstimator:
-        return "LP";
-    case ThrustModelMode::KalmanEstimator:
-        return "KF";
-    case ThrustModelMode::RLSEstimator:
-    default:
-        return "RLS";
-    }
-}
-
-void Geometric_AttitudeControl::log_thrust_model_usage(ThrustModelMode mode,
-                                                       double thrust_cmd,
-                                                       double hover_thrust) {
-    const char* mode_name = thrust_model_mode_name(mode);
-
-    if (!thrust_model_mode_initialized_ || last_thrust_model_mode_ != mode) {
-#ifdef DEBUG
-        if (mode == ThrustModelMode::LinearFallback) {
-            ROS_WARN("thrust->%s u=%.3f", mode_name, thrust_cmd);
-        } else if (mode == ThrustModelMode::LinearForced) {
-            ROS_INFO("thrust->%s u=%.3f", mode_name, thrust_cmd);
-        } else {
-            ROS_INFO("thrust->%s ht=%.3f u=%.3f", mode_name, hover_thrust, thrust_cmd);
-        }
-#else
-        if (mode == ThrustModelMode::LinearFallback) {
-            ROS_WARN("thrust->%s", mode_name);
-        } else if (mode == ThrustModelMode::LinearForced) {
-            ROS_INFO("thrust->%s", mode_name);
-        } else {
-            ROS_INFO("thrust->%s", mode_name);
-        }
-#endif
-        last_thrust_model_mode_ = mode;
-        thrust_model_mode_initialized_ = true;
-    }
-
-#ifdef DEBUG
-    if (mode == ThrustModelMode::LinearFallback) {
-        ROS_WARN_THROTTLE(2.0, "thrust:%s u=%.3f", mode_name, thrust_cmd);
-    } else if (mode == ThrustModelMode::LinearForced) {
-        ROS_INFO_THROTTLE(2.0, "thrust:%s u=%.3f", mode_name, thrust_cmd);
-    } else {
-        ROS_INFO_THROTTLE(2.0, "thrust:%s ht=%.3f u=%.3f", mode_name, hover_thrust, thrust_cmd);
-    }
-#else
-    if (mode == ThrustModelMode::LinearFallback) {
-        ROS_WARN_THROTTLE(2.0, "thrust:%s", mode_name);
-    } else if (mode == ThrustModelMode::LinearForced) {
-        ROS_INFO_THROTTLE(2.0, "thrust:%s", mode_name);
-    } else {
-        ROS_INFO_THROTTLE(2.0, "thrust:%s", mode_name);
-    }
-#endif
-}
-
-double Geometric_AttitudeControl::compose_thrust_command(double thrust_acc,
-                                                         ThrustCommandPolicy thrust_policy) {
-    const double linear_fallback = map_thrust_acc_to_hover_anchor(thrust_acc);
-    if (thrust_policy == ThrustCommandPolicy::ForceLinear) {
-        log_thrust_model_usage(ThrustModelMode::LinearForced, linear_fallback, 0.0);
-        return linear_fallback;
-    }
-
-    if (!hover_thrust_estimator_) {
-        log_thrust_model_usage(ThrustModelMode::LinearFallback, linear_fallback, 0.0);
-        return linear_fallback;
-    }
-
-    maybe_seed_estimator_from_last_linear_command(thrust_acc);
-
-    const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
-    if (!std::isfinite(hover_thrust) || hover_thrust <= 0.0) {
-        log_thrust_model_usage(ThrustModelMode::LinearFallback, linear_fallback, hover_thrust);
-        return linear_fallback;
-    }
-
-    const double gravity = std::max(param_.gravity, 1e-6);
-    const double thrust_cmd = hover_thrust * (thrust_acc / gravity);
-    const double clamped_thrust_cmd = std::clamp(thrust_cmd, 0.0, 0.95);
-    log_thrust_model_usage(get_hover_estimator_mode(), clamped_thrust_cmd, hover_thrust);
-    return clamped_thrust_cmd;
+double Geometric_AttitudeControl::compose_thrust_command(
+    double collective_acc,
+    ThrustCommandPolicy thrust_policy) const {
+    return normalize_collective_acc(collective_acc, select_hover_anchor(thrust_policy));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -564,4 +364,51 @@ Eigen::Quaterniond Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector
     // 旋转矩阵 → 四元数（Shepperd 方法，避免数值奇异）
     const Eigen::Vector4d q_vec = rot2Quaternion(rotmat);
     return Eigen::Quaterniond(q_vec(0), q_vec(1), q_vec(2), q_vec(3));
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Debug 误差记录
+// ═══════════════════════════════════════════════════════════════════════════
+double Geometric_AttitudeControl::wrap_angle(double angle_rad) {
+    return std::atan2(std::sin(angle_rad), std::cos(angle_rad));
+}
+
+Eigen::Vector3d Geometric_AttitudeControl::compute_attitude_error(
+    const Eigen::Quaterniond& curr_att,
+    const Eigen::Quaterniond& ref_att) const {
+    if (param_.attitude_type == 0) {
+        const Eigen::Quaterniond q_err = curr_att.inverse() * ref_att;
+        return std::copysign(1.0, q_err.w()) * Eigen::Vector3d(q_err.x(), q_err.y(), q_err.z());
+    }
+
+    const Eigen::Matrix3d R = curr_att.toRotationMatrix();
+    const Eigen::Matrix3d R_d = ref_att.toRotationMatrix();
+    const Eigen::Matrix3d e_R_hat = 0.5 * (R.transpose() * R_d - R_d.transpose() * R);
+    return Eigen::Vector3d(e_R_hat(2, 1), e_R_hat(0, 2), e_R_hat(1, 0));
+}
+
+void Geometric_AttitudeControl::update_debug_state(
+    const controller_data_types::TargetTrajectoryPoint_t& des_state,
+    const control_common::UAVStateEstimate& current_odom,
+    const Eigen::Vector3d& desired_acc,
+    const Geometric_AttitudeControl_Output_t& output,
+    Control_Type control_type) {
+    const Eigen::Quaterniond& q = current_odom.orientation;
+    const double current_yaw =
+        std::atan2(2.0 * (q.w() * q.z() + q.x() * q.y()), 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
+
+    last_debug_state_.valid = true;
+    last_debug_state_.stamp = current_odom.timestamp.isZero() ? ros::Time::now() : current_odom.timestamp;
+    last_debug_state_.control_type = control_type;
+    last_debug_state_.reference = des_state;
+    last_debug_state_.odom = current_odom;
+    last_debug_state_.position_error = des_state.position - current_odom.position;
+    last_debug_state_.velocity_error = des_state.velocity - current_odom.velocity;
+    last_debug_state_.yaw_error = wrap_angle(des_state.yaw - current_yaw);
+    last_debug_state_.attitude_error = compute_attitude_error(current_odom.orientation, output.orientation);
+    last_debug_state_.desired_acceleration = desired_acc;
+    last_debug_state_.desired_orientation = output.orientation;
+    last_debug_state_.desired_bodyrates = output.bodyrates;
+    last_debug_state_.desired_thrust = output.thrust;
 }
