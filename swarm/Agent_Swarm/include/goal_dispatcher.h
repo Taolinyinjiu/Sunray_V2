@@ -1,4 +1,4 @@
-// 中文说明：目标点下发接口，封装 OrcaSetup
+// 中文说明：目标点下发接口，封装并发布 OrcaSetup
 #pragma once
 
 #include <geometry_msgs/Pose.h>

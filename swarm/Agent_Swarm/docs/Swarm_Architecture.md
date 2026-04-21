@@ -22,8 +22,9 @@ Swarm 架构（基于 Leader 的编队策略系统）
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          外部输入（操控）                            │
-│  formation_switch/tui -> /sunray/formation_cmd  (ring/line/column/v/...) │
-│                     /sunray/leader_goal     (leader 目标点)         │
+│  formation_switch/tui -> /sunray/swarm/uav_swarm_cmd (UAV)         │
+│                       -> /sunray/swarm/ugv_swarm_cmd (UGV)         │
+│                       -> /sunray/leader_goal (leader 目标点)        │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -36,9 +37,9 @@ Swarm 架构（基于 Leader 的编队策略系统）
 │  │      goalTimerCb       @ goal_rate Hz (编队目标计算)                   │   │
 │  │      controlTimerCb    @ control_rate Hz (控制指令输出)                │   │
 │  │      statePublishTimerCb @ state_pub_rate Hz (状态发布)                │   │
-│  │  - 订阅: formation_cmd(/ground), formation_offsets,                    │   │
-│  │         leader_goal, uav_state（orca_cmd 由 OrcaClient 订阅）           │   │
-│  │  - 发布: orca/agent_state, orca/setup, uav_control_cmd，ugv_control_cmd │   │
+│  │  - 订阅: uav_swarm_cmd, ugv_swarm_cmd, formation_offsets,             │   │
+│  │         leader_goal, local_odom（orca_cmd 由 OrcaClient 订阅）         │   │
+│  │  - 发布: orca/agent_state, orca/setup, uav_control_cmd                │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │        │            │             │             │                    │
 │        ▼            ▼             ▼             ▼                    │
@@ -165,9 +166,14 @@ Swarm 架构（基于 Leader 的编队策略系统）
 ### 1 动作/目标输入
 
 外部通过 `formation_switch` 工具或其他节点发送：
-- `/sunray/formation_cmd` (`sunray_msgs::Formation`)：
-  - `cmd` 字段: `TAKEOFF`(=1), `LAND`(=2), `HOVER`(=3), `FORMATION`(=4), `SET_HOME`(=5), `RETURN_HOME`(=6)
-  - `name` 字段: `"ring"`, `"line"`, `"column"`, `"v_shape"`, `"wedge"`, `"expand"`, `"contract"`, `"custom"`
+- `/sunray/swarm/uav_swarm_cmd` (`sunray_msgs::UAVSwarmCMD`)：UAV 集群控制指令
+  - `swarm_cmd` 字段: `TAKEOFF`, `LAND`, `HOVER`, `SWARM_FORMATION`, `SWARM_RETURN`
+  - `formation` 字段: `RING`(=1), `LINE`(=2), `COLUMN`(=3), `V_SHAPE`(=4), `WEDGE`(=5), `CUSTOM`(=6), `EXPAND`, `CONTRACT`
+  - `formation_param`: 可选的 spacing 参数（>0 时直接设置 spacing 值）
+  - `leader_pos` + `leader_yaw`: 可选的 Leader 目标点（非零时生效）
+- `/sunray/swarm/ugv_swarm_cmd` (`sunray_msgs::UGVSwarmCMD`)：UGV 集群控制指令
+  - `swarm_cmd` 字段: `HOLD`, `RETURN`, `MOVE`, `SWARM_FORMATION`
+  - `formation` 字段: 同 UAV
 - `/sunray/formation_offsets` (`sunray_msgs::FormationOffsets`)：
   - `offsets` 数组：自定义阵型偏移量（leader 体坐标系，spacing=1 时的归一化偏移）
 - `/sunray/leader_goal` (`geometry_msgs::PoseStamped`)：Leader 目标点
@@ -233,10 +239,10 @@ statePublishTimerCb() @ state_pub_rate Hz:
 
 ### 3 Leader 位姿获取
 
-[`LeaderTracker`](Agent_Swarm/include/leader_tracker.h) 订阅 Leader 状态话题：
-- 当 `leader_id <= 100` 时，订阅 `/uav{leader_id}/sunray/uav_state`（硬编码前缀，不使用 `agent_name` 参数）
-- 当 `leader_id > 100` 时，订阅 `/ugv{leader_id-100}/sunray_ugv/ugv_state`
-- 缓存 Leader 的当前位姿 (`leader_pose_`)
+[`LeaderTracker`](Agent_Swarm/include/leader_tracker.h) 订阅 Leader 里程计话题：
+- 当 `leader_id <= 100` 时，订阅 `/{agent_name}{leader_id}/sunray/localization/local_odom`
+- 当 `leader_id > 100` 时，订阅 `/ugv{leader_id-100}/sunray/localization/local_odom`（硬编码 ugv 前缀）
+- 缓存 Leader 的当前位姿 (`leader_pose_`)，从 `nav_msgs::Odometry` 提取
 - 提供 `getLeaderPose()` 和 `isFresh(timeout_sec)` 接口
 - Leader 目标点 (`leader_goal`) 的缓存和管理在 `AgentSwarmNode` 中，不在 LeaderTracker 中
 - 收到 `/sunray/leader_goal` 时，`AgentSwarmNode::leaderGoalCb` 除了缓存目标外还会：
@@ -261,15 +267,13 @@ statePublishTimerCb() @ state_pub_rate Hz:
   requested_state_ = INIT（节点启动后在地面待命，不发送任何控制指令）
 
 状态转换触发:
-  - onFormationCmd(cmd):
-      任意 + TAKEOFF cmd → TAKEOFF
-      任意 + FORMATION cmd → FORMATION
-      任意 + HOVER cmd → HOVER
-      任意 + LAND cmd → LAND
-      任意 + RETURN_HOME cmd → ORCA_RETURN_HOME
-      SET_HOME → 不改变状态（仅在 AgentSwarmNode 中记录 home 位置）
-      未知指令 → 保持当前状态不变
-      (EXPAND/CONTRACT 的 cmd 仍是 FORMATION，spacing 调整在 AgentSwarmNode 中处理)
+  - onUavSwarmCmd(msg) / onUgvSwarmCmd(msg):
+      任意 + TAKEOFF → TAKEOFF（仅从 INIT 允许）
+      任意 + SWARM_FORMATION → FORMATION（INIT/TAKEOFF/LAND/RETURN_HOME 时忽略）
+      任意 + HOVER → HOVER（INIT/TAKEOFF/LAND 时忽略）
+      任意 + LAND → LAND（INIT/TAKEOFF 时忽略）
+      任意 + SWARM_RETURN → ORCA_RETURN_HOME
+      (EXPAND/CONTRACT 仍是 SWARM_FORMATION，spacing 调整在 AgentSwarmNode 中处理)
 
   - effectiveState() 安全兜底（无 update() 方法）:
       INIT → 直接返回 INIT，等待外部 TAKEOFF 指令
@@ -287,18 +291,18 @@ statePublishTimerCb() @ state_pub_rate Hz:
 - 限幅范围 `[spacing_min, spacing_max]`（默认 `[0.3, 5.0]`）
 - expand/contract **仅调整 spacing**，不重建策略对象，保持当前阵型不变
 
-**起飞流程**（`handleTakeoff`，仅 UAV 有效）：
+**起飞流程**（`TAKEOFF` 状态，仅 UAV 有效）：
 
-基于时间的四阶段流程，不检测高度到位：
+简化流程，直接发送起飞指令并通过 FSM 状态检测完成：
 
 ```
-0s ~ 5s:   phase 1  切换飞控到 CMD_CONTROL 模式（发布 UAVSetup，已是 CMD_CONTROL 时跳过）
-5s ~ 10s:  phase 2  解锁（发布 UAVSetup ARM，需 CMD_CONTROL 且未解锁时才发送）
-10s ~ 15s: phase 3  发送起飞指令 publishTakeoff(fixed_altitude_)，携带目标高度（需已解锁）
-15s+:      phase 4  起飞流程结束，切回 HOVER 状态（需 uav_state_ready_ 且 armed），等待外部发送 FORMATION 指令进入编队
+controlTimerCb() 中处理 TAKEOFF 状态:
+  1. 持续发送 publishTakeoff(fixed_altitude_) 起飞指令
+  2. 检测 self_fsm_state_.sunray_fsm_state == FSM_HOVER
+  3. 检测到 HOVER 后切换状态机到 HOVER，等待外部发送 FORMATION 指令进入编队
 ```
 
-注意：`publishTakeoff(altitude)` 在 `UAVControlCMD::Takeoff` 指令中设置 `desired_pos[2] = altitude`，
+注意：`publishTakeoff(altitude)` 在 `UAVControlCMD::TAKEOFF` 指令中设置 `desired_pos.z = altitude`，
 确保所有 UAV（包括 Leader）在起飞阶段就飞到 `fixed_altitude_` 高度，避免起飞后 Leader 与 Follower 高度不一致。
 
 ### 5 编队策略计算（OffsetBasedPolicy）
@@ -395,16 +399,19 @@ ORCA 层作为独立节点运行，每个 agent 一个实例。`orca_node.cpp` �
 
 [`ControlCommandMapper`](Agent_Swarm/include/control_command_mapper.h) 将 ORCA 输出转为最终控制指令：
 - UAV 发布话题: `/{agent_name}{id}/sunray/uav_control_cmd` (`sunray_msgs::UAVControlCMD`)
-- UGV 发布话题: `/{agent_name}{id}/sunray_ugv/ugv_control_cmd` (`sunray_msgs::UGVControlCMD`)
-- **三种映射模式**（根据 OrcaCmd.state）：
-  - `RUN` → UAV:`XyVelZPosYaw`；UGV:`VEL_CONTROL_ENU`
-  - `ARRIVED` → UAV:`XyzPosYaw`；UGV:`POS_CONTROL_ENU`
-  - `STOP`/其它 → UAV:`Hover`；UGV:`HOLD`
-- **特殊指令**：
-  - `publishTakeoff(altitude)`: 起飞指令（仅 UAV），`altitude` 参数设置 `desired_pos[2]` 确保起飞到指定高度
-  - `publishLand()`: 降落指令（仅 UAV）
-  - `publishHover()`: 悬停/停止
-- 各方法直接调用发布，无 `publishIfNeeded()` 接口
+- UGV 发布话题: `/{agent_name}{id}/sunray_ugv/ugv_control_cmd` (`sunray_msgs::UGVControlCMD`)（当前未实现）
+- **控制方法**：
+  - `publishHover()`: 发布 HOVER 指令（KEEP_YAW 模式）
+  - `publishTakeoff(altitude)`: 发布 TAKEOFF 指令，`desired_pos.z = altitude` 设置目标高度
+  - `publishLand()`: 发布 LAND 指令（KEEP_YAW 模式）
+  - `publishPosTarget(target_pose)`: 发布 MOVE_POINT 位置控制指令
+  - `publishFromOrca(orca_cmd, current_z)`: 根据 ORCA 状态映射控制指令
+    - `STOP` → publishHover()
+    - `ARRIVED` → publishPosTarget(goal_pose)（位置控制保持）
+    - `RUN` → 发布 MOVE_VELOCITY 速度控制
+      - XY 速度直接使用 orca.linear[0/1]
+      - Z 速度通过 P 控制计算：`z_vel = clamp(1.5 * (goal_z - current_z), -0.5, 0.5)`
+      - Yaw 使用 orca.goal_yaw
 
 ### 10 AgentStateCache
 
@@ -421,33 +428,40 @@ ORCA 层作为独立节点运行，每个 agent 一个实例。`orca_node.cpp` �
 
 | 话题 | 方向 | 消息类型 | 发布者 | 订阅者 | 用途 |
 |---|---|---|---|---|---|
-| `/sunray/formation_cmd` | ext→Agent | `sunray_msgs/Formation` | formation_switch / formation_tui | AgentSwarmNode | 编队指令 |
-| `/sunray/formation_cmd/ground` | ext→Agent | `sunray_msgs/Formation` | 地面站 | AgentSwarmNode | 编队指令备用通道 |
+| `/sunray/swarm/uav_swarm_cmd` | ext→Agent | `sunray_msgs/UAVSwarmCMD` | formation_switch / formation_tui | AgentSwarmNode | UAV 集群控制指令 |
+| `/sunray/swarm/ugv_swarm_cmd` | ext→Agent | `sunray_msgs/UGVSwarmCMD` | formation_switch / formation_tui | AgentSwarmNode | UGV 集群控制指令 |
 | `/sunray/formation_offsets` | ext→Agent | `sunray_msgs/FormationOffsets` | formation_tui | AgentSwarmNode | 自定义阵型偏移量 |
 | `/sunray/leader_goal` | ext→Agent | `geometry_msgs/PoseStamped` | formation_switch / formation_tui | AgentSwarmNode | Leader 目标点 |
-| `/{name}{id}/sunray/uav_state` | ext→Agent | `sunray_msgs/UAVState` | 飞控/仿真 | AgentStateCache, LeaderTracker, AgentSwarmNode | 无人机状态 |
-| `/{name}{id}/sunray_ugv/ugv_state` | ext→Agent | `sunray_msgs/UGVState` | 车控/仿真 | AgentStateCache, LeaderTracker（仅常规前缀场景） | 无人车状态 |
-| `/{name}{id}/sunray/setup` | Agent→飞控 | `sunray_msgs/UAVSetup` | AgentSwarmNode | 飞控/仿真 | UAV 模式切换（起飞流程使用） |
+| `/{name}{id}/sunray/localization/local_odom` | ext→Agent | `nav_msgs/Odometry` | 定位/仿真 | LeaderTracker, AgentSwarmNode | 里程计数据 |
+| `/{name}{id}/sunray/fsm/state` | ext→Agent | `sunray_msgs/UAVControlFSMState` | 飞控FSM | AgentSwarmNode | UAV FSM 状态（用于起飞完成检测） |
 | `/{name}{id}/orca/agent_state` | Agent→ORCA | `nav_msgs/Odometry` | AgentStateCache | OrcaIO | 全部 agent 状态→ORCA |
 | `/{name}{id}/orca/setup` | Agent→ORCA | `sunray_msgs/OrcaSetup` | GoalDispatcher | OrcaIO | 目标点与运行模式 |
 | `/{name}{id}/orca_cmd` | ORCA→Agent | `sunray_msgs/OrcaCmd` | OrcaIO | OrcaClient | 避障后速度与状态 |
 | `/{name}{id}/sunray/uav_control_cmd` | Agent→飞控 | `sunray_msgs/UAVControlCMD` | ControlCommandMapper | 飞控/仿真 | UAV 最终控制指令 |
-| `/{name}{id}/sunray_ugv/ugv_control_cmd` | Agent→车控 | `sunray_msgs/UGVControlCMD` | ControlCommandMapper | 车控/仿真 | UGV 最终控制指令 |
 | `/{name}{id}/orca/goal` | ORCA→RViz | `visualization_msgs/Marker` | OrcaIO | RViz | 目标点可视化 |
 | `/{name}{id}/orca/geo_fence` | ORCA→RViz | `visualization_msgs/MarkerArray` | OrcaIO | RViz | 围栏可视化 |
 
 注：`{name}` = `agent_name` 参数值（默认 `uav`），`{id}` = `agent_id`（1-based）。例如 `/uav1/orca_cmd`。
-例外：LeaderTracker 对 Leader 状态订阅始终使用硬编码前缀：`leader_id<=100` 时为 `/uav{leader_id}/sunray/uav_state`，`leader_id>100` 时为 `/ugv{leader_id-100}/sunray_ugv/ugv_state`；不跟随 `agent_name`。
+例外：LeaderTracker 对 Leader 里程计订阅：`leader_id<=100` 时为 `/{agent_name}{leader_id}/sunray/localization/local_odom`，`leader_id>100` 时为 `/ugv{leader_id-100}/sunray/localization/local_odom`（硬编码 ugv 前缀）。
 
 动作指令（形成编队的方式）
 ------------------------
-- `cmd=FORMATION`：进入编队模式，`name` 指定编队或动作
-  - `name=ring/line/column/v_shape/wedge`：切换阵型
-  - `name=expand/contract`：调整 `spacing`（乘法因子 `spacing_scale_up`/`spacing_scale_down`，限幅 `[spacing_min, spacing_max]`）
-- `cmd=HOVER`：悬停
-- `cmd=TAKEOFF`：全体起飞
-- `cmd=LAND`：全体降落
-- `cmd=RETURN_HOME`：全体返航（走 ORCA）
+**UAV 集群指令** (`UAVSwarmCMD`):
+- `TAKEOFF`：全体起飞到 `fixed_altitude` 高度
+- `LAND`：全体降落
+- `HOVER`：全体悬停
+- `SWARM_FORMATION`：进入编队模式
+  - `formation` 字段指定阵型：`RING`(=1), `LINE`(=2), `COLUMN`(=3), `V_SHAPE`(=4), `WEDGE`(=5), `CUSTOM`(=6)
+  - `EXPAND` / `CONTRACT`：调整 `spacing`（乘法因子 `spacing_scale_up`/`spacing_scale_down`，限幅 `[spacing_min, spacing_max]`）
+  - `formation_param` > 0：直接设置 spacing 值
+  - `leader_pos` + `leader_yaw` 非零：设置 Leader 目标点
+- `SWARM_RETURN`：全体返航（走 ORCA）
+
+**UGV 集群指令** (`UGVSwarmCMD`):
+- `HOLD`：全体停止
+- `RETURN`：全体返航
+- `MOVE`：移动指令（保留）
+- `SWARM_FORMATION`：进入编队模式（同 UAV）
 
 状态机图示
 ------------------
@@ -456,19 +470,19 @@ ORCA 层作为独立节点运行，每个 agent 一个实例。`orca_node.cpp` �
                     ┌──────────┐
                     │   INIT   │ ◄─── 初始状态（地面待命，不发送控制指令）
                     └────┬─────┘
-                         │ TAKEOFF cmd
+                         │ UAVSwarmCMD::TAKEOFF
                          ▼
                     ┌──────────┐
-                    │ TAKEOFF  │
+                    │ TAKEOFF  │ ◄─── 持续发送起飞指令，检测 FSM_HOVER
                     └────┬─────┘
-                         │ 15s后
+                         │ FSM 状态 = HOVER
                          ▼
                     ┌──────────┐
                     │  HOVER   │ ◄─── 起飞完成后在此等待
                     └────┬─────┘
-                         │ FORMATION cmd
+                         │ UAVSwarmCMD::SWARM_FORMATION
                          ▼
-    ┌──────────┐ ◄──── FORMATION cmd (从任意状态)
+    ┌──────────┐ ◄──── SWARM_FORMATION (从任意状态)
  ┌──│FORMATION │──┐
  │  └────┬─────┘  │
  │       │        │ EXPAND/CONTRACT
@@ -484,8 +498,8 @@ ORCA 层作为独立节点运行，每个 agent 一个实例。`orca_node.cpp` �
     │   LAND   │  │ORCA_RETURN_H │
     └──────────┘  └──────────────┘
 
-  正常流程: INIT → TAKEOFF → HOVER → (FORMATION cmd) → FORMATION → HOVER (到位) → ...
-  注: LAND 和 RETURN_HOME 可从任意状态进入（RETURN_HOME 走 ORCA）
+  正常流程: INIT → TAKEOFF → HOVER → (SWARM_FORMATION) → FORMATION → HOVER (到位) → ...
+  注: LAND 和 SWARM_RETURN 可从任意状态进入（SWARM_RETURN 走 ORCA）
   注: effectiveState() 安全兜底——INIT 直接返回不做任何操作，
       leader/orca 超时时 FORMATION→HOVER，orca 超时时 ORCA_RETURN_HOME→HOVER
 ```
@@ -619,7 +633,7 @@ catkin build sunray_swarm
 
 依赖：
 - `roscpp`, `std_msgs`, `geometry_msgs`, `nav_msgs`, `sensor_msgs`, `visualization_msgs`, `tf`, `tf2`, `tf2_geometry_msgs`
-- `sunray_msgs`（自定义消息包：Formation, FormationOffsets, OrcaSetup, OrcaCmd, UAVState, UGVState, UAVControlCMD, UGVControlCMD, UAVSetup）
+- `sunray_msgs`（自定义消息包：UAVSwarmCMD, UGVSwarmCMD, FormationOffsets, OrcaSetup, OrcaCmd, UAVControlCMD, UAVControlFSMState）
 - `ncurses`（formation_tui 依赖）
 
 代码文件职责（与文件头中文说明同步）
@@ -631,14 +645,14 @@ catkin build sunray_swarm
 |---|---|
 | [`agent_swarm_node.h/cpp`](Agent_Swarm/src/agent_swarm_node.cpp) | 节点入口与调度，订阅/发布、定时器与状态机驱动 |
 | [`formation_state_machine.h/cpp`](Agent_Swarm/src/formation_state_machine.cpp) | 编队状态机（状态转换、指令分发、安全兜底） |
-| [`leader_tracker.h/cpp`](Agent_Swarm/src/leader_tracker.cpp) | Leader 位姿获取与缓存（硬编码 /uavN 或 /ugvN 前缀） |
+| [`leader_tracker.h/cpp`](Agent_Swarm/src/leader_tracker.cpp) | Leader 位姿获取与缓存（订阅 local_odom） |
 | [`formation_policy.h`](Agent_Swarm/include/formation_policy.h) | 编队策略接口与通用偏移策略基类（`Offset2D`, `OffsetBasedPolicy`, `FormationContext`） |
 | [`formation_policies.h/cpp`](Agent_Swarm/src/formation_policies.cpp) | Ring/Line/Column/V-Shape/Wedge/Custom 的偏移表生成与通用目标计算 |
 | [`formation_policy_factory.h/cpp`](Agent_Swarm/src/formation_policy_factory.cpp) | 策略工厂，注册 `ring/line/column/v_shape/v/wedge/custom` |
 | [`agent_state_cache.h/cpp`](Agent_Swarm/src/agent_state_cache.cpp) | 全部 agent 状态缓存与 `/orca/agent_state` Odometry 发布 |
 | [`goal_dispatcher.h/cpp`](Agent_Swarm/src/goal_dispatcher.cpp) | 编队目标 → OrcaSetup 封装与发布 |
 | [`orca_client.h/cpp`](Agent_Swarm/src/orca_client.cpp) | 订阅 `/orca_cmd`，缓存 ORCA 避障输出 |
-| [`control_command_mapper.h/cpp`](Agent_Swarm/src/control_command_mapper.cpp) | ORCA 速度输出 → UAVControlCMD/UGVControlCMD 映射（含三种模式：RUN/ARRIVED/STOP） |
+| [`control_command_mapper.h/cpp`](Agent_Swarm/src/control_command_mapper.cpp) | ORCA 速度输出 → UAVControlCMD 映射（RUN=速度控制, ARRIVED=位置控制, STOP=悬停） |
 | [`formation_switch.cpp`](Agent_Swarm/utils/formation_switch.cpp) | 命令行交互控制工具（可执行文件名 `uav_command_pub`，读取整数指令） |
 | [`formation_tui.cpp`](Agent_Swarm/utils/formation_tui.cpp) | ncurses TUI 编队编辑工具（自定义阵型/切阵型/起降/目标点） |
 
@@ -666,11 +680,13 @@ catkin build sunray_swarm
 1. 在 [`formation_policies.h/cpp`](Agent_Swarm/src/formation_policies.cpp) 中新增策略类，继承 `OffsetBasedPolicy`
 2. 实现 `generateOffsets(follower_count)`，返回二维偏移表
 3. 在 [`FormationPolicyFactory`](Agent_Swarm/src/formation_policy_factory.cpp) 中注册新类型
-4. 在 `sunray_msgs/Formation` 消息中新增 `name` 约定（必要时扩展常量）
+4. 在 `sunray_msgs/UAVSwarmCMD` 和 `UGVSwarmCMD` 消息中新增 `formation` 枚举值
 5. 在 `formation_switch` 和/或 `formation_tui` 中添加对应的指令绑定
 
 ### 添加新的外部控制指令
 
-1. 在 [`FormationStateMachine`](Agent_Swarm/src/formation_state_machine.cpp) 中添加新状态/转换
-2. 在 [`AgentSwarmNode::controlTimerCb`](Agent_Swarm/src/agent_swarm_node.cpp) 中处理新状态
-3. 在 [`ControlCommandMapper`](Agent_Swarm/src/control_command_mapper.cpp) 中添加新的指令映射
+1. 在 `sunray_msgs` 中扩展 `UAVSwarmCMD` 或 `UGVSwarmCMD` 消息定义
+2. 在 [`AgentSwarmNode::onUavSwarmCmd`](Agent_Swarm/src/agent_swarm_node.cpp) 或 `onUgvSwarmCmd` 中添加新指令处理
+3. 在 [`FormationStateMachine`](Agent_Swarm/src/formation_state_machine.cpp) 中添加新状态/转换（如需要）
+4. 在 [`AgentSwarmNode::controlTimerCb`](Agent_Swarm/src/agent_swarm_node.cpp) 中处理新状态
+5. 在 [`ControlCommandMapper`](Agent_Swarm/src/control_command_mapper.cpp) 中添加新的指令映射（如需要）

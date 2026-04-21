@@ -3,13 +3,9 @@
 
 #include "RVO.h"
 #include "obstacle_builder.h"
+#include "orca_types.h"
 #include <map>
-#include <nav_msgs/Odometry.h>
-#include <ros/ros.h>
-#include <sunray_msgs/OrcaCmd.h>
-#include <sunray_msgs/OrcaSetup.h>
 #include <vector>
-#include <visualization_msgs/MarkerArray.h>
 
 namespace orca_swarm
 {
@@ -35,25 +31,11 @@ class OrcaEngine
     // 初始化引擎
     void init(int agent_id, int agent_num, const OrcaParams &params, const GeoFence &fence);
     // 更新智能体状态
-    void updateAgentState(int idx, const nav_msgs::Odometry &odom);
+    void updateAgentState(int idx, const AgentState &state);
     // 处理设置指令
-    void handleSetup(int idx, const sunray_msgs::OrcaSetup &msg);
+    void handleSetup(int idx, const OrcaSetupCmd &msg);
     // 运行一步计算
-    bool step(sunray_msgs::OrcaCmd &out);
-
-    // 标志位与围栏可视化
-    bool startFlag() const
-    {
-        return start_flag_;
-    }
-    bool goalReachedPrinted() const
-    {
-        return goal_reached_printed_;
-    }
-    const visualization_msgs::MarkerArray &fenceMarkers() const
-    {
-        return obstacle_builder_.markers();
-    }
+    bool step(double current_time, OrcaOutput &out);
 
   private:
     void setupAgents();
@@ -62,9 +44,8 @@ class OrcaEngine
 
     int agent_id_{1};
     int agent_num_{1};
-    uint8_t orca_state_{sunray_msgs::OrcaCmd::INIT};
+    uint8_t orca_state_{OrcaOutput::INIT};
     bool start_flag_{false};
-    bool goal_reached_printed_{false};
     bool arrived_goal_{false};
 
     float goal_pos_[3]{0.0f, 0.0f, 0.0f};
@@ -74,7 +55,7 @@ class OrcaEngine
     GeoFence fence_{};
     ObstacleBuilder obstacle_builder_{};
 
-    std::map<int, nav_msgs::Odometry> agent_state_{};
+    std::map<int, AgentState> agent_state_{};
     std::vector<bool> odom_valid_{};
 
     RVO::RVOSimulator *sim_{nullptr};

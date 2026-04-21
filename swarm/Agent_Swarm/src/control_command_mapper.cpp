@@ -5,6 +5,15 @@
 
 namespace agent_swarm
 {
+namespace
+{
+
+double clampAbs(double value, double limit)
+{
+    return std::max(-limit, std::min(limit, value));
+}
+
+} // namespace
 
 void ControlCommandMapper::init(ros::NodeHandle &nh, const std::string &agent_name, int agent_id, int agent_type)
 {
@@ -94,6 +103,20 @@ void ControlCommandMapper::publishFromOrca(const sunray_msgs::OrcaCmd &orca, dou
 
     if (orca.state == sunray_msgs::OrcaCmd::ARRIVED)
     {
+        const double xy_speed =
+            std::hypot(static_cast<double>(orca.linear[0]), static_cast<double>(orca.linear[1]));
+        if (xy_speed > 0.05)
+        {
+            auto cmd = makeBaseCmd();
+            cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_VELOCITY;
+            cmd.desired_vel.x = orca.linear[0];
+            cmd.desired_vel.y = orca.linear[1];
+            cmd.desired_vel.z = clampAbs(1.5 * (static_cast<double>(orca.goal_pos[2]) - current_z), 0.5);
+            cmd.desired_yaw = orca.goal_yaw;
+            uav_pub_.publish(cmd);
+            return;
+        }
+
         geometry_msgs::Pose target_pose;
         target_pose.position.x = orca.goal_pos[0];
         target_pose.position.y = orca.goal_pos[1];
@@ -107,7 +130,7 @@ void ControlCommandMapper::publishFromOrca(const sunray_msgs::OrcaCmd &orca, dou
     cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_VELOCITY;
     cmd.desired_vel.x = orca.linear[0];
     cmd.desired_vel.y = orca.linear[1];
-    const double z_vel = std::max(-0.5, std::min(0.5, 1.5 * (static_cast<double>(orca.goal_pos[2]) - current_z)));
+    const double z_vel = clampAbs(1.5 * (static_cast<double>(orca.goal_pos[2]) - current_z), 0.5);
     cmd.desired_vel.z = z_vel;
     cmd.desired_yaw = orca.goal_yaw;
     uav_pub_.publish(cmd);

@@ -2,7 +2,6 @@
 #pragma once
 
 #include "RVO.h"
-#include <visualization_msgs/MarkerArray.h>
 
 namespace orca_swarm
 {
@@ -24,15 +23,9 @@ class ObstacleBuilder
     void init(const GeoFence &fence);
     // 应用到 RVO 仿真
     void apply(RVO::RVOSimulator *sim);
-    // 获取围栏可视化
-    const visualization_msgs::MarkerArray &markers() const
-    {
-        return marker_array_;
-    }
 
   private:
     GeoFence fence_{};
-    visualization_msgs::MarkerArray marker_array_{};
 };
 
 } // namespace orca_swarm

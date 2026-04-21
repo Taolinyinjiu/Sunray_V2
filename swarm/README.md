@@ -1,12 +1,12 @@
 Swarm (sunray_swarm)
 ====================
-面向多机编队控制与 ORCA 避障的 ROS1 包，包含编队策略、状态机、ORCA 速度避障以及交互式编队控制工具。
+面向多机编队控制与 ORCA 避障的 ROS1 包，包含编队策略、状态机、内嵌 ORCA 避障引擎以及交互式编队控制工具。
 
 目录结构
 --------
 Swarm/
-  Agent_Swarm/   # 编队/集群控制主体
-  ORCA/          # ORCA 避障主体
+  Agent_Swarm/   # 编队/集群控制主体（内含本地 ORCA 调用）
+  ORCA/          # ORCA 纯 C++ 避障内核
   launch/        # 一键启动/仿真启动
   scripts/       # 启动辅助脚本
 
@@ -21,7 +21,7 @@ Swarm/
 依赖
 ----
 - ROS 1 (catkin)
-- roscpp, std_msgs, geometry_msgs, nav_msgs, sensor_msgs, visualization_msgs
+- roscpp, std_msgs, geometry_msgs, nav_msgs, sensor_msgs
 - tf, tf2, tf2_geometry_msgs
 - sunray_msgs（自定义消息）
 
@@ -40,6 +40,11 @@ catkin build sunray_swarm
 多机仿真（示例 6 台）：
 ```bash
 roslaunch sunray_swarm swarm_sim.launch agent_num:=6
+```
+
+单机集群控制（已内嵌 ORCA，无需再启动 `orca.launch`）：
+```bash
+roslaunch sunray_swarm agent_swarm.launch agent_id:=1 agent_num:=6
 ```
 
 交互式编队控制（TUI）：
@@ -69,6 +74,7 @@ formation_tui 要点
 - `/sunray/formation_cmd`（`sunray_msgs::Formation`）
 - `/sunray/formation_offsets`（`sunray_msgs::FormationOffsets`）
 - `/sunray/leader_goal`（`geometry_msgs::PoseStamped`）
+- `/{agent_name}{id}/orca/setup`（`sunray_msgs::OrcaSetup`，用于各 agent 间共享目标）
 
 更多细节
 --------

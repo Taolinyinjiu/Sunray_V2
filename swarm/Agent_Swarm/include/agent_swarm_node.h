@@ -3,11 +3,13 @@
 
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <map>
 #include <memory>
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <string>
 #include <sunray_msgs/FormationOffsets.h>
+#include <sunray_msgs/OrcaSetup.h>
 #include <sunray_msgs/UAVControlFSMState.h>
 #include <sunray_msgs/UAVSwarmCMD.h>
 #include <sunray_msgs/UGVSwarmCMD.h>
@@ -19,7 +21,7 @@
 #include "formation_state_machine.h"
 #include "goal_dispatcher.h"
 #include "leader_tracker.h"
-#include "orca_client.h"
+#include "orca_engine.h"
 
 namespace agent_swarm
 {
@@ -37,15 +39,19 @@ class AgentSwarmNode
     void goalTimerCb(const ros::TimerEvent &event);
     // 控制定时发布
     void controlTimerCb(const ros::TimerEvent &event);
-    // 状态定时发布到 ORCA
+    // 状态定时同步到本地 ORCA
     void statePublishTimerCb(const ros::TimerEvent &event);
     void selfOdomCb(const nav_msgs::Odometry::ConstPtr &msg);
     void selfFsmStateCb(const sunray_msgs::UAVControlFSMState::ConstPtr &msg);
+    void orcaSetupCb(const sunray_msgs::OrcaSetup::ConstPtr &msg, int idx);
     // Leader 目标点回调
     void leaderGoalCb(const geometry_msgs::PoseStamped::ConstPtr &msg);
     // 自定义阵型偏移量回调
     void formationOffsetsCb(const sunray_msgs::FormationOffsets::ConstPtr &msg);
     bool cacheHomeFromCurrentPose();
+    void dispatchOrcaGoal(const geometry_msgs::Pose &target_pose, bool run_mode);
+    void updateLocalOrca();
+    bool localOrcaFresh() const;
 
     ros::NodeHandle nh_;
 
@@ -74,7 +80,7 @@ class AgentSwarmNode
     std::shared_ptr<CustomPolicy> custom_policy_{};
     AgentStateCache state_cache_{};
     GoalDispatcher goal_dispatcher_{};
-    OrcaClient orca_client_{};
+    orca_swarm::OrcaEngine orca_engine_{};
     ControlCommandMapper control_mapper_{};
 
     ros::Subscriber uav_swarm_cmd_sub_{};
@@ -83,6 +89,7 @@ class AgentSwarmNode
     ros::Subscriber self_odom_sub_{};
     ros::Subscriber self_fsm_state_sub_{};
     ros::Subscriber leader_goal_sub_{};
+    std::map<int, ros::Subscriber> orca_setup_subs_{};
     ros::Timer goal_timer_{};
     ros::Timer control_timer_{};
     ros::Timer state_pub_timer_{};
@@ -99,6 +106,9 @@ class AgentSwarmNode
     geometry_msgs::Pose leader_goal_{};
     geometry_msgs::Pose last_goal_{};
     bool last_goal_valid_{false};
+    sunray_msgs::OrcaCmd last_orca_cmd_{};
+    ros::Time last_orca_cmd_stamp_{};
+    bool has_orca_cmd_{false};
     SwarmState last_effective_state_{SwarmState::INIT};
     bool last_effective_state_valid_{false};
 };

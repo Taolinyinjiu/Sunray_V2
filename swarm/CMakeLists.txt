@@ -7,7 +7,6 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs
   sensor_msgs
-  visualization_msgs
   tf
   tf2
   tf2_geometry_msgs
@@ -32,21 +31,8 @@ set(AGENT_SWARM_SRCS
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/formation_policy_factory.cpp
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/agent_state_cache.cpp
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/goal_dispatcher.cpp
-  ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/orca_client.cpp
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/control_command_mapper.cpp
 )
-
-add_executable(agent_swarm_node ${AGENT_SWARM_SRCS})
-add_dependencies(agent_swarm_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(agent_swarm_node ${catkin_LIBRARIES})
-
-add_executable(uav_command_pub ${PROJECT_SOURCE_DIR}/Agent_Swarm/utils/formation_switch.cpp)
-add_dependencies(uav_command_pub ${catkin_EXPORTED_TARGETS})
-target_link_libraries(uav_command_pub ${catkin_LIBRARIES})
-
-add_executable(formation_tui ${PROJECT_SOURCE_DIR}/Agent_Swarm/utils/formation_tui.cpp)
-add_dependencies(formation_tui ${catkin_EXPORTED_TARGETS})
-target_link_libraries(formation_tui ${catkin_LIBRARIES} ${CURSES_LIBRARIES})
 
 set(ORCA_RVO_SRCS
   ${PROJECT_SOURCE_DIR}/ORCA/src/Agent.cpp
@@ -55,14 +41,24 @@ set(ORCA_RVO_SRCS
   ${PROJECT_SOURCE_DIR}/ORCA/src/RVOSimulator.cpp
 )
 
-set(ORCA_SRCS
-  ${PROJECT_SOURCE_DIR}/ORCA/src/orca_node.cpp
+set(ORCA_LIB_SRCS
   ${PROJECT_SOURCE_DIR}/ORCA/src/orca_engine.cpp
-  ${PROJECT_SOURCE_DIR}/ORCA/src/orca_io.cpp
   ${PROJECT_SOURCE_DIR}/ORCA/src/obstacle_builder.cpp
   ${ORCA_RVO_SRCS}
 )
 
-add_executable(orca_node ${ORCA_SRCS})
-add_dependencies(orca_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(orca_node ${catkin_LIBRARIES})
+add_library(orca_engine_lib ${ORCA_LIB_SRCS})
+add_dependencies(orca_engine_lib ${catkin_EXPORTED_TARGETS})
+target_include_directories(orca_engine_lib PUBLIC ${PROJECT_SOURCE_DIR}/ORCA/include)
+
+add_executable(agent_swarm_node ${AGENT_SWARM_SRCS})
+add_dependencies(agent_swarm_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(agent_swarm_node orca_engine_lib ${catkin_LIBRARIES})
+
+add_executable(uav_command_pub ${PROJECT_SOURCE_DIR}/Agent_Swarm/utils/formation_switch.cpp)
+add_dependencies(uav_command_pub ${catkin_EXPORTED_TARGETS})
+target_link_libraries(uav_command_pub ${catkin_LIBRARIES})
+
+add_executable(formation_tui ${PROJECT_SOURCE_DIR}/Agent_Swarm/utils/formation_tui.cpp)
+add_dependencies(formation_tui ${catkin_EXPORTED_TARGETS})
+target_link_libraries(formation_tui ${catkin_LIBRARIES} ${CURSES_LIBRARIES})

@@ -1,4 +1,4 @@
-// 中文说明：状态缓存实现，发布 /orca/agent_state
+// 中文说明：状态缓存实现，订阅并缓存全部 agent odom
 #include "agent_state_cache.h"
 #include <boost/bind.hpp>
 
@@ -19,10 +19,6 @@ void AgentStateCache::init(ros::NodeHandle &nh, int agent_num, int agent_type, c
     for (int i = 0; i < agent_num_; ++i)
     {
         int id = i + 1;
-        // ORCA agent_state 始终使用 agent_name 前缀
-        std::string orca_prefix = "/" + agent_name_ + std::to_string(id);
-        pubs_[id] = nh.advertise<nav_msgs::Odometry>(orca_prefix + "/orca/agent_state", 10);
-
         if (leader_is_ugv && id == leader_index)
         {
             std::string topic = "/ugv" + std::to_string(id) + "/sunray/localization/local_odom";
@@ -39,19 +35,6 @@ void AgentStateCache::init(ros::NodeHandle &nh, int agent_num, int agent_type, c
 void AgentStateCache::odomCallback(const nav_msgs::Odometry::ConstPtr &msg, int idx)
 {
     agent_state_[idx] = *msg;
-}
-
-void AgentStateCache::publishOrcaStates()
-{
-    for (const auto &kv : agent_state_)
-    {
-        int id = kv.first;
-        auto it = pubs_.find(id);
-        if (it != pubs_.end())
-        {
-            it->second.publish(kv.second);
-        }
-    }
 }
 
 } // namespace agent_swarm

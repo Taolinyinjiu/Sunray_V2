@@ -54,3 +54,8 @@ __pycache__/
 .clang-tidy
 # .clang-format
 .cache
+
+#codex
+.codex
+AGENTS.md
+CLAUDE.md

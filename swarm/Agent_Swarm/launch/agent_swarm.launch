@@ -5,6 +5,7 @@
   <!-- use_fixed_altitude: true/false；fixed_altitude > 0 -->
   <!-- goal_z_tolerance: 到位判定的 Z 误差容差 (m)，仅 UAV 有效 -->
   <!-- leader_timeout/orca_timeout: 秒；rate 参数建议 5~50 -->
+  <!-- ORCA 参数已并入本 launch，由 agent_swarm_node 内部直接初始化 -->
   
   <arg name="agent_id" default="1"/>
   <arg name="agent_num" default="1"/>
@@ -26,6 +27,16 @@
   <arg name="state_pub_rate" default="20.0"/>
   <arg name="leader_publish_goal" default="true"/>
   <arg name="goal_z_tolerance" default="0.2"/>
+  <arg name="neighborDist" default="3.0"/>
+  <arg name="timeHorizon" default="2.0"/>
+  <arg name="timeHorizonObst" default="2.0"/>
+  <arg name="radius" default="0.3"/>
+  <arg name="maxSpeed" default="2.0"/>
+  <arg name="time_step" default="0.2"/>
+  <arg name="geo_min_x" default="-20.0"/>
+  <arg name="geo_max_x" default="20.0"/>
+  <arg name="geo_min_y" default="-20.0"/>
+  <arg name="geo_max_y" default="20.0"/>
   <arg name="node_name" default="agent_swarm_node"/>
 
   <node pkg="sunray_swarm" type="agent_swarm_node" name="$(arg node_name)" output="screen">
@@ -49,5 +60,15 @@
     <param name="state_pub_rate" value="$(arg state_pub_rate)"/>
     <param name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
     <param name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
+    <param name="orca_params/neighborDist" value="$(arg neighborDist)"/>
+    <param name="orca_params/timeHorizon" value="$(arg timeHorizon)"/>
+    <param name="orca_params/timeHorizonObst" value="$(arg timeHorizonObst)"/>
+    <param name="orca_params/radius" value="$(arg radius)"/>
+    <param name="orca_params/maxSpeed" value="$(arg maxSpeed)"/>
+    <param name="orca_params/time_step" value="$(arg time_step)"/>
+    <param name="geo_fence/min_x" value="$(arg geo_min_x)"/>
+    <param name="geo_fence/max_x" value="$(arg geo_max_x)"/>
+    <param name="geo_fence/min_y" value="$(arg geo_min_y)"/>
+    <param name="geo_fence/max_y" value="$(arg geo_max_y)"/>
   </node>
 </launch>

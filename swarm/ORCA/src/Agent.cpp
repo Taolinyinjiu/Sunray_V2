@@ -19,9 +19,10 @@ Agent::Agent(RVOSimulator *sim)
 void Agent::computePrefVelocity()
 {
     RVO::Vector2 goalVector = goal_ - position_;
+    const float goalDistanceSq = RVO::absSq(goalVector);
 
     // 距离大于1，则归一化
-    if (RVO::absSq(goalVector) > 1.0f)
+    if (goalDistanceSq > 1.0f)
     {
         goalVector = RVO::normalize(goalVector);
     }
@@ -29,12 +30,17 @@ void Agent::computePrefVelocity()
     prefVelocity_ = goalVector;
 
     /*
-     * Perturb a little to avoid deadlocks due to perfect symmetry.
+     * Add a deterministic lateral bias to break perfect symmetry.
+     * Random perturbation without seeding tends to be identical across nodes,
+     * which is ineffective during highly symmetric formation switches.
      */
-    float angle = std::rand() * 2.0f * M_PI / RAND_MAX;
-    float dist = std::rand() * 0.0001f / RAND_MAX;
-    // std::cout << dist * RVO::Vector2(std::cos(angle), std::sin(angle)) << std::endl;
-    prefVelocity_ = prefVelocity_ + dist * RVO::Vector2(std::cos(angle), std::sin(angle));
+    if (goalDistanceSq > 0.2f * 0.2f && RVO::absSq(prefVelocity_) > RVO_EPSILON)
+    {
+        const float sideSign = (id_ % 2 == 0) ? 1.0f : -1.0f;
+        const Vector2 lateralDir = RVO::normalize(Vector2(-prefVelocity_.y(), prefVelocity_.x()));
+        const float lateralBias = 0.03f;
+        prefVelocity_ = prefVelocity_ + sideSign * lateralBias * lateralDir;
+    }
 }
 
 void Agent::computeNeighbors()

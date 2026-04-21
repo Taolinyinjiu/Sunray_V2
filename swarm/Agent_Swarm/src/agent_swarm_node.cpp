@@ -1,6 +1,7 @@
 // 中文说明：AgentSwarm 节点实现，驱动编队计算与控制输出
 #include "agent_swarm_node.h"
 #include <algorithm>
+#include <boost/bind.hpp>
 #include <cmath>
 #include <tf/transform_datatypes.h>
 
@@ -70,6 +71,46 @@ std::string formationNameFromEnum(uint8_t formation)
     }
 }
 
+orca_swarm::AgentState toOrcaAgentState(const nav_msgs::Odometry &odom)
+{
+    orca_swarm::AgentState state;
+    state.x = odom.pose.pose.position.x;
+    state.y = odom.pose.pose.position.y;
+    state.vx = odom.twist.twist.linear.x;
+    state.vy = odom.twist.twist.linear.y;
+    state.timestamp = odom.header.stamp.toSec();
+    return state;
+}
+
+orca_swarm::OrcaSetupCmd toOrcaSetupCmd(const sunray_msgs::OrcaSetup &msg)
+{
+    orca_swarm::OrcaSetupCmd cmd;
+    cmd.cmd = msg.cmd;
+    cmd.desired_pos[0] = msg.desired_pos[0];
+    cmd.desired_pos[1] = msg.desired_pos[1];
+    cmd.desired_pos[2] = msg.desired_pos[2];
+    cmd.desired_yaw = msg.desired_yaw;
+    return cmd;
+}
+
+sunray_msgs::OrcaCmd toRosOrcaCmd(const orca_swarm::OrcaOutput &out, const ros::Time &stamp)
+{
+    sunray_msgs::OrcaCmd cmd;
+    cmd.header.stamp = stamp;
+    cmd.state = out.state;
+    cmd.goal_pos[0] = out.goal_pos[0];
+    cmd.goal_pos[1] = out.goal_pos[1];
+    cmd.goal_pos[2] = out.goal_pos[2];
+    cmd.goal_yaw = out.goal_yaw;
+    cmd.linear[0] = out.linear[0];
+    cmd.linear[1] = out.linear[1];
+    cmd.linear[2] = out.linear[2];
+    cmd.angular[0] = out.angular[0];
+    cmd.angular[1] = out.angular[1];
+    cmd.angular[2] = out.angular[2];
+    return cmd;
+}
+
 } // namespace
 
 AgentSwarmNode::AgentSwarmNode(ros::NodeHandle &nh) : nh_(nh)
@@ -92,6 +133,40 @@ AgentSwarmNode::AgentSwarmNode(ros::NodeHandle &nh) : nh_(nh)
     nh_.param<double>("goal_z_tolerance", goal_z_tolerance_, 0.2);
     nh_.param<bool>("leader_publish_goal", leader_publish_goal_, true);
 
+    orca_swarm::OrcaParams orca_params;
+    double neighbor_dist = static_cast<double>(orca_params.neighbor_dist);
+    double time_horizon = static_cast<double>(orca_params.time_horizon);
+    double time_horizon_obst = static_cast<double>(orca_params.time_horizon_obst);
+    double radius = static_cast<double>(orca_params.radius);
+    double max_speed = static_cast<double>(orca_params.max_speed);
+    double time_step = static_cast<double>(orca_params.time_step);
+    nh_.param<double>("orca_params/neighborDist", neighbor_dist, neighbor_dist);
+    nh_.param<double>("orca_params/timeHorizon", time_horizon, time_horizon);
+    nh_.param<double>("orca_params/timeHorizonObst", time_horizon_obst, time_horizon_obst);
+    nh_.param<double>("orca_params/radius", radius, radius);
+    nh_.param<double>("orca_params/maxSpeed", max_speed, max_speed);
+    nh_.param<double>("orca_params/time_step", time_step, time_step);
+    orca_params.neighbor_dist = static_cast<float>(neighbor_dist);
+    orca_params.time_horizon = static_cast<float>(time_horizon);
+    orca_params.time_horizon_obst = static_cast<float>(time_horizon_obst);
+    orca_params.radius = static_cast<float>(radius);
+    orca_params.max_speed = static_cast<float>(max_speed);
+    orca_params.time_step = static_cast<float>(time_step);
+
+    orca_swarm::GeoFence fence;
+    double geo_min_x = static_cast<double>(fence.min_x);
+    double geo_max_x = static_cast<double>(fence.max_x);
+    double geo_min_y = static_cast<double>(fence.min_y);
+    double geo_max_y = static_cast<double>(fence.max_y);
+    nh_.param<double>("geo_fence/min_x", geo_min_x, geo_min_x);
+    nh_.param<double>("geo_fence/max_x", geo_max_x, geo_max_x);
+    nh_.param<double>("geo_fence/min_y", geo_min_y, geo_min_y);
+    nh_.param<double>("geo_fence/max_y", geo_max_y, geo_max_y);
+    fence.min_x = static_cast<float>(geo_min_x);
+    fence.max_x = static_cast<float>(geo_max_x);
+    fence.min_y = static_cast<float>(geo_min_y);
+    fence.max_y = static_cast<float>(geo_max_y);
+
     custom_policy_ = std::make_shared<CustomPolicy>();
     policy_ = (policy_name_ == "custom") ? std::static_pointer_cast<FormationPolicy>(custom_policy_)
                                           : policy_factory_.create(policy_name_);
@@ -99,8 +174,16 @@ AgentSwarmNode::AgentSwarmNode(ros::NodeHandle &nh) : nh_(nh)
     leader_tracker_.init(nh_, leader_id_, agent_name_);
     state_cache_.init(nh_, agent_num_, agent_type_, agent_name_, leader_id_);
     goal_dispatcher_.init(nh_, agent_name_, agent_id_);
-    orca_client_.init(nh_, agent_name_, agent_id_);
+    orca_engine_.init(agent_id_, agent_num_, orca_params, fence);
     control_mapper_.init(nh_, agent_name_, agent_id_, agent_type_);
+
+    for (int i = 0; i < agent_num_; ++i)
+    {
+        const int id = i + 1;
+        const std::string topic = "/" + agent_name_ + std::to_string(id) + "/orca/setup";
+        orca_setup_subs_[id] = nh_.subscribe<sunray_msgs::OrcaSetup>(
+            topic, 10, boost::bind(&AgentSwarmNode::orcaSetupCb, this, _1, i));
+    }
 
     const std::string self_prefix = "/" + agent_name_ + std::to_string(agent_id_);
     self_odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(self_prefix + "/sunray/localization/local_odom", 10,
@@ -358,7 +441,7 @@ void AgentSwarmNode::onUgvSwarmCmd(const sunray_msgs::UGVSwarmCMD::ConstPtr &msg
 void AgentSwarmNode::goalTimerCb(const ros::TimerEvent &)
 {
     const bool leader_ok = leader_tracker_.isFresh(leader_timeout_);
-    const bool orca_ok = orca_client_.isFresh(orca_timeout_);
+    const bool orca_ok = localOrcaFresh();
     const SwarmState state = state_machine_.effectiveState(leader_ok, orca_ok);
     if (state != SwarmState::FORMATION && state != SwarmState::ORCA_RETURN_HOME)
     {
@@ -378,7 +461,7 @@ void AgentSwarmNode::goalTimerCb(const ros::TimerEvent &)
         }
         last_goal_ = target;
         last_goal_valid_ = true;
-        goal_dispatcher_.publishGoal(target, true);
+        dispatchOrcaGoal(target, true);
         return;
     }
 
@@ -404,7 +487,7 @@ void AgentSwarmNode::goalTimerCb(const ros::TimerEvent &)
         }
         last_goal_ = target;
         last_goal_valid_ = true;
-        goal_dispatcher_.publishGoal(target, true);
+        dispatchOrcaGoal(target, true);
         return;
     }
 
@@ -426,13 +509,13 @@ void AgentSwarmNode::goalTimerCb(const ros::TimerEvent &)
     }
     last_goal_ = passthrough_pose;
     last_goal_valid_ = true;
-    goal_dispatcher_.publishGoal(passthrough_pose, true);
+    dispatchOrcaGoal(passthrough_pose, true);
 }
 
 void AgentSwarmNode::controlTimerCb(const ros::TimerEvent &)
 {
     const bool leader_ok = leader_tracker_.isFresh(leader_timeout_);
-    const bool orca_ok = orca_client_.isFresh(orca_timeout_);
+    const bool orca_ok = localOrcaFresh();
     const SwarmState state = state_machine_.effectiveState(leader_ok, orca_ok);
     if (!last_effective_state_valid_ || state != last_effective_state_)
     {
@@ -473,12 +556,12 @@ void AgentSwarmNode::controlTimerCb(const ros::TimerEvent &)
         return;
     }
 
-    sunray_msgs::OrcaCmd orca_cmd;
-    if (!orca_client_.getLastCmd(orca_cmd))
+    if (!has_orca_cmd_)
     {
         control_mapper_.publishHover();
         return;
     }
+    const sunray_msgs::OrcaCmd &orca_cmd = last_orca_cmd_;
 
     if (orca_cmd.state == sunray_msgs::OrcaCmd::ARRIVED &&
         (formation_change_active_ || leader_goal_active_ || return_home_active_) && last_goal_valid_)
@@ -494,12 +577,20 @@ void AgentSwarmNode::controlTimerCb(const ros::TimerEvent &)
         }
         if (dist2 < 0.04 && z_reached)
         {
-            formation_change_active_ = false;
-            leader_goal_active_ = false;
-            return_home_active_ = false;
-            state_machine_.setRequestedState(SwarmState::HOVER);
-            control_mapper_.publishHover();
-            return;
+            if (return_home_active_)
+            {
+                formation_change_active_ = false;
+                leader_goal_active_ = false;
+            }
+            else
+            {
+                formation_change_active_ = false;
+                leader_goal_active_ = false;
+                return_home_active_ = false;
+                state_machine_.setRequestedState(SwarmState::HOVER);
+                control_mapper_.publishHover();
+                return;
+            }
         }
     }
 
@@ -509,7 +600,7 @@ void AgentSwarmNode::controlTimerCb(const ros::TimerEvent &)
 
 void AgentSwarmNode::statePublishTimerCb(const ros::TimerEvent &)
 {
-    state_cache_.publishOrcaStates();
+    updateLocalOrca();
 }
 
 void AgentSwarmNode::selfOdomCb(const nav_msgs::Odometry::ConstPtr &msg)
@@ -522,6 +613,15 @@ void AgentSwarmNode::selfFsmStateCb(const sunray_msgs::UAVControlFSMState::Const
 {
     self_fsm_state_ = *msg;
     self_fsm_state_ready_ = true;
+}
+
+void AgentSwarmNode::orcaSetupCb(const sunray_msgs::OrcaSetup::ConstPtr &msg, int idx)
+{
+    if (idx == agent_id_ - 1)
+    {
+        return;
+    }
+    orca_engine_.handleSetup(idx, toOrcaSetupCmd(*msg));
 }
 
 void AgentSwarmNode::leaderGoalCb(const geometry_msgs::PoseStamped::ConstPtr &msg)
@@ -549,6 +649,50 @@ void AgentSwarmNode::formationOffsetsCb(const sunray_msgs::FormationOffsets::Con
         offsets.push_back({pt.x, pt.y});
     }
     custom_policy_->setOffsets(offsets);
+}
+
+void AgentSwarmNode::dispatchOrcaGoal(const geometry_msgs::Pose &target_pose, bool run_mode)
+{
+    sunray_msgs::OrcaSetup msg;
+    msg.header.stamp = ros::Time::now();
+    msg.cmd = run_mode ? sunray_msgs::OrcaSetup::GOAL_RUN : sunray_msgs::OrcaSetup::GOAL;
+    msg.desired_pos[0] = target_pose.position.x;
+    msg.desired_pos[1] = target_pose.position.y;
+    msg.desired_pos[2] = target_pose.position.z;
+    msg.desired_yaw = tf::getYaw(target_pose.orientation);
+
+    orca_engine_.handleSetup(agent_id_ - 1, toOrcaSetupCmd(msg));
+    goal_dispatcher_.publishGoal(target_pose, run_mode);
+}
+
+void AgentSwarmNode::updateLocalOrca()
+{
+    const auto &all_states = state_cache_.states();
+    for (const auto &kv : all_states)
+    {
+        const int idx = kv.first - 1;
+        if (idx < 0 || idx >= agent_num_)
+        {
+            continue;
+        }
+        orca_engine_.updateAgentState(idx, toOrcaAgentState(kv.second));
+    }
+
+    const ros::Time now = ros::Time::now();
+    orca_swarm::OrcaOutput out;
+    orca_engine_.step(now.toSec(), out);
+    last_orca_cmd_ = toRosOrcaCmd(out, now);
+    last_orca_cmd_stamp_ = now;
+    has_orca_cmd_ = true;
+}
+
+bool AgentSwarmNode::localOrcaFresh() const
+{
+    if (!has_orca_cmd_)
+    {
+        return false;
+    }
+    return (ros::Time::now() - last_orca_cmd_stamp_).toSec() <= orca_timeout_;
 }
 
 } // namespace agent_swarm

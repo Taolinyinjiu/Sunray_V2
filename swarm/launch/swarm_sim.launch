@@ -52,13 +52,6 @@
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
       <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
-      <arg name="node_name" value="agent_swarm_node_1"/>
-    </include>
-    <include file="$(find sunray_swarm)/ORCA/launch/orca.launch">
-      <arg name="agent_id" value="1"/>
-      <arg name="agent_num" value="$(arg agent_num)"/>
-      <arg name="agent_name" value="$(arg agent_name)"/>
-      <arg name="node_name" value="orca_node_1"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -69,6 +62,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
+      <arg name="node_name" value="agent_swarm_node_1"/>
     </include>
   </group>
 
@@ -90,13 +84,6 @@
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
       <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
-      <arg name="node_name" value="agent_swarm_node_2"/>
-    </include>
-    <include file="$(find sunray_swarm)/ORCA/launch/orca.launch">
-      <arg name="agent_id" value="2"/>
-      <arg name="agent_num" value="$(arg agent_num)"/>
-      <arg name="agent_name" value="$(arg agent_name)"/>
-      <arg name="node_name" value="orca_node_2"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -107,6 +94,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
+      <arg name="node_name" value="agent_swarm_node_2"/>
     </include>
   </group>
 
@@ -128,13 +116,6 @@
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
       <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
-      <arg name="node_name" value="agent_swarm_node_3"/>
-    </include>
-    <include file="$(find sunray_swarm)/ORCA/launch/orca.launch">
-      <arg name="agent_id" value="3"/>
-      <arg name="agent_num" value="$(arg agent_num)"/>
-      <arg name="agent_name" value="$(arg agent_name)"/>
-      <arg name="node_name" value="orca_node_3"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -145,6 +126,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
+      <arg name="node_name" value="agent_swarm_node_3"/>
     </include>
   </group>
 
@@ -166,13 +148,6 @@
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
       <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
-      <arg name="node_name" value="agent_swarm_node_4"/>
-    </include>
-    <include file="$(find sunray_swarm)/ORCA/launch/orca.launch">
-      <arg name="agent_id" value="4"/>
-      <arg name="agent_num" value="$(arg agent_num)"/>
-      <arg name="agent_name" value="$(arg agent_name)"/>
-      <arg name="node_name" value="orca_node_4"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -183,6 +158,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
+      <arg name="node_name" value="agent_swarm_node_4"/>
     </include>
   </group>
 
@@ -204,13 +180,6 @@
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
       <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
-      <arg name="node_name" value="agent_swarm_node_5"/>
-    </include>
-    <include file="$(find sunray_swarm)/ORCA/launch/orca.launch">
-      <arg name="agent_id" value="5"/>
-      <arg name="agent_num" value="$(arg agent_num)"/>
-      <arg name="agent_name" value="$(arg agent_name)"/>
-      <arg name="node_name" value="orca_node_5"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -221,6 +190,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
+      <arg name="node_name" value="agent_swarm_node_5"/>
     </include>
   </group>
 
@@ -242,13 +212,6 @@
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
       <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
-      <arg name="node_name" value="agent_swarm_node_6"/>
-    </include>
-    <include file="$(find sunray_swarm)/ORCA/launch/orca.launch">
-      <arg name="agent_id" value="6"/>
-      <arg name="agent_num" value="$(arg agent_num)"/>
-      <arg name="agent_name" value="$(arg agent_name)"/>
-      <arg name="node_name" value="orca_node_6"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -259,6 +222,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
+      <arg name="node_name" value="agent_swarm_node_6"/>
     </include>
   </group>
 </launch>
