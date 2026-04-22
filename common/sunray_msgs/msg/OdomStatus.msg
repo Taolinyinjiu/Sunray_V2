@@ -15,6 +15,7 @@ uint8 MOCAP = 1	# 动作捕捉定位源
 uint8 VINS = 2
 uint8 GAZEBO = 3
 uint8 GAZEBO_ARUCO = 4
+uint8 PENGYU_SIM = 5     ## 借助pengyu_sim仿真包进行仿真
 
 # localization_mode 重定位模式枚举
 uint8 LOCAL = 0
