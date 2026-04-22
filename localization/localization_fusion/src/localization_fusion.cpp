@@ -1,13 +1,166 @@
 #include "localization_fusion.hpp"
+#include "sunray_log.hpp"
 #include "string_uav_namespace_utils.hpp"
 #include "uav_param_utils.hpp"
+#include <chrono>
+#include <cmath>
+#include <ctime>
 #include <Eigen/Dense>
+#include <iomanip>
+#include <ros/package.h>
+#include <sstream>
 #include <stdexcept>
 #include <sunray_msgs/OdomStatus.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 // clang-format on
+
+namespace {
+
+enum class PanelLogSeverity {
+    INFO,
+    WARN,
+    ERROR
+};
+
+constexpr const char* kAnsiReset = "\033[0m";
+constexpr const char* kAnsiLightCyan = "\033[1;36m";
+constexpr const char* kAnsiGreen = "\033[32m";
+constexpr const char* kAnsiRed = "\033[31m";
+
+const char* localization_mode_to_string(LocalizationMode mode) {
+    switch (mode) {
+    case LocalizationMode::LOCAL:
+        return "LOCAL";
+    case LocalizationMode::GLOBAL:
+        return "GLOBAL";
+    case LocalizationMode::LOCAL_AND_GLOBAL:
+        return "LOCAL_AND_GLOBAL";
+    case LocalizationMode::LOCAL_WITH_ARUCO:
+        return "LOCAL_WITH_ARUCO";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+bool needs_relocalization(LocalizationMode mode) {
+    return mode == LocalizationMode::LOCAL_AND_GLOBAL ||
+           mode == LocalizationMode::LOCAL_WITH_ARUCO;
+}
+
+std::string bool_to_cn(bool value, const std::string& true_text, const std::string& false_text) {
+    return value ? true_text : false_text;
+}
+
+std::string format_scalar(double value, int precision = 3) {
+    if (!std::isfinite(value)) {
+        return "nan";
+    }
+    std::ostringstream oss;
+    oss << std::showpos << std::fixed << std::setprecision(precision) << value;
+    return oss.str();
+}
+
+std::string format_vec3(double x, double y, double z, int precision = 3) {
+    std::ostringstream oss;
+    oss << format_scalar(x, precision) << " " << format_scalar(y, precision) << " "
+        << format_scalar(z, precision);
+    return oss.str();
+}
+
+std::string format_rate_hz(double value, int precision = 2) {
+    if (!std::isfinite(value) || value <= 0.0) {
+        return "未知";
+    }
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(precision) << value;
+    return oss.str();
+}
+
+std::string colorize_console_text(const std::string& text, const char* color) {
+    return std::string(color) + text + kAnsiReset;
+}
+
+std::string format_odom_rpy_deg(const nav_msgs::Odometry& odom, int precision = 2) {
+    const geometry_msgs::Quaternion& q = odom.pose.pose.orientation;
+    const bool quat_finite =
+        std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z) && std::isfinite(q.w);
+    if (!quat_finite) {
+        return "nan nan nan";
+    }
+
+    tf2::Quaternion tf_q(q.x, q.y, q.z, q.w);
+    if (tf_q.length2() < 1e-12) {
+        return "nan nan nan";
+    }
+    tf_q.normalize();
+
+    double roll = 0.0;
+    double pitch = 0.0;
+    double yaw = 0.0;
+    tf2::Matrix3x3(tf_q).getRPY(roll, pitch, yaw);
+    constexpr double kRadToDeg = 180.0 / M_PI;
+    return format_vec3(roll * kRadToDeg, pitch * kRadToDeg, yaw * kRadToDeg, precision);
+}
+
+std::string safe_topic(const std::string& runtime_topic, const std::string& fallback_topic) {
+    return runtime_topic.empty() ? fallback_topic : runtime_topic;
+}
+
+std::string parent_directory(const std::string& path) {
+    const std::size_t pos = path.find_last_of('/');
+    return (pos == std::string::npos) ? "" : path.substr(0, pos);
+}
+
+std::string make_startup_timestamp() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_now;
+    localtime_r(&now_time, &tm_now);
+
+    const auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+    std::ostringstream oss;
+    oss << std::put_time(&tm_now, "%Y%m%d_%H%M%S") << "_" << std::setfill('0') << std::setw(3)
+        << milliseconds.count();
+    return oss.str();
+}
+
+void update_input_rate(double& averaged_rate_hz,
+                       std::deque<double>& sample_times_s,
+                       const double sample_time_s,
+                       const std::size_t window_size = 20) {
+    if (!std::isfinite(sample_time_s)) {
+        return;
+    }
+
+    if (!sample_times_s.empty() && sample_time_s <= sample_times_s.back()) {
+        if (std::abs(sample_time_s - sample_times_s.back()) < 1e-6) {
+            return;
+        }
+        sample_times_s.clear();
+    }
+
+    sample_times_s.push_back(sample_time_s);
+    while (sample_times_s.size() > window_size) {
+        sample_times_s.pop_front();
+    }
+
+    if (sample_times_s.size() < 2) {
+        return;
+    }
+
+    const double duration_s = sample_times_s.back() - sample_times_s.front();
+    if (duration_s > 1e-4) {
+        averaged_rate_hz = static_cast<double>(sample_times_s.size() - 1) / duration_s;
+    }
+}
+
+}  // namespace
 
 // 由于我们在launch文件中将传入的参数设置为了节点私有参数，因此需要在这里构造私有句柄
 LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
@@ -34,8 +187,49 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
         // 读取失败，抛出异常
         throw std::runtime_error("missing param" + node_name + "/use_receive_time");
     }
+    private_nh_.param("log_enable", log_enable_, false);
     // 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
     uav_ns_ = localization_fusion::load_uav_namespace_or_throw(nh_);
+    init_logger();
+}
+
+void LocalizationFusion::init_logger() {
+    SunrayLogConfig cfg;
+    cfg.name = "localization_fusion_" + uav_ns_;
+    cfg.console_level = SunrayLogLevel::info;
+    cfg.file_level = SunrayLogLevel::trace;
+    cfg.async = false;
+
+    if (log_enable_) {
+        log_file_path_ = make_log_file_path();
+        cfg.file_path = log_file_path_;
+    }
+
+    SunrayLogger::instance().Init(cfg);
+    auto logger = SunrayLogger::instance().Get();
+    if (logger && !logger->sinks().empty()) {
+        // 终端日志不显示 [info]/[warn] 前缀，状态面板的颜色在 printf_terminal 中单独控制。
+        logger->sinks().front()->set_pattern("%v");
+    }
+    SUNRAY_INFO("localization_fusion logger initialized. log_enable={} file_path={}",
+                log_enable_,
+                log_enable_ ? log_file_path_ : "disabled");
+}
+
+std::string LocalizationFusion::make_log_file_path() const {
+    const std::string package_path = ros::package::getPath("localization_fusion");
+    if (package_path.empty()) {
+        throw std::runtime_error("failed to locate package path for localization_fusion");
+    }
+
+    const std::string localization_root = parent_directory(package_path);
+    const std::string repo_root = parent_directory(localization_root);
+    if (repo_root.empty()) {
+        throw std::runtime_error("failed to infer repository root from package path: " +
+                                 package_path);
+    }
+
+    return repo_root + "/log/localization_fusion/" + make_startup_timestamp() + ".log";
 }
 
 bool LocalizationFusion::load_param() {
@@ -136,6 +330,9 @@ bool LocalizationFusion::Init() {
 }
 
 void LocalizationFusion::odometry_callback(const nav_msgs::OdometryConstPtr& msg) {
+    update_input_rate(odometry_input_rate_hz_,
+                      odometry_rate_samples_s_,
+                      ros::WallTime::now().toSec());
     // 将里程计转换为sunray_local系下的数据进行发送
     nav_msgs::Odometry temp_msg = *msg;  // 首先解引用，拿到里程计的值
     last_odometry_data_ = temp_msg;
@@ -188,6 +385,9 @@ void LocalizationFusion::publish_global_odom_from_local(const nav_msgs::Odometry
 }
 
 void LocalizationFusion::relocalization_callback(const nav_msgs::OdometryConstPtr& msg) {
+    update_input_rate(relocalization_input_rate_hz_,
+                      relocalization_rate_samples_s_,
+                      ros::WallTime::now().toSec());
     // 输出global系下的里程计，并根据差值重构tf
     nav_msgs::Odometry global_msg = *msg;
     // 首先要进行输入保护，由于tf是严格的计算过程，因此我们要先保证输入的数据是正常的
@@ -312,6 +512,8 @@ void LocalizationFusion::healthtimer_callback(const ros::TimerEvent& e) {
     status_msgs.relocalization_data_valid = relocalization_data_valid_;
     // 向外发布
     odom_state_pub_.publish(status_msgs);
+
+    printf_terminal();
 }
 
 void LocalizationFusion::broadcast_local_to_base_tf(const nav_msgs::Odometry& local_odom) {
@@ -331,4 +533,228 @@ void LocalizationFusion::broadcast_local_to_base_tf(const nav_msgs::Odometry& lo
 
 void LocalizationFusion::Spin() {
     ros::spin();
+}
+
+void LocalizationFusion::printf_terminal(){
+    static ros::Time last_print_time(0);
+    const ros::Time now = ros::Time::now();
+    if (last_print_time != ros::Time(0) && (now - last_print_time).toSec() < 1.0) {
+        return;
+    }
+    last_print_time = now;
+
+    PanelLogSeverity severity = PanelLogSeverity::INFO;
+    std::string source_status = "正常";
+    if (!has_odometry_data_) {
+        source_status = "未收到里程计";
+        severity = PanelLogSeverity::WARN;
+    } else if (odometry_data_timeout_) {
+        source_status = "里程计超时";
+        severity = PanelLogSeverity::ERROR;
+    } else if (selected_source_.localization_mode == LocalizationMode::LOCAL_AND_GLOBAL &&
+               !has_relocalization_data_) {
+        source_status = "等待全局里程计";
+        severity = PanelLogSeverity::WARN;
+    } else if (selected_source_.localization_mode == LocalizationMode::LOCAL_WITH_ARUCO &&
+               !has_relocalization_data_) {
+        source_status = "正常(未收到重定位)";
+        severity = PanelLogSeverity::WARN;
+    } else if (needs_relocalization(selected_source_.localization_mode) &&
+               has_relocalization_data_ && !relocalization_data_valid_) {
+        source_status = "重定位数据无效";
+        severity = PanelLogSeverity::ERROR;
+    }
+
+    const std::string odom_sub_topic =
+        safe_topic(odometry_sub_.getTopic(), selected_source_.odometry_topic);
+    const std::string relocalization_sub_topic =
+        safe_topic(relocalization_sub_.getTopic(), selected_source_.relocalization_topic);
+    const std::string local_pub_topic =
+        safe_topic(local_odom_pub_.getTopic(), local_odometry_topic_);
+    const std::string global_pub_topic =
+        safe_topic(global_odom_pub_.getTopic(), global_odometry_topic_);
+    const std::string odom_status_pub_topic =
+        safe_topic(odom_state_pub_.getTopic(), odom_status_topic_);
+
+    const std::string odometry_rate_text = format_rate_hz(odometry_input_rate_hz_);
+    const std::string relocalization_rate_text = format_rate_hz(relocalization_input_rate_hz_);
+    const std::string odometry_rx_text = bool_to_cn(has_odometry_data_, "已收到", "未收到");
+    const std::string odometry_timeout_text = bool_to_cn(odometry_data_timeout_, "超时", "正常");
+    const std::string relocalization_rx_text =
+        bool_to_cn(has_relocalization_data_, "已收到", "未收到");
+    const std::string relocalization_valid_text =
+        bool_to_cn(relocalization_data_valid_, "有效", "无效/未校验");
+
+    const std::string console_source_status =
+        colorize_console_text(source_status,
+                              severity == PanelLogSeverity::INFO ? kAnsiGreen : kAnsiRed);
+    const std::string console_odometry_rate =
+        colorize_console_text(odometry_rate_text,
+                              odometry_input_rate_hz_ > 0.0 ? kAnsiGreen : kAnsiRed);
+    const std::string console_odometry_rx =
+        colorize_console_text(odometry_rx_text, has_odometry_data_ ? kAnsiGreen : kAnsiRed);
+    const std::string console_odometry_timeout =
+        colorize_console_text(odometry_timeout_text, odometry_data_timeout_ ? kAnsiRed : kAnsiGreen);
+    const std::string console_relocalization_rate =
+        colorize_console_text(relocalization_rate_text,
+                              relocalization_input_rate_hz_ > 0.0 ? kAnsiGreen : kAnsiRed);
+    const std::string console_relocalization_rx = colorize_console_text(
+        relocalization_rx_text, has_relocalization_data_ ? kAnsiGreen : kAnsiRed);
+    const std::string console_relocalization_valid =
+        colorize_console_text(relocalization_valid_text,
+                              relocalization_data_valid_ ? kAnsiGreen : kAnsiRed);
+
+    std::ostringstream body_oss;
+    std::ostringstream console_body_oss;
+    body_oss << std::fixed << std::setprecision(3);
+    console_body_oss << std::fixed << std::setprecision(3);
+    body_oss << " -------- 外部定位源\n";
+    console_body_oss << " -------- 外部定位源\n";
+    body_oss << " 外部定位源名称: [ " << selected_source_.source_name << " ]\n";
+    console_body_oss << " 外部定位源名称: [ " << selected_source_.source_name << " ]\n";
+    body_oss << " 外部定位源模式: [ "
+             << localization_mode_to_string(selected_source_.localization_mode) << " ]\n";
+    console_body_oss << " 外部定位源模式: [ "
+                     << localization_mode_to_string(selected_source_.localization_mode) << " ]\n";
+    body_oss << " 外部定位源状态: [ " << source_status << " ]\n";
+    console_body_oss << " 外部定位源状态: [ " << console_source_status << " ]\n";
+
+    body_oss << " -------- 当前订阅的里程计相关信息\n";
+    console_body_oss << " -------- 当前订阅的里程计相关信息\n";
+    body_oss << " odometry话题: " << odom_sub_topic << "\n";
+    console_body_oss << " odometry话题: " << odom_sub_topic << "\n";
+    body_oss << " odometry上游发布频率: " << odometry_rate_text << " [Hz]\n";
+    console_body_oss << " odometry上游发布频率: " << console_odometry_rate << " [Hz]\n";
+    body_oss << " odometry接收状态: [ " << odometry_rx_text << " ]\n";
+    console_body_oss << " odometry接收状态: [ " << console_odometry_rx << " ]\n";
+    body_oss << " odometry超时状态: [ " << odometry_timeout_text << " ]\n";
+    console_body_oss << " odometry超时状态: [ " << console_odometry_timeout << " ]\n";
+    if (needs_relocalization(selected_source_.localization_mode)) {
+        body_oss << " relocalization话题: " << relocalization_sub_topic << "\n";
+        console_body_oss << " relocalization话题: " << relocalization_sub_topic << "\n";
+        body_oss << " relocalization上游发布频率: " << relocalization_rate_text << " [Hz]\n";
+        console_body_oss << " relocalization上游发布频率: " << console_relocalization_rate
+                         << " [Hz]\n";
+        body_oss << " relocalization接收状态: [ " << relocalization_rx_text << " ]\n";
+        console_body_oss << " relocalization接收状态: [ " << console_relocalization_rx << " ]\n";
+        body_oss << " relocalization数据状态: [ " << relocalization_valid_text << " ]\n";
+        console_body_oss << " relocalization数据状态: [ " << console_relocalization_valid
+                         << " ]\n";
+    }
+
+    body_oss << " -------- 当前发布的里程计相关信息\n";
+    console_body_oss << " -------- 当前发布的里程计相关信息\n";
+    body_oss << " local_odom发布话题: " << local_pub_topic << "\n";
+    console_body_oss << " local_odom发布话题: " << local_pub_topic << "\n";
+    body_oss << " global_odom发布话题: " << global_pub_topic << "\n";
+    console_body_oss << " global_odom发布话题: " << global_pub_topic << "\n";
+    body_oss << " odom_status发布话题: " << odom_status_pub_topic << "\n";
+    console_body_oss << " odom_status发布话题: " << odom_status_pub_topic << "\n";
+
+    body_oss << " -------- 当前里程计数据\n";
+    console_body_oss << " -------- 当前里程计数据\n";
+    if (!has_odometry_data_) {
+        body_oss << " 尚未收到里程计数据\n";
+        console_body_oss << " 尚未收到里程计数据\n";
+    } else {
+        body_oss << " 时间戳: " << last_odometry_data_.header.stamp.toSec()
+                 << " [s]  坐标系: [ " << last_odometry_data_.header.frame_id << " -> "
+                 << last_odometry_data_.child_frame_id << " ]\n";
+        console_body_oss << " 时间戳: " << last_odometry_data_.header.stamp.toSec()
+                         << " [s]  坐标系: [ " << last_odometry_data_.header.frame_id << " -> "
+                         << last_odometry_data_.child_frame_id << " ]\n";
+        body_oss << " 位置[X Y Z]: "
+                 << format_vec3(last_odometry_data_.pose.pose.position.x,
+                                last_odometry_data_.pose.pose.position.y,
+                                last_odometry_data_.pose.pose.position.z)
+                 << " [m]\n";
+        console_body_oss << " 位置[X Y Z]: "
+                         << format_vec3(last_odometry_data_.pose.pose.position.x,
+                                        last_odometry_data_.pose.pose.position.y,
+                                        last_odometry_data_.pose.pose.position.z)
+                         << " [m]\n";
+        body_oss << " 速度[X Y Z]: "
+                 << format_vec3(last_odometry_data_.twist.twist.linear.x,
+                                last_odometry_data_.twist.twist.linear.y,
+                                last_odometry_data_.twist.twist.linear.z)
+                 << " [m/s]\n";
+        console_body_oss << " 速度[X Y Z]: "
+                         << format_vec3(last_odometry_data_.twist.twist.linear.x,
+                                        last_odometry_data_.twist.twist.linear.y,
+                                        last_odometry_data_.twist.twist.linear.z)
+                         << " [m/s]\n";
+        body_oss << " 姿态[RPY]: " << format_odom_rpy_deg(last_odometry_data_) << " [deg]\n";
+        console_body_oss << " 姿态[RPY]: " << format_odom_rpy_deg(last_odometry_data_)
+                         << " [deg]\n";
+    }
+
+    if (needs_relocalization(selected_source_.localization_mode) && has_relocalization_data_) {
+        body_oss << " -------- 当前重定位数据\n";
+        console_body_oss << " -------- 当前重定位数据\n";
+        body_oss << " 时间戳: " << last_relocalization_data_.header.stamp.toSec()
+                 << " [s]  坐标系: [ " << last_relocalization_data_.header.frame_id << " -> "
+                 << last_relocalization_data_.child_frame_id << " ]\n";
+        console_body_oss << " 时间戳: " << last_relocalization_data_.header.stamp.toSec()
+                         << " [s]  坐标系: [ " << last_relocalization_data_.header.frame_id
+                         << " -> " << last_relocalization_data_.child_frame_id << " ]\n";
+        body_oss << " 位置[X Y Z]: "
+                 << format_vec3(last_relocalization_data_.pose.pose.position.x,
+                                last_relocalization_data_.pose.pose.position.y,
+                                last_relocalization_data_.pose.pose.position.z)
+                 << " [m]\n";
+        console_body_oss << " 位置[X Y Z]: "
+                         << format_vec3(last_relocalization_data_.pose.pose.position.x,
+                                        last_relocalization_data_.pose.pose.position.y,
+                                        last_relocalization_data_.pose.pose.position.z)
+                         << " [m]\n";
+        body_oss << " 姿态[RPY]: " << format_odom_rpy_deg(last_relocalization_data_)
+                 << " [deg]\n";
+        console_body_oss << " 姿态[RPY]: " << format_odom_rpy_deg(last_relocalization_data_)
+                         << " [deg]\n";
+    }
+
+    body_oss << " ---------------------------------------------------------\n";
+    console_body_oss << " ---------------------------------------------------------\n";
+
+    const std::string header_line =
+        ">>>>>>>>>>>>>>> 定位融合状态 - [ " + uav_ns_ + " ] <<<<<<<<<<<<<<<";
+    const std::string plain_panel = header_line + "\n" + body_oss.str();
+    const std::string console_panel =
+        std::string(kAnsiLightCyan) + header_line + kAnsiReset + "\n" + console_body_oss.str();
+
+    auto logger = SunrayLogger::instance().Get();
+    if (!logger) {
+        return;
+    }
+
+    spdlog::level::level_enum spdlog_level = spdlog::level::info;
+    switch (severity) {
+    case PanelLogSeverity::INFO:
+        spdlog_level = spdlog::level::info;
+        break;
+    case PanelLogSeverity::WARN:
+        spdlog_level = spdlog::level::warn;
+        break;
+    case PanelLogSeverity::ERROR:
+        spdlog_level = spdlog::level::err;
+        break;
+    }
+
+    auto log_to_sink = [&](const spdlog::sink_ptr& sink, const std::string& text) {
+        if (!sink || !sink->should_log(spdlog_level)) {
+            return;
+        }
+        const spdlog::string_view_t payload(text.data(), text.size());
+        const spdlog::details::log_msg msg(logger->name(), spdlog_level, payload);
+        sink->log(msg);
+        sink->flush();
+    };
+
+    auto& sinks = logger->sinks();
+    if (!sinks.empty()) {
+        log_to_sink(sinks.front(), console_panel);
+    }
+    for (std::size_t i = 1; i < sinks.size(); ++i) {
+        log_to_sink(sinks[i], plain_panel);
+    }
 }

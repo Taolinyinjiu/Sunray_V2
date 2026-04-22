@@ -15,6 +15,7 @@
 #include <ros/node_handle.h>
 
 // #include <mutex>
+#include <deque>
 #include <string>
 
 #include <geometry_msgs/TransformStamped.h>
@@ -39,9 +40,14 @@ class LocalizationFusion {
     // 主循环（单线程 ros::spin）
     void Spin();
 
+    // 添加打印函数
+    void printf_terminal();
+
   private:
     // ---- 初始化阶段 ----
     bool load_param();  // 加载参数，校验参数
+    void init_logger();  // 初始化sunray_log
+    std::string make_log_file_path() const;  // 生成日志文件路径
 
     // ---- 回调函数 ----
     /*
@@ -105,10 +111,12 @@ class LocalizationFusion {
     bool has_selected_source_{false};  // 状态标识符，表示是否读取到了配置参数
     double health_rate_hz_{10};
     bool use_receive_time_{false}; // 使用接收时刻时间戳替换里程计信息时间戳
+    bool log_enable_{false};       // 是否启用文件日志
     // 输出topic约定
     std::string global_odometry_topic_{"${uav_ns}/sunray/localization/global_odom"};
     std::string local_odometry_topic_{"${uav_ns}/sunray/localization/local_odom"};
     std::string odom_status_topic_{"${uav_ns}/sunray/localization/odom_status"};
+    std::string log_file_path_;    // 日志文件绝对路径（启用文件日志时有效）
 
     // 输出 frame 约定：sunray_global -> sunray_local -> base_link
     std::string global_frame_id_{"sunray_global"};
@@ -127,6 +135,10 @@ class LocalizationFusion {
     bool relocalization_data_valid_{false};
 
     ros::Time last_odometry_rx_time_{ros::Time(0)};  // 最新的odometry数据接收时间
+    double odometry_input_rate_hz_{0.0};  // odometry输入频率估计
+    double relocalization_input_rate_hz_{0.0};  // relocalization输入频率估计
+    std::deque<double> odometry_rate_samples_s_;  // odometry频率估计窗口
+    std::deque<double> relocalization_rate_samples_s_;  // relocalization频率估计窗口
 
     bool odometry_data_timeout_{false};  // local系数据是否超时
 

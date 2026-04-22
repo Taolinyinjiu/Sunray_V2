@@ -7,6 +7,8 @@
   <arg name="health_rate_hz" default="10.0" />
   <!-- 是否使用localization_fusion节点接收时刻时间戳替代定位源发送时刻时间戳 -->
   <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
+  <!-- 是否启用文件日志 -->
+  <arg name="log_enable" default="false" />
   <arg name="uav_name" default="uav" />
   <arg name="uav_id" default="1" />
   <arg name="node_name" default="localization_fusion" />
@@ -45,6 +47,7 @@
     <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
     <param name="health_rate_hz" value="$(arg health_rate_hz)" />
     <param name="use_receive_time" value="$(arg use_receive_time)" />
+    <param name="log_enable" value="$(arg log_enable)" />
     <param name="uav_name" value="$(arg uav_name)" />
     <param name="uav_id" value="$(arg uav_id)" />
   </node>

@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
   rospy
   std_msgs
   sensor_msgs
@@ -26,6 +27,7 @@ catkin_package(
   INCLUDE_DIRS include
   CATKIN_DEPENDS
     roscpp
+    roslib
     rospy
     std_msgs
     sensor_msgs
@@ -42,6 +44,8 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
 )
 
 # Core library: class implementation (no main function)

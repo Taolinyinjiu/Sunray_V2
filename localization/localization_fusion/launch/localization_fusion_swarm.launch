@@ -4,6 +4,7 @@
        default="$(find localization_fusion)/config/localization_sources.yaml" />
   <arg name="health_rate_hz" default="10.0" />
   <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
+  <arg name="log_enable" default="false" />
   <arg name="uav_name" default="uav" />
   <arg name="uav_id" default="1" />
   <arg name="uav_num" default="6" />
@@ -13,6 +14,7 @@
     <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
     <arg name="health_rate_hz" value="$(arg health_rate_hz)" />
     <arg name="use_receive_time" value="$(arg use_receive_time)" />
+    <arg name="log_enable" value="$(arg log_enable)" />
     <arg name="uav_name" value="$(arg uav_name)" />
     <arg name="uav_id" value="$(arg uav_id)" />
     <arg name="node_name" value="$(eval 'localization_fusion_' + str(int(arg('uav_id'))))" />
@@ -26,6 +28,7 @@
     <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
     <arg name="health_rate_hz" value="$(arg health_rate_hz)" />
     <arg name="use_receive_time" value="$(arg use_receive_time)" />
+    <arg name="log_enable" value="$(arg log_enable)" />
     <arg name="uav_name" value="$(arg uav_name)" />
     <arg name="uav_id" value="$(eval int(arg('uav_id')) + 1)" />
     <arg name="uav_num" value="$(arg uav_num)" />
