@@ -1,16 +1,9 @@
 #include "controller/geometric_controller.hpp"
-#include "control_data_types/mavros_helper_data_types.hpp"
 #include "eigen_helper.hpp"
-#include <ros/ros.h>
+#include "utils/controller_panel_log_utils.hpp"
 #include <algorithm>
-#include <iomanip>
-#include <sstream>
 
 namespace {
-
-const char* bool_to_string(bool value) {
-    return value ? "true" : "false";
-}
 
 const char* control_type_to_string(Control_Type type) {
     switch (type) {
@@ -24,13 +17,6 @@ const char* control_type_to_string(Control_Type type) {
     default:
         return "UNDEFINE";
     }
-}
-
-std::string format_vec3(const Eigen::Vector3d& value, int precision = 3) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(precision) << "(" << value.x() << ", " << value.y()
-        << ", " << value.z() << ")";
-    return oss.str();
 }
 
 }  // namespace
@@ -66,8 +52,11 @@ Geometric_Controller::LogSnapshot Geometric_Controller::get_log_snapshot() const
     return log_snapshot_;
 }
 
-void Geometric_Controller::printf_logs() {
+void Geometric_Controller::printf_logs(uint8_t log_level) {
+    using namespace sunray_control_log;
+
     const LogSnapshot snapshot = get_log_snapshot();
+    const uint8_t panel_level = log_level <= 2 ? log_level : 2;
     const auto& debug_state = snapshot.debug_state;
     const auto& desired_state = debug_state.valid ? debug_state.reference : snapshot.desired_state;
     const char* attitude_mode = "UNKNOWN_MODE";
@@ -80,38 +69,80 @@ void Geometric_Controller::printf_logs() {
         break;
     }
 
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(3);
-    oss << "[Controller][GEOMETRIC][" << uav_ns_ << "]"
-        << " ready=" << bool_to_string(snapshot.controller_ready)
-        << " mode=" << attitude_mode
-        << " px4_mode=" << control_common::flightmode_to_string(snapshot.px4_state.flight_mode)
-        << " armed=" << bool_to_string(snapshot.px4_state.armed)
-        << " landed=" << control_common::landed_to_string(snapshot.px4_state.landed_state)
-        << "\n  flags: takeoff_complete=" << bool_to_string(snapshot.takeoff_complete)
-        << " land_complete=" << bool_to_string(snapshot.land_complete)
-        << " point_complete=" << bool_to_string(snapshot.point_complete)
-        << " has_odom=" << bool_to_string(snapshot.has_uav_odometry)
-        << " has_imu=" << bool_to_string(snapshot.has_imu)
-        << " can_fuse=" << bool_to_string(snapshot.can_fuse)
-        << " land_near_ground=" << bool_to_string(snapshot.land_near_ground)
-        << "\n  desired: pos=" << format_vec3(desired_state.position)
-        << " vel=" << format_vec3(desired_state.velocity)
-        << " acc=" << format_vec3(desired_state.acceleration)
-        << " yaw=" << desired_state.yaw
-        << "\n  hover: pos=" << format_vec3(snapshot.hover_point)
-        << " yaw=" << snapshot.hover_yaw
-        << " thrust=" << snapshot.last_setpoint.thrust
-        << " bodyrate=" << format_vec3(snapshot.last_setpoint.body_rate);
+    const bool health_ok =
+        snapshot.controller_ready && snapshot.has_uav_odometry && snapshot.has_imu;
+    const SunrayPanelSeverity severity =
+        health_ok ? SunrayPanelSeverity::INFO : SunrayPanelSeverity::ERROR;
+    const Eigen::Vector3d pos_error = desired_state.position - snapshot.odom.position;
+    const Eigen::Vector3d vel_error = desired_state.velocity - snapshot.odom.velocity;
+    const double current_yaw = eigen_helper::get_yaw_from_orientation(snapshot.odom.orientation);
+    const double yaw_error = eigen_helper::wrap_angle(desired_state.yaw - current_yaw);
 
-    if (debug_state.valid) {
-        oss << "\n  debug[" << control_type_to_string(debug_state.control_type)
-            << "]: pos_err=" << format_vec3(debug_state.position_error)
-            << " vel_err=" << format_vec3(debug_state.velocity_error)
-            << " yaw_err=" << debug_state.yaw_error
-            << " att_err=" << format_vec3(debug_state.attitude_error)
-            << " thrust=" << debug_state.desired_thrust;
+    std::ostringstream body_oss;
+    std::ostringstream console_body_oss;
+    init_panel_streams(body_oss, console_body_oss);
+    std::vector<PanelLine> flight_extra_lines;
+    std::vector<PanelLine> flag_extra_lines;
+    flag_extra_lines.push_back(make_status_line("IMU状态", snapshot.has_imu, "正常", "异常"));
+    if (panel_level >= 2) {
+        flight_extra_lines.push_back(
+            make_plain_line(" 姿态控制模式: [ " + std::string(attitude_mode) + " ]"));
+        flag_extra_lines.push_back(
+            make_plain_line(" 近地降落阶段: [ " +
+                            bool_to_cn(snapshot.land_near_ground, "是", "否") + " ]"));
     }
 
-    ROS_INFO_STREAM(oss.str());
+    append_common_flight_status(body_oss,
+                                console_body_oss,
+                                snapshot.controller_ready,
+                                snapshot.px4_state,
+                                flight_extra_lines);
+
+    append_common_flag_status(body_oss,
+                              console_body_oss,
+                              snapshot.takeoff_complete,
+                              snapshot.land_complete,
+                              snapshot.point_complete,
+                              snapshot.has_uav_odometry,
+                              flag_extra_lines);
+
+    if (panel_level >= 2) {
+        append_desired_state_section(body_oss, console_body_oss, " -------- 期望值", desired_state);
+    }
+
+    append_tracking_error_section(body_oss,
+                                  console_body_oss,
+                                  " -------- 控制误差",
+                                  pos_error,
+                                  vel_error,
+                                  yaw_error);
+
+    if (panel_level >= 1) {
+        append_attitude_output_section(body_oss,
+                                       console_body_oss,
+                                       snapshot.last_setpoint.thrust,
+                                       snapshot.last_setpoint.body_rate);
+    }
+
+    if (panel_level >= 2) {
+        append_hover_section(body_oss, console_body_oss, snapshot.hover_point, snapshot.hover_yaw);
+    }
+
+    if (panel_level >= 2 && debug_state.valid) {
+        append_section_header(body_oss, console_body_oss, " -------- Debug控制误差");
+        append_line(body_oss,
+                    console_body_oss,
+                    " 控制类型: [ " + std::string(control_type_to_string(debug_state.control_type)) +
+                        " ]");
+        append_line(body_oss,
+                    console_body_oss,
+                    " 姿态误差: " + format_vec3(debug_state.attitude_error) + " [rad]");
+        append_line(body_oss,
+                    console_body_oss,
+                    " 期望推力: " + format_scalar(debug_state.desired_thrust));
+    }
+
+    append_panel_footer(body_oss, console_body_oss);
+    write_controller_panel(
+        uav_ns_, "GEOMETRIC", severity, body_oss.str(), console_body_oss.str());
 }

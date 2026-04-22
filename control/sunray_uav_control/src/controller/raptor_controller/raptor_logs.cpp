@@ -1,61 +1,76 @@
 #include "controller/raptor_controller.hpp"
 #include "eigen_helper.hpp"
-#include <iomanip>
-#include <ros/ros.h>
-#include <sstream>
+#include "utils/controller_panel_log_utils.hpp"
 
-namespace {
+void Raptor_Controller::printf_logs(uint8_t log_level) {
+    using namespace sunray_control_log;
 
-const char* bool_to_string(bool value) {
-    return value ? "true" : "false";
-}
-
-std::string format_vec3(const Eigen::Vector3d& value, int precision = 3) {
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(precision) << "(" << value.x() << ", " << value.y()
-        << ", " << value.z() << ")";
-    return oss.str();
-}
-
-}  // namespace
-
-void Raptor_Controller::printf_logs() {
     const LogSnapshot snapshot = get_log_snapshot();
+    const uint8_t panel_level = log_level <= 2 ? log_level : 2;
+    const bool has_controller_setpoint = snapshot.last_setpoint.valid;
     const control_common::Mavros_SetpointLocal controller_local_output =
-        snapshot.last_setpoint.valid ? snapshot.last_setpoint : snapshot.px4_local_target;
+        has_controller_setpoint ? snapshot.last_setpoint : control_common::Mavros_SetpointLocal{};
+    const controller_data_types::TargetTrajectoryPoint_t desired_state =
+        has_controller_setpoint ? snapshot.desired_state : make_hold_desired_state(snapshot.odom);
 
-    const Eigen::Vector3d pos_error = snapshot.desired_state.position - snapshot.odom.position;
-    const Eigen::Vector3d vel_error = snapshot.desired_state.velocity - snapshot.odom.velocity;
+    const Eigen::Vector3d pos_error = desired_state.position - snapshot.odom.position;
+    const Eigen::Vector3d vel_error = desired_state.velocity - snapshot.odom.velocity;
     const double current_yaw = eigen_helper::get_yaw_from_orientation(snapshot.odom.orientation);
-    const double yaw_error = eigen_helper::wrap_angle(snapshot.desired_state.yaw - current_yaw);
+    const double yaw_error = eigen_helper::wrap_angle(desired_state.yaw - current_yaw);
 
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(3);
-    oss << "[Controller][RAPTOR][" << uav_ns_ << "]"
-        << " ready=" << bool_to_string(snapshot.controller_ready)
-        << " px4_mode=" << control_common::flightmode_to_string(snapshot.px4_state.flight_mode)
-        << " armed=" << bool_to_string(snapshot.px4_state.armed)
-        << " landed=" << control_common::landed_to_string(snapshot.px4_state.landed_state)
-        << "\n  flags: takeoff_complete=" << bool_to_string(snapshot.takeoff_complete)
-        << " land_complete=" << bool_to_string(snapshot.land_complete)
-        << " point_complete=" << bool_to_string(snapshot.point_complete)
-        << " has_odom=" << bool_to_string(snapshot.has_uav_odometry)
-        << " can_fuse=" << bool_to_string(snapshot.can_fuse)
-        << " setpoint_valid=" << bool_to_string(controller_local_output.valid)
-        << "\n  desired: pos=" << format_vec3(snapshot.desired_state.position)
-        << " vel=" << format_vec3(snapshot.desired_state.velocity)
-        << " acc=" << format_vec3(snapshot.desired_state.acceleration)
-        << " yaw=" << snapshot.desired_state.yaw
-        << "\n  err: pos=" << format_vec3(pos_error)
-        << " vel=" << format_vec3(vel_error)
-        << " yaw=" << yaw_error
-        << "\n  ctrl_out: pos=" << format_vec3(controller_local_output.position)
-        << " vel=" << format_vec3(controller_local_output.velocity)
-        << " acc=" << format_vec3(controller_local_output.accel_or_force)
-        << " yaw=" << controller_local_output.yaw
-        << " yaw_rate=" << controller_local_output.yaw_rate
-        << "\n  hover: pos=" << format_vec3(snapshot.hover_point)
-        << " yaw=" << snapshot.hover_yaw;
+    SunrayPanelSeverity severity = controller_panel_severity(snapshot.controller_ready,
+                                                             snapshot.has_uav_odometry);
+    if (!has_controller_setpoint && severity == SunrayPanelSeverity::INFO) {
+        severity = SunrayPanelSeverity::WARN;
+    }
 
-    ROS_INFO_STREAM(oss.str());
+    std::ostringstream body_oss;
+    std::ostringstream console_body_oss;
+    init_panel_streams(body_oss, console_body_oss);
+    std::vector<PanelLine> flag_extra_lines;
+    if (panel_level >= 1) {
+        flag_extra_lines.push_back(
+            make_status_line("Setpoint有效性", has_controller_setpoint, "有效", "无效"));
+    }
+
+    append_common_flight_status(body_oss,
+                                console_body_oss,
+                                snapshot.controller_ready,
+                                snapshot.px4_state);
+
+    append_common_flag_status(body_oss,
+                              console_body_oss,
+                              snapshot.takeoff_complete,
+                              snapshot.land_complete,
+                              snapshot.point_complete,
+                              snapshot.has_uav_odometry,
+                              flag_extra_lines);
+
+    if (panel_level >= 2) {
+        append_desired_state_section(body_oss, console_body_oss, " -------- 期望值", desired_state);
+    }
+
+    append_tracking_error_section(body_oss,
+                                  console_body_oss,
+                                  " -------- 控制误差",
+                                  pos_error,
+                                  vel_error,
+                                  yaw_error);
+
+    if (panel_level >= 1) {
+        append_local_output_section(body_oss,
+                                    console_body_oss,
+                                    controller_local_output,
+                                    false,
+                                    false,
+                                    true);
+    }
+
+    if (panel_level >= 2) {
+        append_hover_section(
+            body_oss, console_body_oss, snapshot.hover_point, snapshot.hover_yaw);
+    }
+
+    append_panel_footer(body_oss, console_body_oss);
+    write_controller_panel(uav_ns_, "RAPTOR", severity, body_oss.str(), console_body_oss.str());
 }

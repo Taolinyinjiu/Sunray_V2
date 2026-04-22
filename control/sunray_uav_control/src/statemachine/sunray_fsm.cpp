@@ -1,10 +1,13 @@
 #include "statemachine/sunray_fsm.hpp"
 #include "statemachine/sunray_fsm_loadparam.hpp"
+#include "sunray_log.hpp"
 #include "string_uav_namespace_utils.hpp"
+#include "utils/sunray_panel_log_utils.hpp"
 #include "utils/uav_param_utils.hpp"
 #include <cmath>
-#include <stdexcept>
 #include <ros/ros.h>
+#include <ros/package.h>
+#include <stdexcept>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
 #include <sunray_msgs/UAVControlFSMState.h>
 #include "controller/px4_origin_controller.hpp"
@@ -28,12 +31,43 @@ double round_to_3_decimals(double value) {
     return std::round(value * 1000.0) / 1000.0;
 }
 
+void update_input_rate(double& averaged_rate_hz,
+                       std::deque<double>& sample_times_s,
+                       const double sample_time_s,
+                       const std::size_t window_size = 20) {
+    if (!std::isfinite(sample_time_s)) {
+        return;
+    }
+
+    if (!sample_times_s.empty() && sample_time_s <= sample_times_s.back()) {
+        if (std::abs(sample_time_s - sample_times_s.back()) < 1e-6) {
+            return;
+        }
+        sample_times_s.clear();
+    }
+
+    sample_times_s.push_back(sample_time_s);
+    while (sample_times_s.size() > window_size) {
+        sample_times_s.pop_front();
+    }
+
+    if (sample_times_s.size() < 2) {
+        return;
+    }
+
+    const double duration_s = sample_times_s.back() - sample_times_s.front();
+    if (duration_s > 1e-4) {
+        averaged_rate_hz = static_cast<double>(sample_times_s.size() - 1) / duration_s;
+    }
+}
+
 }  // namespace
 
 // 构造函数
 Sunray_FSM::Sunray_FSM(ros::NodeHandle& nh) {
     nh_ = nh;
-};
+    uav_ns_ = sunray_control::load_uav_namespace_or_throw(nh_);
+}
 // 析构函数
 Sunray_FSM::~Sunray_FSM() {
     stop_controller_thread_.store(true, std::memory_order_relaxed);
@@ -55,6 +89,45 @@ void Sunray_FSM::init() {
     // 控制器更新线程
     stop_controller_thread_.store(false, std::memory_order_relaxed);
     controller_update_thread_ = std::thread(&Sunray_FSM::controller_update_loop, this);
+}
+
+void Sunray_FSM::init_logger() {
+    SunrayLogConfig cfg;
+    cfg.name = "sunray_uav_control_" + uav_ns_;
+    cfg.console_level = SunrayLogLevel::info;
+    cfg.file_level = SunrayLogLevel::trace;
+    cfg.async = false;
+
+    if (log_save_) {
+        log_file_path_ = make_log_file_path();
+        cfg.file_path = log_file_path_;
+    }
+
+    SunrayLogger::instance().Init(cfg);
+    auto logger = SunrayLogger::instance().Get();
+    if (logger && !logger->sinks().empty()) {
+        logger->sinks().front()->set_pattern("%v");
+    }
+
+    SUNRAY_INFO("sunray_uav_control logger initialized. log_save={} file_path={}",
+                log_save_,
+                log_save_ ? log_file_path_ : "disabled");
+}
+
+std::string Sunray_FSM::make_log_file_path() const {
+    const std::string package_path = ros::package::getPath("sunray_uav_control");
+    if (package_path.empty()) {
+        throw std::runtime_error("failed to locate package path for sunray_uav_control");
+    }
+
+    const std::string control_root = sunray_parent_directory(package_path);
+    const std::string repo_root = sunray_parent_directory(control_root);
+    if (repo_root.empty()) {
+        throw std::runtime_error("failed to infer repository root from package path: " +
+                                 package_path);
+    }
+
+    return repo_root + "/log/sunray_uav_control/" + sunray_make_startup_timestamp() + ".log";
 }
 
 // 获取状态机的更新频率
@@ -89,9 +162,7 @@ void Sunray_FSM::process() {
 
 // 从yaml文件中加载参数
 void Sunray_FSM::load_param() {
-    // 1. 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
-    uav_ns_ = sunray_control::load_uav_namespace_or_throw(nh_);
-    // 2. 读取config.yaml路径
+    // 1. 读取config.yaml路径
     // 读取节点名
     std::string node_name = ros::this_node::getName();
     // 构造私有节点句柄，用于读取节点私有参数,这里主要是config.yaml路径
@@ -104,7 +175,7 @@ void Sunray_FSM::load_param() {
     } else {  // 读取失败，抛出异常
         throw std::runtime_error("missing param" + node_name + "/config_yamlfile_path");
     }
-    // 3. 依据yaml_path,构造yaml节点读取文件，根据字段填充结构体
+    // 2. 依据yaml_path,构造yaml节点读取文件，根据字段填充结构体
     YAML::Node root;  // 构造一个YAML文件的根节点
     // 由于读取的过程可能引发异常，因此使用try语法
     try {
@@ -116,22 +187,25 @@ void Sunray_FSM::load_param() {
     }
     // 顺利读取，取出各个字段对应的部分
     // 由于这里会写的很长，所以将他们分为几个不同的函数用来填充结构体
-    ROS_INFO("Loading sunray_control_config.yaml from %s start", config_yamlfile_path_.c_str());
-    ROS_INFO("basic");
     loadBasicParam(root["basic_param"], fsm_config_.basic_param);
-    ROS_INFO("protect");
+    log_save_ = fsm_config_.basic_param.log_save;
+    init_logger();
+
+    SUNRAY_INFO("Loading sunray_control_config.yaml from {} start", config_yamlfile_path_);
+    SUNRAY_INFO("load basic_param");
+    SUNRAY_INFO("load protect_param");
     loadProtectParam(root["protect_param"], fsm_config_.protect_param);
-    ROS_INFO("msg_timeout");
+    SUNRAY_INFO("load msg_timeout_param");
     loadMsgTimeoutParam(root["msg_timeout_param"], fsm_config_.msg_timeout_param);
-    ROS_INFO("takeoff_land");
+    SUNRAY_INFO("load takeoff_land_param");
     loadTakeoffLandParam(root["takeoff_land_param"], fsm_config_.takeoff_land_param);
-    ROS_INFO("arrival_judge");
+    SUNRAY_INFO("load arrival_judge_param");
     loadArrivalJudgeParam(root["arrival_judge_param"], fsm_config_.arrival_judge_param);
-    ROS_INFO("local_fence");
+    SUNRAY_INFO("load local_fence_param");
     loadLocalFenceParam(root["local_fence_param"], fsm_config_.local_fence_param);
-    ROS_INFO("velocity");
+    SUNRAY_INFO("load velocity_param");
     loadVelocityParam(root["velocity_param"], fsm_config_.velocity_param);
-    ROS_INFO("Loading sunray_control_config.yaml from %s end", config_yamlfile_path_.c_str());
+    SUNRAY_INFO("Loading sunray_control_config.yaml from {} end", config_yamlfile_path_);
     // 标准化里程计话题
     fsm_config_.basic_param.odom_topic_name =
         sunray_common::replace_uav_ns(fsm_config_.basic_param.odom_topic_name, uav_ns_);
@@ -211,13 +285,7 @@ void Sunray_FSM::local_odom_callback(const nav_msgs::Odometry& msg) {
     {
         std::lock_guard<std::mutex> lk(odom_mutex_);
         last_raw_odometry_ = odom_sample;
-
-        if (!last_raw_odom_receive_time_.isZero()) {
-            const double dt = (receive_time - last_raw_odom_receive_time_).toSec();
-            if (dt > 1e-6) {
-                odom_frequency_hz_ = 1.0 / dt;
-            }
-        }
+        update_input_rate(odom_frequency_hz_, odom_rate_samples_s_, receive_time.toSec());
         last_raw_odom_receive_time_ = receive_time;
         odom_meets_rate_target_ = odom_frequency_hz_ >= 100.0;
         odom_frequency_hz = odom_frequency_hz_;
@@ -238,7 +306,14 @@ void Sunray_FSM::local_odom_callback(const nav_msgs::Odometry& msg) {
 
 // 外部里程计状态回调函数
 void Sunray_FSM::localization_state_callback(const sunray_msgs::OdomStatus& msg) {
-    // TODO
+    const ros::Time receive_time = ros::Time::now();
+    std::lock_guard<std::mutex> lk(localization_status_mutex_);
+    last_localization_status_ = msg;
+    has_localization_status_ = true;
+    last_localization_status_receive_time_ = receive_time;
+    update_input_rate(localization_status_rate_hz_,
+                      localization_status_rate_samples_s_,
+                      receive_time.toSec());
 }
 
 // 无人机控制指令回调函数

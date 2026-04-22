@@ -26,6 +26,8 @@ struct basic_param_t {
     std::string odom_topic_name{"null"};
     uint8_t fuse_odom_type{0};
     double fuse_odom_frequency{0.0};
+    bool log_save{false};
+    uint8_t log_level{2};
 };
 // -------------------保护参数-----------------------
 struct protect_param_t {

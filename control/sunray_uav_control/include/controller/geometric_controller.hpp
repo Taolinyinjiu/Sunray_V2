@@ -5,6 +5,7 @@
 #include "core_algorithm/geometric_attitude_control.hpp"
 #include "mavros_helper/mavros_helper.hpp"
 #include "utils/arrival_helper.hpp"
+#include "utils/reference_limit_helper.hpp"
 #include "utils/quintic_curve.hpp"
 #include <ros/node_handle.h>
 #include <ros/time.h>
@@ -75,7 +76,7 @@ class Geometric_Controller : public Controller_Interface {
 
     // ----------------------控制器状态话题更新函数-----------------
     void pub_controller_state() override;  // 发布控制器参考量/反馈量/误差与输出
-    void printf_logs() override;           // 为 Sunray_FSM 提供同步日志输出
+    void printf_logs(uint8_t log_level) override;  // 为 Sunray_FSM 提供同步日志输出
 
   private:
     enum class AttitudeCommandMode : uint8_t {
@@ -112,7 +113,8 @@ class Geometric_Controller : public Controller_Interface {
     AttitudeCommandMode attitude_command_mode_{AttitudeCommandMode::BodyRate};
     int fuse_odom_type{0};
     double fuse_odom_frequency{0.0};
-    double max_velocity_z_{1.0};
+    Eigen::Vector3d max_velocity_{Eigen::Vector3d::Ones()};
+    double max_yaw_rate_rad_s_{0.5};
 
     // ----------------------检查相关-----------------------
     // void 类型 + throw 后缀 = 整个启动过程只执行一次，抛出异常则终止启动
@@ -135,6 +137,13 @@ class Geometric_Controller : public Controller_Interface {
     void update_hover_reference(const Eigen::Vector3d& hover_point,
                                 double hover_yaw,
                                 const char* reason);
+    bool move_point_impl(controller_data_types::TargetPoint_t point,
+                         bool preserve_body_point_context);
+    void reset_point_motion_context();
+    double update_limited_yaw_target(double target_yaw, const ros::Time& now);
+    double integrate_limited_yaw_rate(double yaw_rate_cmd, const ros::Time& now);
+    void warn_if_trajectory_exceeds_limits(
+        const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
     void reset_stage_thrust_filters();
     bool
     publish_trajectory_setpoint(const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
@@ -171,6 +180,7 @@ class Geometric_Controller : public Controller_Interface {
 
     // 五次项起飞曲线（平滑爬升，避免直接发送目标位置引起的阶跃响应）
     curve::QuinticCurve quint_curve_;
+    curve::QuinticCurve move_point_curve_;
 
     // 降落阶段相关状态
     takeoff_land::LandingTuning landing_tuning_{};
@@ -178,6 +188,9 @@ class Geometric_Controller : public Controller_Interface {
 
     arrival_helper::State takeoff_arrival_state_{};
     arrival_helper::State point_arrival_state_{};
+    reference_limit_helper::YawReferenceState yaw_reference_state_{};
+    bool point_target_initialized_{false};
+    bool body_point_target_initialized_{false};
 
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointAttitude last_setpoint_;

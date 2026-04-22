@@ -2,6 +2,7 @@
 
 #include "control_data_types/uav_state_estimate.hpp"
 #include "control_data_types/controller_desired_types.hpp"
+#include <cstdint>
 #include <geographic_msgs/GeoPoint.h>
 
 class Controller_Interface {
@@ -45,6 +46,6 @@ class Controller_Interface {
     virtual void pub_controller_state() = 0;
     // 为了将Sunray_FSM与Mavros/PX4解耦，这里还是决定，参数由控制器自己读取yaml文件而不是函数传递
     // ---------------------控制器日志流发布接口----------------------
-    virtual void printf_logs() = 0;
+    virtual void printf_logs(uint8_t log_level) = 0;
   protected:
 };

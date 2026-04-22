@@ -111,6 +111,8 @@ void Geometric_Controller::set_current_odom(const control_common::UAVStateEstima
 //              land  :  [mode]offboard -> [mode]position setpoint 流停止发送
 // 因此我们提供一个set_postion_mode函数用于设置为position模式
 void Geometric_Controller::set_position_mode() {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     control_common::Mavros_State state = mavros_helper_.get_state();
     if (state.flight_mode != control_common::FlightMode::Posctl) {
         mavros_helper_.set_px4_mode(control_common::FlightMode::Posctl);
@@ -186,12 +188,105 @@ void Geometric_Controller::update_hover_reference(const Eigen::Vector3d& hover_p
     (void)pos_err;
 }
 
+void Geometric_Controller::reset_point_motion_context() {
+    move_point_curve_.clear();
+    point_arrival_state_ = arrival_helper::State{};
+    point_complete_.store(false, std::memory_order_relaxed);
+    point_target_initialized_ = false;
+    body_point_target_initialized_ = false;
+    last_point_ = controller_data_types::TargetPoint_t{};
+    last_point_body_ = controller_data_types::TargetBodyPoint_t{};
+}
+
+double Geometric_Controller::update_limited_yaw_target(double target_yaw, const ros::Time& now) {
+    return reference_limit_helper::update_slewed_yaw_target(
+        yaw_reference_state_, target_yaw, uav_odometry_.get_yaw(), max_yaw_rate_rad_s_, now);
+}
+
+double Geometric_Controller::integrate_limited_yaw_rate(double yaw_rate_cmd, const ros::Time& now) {
+    return reference_limit_helper::integrate_yaw_rate_command(
+        yaw_reference_state_, yaw_rate_cmd, uav_odometry_.get_yaw(), max_yaw_rate_rad_s_, now);
+}
+
+void Geometric_Controller::warn_if_trajectory_exceeds_limits(
+    const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const {
+    if (!reference_limit_helper::trajectory_reference_exceeds_limits(
+            trajpoint.velocity, trajpoint.yaw_rate, max_velocity_, max_yaw_rate_rad_s_)) {
+        return;
+    }
+
+    ROS_WARN_STREAM_THROTTLE(
+        1.0,
+        "[Geometric_Controller][" << uav_ns_
+                                   << "] trajectory reference exceeds velocity_param limits: vel="
+                                   << trajpoint.velocity.transpose() << " max="
+                                   << max_velocity_.transpose() << " yaw_rate="
+                                   << trajpoint.yaw_rate << " max_yaw_rate="
+                                   << max_yaw_rate_rad_s_);
+}
+
+bool Geometric_Controller::move_point_impl(controller_data_types::TargetPoint_t point,
+                                           bool preserve_body_point_context) {
+    constexpr double kNewTargetPosEps = 1e-3;
+    if (!preserve_body_point_context) {
+        body_point_target_initialized_ = false;
+    }
+
+    const bool is_new_target = !point_target_initialized_ ||
+                               (point.position - last_point_.position).norm() > kNewTargetPosEps;
+    if (is_new_target) {
+        point_arrival_state_ = arrival_helper::State{};
+        point_complete_.store(false, std::memory_order_relaxed);
+        controller_.reset_vertical_integral();
+        last_point_ = point;
+        point_target_initialized_ = true;
+        move_point_curve_.clear();
+        move_point_curve_.set_start_trajpoint(uav_odometry_.position, uav_odometry_.velocity);
+        move_point_curve_.set_end_trajpoint(point.position, Eigen::Vector3d::Zero());
+        move_point_curve_.set_curve_maxvel(reference_limit_helper::compute_point_curve_maxvel(
+            uav_odometry_.position, point.position, max_velocity_));
+    }
+
+    const ros::Time now = ros::Time::now();
+    const curve::QuinticCurveState curve_result = move_point_curve_.get_result();
+    controller_data_types::TargetTrajectoryPoint_t des_state;
+    // Keep geometric point mode close to the historical "position hold" semantics:
+    // only smooth the position reference, and avoid quintic velocity/acceleration
+    // feedforward that can make the point interface much more aggressive.
+    des_state.position = curve_result.valid ? curve_result.position : point.position;
+    des_state.velocity = Eigen::Vector3d::Zero();
+    des_state.acceleration = Eigen::Vector3d::Zero();
+    des_state.jerk = Eigen::Vector3d::Zero();
+    des_state.yaw = point.yaw;
+    des_state.yaw_rate = 0.0;
+
+    publish_trajectory_setpoint(des_state, ThrustCommandPolicy::UseEstimatedAnchor);
+
+    if (point_complete_.load(std::memory_order_relaxed)) {
+        return true;
+    }
+
+    const double pos_err = (uav_odometry_.position - last_point_.position).norm();
+    const double vel_err = uav_odometry_.velocity.norm();
+    if (!arrival_helper::update_and_check(
+            point_arrival_state_, arrival_judge_config_, pos_err, vel_err, now)) {
+        point_complete_.store(false, std::memory_order_relaxed);
+        return false;
+    }
+
+    point_complete_.store(true, std::memory_order_relaxed);
+    update_hover_reference(last_point_.position, last_point_.yaw, "move_point_arrive");
+    return true;
+}
+
 void Geometric_Controller::reset_stage_thrust_filters() {
     takeoff_state_.thrust_filter = takeoff_land::RCThrustFilterState{};
     landing_state_.thrust_filter = takeoff_land::RCThrustFilterState{};
 }
 
 bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     // 如果本轮之前已经降落，清除降落标志
     if (land_complete_.load(std::memory_order_relaxed)) {
         land_complete_.store(false, std::memory_order_relaxed);
@@ -394,6 +489,8 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
 }
 
 bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     takeoff_state_.thrust_filter = takeoff_land::RCThrustFilterState{};
     // 进入降落流程时重置积分，防止下降阶段因残留积分产生额外推力
     if (landing_state_.start_time == ros::Time(0)) {
@@ -567,11 +664,15 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
 }
 
 bool Geometric_Controller::set_hover_point(control_common::UAVStateEstimate current_odom) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     update_hover_reference(current_odom.position, current_odom.get_yaw(), "set_hover_point");
     return true;
 }
 
 bool Geometric_Controller::hover() {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = hover_point;
     des_state.velocity = Eigen::Vector3d::Zero();
@@ -610,69 +711,29 @@ bool Geometric_Controller::hover() {
 }
 
 bool Geometric_Controller::emergency_kill() {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     return mavros_helper_.emergency_kill();
 }
 
 bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point) {
-    // 新目标检测
-    constexpr double kNewTargetPosEps = 1e-3;
-    bool is_new_target = false;
-    const double dp = (point.position - last_point_.position).norm();
-    if (dp > kNewTargetPosEps) {
-        is_new_target = true;
-    }
-    if (is_new_target) {
-        point_arrival_state_ = arrival_helper::State{};
-        point_complete_.store(false, std::memory_order_relaxed);
-        controller_.reset_vertical_integral();
-        last_point_ = point;
-    }
-
-    controller_data_types::TargetTrajectoryPoint_t des_state;
-    des_state.position = point.position;
-    des_state.velocity = Eigen::Vector3d::Zero();
-    des_state.acceleration = Eigen::Vector3d::Zero();
-    des_state.jerk = Eigen::Vector3d::Zero();
-    des_state.yaw = point.yaw;
-    des_state.yaw_rate = 0.0;
-
-    auto output = controller_.calculateControl(
-        des_state, uav_odometry_, ThrustCommandPolicy::UseEstimatedAnchor);
-
-    control_common::Mavros_SetpointAttitude setpoint;
-    if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
-        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
-                        control_common::Mavros_SetpointAttitude::IgnorePitchRate |
-                        control_common::Mavros_SetpointAttitude::IgnoreYawRate;
-        setpoint.orientation = output.orientation;
-        setpoint.body_rate = Eigen::Vector3d::Zero();
-    } else {
-        setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-        setpoint.body_rate = output.bodyrates;
-    }
-    setpoint.thrust = output.thrust;
-    mavros_helper_.pub_attitude_setpoint(setpoint);
-    last_setpoint_ = setpoint;
-
-    if (point_complete_.load(std::memory_order_relaxed)) {
-        return true;
-    }
-
-    const ros::Time now = ros::Time::now();
-    const double pos_err = (uav_odometry_.position - last_point_.position).norm();
-    const double vel_err = uav_odometry_.velocity.norm();
-    if (!arrival_helper::update_and_check(
-            point_arrival_state_, arrival_judge_config_, pos_err, vel_err, now)) {
-        point_complete_.store(false, std::memory_order_relaxed);
-        return false;
-    }
-
-    point_complete_.store(true, std::memory_order_relaxed);
-    update_hover_reference(last_point_.position, last_point_.yaw, "move_point_arrive");
-    return true;
+    return move_point_impl(point, false);
 }
 
 bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t velocity) {
+    reset_point_motion_context();
+    const ros::Time now = velocity.stamp.isZero() ? ros::Time::now() : velocity.stamp;
+    velocity.velocity =
+        reference_limit_helper::clamp_velocity_per_axis(velocity.velocity, max_velocity_);
+    if (std::abs(velocity.yaw_rate) > 1e-6) {
+        velocity.yaw_rate =
+            reference_limit_helper::clamp_yaw_rate(velocity.yaw_rate, max_yaw_rate_rad_s_);
+        velocity.yaw = integrate_limited_yaw_rate(velocity.yaw_rate, now);
+    } else {
+        velocity.yaw = update_limited_yaw_target(velocity.yaw, now);
+        velocity.yaw_rate = 0.0;
+    }
+
     auto output =
         controller_.calculateVelocityControl(
             velocity, uav_odometry_, ThrustCommandPolicy::UseEstimatedAnchor);
@@ -691,11 +752,20 @@ bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
     last_setpoint_ = setpoint;
+    desired_state_.position = uav_odometry_.position;
+    desired_state_.velocity = velocity.velocity;
+    desired_state_.acceleration = Eigen::Vector3d::Zero();
+    desired_state_.jerk = Eigen::Vector3d::Zero();
+    desired_state_.yaw = velocity.yaw;
+    desired_state_.yaw_rate = velocity.yaw_rate;
     return true;
 }
 
 bool Geometric_Controller::move_trajectory(
     controller_data_types::TargetTrajectoryPoint_t trajpoint) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
+    warn_if_trajectory_exceeds_limits(trajpoint);
     // 几何控制器的核心运动接口。
     // 将完整的轨迹点（位置 / 速度 / 加速度 / 加加速度 / yaw）直接送入核心算法，
     // 由两级控制环（位置 PD + 姿态子控制器）输出 body rate 和归一化推力。
@@ -705,7 +775,7 @@ bool Geometric_Controller::move_trajectory(
 bool Geometric_Controller::move_point_body(controller_data_types::TargetBodyPoint_t point) {
     constexpr double kPosEps = 1e-3;
     constexpr double kYawEps = 1e-3;
-    bool is_new_body_target = false;
+    bool is_new_body_target = !body_point_target_initialized_;
     controller_data_types::TargetPoint_t world_point = last_point_;
 
     const double dxy = (point.position_xy - last_point_body_.position_xy).norm();
@@ -732,9 +802,10 @@ bool Geometric_Controller::move_point_body(controller_data_types::TargetBodyPoin
         world_point.yaw = yaw + point.yaw;
 
         last_point_body_ = point;
+        body_point_target_initialized_ = true;
     }
 
-    return move_point(world_point);
+    return move_point_impl(world_point, true);
 }
 
 bool Geometric_Controller::move_velocity_body(
@@ -756,7 +827,8 @@ bool Geometric_Controller::move_velocity_body(
     // 将高度误差转换为 z 方向速度指令，并使用通用速度上限进行限幅。
     const double height_error = velocity.fixed_height - uav_odometry_.position.z();
     const double z_velocity_cmd = geometric_controller_param_.pos_kp.z() * height_error;
-    world_velocity.velocity.z() = std::clamp(z_velocity_cmd, -max_velocity_z_, max_velocity_z_);
+    world_velocity.velocity.z() =
+        std::clamp(z_velocity_cmd, -max_velocity_.z(), max_velocity_.z());
     world_velocity.yaw = yaw + velocity.yaw;
     world_velocity.yaw_rate = velocity.yaw_rate;
 

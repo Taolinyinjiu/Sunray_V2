@@ -187,7 +187,7 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
         // 读取失败，抛出异常
         throw std::runtime_error("missing param" + node_name + "/use_receive_time");
     }
-    private_nh_.param("log_enable", log_enable_, false);
+    private_nh_.param("log_save", log_save_, false);
     // 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
     uav_ns_ = localization_fusion::load_uav_namespace_or_throw(nh_);
     init_logger();
@@ -200,7 +200,7 @@ void LocalizationFusion::init_logger() {
     cfg.file_level = SunrayLogLevel::trace;
     cfg.async = false;
 
-    if (log_enable_) {
+    if (log_save_) {
         log_file_path_ = make_log_file_path();
         cfg.file_path = log_file_path_;
     }
@@ -211,9 +211,9 @@ void LocalizationFusion::init_logger() {
         // 终端日志不显示 [info]/[warn] 前缀，状态面板的颜色在 printf_terminal 中单独控制。
         logger->sinks().front()->set_pattern("%v");
     }
-    SUNRAY_INFO("localization_fusion logger initialized. log_enable={} file_path={}",
-                log_enable_,
-                log_enable_ ? log_file_path_ : "disabled");
+    SUNRAY_INFO("localization_fusion logger initialized. log_save={} file_path={}",
+                log_save_,
+                log_save_ ? log_file_path_ : "disabled");
 }
 
 std::string LocalizationFusion::make_log_file_path() const {
