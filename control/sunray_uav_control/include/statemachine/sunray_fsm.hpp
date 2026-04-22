@@ -15,6 +15,7 @@
 #include <nav_msgs/Odometry.h>
 #include "controller/controller_interface.hpp"
 #include "control_data_types/uav_control_cmd_types.hpp"
+#include <deque>
 #include <queue>
 #include <thread>
 #include <atomic>
@@ -67,10 +68,12 @@ class Sunray_FSM {
     // ------------------------- 函数 -------------------------
     // init() = load_param() + set_subscriber() + set_publisher() + register_controller
     void load_param();           // 读取参数
+    void init_logger();          // 初始化sunray_log
     void init_subscriber();      // 初始化订阅者
     void init_publisher();       // 初始化发布者
     void register_controller();  // 注册控制器
     void show_static_info();     // 打印一次性的静态配置和参数信息
+    std::string make_log_file_path() const;  // 生成日志文件路径
 
     // 状态检查部分
     void check_controller_ready();  // 检查controller是否就绪，就绪则Sunray_FSM State: OFF -> INIT
@@ -153,6 +156,7 @@ class Sunray_FSM {
     mutable std::mutex state_mutex_;  // fsm当前状态
     mutable std::mutex odom_mutex_;
     mutable std::mutex cmd_mutex_;
+    mutable std::mutex localization_status_mutex_;
     mutable std::mutex event_mutex_;  // fsm当前事件队列
 
     sunray_fsm::SunrayState fsm_state_{sunray_fsm::SunrayState::OFF};  // 当前状态
@@ -160,4 +164,12 @@ class Sunray_FSM {
     sunray_fsm::sunray_fsm_config_t fsm_config_;                       // 状态机参数结构体
     std::vector<sunray_fsm::Transition> sunray_state_transmit_table_;  // 成员变量
     bool rc_connected{false};  // 遥控器连接状态，这里是从sunray_rc_joy_node节点传递？
+    bool log_save_{false};   // 是否保存文件日志
+    std::string log_file_path_;  // 启用文件日志时的输出路径
+    bool has_localization_status_{false};
+    sunray_msgs::OdomStatus last_localization_status_;
+    ros::Time last_localization_status_receive_time_{ros::Time(0)};
+    double localization_status_rate_hz_{0.0};
+    std::deque<double> localization_status_rate_samples_s_;
+    std::deque<double> odom_rate_samples_s_;
 };

@@ -73,7 +73,7 @@ void Sunray_FSM::update_controller_output() {
         sunray_controller_->hover();
         break;
     }
-        // 降落阶段
+    // 降落阶段
     case sunray_fsm::SunrayState::LAND: {
         // 降落状态下，我们疯狂调用takeoff函数
         sunray_controller_->land(fsm_config_.takeoff_land_param.land_type,

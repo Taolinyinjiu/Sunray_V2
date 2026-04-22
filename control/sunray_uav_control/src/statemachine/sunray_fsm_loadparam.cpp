@@ -1,4 +1,5 @@
 #include "statemachine/sunray_fsm_loadparam.hpp"
+#include "utils/orientation_utils.hpp"
 #include <stdexcept>
 #include <ros/ros.h>
 
@@ -101,6 +102,19 @@ void loadBasicParam(const YAML::Node& node, sunray_fsm::basic_param_t& param) {
             throw std::runtime_error(
                 "the sunray_control_config.yaml param 'fuse_odom_frequency' must > 0");
         }
+    }
+    // ---------------------日志开关--------------------
+    if (node["log_save"]) {
+        param.log_save = node["log_save"].as<bool>();
+    }
+    // ---------------------日志等级--------------------
+    if (node["log_level"]) {
+        const int log_level = node["log_level"].as<int>();
+        if (log_level < 0 || log_level > 2) {
+            throw std::runtime_error(
+                "the sunray_control_config.yaml param 'log_level' only can 0, 1, 2");
+        }
+        param.log_level = static_cast<uint8_t>(log_level);
     }
 }
 // 从yaml文件构造的节点中，读取protect_param字段的内容
@@ -439,7 +453,7 @@ void loadVelocityParam(const YAML::Node& node, sunray_fsm::velocity_param_t& par
     if (!node["yaw_rate"]) {
         throw std::runtime_error("the sunray_control_config.yaml miss param 'yaw_rate'");
     } else {
-        param.yaw_rate = node["yaw_rate"].as<double>();
+        param.yaw_rate = deg2rad(node["yaw_rate"].as<double>());
         if (param.yaw_rate <= 0) {
             throw std::runtime_error("the sunray_control_config.yaml param 'yaw_rate' must > 0");
         }

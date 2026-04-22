@@ -7,7 +7,7 @@
     <param name="uav_name" value="$(arg uav_name)" />
     <!-- 将mavros节点放置在 /uav_name+/uav_id 的命名空间下-->
     <group ns="$(arg uav_name)$(arg uav_id)">
-        <arg name="fcu_url" default="/dev/tty:921600" />
+        <arg name="fcu_url" default="/dev/ttyACM0:921600" />
         <arg name="gcs_url" default="udp://:14556@$(arg ip):14551" />
         <arg name="tgt_system" default="1" />
         <arg name="tgt_component" default="1" />

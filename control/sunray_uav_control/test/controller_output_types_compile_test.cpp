@@ -8,31 +8,19 @@
  */
 #include <gtest/gtest.h>
 
-#include "controller_data_types/controller_output_types.hpp"
-
+#include "control_data_types/controller_desired_types.hpp"
 namespace controller_data_types {
 namespace {
 
-TEST(ControllerOutputTypesTest, LocalSetpointDefaultsAreUsable) {
-  LocalSetpointOutput output;
+TEST(ControllerDesiredTypesTest, TargetTrajectoryDefaultsAreZeroInitialized) {
+  TargetTrajectoryPoint_t point;
 
-  EXPECT_EQ(output.coordinate_frame, LocalSetpointFrame::kLocalNed);
-  EXPECT_EQ(output.type_mask, 0u);
-  EXPECT_TRUE(output.position.isZero());
-  EXPECT_TRUE(output.velocity.isZero());
-  EXPECT_TRUE(output.acceleration_or_force.isZero());
-  EXPECT_DOUBLE_EQ(output.yaw, 0.0);
-  EXPECT_DOUBLE_EQ(output.yaw_rate, 0.0);
-}
-
-TEST(ControllerOutputTypesTest, AttitudeSetpointDefaultsAreUsable) {
-  AttitudeSetpointOutput output;
-
-  EXPECT_EQ(output.type_mask, 0u);
-  EXPECT_TRUE(output.attitude.coeffs().isApprox(
-      Eigen::Quaterniond::Identity().coeffs()));
-  EXPECT_TRUE(output.body_rate.isZero());
-  EXPECT_DOUBLE_EQ(output.thrust, 0.0);
+  EXPECT_TRUE(point.position.isZero());
+  EXPECT_TRUE(point.velocity.isZero());
+  EXPECT_TRUE(point.acceleration.isZero());
+  EXPECT_TRUE(point.jerk.isZero());
+  EXPECT_DOUBLE_EQ(point.yaw, 0.0);
+  EXPECT_DOUBLE_EQ(point.yaw_rate, 0.0);
 }
 
 }  // namespace

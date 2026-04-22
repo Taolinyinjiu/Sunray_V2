@@ -1,4 +1,5 @@
 #include "controller/raptor_controller.hpp"
+#include "utils/orientation_utils.hpp"
 #include <algorithm>
 #include <stdexcept>
 #include <yaml-cpp/yaml.h>
@@ -61,6 +62,32 @@ void Raptor_Controller::load_and_validate_config_or_throw() {
     }
     if (arrival_judge_config_.vel_err_mps <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.vel_stabile_err_mps' must > 0");
+    }
+
+    const YAML::Node velocity_param = root["velocity_param"];
+    if (!velocity_param || !velocity_param.IsMap()) {
+        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+                                 "' is missing a valid 'velocity_param' map");
+    }
+    const YAML::Node max_velocity = velocity_param["max_velocity"];
+    if (!max_velocity || !max_velocity.IsMap() || !max_velocity["x_vel"] || !max_velocity["y_vel"] ||
+        !max_velocity["z_vel"]) {
+        throw std::runtime_error("missing param 'velocity_param.max_velocity.(x_vel|y_vel|z_vel)'");
+    }
+
+    max_move_velocity_.x() = max_velocity["x_vel"].as<double>();
+    max_move_velocity_.y() = max_velocity["y_vel"].as<double>();
+    max_move_velocity_.z() = max_velocity["z_vel"].as<double>();
+    if (max_move_velocity_.x() <= 0.0 || max_move_velocity_.y() <= 0.0 ||
+        max_move_velocity_.z() <= 0.0) {
+        throw std::runtime_error("param 'velocity_param.max_velocity.*' must > 0");
+    }
+    if (!velocity_param["yaw_rate"]) {
+        throw std::runtime_error("missing param 'velocity_param.yaw_rate'");
+    }
+    max_yaw_rate_rad_s_ = deg2rad(velocity_param["yaw_rate"].as<double>());
+    if (max_yaw_rate_rad_s_ <= 0.0) {
+        throw std::runtime_error("param 'velocity_param.yaw_rate' must > 0");
     }
 }
 

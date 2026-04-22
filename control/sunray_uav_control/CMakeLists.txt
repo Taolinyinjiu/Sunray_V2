@@ -17,6 +17,7 @@ set(yaml-cpp_LIBRARIES yaml-cpp)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
   geometry_msgs
   nav_msgs
   sensor_msgs
@@ -33,6 +34,7 @@ catkin_package(
   LIBRARIES sunray_uav_control_lib
   CATKIN_DEPENDS
     roscpp
+    roslib
     geometry_msgs
     nav_msgs
     sensor_msgs
@@ -75,6 +77,8 @@ target_include_directories(sunray_uav_control_lib
     include
     ${catkin_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
 )
 
 target_link_libraries(sunray_uav_control_lib
@@ -148,6 +152,12 @@ if(CATKIN_ENABLE_TESTING)
     test/base_controller_compile_test.cpp
   )
   if(TARGET base_controller_compile_test)
+    target_include_directories(base_controller_compile_test
+      PRIVATE
+        include
+        ${catkin_INCLUDE_DIRS}
+        ${EIGEN3_INCLUDE_DIRS}
+    )
     target_link_libraries(base_controller_compile_test
         sunray_uav_control_lib
     )
@@ -157,6 +167,12 @@ if(CATKIN_ENABLE_TESTING)
     test/controller_output_types_compile_test.cpp
   )
   if(TARGET controller_output_types_compile_test)
+    target_include_directories(controller_output_types_compile_test
+      PRIVATE
+        include
+        ${catkin_INCLUDE_DIRS}
+        ${EIGEN3_INCLUDE_DIRS}
+    )
     target_link_libraries(controller_output_types_compile_test
         sunray_uav_control_lib
     )

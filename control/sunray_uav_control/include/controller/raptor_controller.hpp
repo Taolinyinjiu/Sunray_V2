@@ -3,6 +3,7 @@
 #include "controller/controller_interface.hpp"
 #include "mavros_helper/mavros_helper.hpp"
 #include "utils/arrival_helper.hpp"
+#include "utils/reference_limit_helper.hpp"
 #include "utils/quintic_curve.hpp"
 #include <Eigen/Dense>
 #include <atomic>
@@ -39,7 +40,7 @@ class Raptor_Controller : public Controller_Interface {
     bool is_point_complete() override;
 
     void pub_controller_state() override;
-    void printf_logs() override;
+    void printf_logs(uint8_t log_level) override;
 
   private:
     struct LogSnapshot {
@@ -63,7 +64,21 @@ class Raptor_Controller : public Controller_Interface {
 
     void load_and_validate_config_or_throw();
     void ensure_fusion_param_ready_or_throw();
+    double compute_move_point_curve_maxvel(const Eigen::Vector3d& start_position,
+                                           const Eigen::Vector3d& goal_position) const;
+    bool move_point_impl(controller_data_types::TargetPoint_t point,
+                         bool preserve_body_point_context);
+    double update_limited_yaw_target(double target_yaw, const ros::Time& now);
+    void warn_if_trajectory_exceeds_limits(
+        const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
+    bool publish_trajectory_setpoint(
+        const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
+        bool preserve_point_context);
+    void reset_point_motion_context();
+    void clear_cached_setpoint();
     void cache_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint);
+    controller_data_types::TargetTrajectoryPoint_t make_hold_desired_state(
+        const control_common::UAVStateEstimate& odom) const;
     void publish_hold_setpoint(double yaw);
     bool ensure_raptor_mode(const ros::Time& now, double yaw);
     void update_log_snapshot();
@@ -76,6 +91,8 @@ class Raptor_Controller : public Controller_Interface {
 
     int fuse_odom_type{0};
     double fuse_odom_frequency{0.0};
+    Eigen::Vector3d max_move_velocity_{Eigen::Vector3d::Ones()};
+    double max_yaw_rate_rad_s_{0.5};
     arrival_helper::Config arrival_judge_config_{};
 
     ros::NodeHandle nh_;
@@ -88,11 +105,15 @@ class Raptor_Controller : public Controller_Interface {
     double land_yaw_{0.0};
     ros::Time last_checkout_raptor_time_{ros::Time(0)};
     curve::QuinticCurve quint_curve_;
+    curve::QuinticCurve move_point_curve_;
     ros::Time start_land_time_{ros::Time(0)};
     ros::Time land_touchground_time_{ros::Time(0)};
 
     arrival_helper::State takeoff_arrival_state_{};
     arrival_helper::State point_arrival_state_{};
+    reference_limit_helper::YawReferenceState yaw_reference_state_{};
+    bool point_target_initialized_{false};
+    bool body_point_target_initialized_{false};
 
     control_common::Mavros_SetpointLocal last_setpoint_{};
     controller_data_types::TargetPoint_t last_point_{};

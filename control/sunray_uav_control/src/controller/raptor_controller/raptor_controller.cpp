@@ -87,10 +87,142 @@ void Raptor_Controller::set_current_odom(const control_common::UAVStateEstimate&
 }
 
 void Raptor_Controller::set_position_mode() {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
+    clear_cached_setpoint();
     const control_common::Mavros_State state = mavros_helper_.get_state();
     if (state.flight_mode != control_common::FlightMode::Posctl) {
         mavros_helper_.set_px4_mode(control_common::FlightMode::Posctl);
     }
+}
+
+double Raptor_Controller::compute_move_point_curve_maxvel(const Eigen::Vector3d& start_position,
+                                                          const Eigen::Vector3d& goal_position) const {
+    return reference_limit_helper::compute_point_curve_maxvel(
+        start_position, goal_position, max_move_velocity_, kMinCurveVelocity);
+}
+
+double Raptor_Controller::update_limited_yaw_target(double target_yaw, const ros::Time& now) {
+    return reference_limit_helper::update_slewed_yaw_target(
+        yaw_reference_state_, target_yaw, uav_odometry_.get_yaw(), max_yaw_rate_rad_s_, now);
+}
+
+void Raptor_Controller::warn_if_trajectory_exceeds_limits(
+    const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const {
+    if (!reference_limit_helper::trajectory_reference_exceeds_limits(
+            trajpoint.velocity, trajpoint.yaw_rate, max_move_velocity_, max_yaw_rate_rad_s_)) {
+        return;
+    }
+
+    ROS_WARN_STREAM_THROTTLE(
+        1.0,
+        "[Raptor_Controller][" << uav_ns_
+                                << "] trajectory reference exceeds velocity_param limits: vel="
+                                << trajpoint.velocity.transpose() << " max="
+                                << max_move_velocity_.transpose() << " yaw_rate="
+                                << trajpoint.yaw_rate << " max_yaw_rate="
+                                << max_yaw_rate_rad_s_);
+}
+
+bool Raptor_Controller::publish_trajectory_setpoint(
+    const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
+    bool preserve_point_context) {
+    if (!has_uav_odometry_.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    if (!preserve_point_context) {
+        reset_point_motion_context();
+    }
+
+    control_common::Mavros_SetpointLocal setpoint;
+    setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    setpoint.position = trajpoint.position;
+    setpoint.velocity = trajpoint.velocity;
+    setpoint.accel_or_force = trajpoint.acceleration;
+    setpoint.yaw = trajpoint.yaw;
+    setpoint.yaw_rate = trajpoint.yaw_rate;
+    mavros_helper_.pub_local_setpoint(setpoint);
+    cache_local_setpoint(setpoint);
+    desired_state_ = trajpoint;
+    return true;
+}
+
+bool Raptor_Controller::move_point_impl(controller_data_types::TargetPoint_t point,
+                                        bool preserve_body_point_context) {
+    if (!has_uav_odometry_.load(std::memory_order_relaxed)) {
+        return false;
+    }
+
+    constexpr double kNewTargetPosEps = 1e-3;
+    if (!preserve_body_point_context) {
+        body_point_target_initialized_ = false;
+    }
+
+    const bool is_new_target = !point_target_initialized_ ||
+                               (point.position - last_point_.position).norm() > kNewTargetPosEps;
+    if (is_new_target) {
+        const Eigen::Vector3d start_position =
+            last_setpoint_.valid ? last_setpoint_.position : uav_odometry_.position;
+        const Eigen::Vector3d start_velocity =
+            last_setpoint_.valid ? last_setpoint_.velocity : uav_odometry_.velocity;
+        move_point_curve_.clear();
+        last_point_ = point;
+        point_target_initialized_ = true;
+        point_arrival_state_ = arrival_helper::State{};
+        point_complete_.store(false, std::memory_order_relaxed);
+        move_point_curve_.set_start_trajpoint(start_position, start_velocity);
+        move_point_curve_.set_end_trajpoint(point.position, Eigen::Vector3d::Zero());
+        move_point_curve_.set_curve_maxvel(
+            compute_move_point_curve_maxvel(start_position, point.position));
+    }
+
+    curve::QuinticCurveState curve_result = move_point_curve_.get_result();
+    controller_data_types::TargetTrajectoryPoint_t trajpoint;
+    trajpoint.position = curve_result.valid ? curve_result.position : point.position;
+    trajpoint.velocity = curve_result.valid ? curve_result.velocity : Eigen::Vector3d::Zero();
+    trajpoint.acceleration =
+        curve_result.valid ? curve_result.acceleration : Eigen::Vector3d::Zero();
+    trajpoint.jerk = Eigen::Vector3d::Zero();
+    trajpoint.yaw = update_limited_yaw_target(point.yaw, ros::Time::now());
+    trajpoint.yaw_rate = 0.0;
+    if (!publish_trajectory_setpoint(trajpoint, true)) {
+        return false;
+    }
+
+    if (point_complete_.load(std::memory_order_relaxed)) {
+        return true;
+    }
+
+    const ros::Time now = ros::Time::now();
+    const double pos_err = (uav_odometry_.position - last_point_.position).norm();
+    const double vel_err = uav_odometry_.velocity.norm();
+    if (!arrival_helper::update_and_check(
+            point_arrival_state_, arrival_judge_config_, pos_err, vel_err, now)) {
+        point_complete_.store(false, std::memory_order_relaxed);
+        return false;
+    }
+
+    point_complete_.store(true, std::memory_order_relaxed);
+    hover_point_ = last_point_.position;
+    hover_yaw_ = last_point_.yaw;
+    return true;
+}
+
+void Raptor_Controller::reset_point_motion_context() {
+    move_point_curve_.clear();
+    point_arrival_state_ = arrival_helper::State{};
+    point_complete_.store(false, std::memory_order_relaxed);
+    point_target_initialized_ = false;
+    body_point_target_initialized_ = false;
+    last_point_ = controller_data_types::TargetPoint_t{};
+    last_point_body_ = controller_data_types::TargetBodyPoint_t{};
+}
+
+void Raptor_Controller::clear_cached_setpoint() {
+    last_setpoint_ = control_common::Mavros_SetpointLocal{};
+    desired_state_ = has_uav_odometry_.load(std::memory_order_relaxed)
+                         ? make_hold_desired_state(uav_odometry_)
+                         : controller_data_types::TargetTrajectoryPoint_t{};
 }
 
 void Raptor_Controller::cache_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint) {
@@ -104,6 +236,14 @@ void Raptor_Controller::cache_local_setpoint(const control_common::Mavros_Setpoi
     desired_state_.jerk = Eigen::Vector3d::Zero();
     desired_state_.yaw = setpoint.yaw;
     desired_state_.yaw_rate = setpoint.yaw_rate;
+}
+
+controller_data_types::TargetTrajectoryPoint_t Raptor_Controller::make_hold_desired_state(
+    const control_common::UAVStateEstimate& odom) const {
+    controller_data_types::TargetTrajectoryPoint_t desired_state;
+    desired_state.position = odom.position;
+    desired_state.yaw = eigen_helper::get_yaw_from_orientation(odom.orientation);
+    return desired_state;
 }
 
 void Raptor_Controller::publish_hold_setpoint(double yaw) {
@@ -136,6 +276,8 @@ bool Raptor_Controller::ensure_raptor_mode(const ros::Time& now, double yaw) {
 }
 
 bool Raptor_Controller::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     if (land_complete_.load(std::memory_order_relaxed)) {
         land_complete_.store(false, std::memory_order_relaxed);
     }
@@ -198,6 +340,8 @@ bool Raptor_Controller::takeoff(double relative_takeoff_height, double max_takeo
 }
 
 bool Raptor_Controller::land(bool land_type, double max_land_velocity) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     if (land_type == 1) {
         mavros_helper_.set_px4_mode(control_common::FlightMode::AutoLand);
         const bool landed =
@@ -291,12 +435,16 @@ bool Raptor_Controller::land(bool land_type, double max_land_velocity) {
 }
 
 bool Raptor_Controller::set_hover_point(control_common::UAVStateEstimate current_odom) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     hover_point_ = current_odom.position;
     hover_yaw_ = current_odom.get_yaw();
     return true;
 }
 
 bool Raptor_Controller::hover() {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     if (!has_uav_odometry_.load(std::memory_order_relaxed)) {
         return false;
     }
@@ -314,51 +462,19 @@ bool Raptor_Controller::hover() {
 }
 
 bool Raptor_Controller::emergency_kill() {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
+    clear_cached_setpoint();
     return mavros_helper_.emergency_kill();
 }
 
 bool Raptor_Controller::move_point(controller_data_types::TargetPoint_t point) {
-    if (!has_uav_odometry_.load(std::memory_order_relaxed)) {
-        return false;
-    }
-
-    constexpr double kNewTargetPosEps = 1e-3;
-    if ((point.position - last_point_.position).norm() > kNewTargetPosEps) {
-        point_arrival_state_ = arrival_helper::State{};
-        point_complete_.store(false, std::memory_order_relaxed);
-        last_point_ = point;
-    }
-
-    control_common::Mavros_SetpointLocal setpoint;
-    setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
-    setpoint.position = point.position;
-    setpoint.velocity = Eigen::Vector3d::Zero();
-    setpoint.accel_or_force = Eigen::Vector3d::Zero();
-    setpoint.yaw = point.yaw;
-    setpoint.yaw_rate = 0.0;
-    mavros_helper_.pub_local_setpoint(setpoint);
-    cache_local_setpoint(setpoint);
-
-    if (point_complete_.load(std::memory_order_relaxed)) {
-        return true;
-    }
-
-    const ros::Time now = ros::Time::now();
-    const double pos_err = (uav_odometry_.position - last_point_.position).norm();
-    const double vel_err = uav_odometry_.velocity.norm();
-    if (!arrival_helper::update_and_check(
-            point_arrival_state_, arrival_judge_config_, pos_err, vel_err, now)) {
-        point_complete_.store(false, std::memory_order_relaxed);
-        return false;
-    }
-
-    point_complete_.store(true, std::memory_order_relaxed);
-    hover_point_ = last_point_.position;
-    hover_yaw_ = last_point_.yaw;
-    return true;
+    return move_point_impl(point, false);
 }
 
 bool Raptor_Controller::move_velocity(controller_data_types::TargetVelocity_t velocity) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     (void)velocity;
     ROS_WARN_THROTTLE(
         1.0,
@@ -369,21 +485,9 @@ bool Raptor_Controller::move_velocity(controller_data_types::TargetVelocity_t ve
 
 bool Raptor_Controller::move_trajectory(
     controller_data_types::TargetTrajectoryPoint_t trajpoint) {
-    if (!has_uav_odometry_.load(std::memory_order_relaxed)) {
-        return false;
-    }
-
-    control_common::Mavros_SetpointLocal setpoint;
-    setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
-    setpoint.position = trajpoint.position;
-    setpoint.velocity = trajpoint.velocity;
-    setpoint.accel_or_force = trajpoint.acceleration;
-    setpoint.yaw = trajpoint.yaw;
-    setpoint.yaw_rate = trajpoint.yaw_rate;
-    mavros_helper_.pub_local_setpoint(setpoint);
-    cache_local_setpoint(setpoint);
-    desired_state_ = trajpoint;
-    return true;
+    yaw_reference_state_.reset();
+    warn_if_trajectory_exceeds_limits(trajpoint);
+    return publish_trajectory_setpoint(trajpoint, false);
 }
 
 bool Raptor_Controller::move_point_body(controller_data_types::TargetBodyPoint_t point) {
@@ -393,7 +497,7 @@ bool Raptor_Controller::move_point_body(controller_data_types::TargetBodyPoint_t
 
     constexpr double kPosEps = 1e-3;
     constexpr double kYawEps = 1e-3;
-    bool is_new_body_target = false;
+    bool is_new_body_target = !body_point_target_initialized_;
     controller_data_types::TargetPoint_t world_point = last_point_;
 
     const double dxy = (point.position_xy - last_point_body_.position_xy).norm();
@@ -418,12 +522,15 @@ bool Raptor_Controller::move_point_body(controller_data_types::TargetBodyPoint_t
         world_point.position.z() = point.fixed_height;
         world_point.yaw = yaw + point.yaw;
         last_point_body_ = point;
+        body_point_target_initialized_ = true;
     }
 
-    return move_point(world_point);
+    return move_point_impl(world_point, true);
 }
 
 bool Raptor_Controller::move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     (void)velocity;
     ROS_WARN_THROTTLE(
         1.0,
@@ -433,6 +540,8 @@ bool Raptor_Controller::move_velocity_body(controller_data_types::TargetBodyVelo
 }
 
 bool Raptor_Controller::move_point_wgs84(geographic_msgs::GeoPoint point) {
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
     (void)point;
     return false;
 }
@@ -457,8 +566,11 @@ void Raptor_Controller::pub_controller_state() {
     }
 
     const control_common::Mavros_SetpointLocal px4_local_target = mavros_helper_.get_target_local();
+    const bool has_controller_setpoint = last_setpoint_.valid;
     const control_common::Mavros_SetpointLocal controller_local_output =
-        last_setpoint_.valid ? last_setpoint_ : px4_local_target;
+        has_controller_setpoint ? last_setpoint_ : control_common::Mavros_SetpointLocal{};
+    const controller_data_types::TargetTrajectoryPoint_t desired_state =
+        has_controller_setpoint ? desired_state_ : make_hold_desired_state(uav_odometry_);
 
     sunray_msgs::UAVControllerState msg;
     msg.header.stamp =
@@ -466,11 +578,11 @@ void Raptor_Controller::pub_controller_state() {
     msg.reference_frame = sunray_msgs::UAVControllerState::FRAME_LOCAL;
     msg.controller_type = sunray_msgs::UAVControllerState::RL_RAPTOR_CONTROLLER;
 
-    msg.desired_pos = eigen_helper::to_ros_point(desired_state_.position);
-    msg.desired_vel = eigen_helper::to_ros_vector3(desired_state_.velocity);
-    msg.desired_acc = eigen_helper::to_ros_vector3(desired_state_.acceleration);
-    msg.desired_yaw = desired_state_.yaw;
-    msg.desired_yawrate = desired_state_.yaw_rate;
+    msg.desired_pos = eigen_helper::to_ros_point(desired_state.position);
+    msg.desired_vel = eigen_helper::to_ros_vector3(desired_state.velocity);
+    msg.desired_acc = eigen_helper::to_ros_vector3(desired_state.acceleration);
+    msg.desired_yaw = desired_state.yaw;
+    msg.desired_yawrate = desired_state.yaw_rate;
 
     msg.current_pos = eigen_helper::to_ros_point(uav_odometry_.position);
     msg.current_vel = eigen_helper::to_ros_vector3(uav_odometry_.velocity);
@@ -478,9 +590,9 @@ void Raptor_Controller::pub_controller_state() {
     msg.current_bodyrate = eigen_helper::to_ros_vector3(uav_odometry_.bodyrate);
     msg.current_yaw = eigen_helper::get_yaw_from_orientation(uav_odometry_.orientation);
 
-    msg.pos_error = eigen_helper::to_ros_vector3(desired_state_.position - uav_odometry_.position);
-    msg.vel_error = eigen_helper::to_ros_vector3(desired_state_.velocity - uav_odometry_.velocity);
-    msg.yaw_error = eigen_helper::wrap_angle(desired_state_.yaw - msg.current_yaw);
+    msg.pos_error = eigen_helper::to_ros_vector3(desired_state.position - uav_odometry_.position);
+    msg.vel_error = eigen_helper::to_ros_vector3(desired_state.velocity - uav_odometry_.velocity);
+    msg.yaw_error = eigen_helper::wrap_angle(desired_state.yaw - msg.current_yaw);
 
     msg.position_from_ctrl = eigen_helper::to_ros_vector3(controller_local_output.position);
     msg.velocity_from_ctrl = eigen_helper::to_ros_vector3(controller_local_output.velocity);
