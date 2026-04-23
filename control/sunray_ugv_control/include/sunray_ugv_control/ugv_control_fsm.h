@@ -7,6 +7,7 @@
 #include <sunray_msgs/UGVControlCMD.h>
 #include <sunray_msgs/OdomStatus.h>
 #include <sunray_msgs/UGVControlFSMState.h>
+#include <memory>
 #include <Eigen/Eigen>
 #include "sunray_ugv_control/ugv_controller.h"
 #include "sunray_ugv_control/ugv_control_utils.h"
@@ -30,6 +31,9 @@ private:
   // ROS节点
   ros::NodeHandle nh_;
   std::string ugv_id_; // 无人车id
+  std::string localization_ns_;
+  int drive_type_;
+  std::string drive_type_name_;
   ros::Subscriber sub_odom_;
   ros::Subscriber sub_odom_status_;
   ros::Subscriber sub_control_cmd_;
@@ -38,10 +42,13 @@ private:
   ros::Publisher pub_debug_;
 
   // 控制器
-  UGVController controller_;
+  std::unique_ptr<UGVController> controller_;
 
   // 当前状态
   State current_state_;
+  Eigen::Vector3d current_pos_;
+  double current_yaw_;
+  bool have_odom_;
 
   // 控制指令
   sunray_msgs::UGVControlCMD ugv_control_cmd_;
@@ -58,8 +65,9 @@ private:
   Eigen::Vector3d fence_max_;
 
   // 时间参数
-  double WAIT_POSCMD_TIME_;
   double WAIT_VELCMD_TIME_;
+  double point_pos_tolerance_;
+  double point_yaw_tolerance_;
 
   // 定时器
   ros::Timer control_timer_;
@@ -80,9 +88,11 @@ private:
   void process_move();
 
   // 辅助函数
+  bool is_point_reached(const sunray_msgs::UGVControlCMD& cmd) const;
+  void switch_to_hold();
   void publish_fsm_state();
   void publish_debug();
-  void print_status_info();
+  void print_status_info(const ros::TimerEvent& event);
 };
 
 } // namespace sunray_ugv_control

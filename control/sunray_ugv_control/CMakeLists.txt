@@ -127,6 +127,8 @@ include_directories(
 add_library(${PROJECT_NAME}
   src/ugv_control_utils.cpp
   src/ugv_controller.cpp
+  src/differential_controller.cpp
+  src/mecanum_controller.cpp
   src/ugv_control_fsm.cpp
 )
 

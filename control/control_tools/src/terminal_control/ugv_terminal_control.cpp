@@ -10,22 +10,62 @@
 
 #include <iostream>
 #include <limits>
+#include <cmath>
 #include <string>
 
-static void printMenu() {
+namespace {
+enum class DriveType {
+    MECANUM = 1,
+    DIFFERENTIAL = 2,
+};
+
+double degToRad(const double deg) {
+    return deg * M_PI / 180.0;
+}
+
+const char* driveTypeName(const DriveType drive_type) {
+    return drive_type == DriveType::MECANUM ? "mecanum" : "differential";
+}
+}
+
+static void printMenu(const DriveType drive_type) {
     std::cout << "\n===== UGV Terminal Control =====" << std::endl;
+    std::cout << "Drive type: " << driveTypeName(drive_type) << std::endl;
+    std::cout << "Units: position[m], velocity[m/s], duration[s], yaw input[deg] -> publish[rad], angular_z input[deg/s] -> publish[rad/s]" << std::endl;
     std::cout << "1 - HOLD (停止)" << std::endl;
     std::cout << "2 - RETURN (返航)" << std::endl;
     std::cout << "3 - MOVE_POINT (点位置控制)" << std::endl;
-    std::cout << "4 - MOVE_VELOCITY (速度控制)" << std::endl;
-    std::cout << "5 - MOVE_VELOCITY_BODY (机体系速度控制)" << std::endl;
+    if (drive_type == DriveType::MECANUM) {
+        std::cout << "4 - MOVE_VELOCITY (速度控制)" << std::endl;
+        std::cout << "5 - MOVE_VELOCITY_BODY (机体系速度控制)" << std::endl;
+    } else {
+        std::cout << "4 - MOVE_VELOCITY_BODY (机体系速度控制, vx+wz)" << std::endl;
+    }
     std::cout << "0 - quit" << std::endl;
     std::cout << "Please input: ";
 }
 
+static bool selectDriveType(DriveType& drive_type) {
+    std::cout << "\n===== Select UGV Drive Type =====" << std::endl;
+    std::cout << "1 - MECANUM (麦克纳姆轮)" << std::endl;
+    std::cout << "2 - DIFFERENTIAL (差速轮)" << std::endl;
+    std::cout << "Please input drive type: ";
+
+    int input = 0;
+    if (!(std::cin >> input) || (input != 1 && input != 2)) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        ROS_WARN("Invalid drive type input");
+        return false;
+    }
+
+    drive_type = static_cast<DriveType>(input);
+    return true;
+}
+
 static bool readPoint(const std::string& title, double& x, double& y, double& yaw) {
     std::cout << title << std::endl;
-    std::cout << "Enter desired position x y and yaw: ";
+    std::cout << "Enter desired position x[m] y[m] yaw[deg]: ";
     if (!(std::cin >> x >> y >> yaw)) {
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -37,7 +77,7 @@ static bool readPoint(const std::string& title, double& x, double& y, double& ya
 
 static bool readVelocity(const std::string& title, double& vx, double& vy, double& yaw, double& duration) {
     std::cout << title << std::endl;
-    std::cout << "Enter desired velocity vx vy yaw and duration(s): ";
+    std::cout << "Enter desired velocity vx[m/s] vy[m/s] yaw[deg] duration[s]: ";
     if (!(std::cin >> vx >> vy >> yaw >> duration) || duration <= 0.0) {
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -49,11 +89,23 @@ static bool readVelocity(const std::string& title, double& vx, double& vy, doubl
 
 static bool readBodyVelocity(const std::string& title, double& vx, double& vy, double& wz, double& duration) {
     std::cout << title << std::endl;
-    std::cout << "Enter desired body velocity vx vy angular_z and duration(s): ";
+    std::cout << "Enter desired body velocity vx[m/s] vy[m/s] angular_z[deg/s] duration[s]: ";
     if (!(std::cin >> vx >> vy >> wz >> duration) || duration <= 0.0) {
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         ROS_WARN("Invalid body velocity input");
+        return false;
+    }
+    return true;
+}
+
+static bool readDifferentialBodyVelocity(const std::string& title, double& vx, double& wz, double& duration) {
+    std::cout << title << std::endl;
+    std::cout << "Enter desired body velocity vx[m/s] angular_z[deg/s] duration[s]: ";
+    if (!(std::cin >> vx >> wz >> duration) || duration <= 0.0) {
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        ROS_WARN("Invalid differential body velocity input");
         return false;
     }
     return true;
@@ -96,8 +148,16 @@ int main(int argc, char** argv) {
 
     ROS_INFO("ugv_terminal_control_node started, publishing to %s", topic.c_str());
 
+    DriveType drive_type = DriveType::DIFFERENTIAL;
+    while (ros::ok() && !selectDriveType(drive_type)) {
+    }
+    if (!ros::ok()) {
+        return 0;
+    }
+    ROS_INFO("Selected drive type: %s", driveTypeName(drive_type));
+
     while (ros::ok()) {
-        printMenu();
+        printMenu(drive_type);
         int input = -1;
         if (!(std::cin >> input)) {
             std::cin.clear();
@@ -117,64 +177,89 @@ int main(int argc, char** argv) {
         bool timed_velocity_cmd = false;
         double velocity_duration_s = 0.0;
 
-        switch (input) {
-        case 1:
+        if (input == 1) {
             cmd.control_cmd = sunray_msgs::UGVControlCMD::HOLD;
             ROS_INFO("Publish HOLD");
-            break;
-        case 2:
+        } else if (input == 2) {
             cmd.control_cmd = sunray_msgs::UGVControlCMD::RETURN;
             ROS_INFO("Publish RETURN");
-            break;
-        case 3: {
+        } else if (input == 3) {
             double x, y, yaw;
             std::string title = "MOVE_POINT";
             if (!readPoint(title, x, y, yaw)) {
                 continue;
             }
-            cmd.control_cmd = sunray_msgs::UGVControlCMD::POINT;
+            cmd.control_cmd = sunray_msgs::UGVControlCMD::MOVE_POINT;
             cmd.desired_pos.x = x;
             cmd.desired_pos.y = y;
             cmd.desired_pos.z = 0.0;
-            cmd.desired_yaw = yaw;
-            ROS_INFO("Publish %s [%.2f, %.2f, yaw=%.2f]", title.c_str(), x, y, yaw);
-            break;
-        }
-        case 4: {
+            cmd.desired_yaw = degToRad(yaw);
+            ROS_INFO("Publish %s [x=%.2fm, y=%.2fm, yaw=%.2fdeg -> %.3frad]",
+                     title.c_str(),
+                     x,
+                     y,
+                     yaw,
+                     cmd.desired_yaw);
+        } else if (drive_type == DriveType::MECANUM && input == 4) {
             double vx, vy, yaw, duration;
             const std::string title = "MOVE_VELOCITY";
             if (!readVelocity(title, vx, vy, yaw, duration)) {
                 continue;
             }
-            cmd.control_cmd = sunray_msgs::UGVControlCMD::VELOCITY;
+            cmd.control_cmd = sunray_msgs::UGVControlCMD::MOVE_VELOCITY;
             cmd.desired_vel.x = vx;
             cmd.desired_vel.y = vy;
             cmd.desired_vel.z = 0.0;
-            cmd.desired_yaw = yaw;
+            cmd.desired_yaw = degToRad(yaw);
             timed_velocity_cmd = true;
             velocity_duration_s = duration;
-            ROS_INFO("Publish %s [%.2f, %.2f, yaw=%.2f] for %.2fs", title.c_str(), vx, vy, yaw, duration);
-            break;
-        }
-        case 5: {
+            ROS_INFO("Publish %s [vx=%.2fm/s, vy=%.2fm/s, yaw=%.2fdeg -> %.3frad] for %.2fs",
+                     title.c_str(),
+                     vx,
+                     vy,
+                     yaw,
+                     cmd.desired_yaw,
+                     duration);
+        } else if ((drive_type == DriveType::MECANUM && input == 5) ||
+                   (drive_type == DriveType::DIFFERENTIAL && input == 4)) {
             double vx, vy, wz, duration;
             const std::string title = "MOVE_VELOCITY_BODY";
-            if (!readBodyVelocity(title, vx, vy, wz, duration)) {
-                continue;
+            if (drive_type == DriveType::DIFFERENTIAL) {
+                if (!readDifferentialBodyVelocity(title, vx, wz, duration)) {
+                    continue;
+                }
+                vy = 0.0;
+            } else {
+                if (!readBodyVelocity(title, vx, vy, wz, duration)) {
+                    continue;
+                }
             }
-            cmd.control_cmd = sunray_msgs::UGVControlCMD::VELOCITY_BODY;
+            cmd.control_cmd = sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY;
             cmd.desired_linear.x = vx;
-            cmd.desired_linear.y = vy;
+            cmd.desired_linear.y = (drive_type == DriveType::DIFFERENTIAL) ? 0.0 : vy;
             cmd.desired_linear.z = 0.0;
             cmd.desired_angular.x = 0.0;
             cmd.desired_angular.y = 0.0;
-            cmd.desired_angular.z = wz;
+            cmd.desired_angular.z = degToRad(wz);
             timed_velocity_cmd = true;
             velocity_duration_s = duration;
-            ROS_INFO("Publish %s [vx=%.2f, vy=%.2f, wz=%.2f] for %.2fs", title.c_str(), vx, vy, wz, duration);
-            break;
-        }
-        default:
+            if (drive_type == DriveType::DIFFERENTIAL) {
+                ROS_INFO("Publish %s [vx=%.2fm/s, wz=%.2fdeg/s -> %.3frad/s] for %.2fs",
+                         title.c_str(),
+                         vx,
+                         wz,
+                         cmd.desired_angular.z,
+                         duration);
+            } else {
+                ROS_INFO("Publish %s [vx=%.2fm/s, vy=%.2fm/s, wz=%.2fdeg/s -> %.3frad/s] for %.2fs",
+                         title.c_str(),
+                         vx,
+                         vy,
+                         wz,
+                         cmd.desired_angular.z,
+                         duration);
+            }
+        } else {
             ROS_WARN("Unsupported command: %d", input);
             continue;
         }

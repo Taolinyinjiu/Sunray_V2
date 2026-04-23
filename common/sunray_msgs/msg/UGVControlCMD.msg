@@ -16,10 +16,10 @@ uint8 cmd_source
 # ------------- 控制命令枚举 ------------
 uint8 HOLD=1            # 停止（单次触发）
 uint8 RETURN=2          # 返航（单次触发）
-uint8 POINT=3           # 移动到某一点（单次触发）
-uint8 VELOCITY=4        # 惯性系速度控制（频率至少为10hz）
-uint8 VELOCITY_BODY=5   # 机体系速度控制（频率至少为10hz）
-uint8 WGS84=6           # WGS84 经纬高定位（单次触发）- 暂未启用，此处保留接口
+uint8 MOVE_POINT=3           # 移动到某一点（单次触发）
+uint8 MOVE_VELOCITY=4        # 惯性系速度控制（频率至少为10hz）
+uint8 MOVE_VELOCITY_BODY=5   # 机体系速度控制（频率至少为10hz）
+uint8 MOVE_WGS84=6           # WGS84 经纬高定位（单次触发）- 暂未启用，此处保留接口
 # 控制命令
 uint8 control_cmd
 
