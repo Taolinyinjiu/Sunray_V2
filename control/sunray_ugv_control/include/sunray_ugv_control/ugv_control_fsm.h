@@ -45,6 +45,9 @@ private:
 
   // 控制指令
   sunray_msgs::UGVControlCMD ugv_control_cmd_;
+  
+  // 最后发布的控制指令
+  geometry_msgs::Twist last_cmd_vel;
 
   // 返航点
   Eigen::Vector3d return_point_;
@@ -61,6 +64,7 @@ private:
   // 定时器
   ros::Timer control_timer_;
   ros::Timer geo_fence_timer_;
+  ros::Timer status_print_timer_;
 
   // 回调函数
   void odom_callback(const nav_msgs::Odometry::ConstPtr& msg);
@@ -78,6 +82,7 @@ private:
   // 辅助函数
   void publish_fsm_state();
   void publish_debug();
+  void print_status_info();
 };
 
 } // namespace sunray_ugv_control

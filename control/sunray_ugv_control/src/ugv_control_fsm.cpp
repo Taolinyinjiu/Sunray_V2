@@ -38,6 +38,10 @@ UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh), controller_(nh) {
   // 启动定时器
   control_timer_ = nh_.createTimer(ros::Duration(0.01), &UGVControlFSM::control_timer_callback, this);
   geo_fence_timer_ = nh_.createTimer(ros::Duration(0.1), &UGVControlFSM::geo_fence_timer_callback, this);
+  
+  // 初始化状态信息打印定时器
+  double status_print_frequency = 1.0;  // 1Hz
+  status_print_timer_ = nh_.createTimer(ros::Duration(1.0 / status_print_frequency), &UGVControlFSM::print_status_info, this);
 }
 
 UGVControlFSM::~UGVControlFSM() {
@@ -136,6 +140,7 @@ void UGVControlFSM::process_return() {
 
   // 计算控制量
   geometry_msgs::Twist twist = controller_.move_point(return_cmd);
+  last_cmd_vel = twist;
   pub_cmd_vel_.publish(twist);
 
   // 检查是否到达目标点
@@ -163,10 +168,12 @@ void UGVControlFSM::process_move() {
   switch (ugv_control_cmd_.control_cmd) {
     case sunray_msgs::UGVControlCMD::POINT:
       twist = controller_.move_point(ugv_control_cmd_);
+      last_cmd_vel = twist;
       pub_cmd_vel_.publish(twist);
       break;
     case sunray_msgs::UGVControlCMD::VELOCITY:
       twist = controller_.move_velocity(ugv_control_cmd_);
+      last_cmd_vel = twist;
       pub_cmd_vel_.publish(twist);
       break;
     case sunray_msgs::UGVControlCMD::VELOCITY_BODY:
@@ -174,6 +181,7 @@ void UGVControlFSM::process_move() {
       twist.linear.x = ugv_control_cmd_.desired_linear.x;
       twist.linear.y = ugv_control_cmd_.desired_linear.y;
       twist.angular.z = ugv_control_cmd_.desired_angular.z;
+      last_cmd_vel = twist;
       pub_cmd_vel_.publish(twist);
       break;
     case sunray_msgs::UGVControlCMD::WGS84:
@@ -191,21 +199,27 @@ void UGVControlFSM::publish_fsm_state() {
   // 设置当前状态
   switch (current_state_) {
     case INIT:
-      state_msg.state = sunray_msgs::UGVControlFSMState::INIT;
+      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::INIT;
       break;
     case HOLD:
-      state_msg.state = sunray_msgs::UGVControlFSMState::HOLD;
+      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::HOLD;
       break;
     case RETURN:
-      state_msg.state = sunray_msgs::UGVControlFSMState::RETURN;
+      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::RETURN;
       break;
     case MOVE:
-      state_msg.state = sunray_msgs::UGVControlFSMState::MOVE;
+      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::MOVE;
       break;
     default:
-      state_msg.state = sunray_msgs::UGVControlFSMState::INIT;
+      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::INIT;
       break;
   }
+
+  // 设置上一条收到的指令
+  state_msg.ugv_control_cmd = ugv_control_cmd_;
+
+  // 设置下发到底层的控制指令
+  state_msg.cmd_vel = last_cmd_vel;
 
   pub_fsm_state_.publish(state_msg);
 }
@@ -213,6 +227,96 @@ void UGVControlFSM::publish_fsm_state() {
 void UGVControlFSM::publish_debug() {
   // 发布调试信息
   pub_debug_.publish(ugv_control_cmd_);
+}
+
+void UGVControlFSM::print_status_info() {
+  // 清除屏幕
+  std::cout << "\033[2J\033[H";
+  
+  // 打印标题
+  std::cout << "\033[1;36m==========================================\033[0m" << std::endl;
+  std::cout << "\033[1;36m           UGV Control FSM Status Info       \033[0m" << std::endl;
+  std::cout << "\033[1;36m==========================================\033[0m" << std::endl;
+  
+  // 打印时间
+  ros::Time current_time = ros::Time::now();
+  std::cout << "\033[1;32m[Time]\033[0m: " << current_time.toSec() << std::endl;
+  
+  // 打印UGV ID
+  std::cout << "\033[1;32m[UGV ID]\033[0m: " << ugv_id_ << std::endl;
+  
+  // 打印FSM状态
+  std::cout << "\033[1;32m[FSM State]\033[0m: ";
+  switch (current_state_) {
+    case INIT:
+      std::cout << "\033[1;34mINIT\033[0m" << std::endl;
+      break;
+    case HOLD:
+      std::cout << "\033[1;33mHOLD\033[0m" << std::endl;
+      break;
+    case RETURN:
+      std::cout << "\033[1;31mRETURN\033[0m" << std::endl;
+      break;
+    case MOVE:
+      std::cout << "\033[1;32mMOVE\033[0m" << std::endl;
+      break;
+    default:
+      std::cout << "\033[1;33mUNKNOWN\033[0m" << std::endl;
+      break;
+  }
+  
+  // 打印控制指令信息
+  std::cout << "\033[1;32m[Control Cmd]\033[0m: " << std::endl;
+  std::cout << "  Cmd Source: " << ugv_control_cmd_.cmd_source << std::endl;
+  std::cout << "  Control Cmd: ";
+  switch (ugv_control_cmd_.control_cmd) {
+    case sunray_msgs::UGVControlCMD::HOLD:
+      std::cout << "HOLD" << std::endl;
+      break;
+    case sunray_msgs::UGVControlCMD::RETURN:
+      std::cout << "RETURN" << std::endl;
+      break;
+    case sunray_msgs::UGVControlCMD::POINT:
+      std::cout << "POINT" << std::endl;
+      std::cout << "  Desired Pos: (" << ugv_control_cmd_.desired_pos.x << ", " << ugv_control_cmd_.desired_pos.y << ", " << ugv_control_cmd_.desired_pos.z << ")" << std::endl;
+      std::cout << "  Desired Yaw: " << ugv_control_cmd_.desired_yaw << std::endl;
+      break;
+    case sunray_msgs::UGVControlCMD::VELOCITY:
+      std::cout << "VELOCITY" << std::endl;
+      std::cout << "  Desired Vel: (" << ugv_control_cmd_.desired_vel.x << ", " << ugv_control_cmd_.desired_vel.y << ", " << ugv_control_cmd_.desired_vel.z << ")" << std::endl;
+      std::cout << "  Desired Yaw: " << ugv_control_cmd_.desired_yaw << std::endl;
+      break;
+    case sunray_msgs::UGVControlCMD::VELOCITY_BODY:
+      std::cout << "VELOCITY_BODY" << std::endl;
+      std::cout << "  Desired Linear: (" << ugv_control_cmd_.desired_linear.x << ", " << ugv_control_cmd_.desired_linear.y << ", " << ugv_control_cmd_.desired_linear.z << ")" << std::endl;
+      std::cout << "  Desired Angular: (" << ugv_control_cmd_.desired_angular.x << ", " << ugv_control_cmd_.desired_angular.y << ", " << ugv_control_cmd_.desired_angular.z << ")" << std::endl;
+      break;
+    case sunray_msgs::UGVControlCMD::WGS84:
+      std::cout << "WGS84" << std::endl;
+      std::cout << "  Lat: " << ugv_control_cmd_.lat << ", Lon: " << ugv_control_cmd_.lon << ", Alt: " << ugv_control_cmd_.alt << std::endl;
+      break;
+    default:
+      std::cout << "UNKNOWN" << std::endl;
+      break;
+  }
+  
+  // 打印返航点信息
+  std::cout << "\033[1;32m[Return Point]\033[0m: (" << return_point_.x() << ", " << return_point_.y() << ", " << return_point_.z() << ")" << std::endl;
+  std::cout << "  Return Yaw: " << return_yaw_ << std::endl;
+  
+  // 打印地理围栏信息
+  std::cout << "\033[1;32m[Geo Fence]\033[0m: " << std::endl;
+  std::cout << "  Min: (" << fence_min_.x() << ", " << fence_min_.y() << ", " << fence_min_.z() << ")" << std::endl;
+  std::cout << "  Max: (" << fence_max_.x() << ", " << fence_max_.y() << ", " << fence_max_.z() << ")" << std::endl;
+  
+  // 打印时间参数
+  std::cout << "\033[1;32m[Time Params]\033[0m: " << std::endl;
+  std::cout << "  Wait Pos Cmd Time: " << WAIT_POSCMD_TIME_ << "s" << std::endl;
+  std::cout << "  Wait Vel Cmd Time: " << WAIT_VELCMD_TIME_ << "s" << std::endl;
+  
+  // 打印分隔线
+  std::cout << "\033[1;36m==========================================\033[0m" << std::endl;
+  std::cout << "\033[1;36mPress Ctrl+C to exit\033[0m" << std::endl;
 }
 
 } // namespace sunray_ugv_control

@@ -7,4 +7,14 @@ uint8 RETURN=2   # 返航状态
 uint8 MOVE=3     # 移动状态
 
 # 当前的状态机状态
-uint8 state
+uint8 fsm_state
+
+## 上一条收到的指令
+sunray_msgs/UGVControlCMD ugv_control_cmd
+
+##返航点
+
+
+## 下发到底层的控制指令
+geometry_msgs/Twist cmd_vel
+
