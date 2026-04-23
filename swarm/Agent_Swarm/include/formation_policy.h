@@ -1,4 +1,11 @@
-// 中文说明：编队策略接口与上下文参数定义，偏移量表驱动基类
+/*
+本程序功能：
+    1、定义 FormationContext 结构体，包含 agent_id、agent_num、leader_id、spacing 等编队上下文参数
+    2、定义 Offset2D 结构体，表示归一化偏移量（leader 体坐标系，spacing=1 时的偏移）
+    3、定义 FormationPolicy 抽象接口，声明 computeTarget() 虚函数供具体策略实现
+    4、定义 OffsetBasedPolicy 基类，实现通用的 computeTarget 流程：查表 → 缩放 → 旋转 → 平移
+    5、子类只需实现 generateOffsets() 返回归一化偏移量表即可
+*/
 #pragma once
 
 #include <geometry_msgs/Pose.h>

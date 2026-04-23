@@ -1,3 +1,9 @@
+/*
+本程序功能：
+    1、实现基于 ncurses 的编队交互界面，在 20x20 网格上编辑 follower 相对 Leader 的自定义位置
+    2、支持保存/加载自定义阵型文件，并发布 FormationOffsets 与 UAVSwarmCMD 消息
+    3、集成 ring/line/column/v_shape/wedge、起飞、降落、悬停、返航和 leader 移动等快捷控制
+*/
 #include <algorithm>
 #include <cmath>
 #include <cstring>

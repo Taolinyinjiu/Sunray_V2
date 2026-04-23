@@ -1,4 +1,9 @@
-// 中文说明：编队策略工厂实现，映射策略名称到具体策略类
+/*
+本程序功能：
+    1、实现 FormationPolicyFactory::create，将策略名称映射到具体策略类实例
+    2、支持 ring/line/column/v_shape(v)/wedge/custom 六种名称
+    3、未知名称默认返回 RingPolicy
+*/
 #include "formation_policy_factory.h"
 #include "formation_policies.h"
 

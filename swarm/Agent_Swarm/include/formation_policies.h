@@ -1,4 +1,14 @@
-// 中文说明：编队策略集合声明，所有阵型均基于偏移量表
+/*
+本程序功能：
+    1、定义 6 种具体编队策略类：RingPolicy、LinePolicy、ColumnPolicy、VFormationPolicy、WedgePolicy、CustomPolicy
+    2、每种策略继承 OffsetBasedPolicy，只需实现 generateOffsets() 返回归一化偏移量表
+    3、Ring 圆环阵型：follower 均匀分布在以 leader 为圆心的圆周上
+    4、Line 一字横队：follower 交替排列在 leader 左右两侧
+    5、Column 纵队：follower 依次排列在 leader 正后方
+    6、VFormation 雁阵：两翼向后张开 45° 夹角
+    7、Wedge 楔形：两翼向后收拢约 27° 夹角
+    8、Custom 自定义阵型：由外部（TUI）输入偏移量表，不足时用 Ring 补齐
+*/
 #pragma once
 
 #include "formation_policy.h"

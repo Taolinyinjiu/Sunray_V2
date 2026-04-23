@@ -1,4 +1,9 @@
-// 中文说明：ORCA 引擎实现，计算速度与状态
+/*
+本程序功能：
+    1、实现 OrcaEngine 的初始化流程，创建 RVO 仿真器并配置 Agent、围栏和参数
+    2、接收外部里程计状态与 GOAL/RUN/STOP 指令，同步到内部 ORCA 仿真环境
+    3、执行单步 ORCA 计算，输出当前状态、目标点和速度控制结果，并处理到达判定
+*/
 #include "orca_engine.h"
 
 namespace orca_swarm

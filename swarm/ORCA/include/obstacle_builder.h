@@ -1,4 +1,9 @@
-// 中文说明：围栏/障碍物构建接口与可视化
+/*
+本程序功能：
+    1、定义 GeoFence 结构体，描述 ORCA 仿真使用的矩形边界范围
+    2、定义 ObstacleBuilder 类，将围栏参数转换为 RVO 可识别的静态障碍物
+    3、为 ORCA 引擎提供统一的围栏初始化与障碍物注入接口
+*/
 #pragma once
 
 #include "RVO.h"

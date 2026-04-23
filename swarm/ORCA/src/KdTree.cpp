@@ -1,4 +1,9 @@
-// 中文说明：RVO KD-Tree 实现
+/*
+本程序功能：
+    1、实现 Agent 与 Obstacle 两类 KD-Tree 的构建、拆分与释放逻辑
+    2、实现邻居查询、障碍物查询和可视性检测，服务于 ORCA 近邻搜索
+    3、为 RVOSimulator 和 Agent 提供高效的空间索引能力
+*/
 /*
  * KdTree.cpp
  * RVO2 Library

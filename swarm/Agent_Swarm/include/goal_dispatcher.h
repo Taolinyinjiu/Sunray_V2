@@ -1,4 +1,9 @@
-// 中文说明：目标点下发接口，封装并发布 OrcaSetup
+/*
+本程序功能：
+    1、定义 GoalDispatcher 类，封装 ORCA 目标点的下发逻辑
+    2、将编队策略计算出的目标 Pose 打包为 sunray_msgs::OrcaSetup 消息
+    3、发布到 /{agent_name}{id}/orca/setup 话题，供本地和其他 agent 的 ORCA 引擎使用
+*/
 #pragma once
 
 #include <geometry_msgs/Pose.h>

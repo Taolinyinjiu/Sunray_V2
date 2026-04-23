@@ -1,4 +1,10 @@
-// 中文说明：编队状态机接口，定义状态与状态切换
+/*
+本程序功能：
+    1、定义 SwarmState 枚举：INIT、TAKEOFF、LAND、HOVER、FORMATION、ORCA_RETURN_HOME
+    2、定义 FormationStateMachine 类，管理集群状态请求与安全兜底逻辑
+    3、effectiveState() 根据 leader 和 ORCA 数据新鲜度裁决实际生效状态
+    4、leader 或 ORCA 超时时自动降级到 HOVER 状态，防止失控
+*/
 #pragma once
 
 namespace agent_swarm

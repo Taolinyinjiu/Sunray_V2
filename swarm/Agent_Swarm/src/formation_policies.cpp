@@ -1,6 +1,13 @@
-// 中文说明：偏移量表驱动的编队策略实现
-//   OffsetBasedPolicy::computeTarget —— 通用：查表 → 缩放 → 旋转 → 平移
-//   各子类只实现 generateOffsets() 返回归一化偏移量表
+/*
+本程序功能：
+    1、实现 OffsetBasedPolicy::computeTarget 通用流程：查表 → 缩放 → 旋转 → 平移
+    2、实现 RingPolicy：圆环阵型，follower 均匀分布在圆周上，归一化使相邻弦长=1
+    3、实现 LinePolicy：一字横队，follower 交替分布在 leader 左右
+    4、实现 ColumnPolicy：纵队，follower 依次排列在 leader 正后方
+    5、实现 VFormationPolicy：V 形/雁阵，两翼向后张开 45° 夹角
+    6、实现 WedgePolicy：楔形，两翼收拢约 27° 夹角
+    7、实现 CustomPolicy：外部输入偏移量表，线程安全读写，不足时用 Ring 补齐
+*/
 #include "formation_policies.h"
 #include <cmath>
 #include <tf/transform_datatypes.h>

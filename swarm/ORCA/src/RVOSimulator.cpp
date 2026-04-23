@@ -1,4 +1,9 @@
-// 中文说明：RVO 仿真器实现
+/*
+本程序功能：
+    1、实现 RVOSimulator 的构造、析构以及 Agent/Obstacle 的创建与管理
+    2、实现仿真步推进流程：构建 KD-Tree、计算期望速度、求解 ORCA 新速度并更新位置
+    3、实现 Agent 参数、状态、目标点和邻居信息的读写接口，供上层 ORCA 引擎调用
+*/
 #include "RVOSimulator.h"
 
 #include "Agent.h"
