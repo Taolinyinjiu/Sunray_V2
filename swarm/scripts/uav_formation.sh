@@ -1,62 +1,62 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-AGENT_NUM="${1:-6}"
+SESSION_NAME="${SESSION_NAME:-uav_formation}"
+UAV_NUM="${1:-${UAV_NUM:-6}}"
 UAV_NAME="${UAV_NAME:-uav}"
-SWARM_PKG="sunray_swarm"
-CONTROL_PKG="sunray_uav_control"
-CONFIG_PATH="${CONFIG_PATH:-$(rospack find ${CONTROL_PKG})/config/sunray_control_config.yaml}"
+SOURCE_ID="${SOURCE_ID:-3}"
+HEALTH_RATE_HZ="${HEALTH_RATE_HZ:-10.0}"
+USE_RECEIVE_TIME="${USE_RECEIVE_TIME:-true}"
+WORKSPACE_ROOT="/home/yyf/Sunray_v2"
 
-launch_term() {
-  local title="$1"
-  local cmd="$2"
-  gnome-terminal --title="${title}" -- bash -lc "${cmd}; exec bash" &
+if ! command -v tmux >/dev/null 2>&1; then
+  echo "tmux not found"
+  exit 1
+fi
+
+if [ "${UAV_NUM}" -lt 1 ] || [ "${UAV_NUM}" -gt 6 ]; then
+  echo "UAV_NUM must be in [1, 6]"
+  exit 1
+fi
+
+attach_or_switch() {
+  if [ -n "${TMUX:-}" ]; then
+    tmux switch-client -t "${SESSION_NAME}"
+  else
+    exec tmux attach-session -t "${SESSION_NAME}"
+  fi
 }
 
-if ! command -v gnome-terminal >/dev/null 2>&1; then
-  echo "gnome-terminal not found"
-  exit 1
+send_window_command() {
+  local window_name="$1"
+  local command="$2"
+
+  tmux send-keys -t "${SESSION_NAME}:${window_name}.0" "${command}" C-m
+}
+
+if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
+  echo "tmux session '${SESSION_NAME}' already exists"
+  attach_or_switch
 fi
 
-if [ "${AGENT_NUM}" -lt 1 ] || [ "${AGENT_NUM}" -gt 6 ]; then
-  echo "agent_num must be in [1, 6]"
-  exit 1
-fi
+tmux new-session -d -s "${SESSION_NAME}" -n roscore -c "${WORKSPACE_ROOT}"
+send_window_command roscore "cd ${WORKSPACE_ROOT} && roscore"
 
-if [ ! -f "${CONFIG_PATH}" ]; then
-  echo "sunray_uav_control config not found: ${CONFIG_PATH}"
-  exit 1
-fi
+tmux new-window -d -t "${SESSION_NAME}:" -n simulator -c "${WORKSPACE_ROOT}"
+send_window_command simulator "cd ${WORKSPACE_ROOT} && sleep 3 && roslaunch sunray_simulator sunray_sim_6uav.launch"
 
-# This script now only uses launch/binaries that actually exist in Sunray_v2.
-# The old simulator and external fusion launch chain referenced by the previous
-# version is not present in this repository anymore.
+tmux new-window -d -t "${SESSION_NAME}:" -n control -c "${WORKSPACE_ROOT}"
+send_window_command control "cd ${WORKSPACE_ROOT} && sleep 8 && roslaunch sunray_uav_control uav_control_swarm.launch uav_num:=${UAV_NUM} uav_name:=${UAV_NAME}"
 
-launch_term "roscore" "roscore"
+tmux new-window -d -t "${SESSION_NAME}:" -n localization -c "${WORKSPACE_ROOT}"
+send_window_command localization "cd ${WORKSPACE_ROOT} && sleep 10 && roslaunch localization_fusion localization_fusion_swarm.launch uav_num:=${UAV_NUM} uav_name:=${UAV_NAME} source_id:=${SOURCE_ID} health_rate_hz:=${HEALTH_RATE_HZ} use_receive_time:=${USE_RECEIVE_TIME}"
 
-for ((i = 1; i <= AGENT_NUM; ++i)); do
-  delay=$((4 + i * 2))
-  launch_term \
-    "uav_control_${i}" \
-    "sleep ${delay}; rosparam set /uav_name ${UAV_NAME}; rosparam set /uav_id ${i}; sleep 1; rosrun ${CONTROL_PKG} uav_control_node __name:=uav_control_node_${i} _config_yamlfile_path:=${CONFIG_PATH}"
-done
+tmux new-window -d -t "${SESSION_NAME}:" -n swarm -c "${WORKSPACE_ROOT}"
+send_window_command swarm "cd ${WORKSPACE_ROOT} && sleep 12 && roslaunch sunray_swarm swarm_sim.launch agent_num:=${UAV_NUM} agent_name:=${UAV_NAME}"
 
-launch_term "swarm_sim" "sleep 4; roslaunch ${SWARM_PKG} swarm_sim.launch agent_num:=${AGENT_NUM} agent_name:=${UAV_NAME}"
-launch_term "formation_tui" "sleep 6; roslaunch ${SWARM_PKG} formation_tui.launch"
+tmux new-window -d -t "${SESSION_NAME}:" -n tui -c "${WORKSPACE_ROOT}"
+send_window_command tui "cd ${WORKSPACE_ROOT} && sleep 14 && roslaunch sunray_swarm formation_tui.launch"
 
-if [ "${ENABLE_FORMATION_SWITCH:-0}" = "1" ]; then
-  launch_term "formation_switch" "sleep 6; roslaunch ${SWARM_PKG} formation_switch.launch"
-fi
-
-cat <<EOF
-Started:
-  roscore
-  ${AGENT_NUM} x sunray_uav_control
-  roslaunch ${SWARM_PKG} swarm_sim.launch agent_num:=${AGENT_NUM} agent_name:=${UAV_NAME}
-  roslaunch ${SWARM_PKG} formation_tui.launch
-
-Note:
-  This script does not launch Gazebo or the old external fusion pipeline.
-  If you still need a simulator/localization source, start that stack separately.
-EOF
+tmux select-window -t "${SESSION_NAME}:tui"
+attach_or_switch
