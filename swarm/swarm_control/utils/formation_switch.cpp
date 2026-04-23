@@ -23,8 +23,9 @@ static void SigintHandler(int)
 namespace
 {
 
-void publishUavSwarmCmd(ros::Publisher &pub, uint8_t swarm_cmd, uint8_t formation = sunray_msgs::UAVSwarmCMD::FORMATION_NONE,
-                        float formation_param = 0.0f, double x = 0.0, double y = 0.0, double z = 0.0, double yaw = 0.0)
+void publishUAVSwarmCMD(ros::Publisher &pub, uint8_t swarm_cmd,
+                        uint8_t formation = sunray_msgs::UAVSwarmCMD::FORMATION_NONE, float formation_param = 0.0f,
+                        double x = 0.0, double y = 0.0, double z = 0.0, double yaw = 0.0)
 {
     sunray_msgs::UAVSwarmCMD msg;
     msg.header.stamp = ros::Time::now();
@@ -84,37 +85,40 @@ int main(int argc, char **argv)
         switch (cmd)
         {
         case 1:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::RING);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::RING);
             break;
         case 2:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::EXPAND);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::EXPAND);
             break;
         case 3:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::CONTRACT);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::CONTRACT);
             break;
         case 4:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::LINE);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::LINE);
             break;
         case 5:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::COLUMN);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::COLUMN);
             break;
         case 6:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::V_SHAPE);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::V_SHAPE);
             break;
         case 7:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::WEDGE);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::WEDGE);
             break;
         case 101:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::TAKEOFF);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::TAKEOFF);
             break;
         case 102:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::LAND);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::LAND);
             break;
         case 103:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::HOVER);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::HOVER);
             break;
         case 105:
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_RETURN);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_RETURN);
             break;
         case 201: {
             cout << "输入目标点 x y z yaw (空格分隔): ";
@@ -123,7 +127,7 @@ int main(int argc, char **argv)
             double z = 0.0;
             double yaw = 0.0;
             cin >> x >> y >> z >> yaw;
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
                                sunray_msgs::UAVSwarmCMD::FORMATION_NONE, 0.0f, x, y, z, yaw);
             break;
         }

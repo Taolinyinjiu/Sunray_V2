@@ -12,7 +12,7 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // Leader 追踪器
@@ -36,4 +36,4 @@ class LeaderTracker
     ros::Subscriber sub_{};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

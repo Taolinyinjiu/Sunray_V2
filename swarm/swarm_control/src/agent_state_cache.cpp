@@ -7,7 +7,7 @@
 #include "agent_state_cache.h"
 #include <boost/bind.hpp>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 void AgentStateCache::init(ros::NodeHandle &nh, int agent_num, int agent_type, const std::string &agent_name,
@@ -43,4 +43,4 @@ void AgentStateCache::odomCallback(const nav_msgs::Odometry::ConstPtr &msg, int 
     agent_state_[idx] = *msg;
 }
 
-} // namespace agent_swarm
+} // namespace swarm_control

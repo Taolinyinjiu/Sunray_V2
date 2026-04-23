@@ -7,7 +7,7 @@
 #include "formation_policy_factory.h"
 #include "formation_policies.h"
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 std::shared_ptr<FormationPolicy> FormationPolicyFactory::create(const std::string &name) const
@@ -40,4 +40,4 @@ std::shared_ptr<FormationPolicy> FormationPolicyFactory::create(const std::strin
     return std::make_shared<RingPolicy>();
 }
 
-} // namespace agent_swarm
+} // namespace swarm_control

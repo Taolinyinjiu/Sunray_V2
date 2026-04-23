@@ -7,7 +7,7 @@
 #include "goal_dispatcher.h"
 #include <tf/transform_datatypes.h>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 void GoalDispatcher::init(ros::NodeHandle &nh, const std::string &agent_name, int agent_id)
@@ -28,4 +28,4 @@ void GoalDispatcher::publishGoal(const geometry_msgs::Pose &target_pose, bool ru
     pub_.publish(msg);
 }
 
-} // namespace agent_swarm
+} // namespace swarm_control

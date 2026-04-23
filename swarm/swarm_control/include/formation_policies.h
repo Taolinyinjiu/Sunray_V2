@@ -14,7 +14,7 @@
 #include "formation_policy.h"
 #include <mutex>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // 圆环阵型（leader 为圆心，follower 均匀分布在圆周上）
@@ -101,4 +101,4 @@ class CustomPolicy final : public OffsetBasedPolicy
     std::vector<Offset2D> offsets_{};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

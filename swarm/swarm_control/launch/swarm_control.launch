@@ -1,5 +1,5 @@
 <launch>
-  <!-- Agent_Swarm 单机启动文件，直接选择 UAV 或 UGV 专用节点 -->
+  <!-- swarm_control 单机启动文件，直接选择 UAV 或 UGV 专用节点 -->
   <!-- 可调参数范围：agent_id >=1，agent_num >=1 -->
   <!-- formation_policy: ring（推荐）；spacing > 0 -->
   <!-- use_fixed_altitude: true/false；fixed_altitude > 0 -->
@@ -40,7 +40,7 @@
   <arg name="node_executable" default="uav_swarm_node"/>
   <arg name="node_name" default="uav_swarm_node"/>
 
-  <node pkg="sunray_swarm" type="$(arg node_executable)" name="$(arg node_name)" output="screen">
+  <node pkg="sunray_swarm_control" type="$(arg node_executable)" name="$(arg node_name)" output="screen">
     <param name="agent_id" value="$(arg agent_id)"/>
     <param name="agent_num" value="$(arg agent_num)"/>
     <param name="agent_type" value="$(arg agent_type)"/>

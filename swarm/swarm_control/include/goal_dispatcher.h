@@ -10,7 +10,7 @@
 #include <ros/ros.h>
 #include <sunray_msgs/OrcaSetup.h>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // 目标点下发器
@@ -26,4 +26,4 @@ class GoalDispatcher
     ros::Publisher pub_{};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

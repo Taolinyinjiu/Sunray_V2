@@ -13,7 +13,7 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // 代理状态缓存
@@ -41,4 +41,4 @@ class AgentStateCache
     std::map<int, ros::Subscriber> subs_{};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

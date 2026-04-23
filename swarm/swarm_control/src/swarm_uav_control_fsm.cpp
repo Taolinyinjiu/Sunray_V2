@@ -1,6 +1,6 @@
 /*
 本程序功能：
-    1、实现 UAV 集群控制节点 UavSwarmNode，统一管理参数、订阅器、发布器与定时器
+    1、实现 UAV 集群控制节点 UAVSwarmNode，统一管理参数、订阅器、发布器与定时器
     2、接收集群指令、Leader 目标、自身状态和自定义阵型偏移，生成当前编队目标点
     3、联动 FormationStateMachine、FormationPolicy、OrcaEngine 完成编队跟随与避障控制
     4、将 ORCA 输出映射为起飞、降落、悬停、位置控制等底层飞控指令，并提供 main 入口
@@ -31,7 +31,7 @@
 #include "leader_tracker.h"
 #include "orca_engine.h"
 
-namespace agent_swarm
+namespace swarm_control
 {
 namespace
 {
@@ -108,7 +108,7 @@ orca_swarm::AgentState toOrcaAgentState(const nav_msgs::Odometry &odom)
     return state;
 }
 
-orca_swarm::OrcaSetupCmd toOrcaSetupCmd(const sunray_msgs::OrcaSetup &msg)
+orca_swarm::OrcaSetupCmd toOrcaSetupCMD(const sunray_msgs::OrcaSetup &msg)
 {
     orca_swarm::OrcaSetupCmd cmd;
     cmd.cmd = msg.cmd;
@@ -119,7 +119,7 @@ orca_swarm::OrcaSetupCmd toOrcaSetupCmd(const sunray_msgs::OrcaSetup &msg)
     return cmd;
 }
 
-sunray_msgs::OrcaCmd toRosOrcaCmd(const orca_swarm::OrcaOutput &out, const ros::Time &stamp)
+sunray_msgs::OrcaCmd toRosOrcaCMD(const orca_swarm::OrcaOutput &out, const ros::Time &stamp)
 {
     sunray_msgs::OrcaCmd cmd;
     cmd.header.stamp = stamp;
@@ -139,10 +139,10 @@ sunray_msgs::OrcaCmd toRosOrcaCmd(const orca_swarm::OrcaOutput &out, const ros::
 
 } // namespace
 
-class UavSwarmNode
+class UAVSwarmNode
 {
   public:
-    explicit UavSwarmNode(ros::NodeHandle &nh) : nh_(nh)
+    explicit UAVSwarmNode(ros::NodeHandle &nh) : nh_(nh)
     {
         nh_.param<int>("agent_id", agent_id_, 1);
         nh_.param<int>("agent_num", agent_num_, 1);
@@ -210,20 +210,20 @@ class UavSwarmNode
             const int id = i + 1;
             const std::string topic = "/" + agent_name_ + std::to_string(id) + "/orca/setup";
             orca_setup_subs_[id] = nh_.subscribe<sunray_msgs::OrcaSetup>(
-                topic, 10, boost::bind(&UavSwarmNode::orcaSetupCb, this, _1, i));
+                topic, 10, boost::bind(&UAVSwarmNode::orcaSetupCb, this, _1, i));
         }
 
         const std::string self_prefix = "/" + agent_name_ + std::to_string(agent_id_);
         self_odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(self_prefix + "/sunray/localization/local_odom", 10,
-                                                           &UavSwarmNode::selfOdomCb, this);
+                                                           &UAVSwarmNode::selfOdomCb, this);
         self_fsm_state_sub_ = nh_.subscribe<sunray_msgs::UAVControlFSMState>(self_prefix + "/sunray/fsm/state", 10,
-                                                                             &UavSwarmNode::selfFsmStateCb, this);
+                                                                             &UAVSwarmNode::selfFsmStateCb, this);
         uav_swarm_cmd_sub_ = nh_.subscribe<sunray_msgs::UAVSwarmCMD>("/sunray/swarm/uav_swarm_cmd", 10,
-                                                                     &UavSwarmNode::onUavSwarmCmd, this);
+                                                                     &UAVSwarmNode::onUAVSwarmCMD, this);
         formation_offsets_sub_ = nh_.subscribe<sunray_msgs::FormationOffsets>("/sunray/formation_offsets", 10,
-                                                                              &UavSwarmNode::formationOffsetsCb, this);
+                                                                              &UAVSwarmNode::formationOffsetsCb, this);
         leader_goal_sub_ =
-            nh_.subscribe<geometry_msgs::PoseStamped>("/sunray/leader_goal", 10, &UavSwarmNode::leaderGoalCb, this);
+            nh_.subscribe<geometry_msgs::PoseStamped>("/sunray/leader_goal", 10, &UAVSwarmNode::leaderGoalCb, this);
 
         double goal_rate = 20.0;
         double control_rate = 20.0;
@@ -232,13 +232,13 @@ class UavSwarmNode
         nh_.param<double>("control_rate", control_rate, 20.0);
         nh_.param<double>("state_pub_rate", state_pub_rate, 20.0);
 
-        goal_timer_ = nh_.createTimer(ros::Duration(1.0 / goal_rate), &UavSwarmNode::goalTimerCb, this);
-        control_timer_ = nh_.createTimer(ros::Duration(1.0 / control_rate), &UavSwarmNode::controlTimerCb, this);
-        state_pub_timer_ = nh_.createTimer(ros::Duration(1.0 / state_pub_rate), &UavSwarmNode::statePublishTimerCb, this);
+        goal_timer_ = nh_.createTimer(ros::Duration(1.0 / goal_rate), &UAVSwarmNode::goalTimerCb, this);
+        control_timer_ = nh_.createTimer(ros::Duration(1.0 / control_rate), &UAVSwarmNode::controlTimerCb, this);
+        state_pub_timer_ = nh_.createTimer(ros::Duration(1.0 / state_pub_rate), &UAVSwarmNode::statePublishTimerCb, this);
     }
 
   private:
-    void onUavSwarmCmd(const sunray_msgs::UAVSwarmCMD::ConstPtr &msg)
+    void onUAVSwarmCMD(const sunray_msgs::UAVSwarmCMD::ConstPtr &msg)
     {
         const SwarmState requested = state_machine_.requestedState();
         switch (msg->swarm_cmd)
@@ -487,7 +487,7 @@ class UavSwarmNode
         {
             return;
         }
-        orca_engine_.handleSetup(idx, toOrcaSetupCmd(*msg));
+        orca_engine_.handleSetup(idx, toOrcaSetupCMD(*msg));
     }
 
     void leaderGoalCb(const geometry_msgs::PoseStamped::ConstPtr &msg)
@@ -667,7 +667,7 @@ class UavSwarmNode
         msg.desired_pos[2] = target_pose.position.z;
         msg.desired_yaw = tf::getYaw(target_pose.orientation);
 
-        orca_engine_.handleSetup(agent_id_ - 1, toOrcaSetupCmd(msg));
+        orca_engine_.handleSetup(agent_id_ - 1, toOrcaSetupCMD(msg));
         goal_dispatcher_.publishGoal(target_pose, run_mode);
     }
 
@@ -687,7 +687,7 @@ class UavSwarmNode
         const ros::Time now = ros::Time::now();
         orca_swarm::OrcaOutput out;
         orca_engine_.step(now.toSec(), out);
-        last_orca_cmd_ = toRosOrcaCmd(out, now);
+        last_orca_cmd_ = toRosOrcaCMD(out, now);
         last_orca_cmd_stamp_ = now;
         has_orca_cmd_ = true;
     }
@@ -761,14 +761,14 @@ class UavSwarmNode
     bool last_effective_state_valid_{false};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "uav_swarm_node");
     ros::NodeHandle nh("~");
 
-    agent_swarm::UavSwarmNode node(nh);
+    swarm_control::UAVSwarmNode node(nh);
     ros::spin();
     return 0;
 }

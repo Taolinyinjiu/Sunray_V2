@@ -310,7 +310,7 @@ bool loadOffsets(const std::string &path, GridState &grid)
     return true;
 }
 
-void publishUavSwarmCmd(ros::Publisher &pub, uint8_t swarm_cmd,
+void publishUAVSwarmCMD(ros::Publisher &pub, uint8_t swarm_cmd,
                         uint8_t formation = sunray_msgs::UAVSwarmCMD::FORMATION_NONE, float formation_param = 0.0f,
                         double x = 0.0, double y = 0.0, double z = 0.0, double yaw = 0.0)
 {
@@ -461,7 +461,7 @@ int main(int argc, char **argv)
             offsets_msg.header.frame_id = "leader";
             offsets_msg.offsets = collectOffsets(state.grid);
             offsets_pub.publish(offsets_msg);
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::CUSTOM);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::CUSTOM);
             setStatus(state, "Custom formation sent");
         }
         else if (ch == 'm')
@@ -471,7 +471,7 @@ int main(int argc, char **argv)
             double x = 0.0, y = 0.0, z = 0.0, yaw = 0.0;
             if (ss >> x >> y >> z >> yaw)
             {
-                publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
                                    sunray_msgs::UAVSwarmCMD::FORMATION_NONE, 0.0f, x, y, z, yaw);
                 setStatus(state, "Leader goal sent");
             }
@@ -482,57 +482,60 @@ int main(int argc, char **argv)
         }
         else if (ch == '1')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::RING);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::RING);
             setStatus(state, "Formation: ring");
         }
         else if (ch == '4')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::LINE);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::LINE);
             setStatus(state, "Formation: line");
         }
         else if (ch == '5')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::COLUMN);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::COLUMN);
             setStatus(state, "Formation: column");
         }
         else if (ch == '6')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::V_SHAPE);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::V_SHAPE);
             setStatus(state, "Formation: v_shape");
         }
         else if (ch == '7')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::WEDGE);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::WEDGE);
             setStatus(state, "Formation: wedge");
         }
         else if (ch == '2')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::EXPAND);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::EXPAND);
             setStatus(state, "Spacing: expand");
         }
         else if (ch == '3')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::CONTRACT);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::CONTRACT);
             setStatus(state, "Spacing: contract");
         }
         else if (ch == 't')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::TAKEOFF);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::TAKEOFF);
             setStatus(state, "Takeoff sent");
         }
         else if (ch == 'g')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::LAND);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::LAND);
             setStatus(state, "Land sent");
         }
         else if (ch == 'h')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::HOVER);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::HOVER);
             setStatus(state, "Hover sent");
         }
         else if (ch == 'b')
         {
-            publishUavSwarmCmd(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_RETURN);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_RETURN);
             setStatus(state, "Return home sent");
         }
         else if (ch == 'q')

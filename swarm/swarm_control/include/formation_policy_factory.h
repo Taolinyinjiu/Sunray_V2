@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // 阵型策略工厂
@@ -21,4 +21,4 @@ class FormationPolicyFactory
     std::shared_ptr<FormationPolicy> create(const std::string &name) const;
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

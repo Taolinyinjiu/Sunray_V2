@@ -12,7 +12,7 @@
 #include <cmath>
 #include <tf/transform_datatypes.h>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // ========== 工具函数 ==========
@@ -232,4 +232,4 @@ std::vector<Offset2D> CustomPolicy::generateOffsets(int n) const
     return offsets;
 }
 
-} // namespace agent_swarm
+} // namespace swarm_control

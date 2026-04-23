@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // 编队上下文参数
@@ -56,4 +56,4 @@ class OffsetBasedPolicy : public FormationPolicy
     virtual std::vector<Offset2D> generateOffsets(int follower_count) const = 0;
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

@@ -7,7 +7,7 @@
 */
 #pragma once
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 // 编队状态枚举
@@ -40,4 +40,4 @@ class FormationStateMachine
     SwarmState requested_state_{SwarmState::INIT};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control

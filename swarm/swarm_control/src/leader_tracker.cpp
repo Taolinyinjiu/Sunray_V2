@@ -7,7 +7,7 @@
 */
 #include "leader_tracker.h"
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 void LeaderTracker::init(ros::NodeHandle &nh, int leader_id, const std::string &agent_name)
@@ -54,4 +54,4 @@ bool LeaderTracker::isFresh(double timeout_sec) const
     return (ros::Time::now() - last_stamp_).toSec() <= timeout_sec;
 }
 
-} // namespace agent_swarm
+} // namespace swarm_control

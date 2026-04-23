@@ -1,4 +1,4 @@
-# sunray_swarm 技术与架构文档
+# sunray_swarm_control 技术与架构文档
 
 > 面向多机（UAV / UGV）编队控制与 ORCA 避障的 ROS 1 软件包。本文基于 `swarm/` 源码，覆盖模块划分、数据流、状态机、ORCA 内核、ROS 接口与参数。
 
@@ -6,13 +6,13 @@
 
 ## 1. 总体概览
 
-`sunray_swarm` 将**编队规划**与**避障执行**合并到单个 per‑agent 节点内运行：每个 agent 启动一份 `uav_swarm_node`（或 `ugv_swarm_node`），节点内内嵌 ORCA 引擎。agent 之间通过 ROS 话题交换各自的目标点（`OrcaSetup`）与里程计（`local_odom`），构成分布式的集中式避障。
+`sunray_swarm_control` 将**编队规划**与**避障执行**合并到单个 per‑agent 节点内运行：每个 agent 启动一份 `uav_swarm_node`（或 `ugv_swarm_node`），节点内内嵌 ORCA 引擎。agent 之间通过 ROS 话题交换各自的目标点（`OrcaSetup`）与里程计（`local_odom`），构成分布式的集中式避障。
 
 ### 1.1 目录结构
 
 ```
 swarm/
-├── Agent_Swarm/     # 编队控制主体（Leader/Follower、FSM、策略、控制映射）
+├── swarm_control/   # 编队控制主体（Leader/Follower、FSM、策略、控制映射）
 │   ├── include/     # 公共接口
 │   ├── src/         # 实现 + 节点入口 (uav/ugv swarm_node)
 │   ├── utils/       # 外设工具：键盘指令、Ncurses TUI
@@ -47,6 +47,7 @@ swarm/
 │ │ GoalDispatcher   │─┼────▶ /{name}{id}/orca/setup
 │ │ OrcaEngine       │◀┼──── (订阅其他 agent 的 setup)
 │ │ ControlMapper    │─┼────▶ /{name}{id}/sunray/uav_control_cmd
+│ │                  │ │      /{name}{id}/sunray/ugv_control/control_cmd
 │ └──────────────────┘ │
 └──────────────────────┘
         ▲
@@ -56,13 +57,13 @@ swarm/
 
 ---
 
-## 2. Agent_Swarm 内部架构
+## 2. swarm_control 内部架构
 
 ### 2.1 类职责表
 
 | 类 | 文件 | 职责 |
 |---|---|---|
-| `UavSwarmNode` / `UgvSwarmNode` | `swarm_uav_control_fsm.cpp` / `swarm_ugv_control_fsm.cpp` | 节点入口；整合组件与三个定时器 |
+| `UAVSwarmNode` / `UGVSwarmNode` | `swarm_uav_control_fsm.cpp` / `swarm_ugv_control_fsm.cpp` | 节点入口；整合组件与三个定时器 |
 | `FormationStateMachine` | `formation_state_machine.*` | 管理请求状态与安全兜底（leader/orca 超时 → HOVER） |
 | `LeaderTracker` | `leader_tracker.*` | 订阅 leader odom，输出 leader 位姿与新鲜度 |
 | `AgentStateCache` | `agent_state_cache.*` | 订阅所有 agent 的 odom，供本地 ORCA 镜像仿真 |
@@ -70,13 +71,13 @@ swarm/
 | `FormationPolicyFactory` | `formation_policy_factory.*` | 按字符串创建策略（ring/line/column/v_shape/wedge/custom） |
 | `GoalDispatcher` | `goal_dispatcher.*` | 打包并发布 `OrcaSetup`（同时喂给本地 ORCA 与其他 agent） |
 | `OrcaEngine` | `ORCA/src/orca_engine.cpp` | 本地 RVO 仿真，输出速度指令 |
-| `ControlCommandMapper` | `control_command_mapper.*` | 把 ORCA 输出翻译成 `UAVControlCMD` |
+| `ControlCommandMapper` | `control_command_mapper.*` | 把 ORCA 输出翻译成 UAV / UGV 底层控制消息 |
 
 ### 2.2 分层依赖
 
 ```
            ┌────────────────────────────┐
-           │  UavSwarmNode / UgvSwarmNode│   (编排层)
+           │  UAVSwarmNode / UGVSwarmNode│   (编排层)
            └──────────┬─────────────────┘
                       │
    ┌──────────┬───────┴───────┬──────────────┬────────────┐
@@ -85,7 +86,7 @@ FormationFSM LeaderTracker  AgentStateCache GoalDispatcher ControlMapper
    │          │               │              │
    └────┬─────┘               │              │
         ▼                     ▼              ▼
-  FormationPolicy        OrcaEngine    (sunray_msgs::UAVControlCMD)
+  FormationPolicy        OrcaEngine    (sunray_msgs::UAVControlCMD / UGVControlCMD)
   (Ring/Line/Column/V/Wedge/Custom)
         │                     │
         └────── Offset2D ──────┘
@@ -123,6 +124,7 @@ FormationFSM LeaderTracker  AgentStateCache GoalDispatcher ControlMapper
                                     │
                                     ▼
                        /{name}{id}/sunray/uav_control_cmd
+                       /{name}{id}/sunray/ugv_control/control_cmd
 ```
 
 ### 3.2 三个定时器（默认均 20 Hz）
@@ -218,7 +220,7 @@ formation_tui (ncurses 20×20)
 sunray_msgs::FormationOffsets.offsets[]
    │
    ▼ /sunray/formation_offsets
-UavSwarmNode::formationOffsetsCb
+UAVSwarmNode::formationOffsetsCb
    │
    ▼ CustomPolicy::setOffsets
 后续 computeTarget 查表即可
@@ -319,7 +321,7 @@ step(now):
 | `RUN` | — | `MOVE_VELOCITY`（xy = orca.linear；`vz = clamp(1.5·(goal_z−cur_z), 0.5)`） |
 | 起飞/降落/悬停 | 节点直接调用 `publishTakeoff/Land/Hover/PosTarget` |
 
-> UGV 分支当前仅打印 `WARN("not wired to a stable control interface yet")`，接口预留但未启用。
+> UGV 分支现已接到 `sunray_ugv_control`，`HOLD / MOVE_POINT / MOVE_VELOCITY` 会发布到 `/{name}{id}/sunray/ugv_control/control_cmd`。
 
 ---
 
@@ -332,7 +334,7 @@ step(now):
 | `/{name}{id}/sunray/localization/local_odom` | `nav_msgs/Odometry` | 每个 agent 的位姿/速度（自身 + 全体） |
 | `/{name}{id}/sunray/fsm/state` | `sunray_msgs/UAVControlFSMState` | UAV 底层 FSM（识别起飞完成） |
 | `/{name}{id}/orca/setup` | `sunray_msgs/OrcaSetup` | agent 间互相广播目标，驱动镜像仿真 |
-| `/sunray/swarm/uav_swarm_cmd` (UGV: `ugv_swarm_cmd`) | `sunray_msgs/UAVSwarmCMD` | 顶层集群指令（起降/阵型/返航） |
+| `/sunray/swarm/uav_swarm_cmd` (UGV: `ugv_swarm_cmd`) | `sunray_msgs/UAVSwarmCMD` / `sunray_msgs/UGVSwarmCMD` | 顶层集群指令（起降/阵型/返航） |
 | `/sunray/leader_goal` | `geometry_msgs/PoseStamped` | 外部指定 Leader 目标（优先于真实 Leader odom） |
 | `/sunray/formation_offsets` | `sunray_msgs/FormationOffsets` | Custom 阵型偏移量表 |
 
@@ -341,7 +343,8 @@ step(now):
 | 话题 | 类型 | 说明 |
 |---|---|---|
 | `/{name}{id}/orca/setup` | `sunray_msgs/OrcaSetup` | 下发 ORCA 目标（兼作 agent 间通告） |
-| `/{name}{id}/sunray/uav_control_cmd` | `sunray_msgs/UAVControlCMD` | 最终控制指令 |
+| `/{name}{id}/sunray/uav_control_cmd` | `sunray_msgs/UAVControlCMD` | UAV 最终控制指令 |
+| `/{name}{id}/sunray/ugv_control/control_cmd` | `sunray_msgs/UGVControlCMD` | UGV 最终控制指令 |
 
 ### 8.3 命名约定
 
@@ -374,13 +377,13 @@ step(now):
 swarm_sim.launch (agent_num ≤ 6)
    ├─ <param name="agent_num"/>                 # 暴露给 formation_tui
    └─ for i in 1..agent_num:
-         include Agent_Swarm/launch/agent_swarm.launch  → uav_swarm_node / ugv_swarm_node
+         include swarm_control/launch/swarm_control.launch  → uav_swarm_node / ugv_swarm_node
 
 formation_tui.launch    → formation_tui         (custom 阵型编辑 + TUI 遥控)
 formation_switch.launch → uav_command_pub       (stdin 菜单发指令)
 ```
 
-### 10.2 Agent 节点初始化顺序（`UavSwarmNode` 构造）
+### 10.2 Agent 节点初始化顺序（`UAVSwarmNode` 构造）
 
 ```
 读参 (agent_id/num, leader_id, formation_policy, spacing, fixed_altitude,
@@ -394,7 +397,7 @@ leader_tracker_.init → 订阅 leader odom
 state_cache_.init    → 订阅全体 odom
 goal_dispatcher_.init→ 建 /orca/setup publisher
 orca_engine_.init    → 构造 RVOSimulator、加 agents、加围栏
-control_mapper_.init → 建 /sunray/uav_control_cmd publisher
+control_mapper_.init → 建控制 publisher（UAV: /sunray/uav_control_cmd，UGV: /sunray/ugv_control/control_cmd）
   │
   ▼
 订阅全体 /{name}{id}/orca/setup（跳过自己）
@@ -408,7 +411,7 @@ control_mapper_.init → 建 /sunray/uav_control_cmd publisher
 - **镜像仿真**：每个 agent 各自跑一份完整 `RVOSimulator`；其他 agent 的位姿来自 odom，其他 agent 的目标来自其广播的 `/orca/setup`。**所有 agent 必须订阅到全体 odom**，否则过期 agent 会被放到 `(1e4, 1e4)` 以避免幽灵障碍。
 - **新鲜度阈值**：`OrcaEngine` 内部硬编码 1s 过期；`leader_timeout`/`orca_timeout` 作用于上层 FSM 的 HOVER 兜底。
 - **到达判定**：ORCA 层 0.15m；节点层 `isActiveGoalReached` 叠加 `goal_z_tolerance` 再切 `HOVER`。
-- **UGV 控制未接线**：`agent_type != 0` 时 `ControlCommandMapper` 只 warn，UGV 节点可计算目标但无终端输出。
+- **UGV 控制链路**：`agent_type != 0` 时 `ControlCommandMapper` 发布 `UGVControlCMD`；当前已接入 `HOLD / MOVE_POINT / MOVE_VELOCITY` 三类指令。
 - **自定义阵型座位数**：TUI 侧要求等于 `agent_num - 1`，否则 `CustomPolicy` 截断或用 ring 补齐。
 - **fixed_altitude 覆盖**：`use_fixed_altitude=true` 时 follower/返航目标 z 统一为 `fixed_altitude`；当 `/sunray/leader_goal` 到来，会用其 z 更新 `fixed_altitude_`。
 - **leader_id > 100**：用于 UGV 带队 UAV 的异构编队，相关模块均按 `leader_id-100` 取索引。
@@ -420,7 +423,7 @@ control_mapper_.init → 建 /sunray/uav_control_cmd publisher
 | 扩展需求 | 落点 |
 |---|---|
 | 新增阵型 | 继承 `OffsetBasedPolicy` 实现 `generateOffsets`，在 `FormationPolicyFactory::create` 注册 |
-| 接入真实 UGV 控制 | 在 `ControlCommandMapper` 的 UGV 分支填充 publisher；或新增 `UgvControlCommandMapper` |
+| 扩展 UGV 控制模式 | 在 `ControlCommandMapper` 的 UGV 分支继续补 `MOVE_VELOCITY_BODY` / `RETURN` 等更细控制语义 |
 | 替换避障内核 | 抽象 `OrcaEngine` 为接口，替换为 MPC/Buffered Voronoi；保持 `OrcaSetup/OrcaCmd` 协议 |
 | 动态障碍 | 在 `ObstacleBuilder::apply` 前追加；或新增 `DynamicObstacleSource` 订阅传感器 |
 | 多 Leader / 分组 | 扩展 `FormationContext` 增加组 id；`AgentStateCache` 按组过滤 |
@@ -431,15 +434,15 @@ control_mapper_.init → 建 /sunray/uav_control_cmd publisher
 
 ```bash
 # 按本仓库的非标准 catkin 流程构建（详见 tools/build_scripts）
-catkin_make --source swarm/ --build build/sunray_swarm
+catkin_make --source swarm/ --build build/sunray_swarm_control
 
 # 6 机仿真
-roslaunch sunray_swarm swarm_sim.launch agent_num:=6
+roslaunch sunray_swarm_control swarm_sim.launch agent_num:=6
 
 # 键盘指令
-roslaunch sunray_swarm formation_switch.launch
+roslaunch sunray_swarm_control formation_switch.launch
 
 # TUI 自定义阵型
 rosparam set /agent_num 6
-roslaunch sunray_swarm formation_tui.launch
+roslaunch sunray_swarm_control formation_tui.launch
 ```

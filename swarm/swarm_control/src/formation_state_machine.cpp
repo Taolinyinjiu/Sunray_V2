@@ -7,7 +7,7 @@
 */
 #include "formation_state_machine.h"
 
-namespace agent_swarm
+namespace swarm_control
 {
 
 FormationStateMachine::FormationStateMachine() = default;
@@ -41,4 +41,4 @@ void FormationStateMachine::setRequestedState(SwarmState state)
     requested_state_ = state;
 }
 
-} // namespace agent_swarm
+} // namespace swarm_control

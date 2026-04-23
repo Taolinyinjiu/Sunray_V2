@@ -1,6 +1,6 @@
 /*
 本程序功能：
-    1、实现 UGV 集群控制节点 UgvSwarmNode，统一管理参数、订阅器、发布器与定时器
+    1、实现 UGV 集群控制节点 UGVSwarmNode，统一管理参数、订阅器、发布器与定时器
     2、接收集群指令、Leader 目标、自身里程计和自定义阵型偏移，生成当前编队目标点
     3、联动 FormationStateMachine、FormationPolicy、OrcaEngine 完成编队跟随与避障控制
     4、将 ORCA 输出转换为地面平台控制目标，支持保持、编队、返航等模式，并提供 main 入口
@@ -30,7 +30,7 @@
 #include "leader_tracker.h"
 #include "orca_engine.h"
 
-namespace agent_swarm
+namespace swarm_control
 {
 namespace
 {
@@ -107,7 +107,7 @@ orca_swarm::AgentState toOrcaAgentState(const nav_msgs::Odometry &odom)
     return state;
 }
 
-orca_swarm::OrcaSetupCmd toOrcaSetupCmd(const sunray_msgs::OrcaSetup &msg)
+orca_swarm::OrcaSetupCmd toOrcaSetupCMD(const sunray_msgs::OrcaSetup &msg)
 {
     orca_swarm::OrcaSetupCmd cmd;
     cmd.cmd = msg.cmd;
@@ -118,7 +118,7 @@ orca_swarm::OrcaSetupCmd toOrcaSetupCmd(const sunray_msgs::OrcaSetup &msg)
     return cmd;
 }
 
-sunray_msgs::OrcaCmd toRosOrcaCmd(const orca_swarm::OrcaOutput &out, const ros::Time &stamp)
+sunray_msgs::OrcaCmd toRosOrcaCMD(const orca_swarm::OrcaOutput &out, const ros::Time &stamp)
 {
     sunray_msgs::OrcaCmd cmd;
     cmd.header.stamp = stamp;
@@ -138,10 +138,10 @@ sunray_msgs::OrcaCmd toRosOrcaCmd(const orca_swarm::OrcaOutput &out, const ros::
 
 } // namespace
 
-class UgvSwarmNode
+class UGVSwarmNode
 {
   public:
-    explicit UgvSwarmNode(ros::NodeHandle &nh) : nh_(nh)
+    explicit UGVSwarmNode(ros::NodeHandle &nh) : nh_(nh)
     {
         nh_.param<int>("agent_id", agent_id_, 1);
         nh_.param<int>("agent_num", agent_num_, 1);
@@ -206,18 +206,18 @@ class UgvSwarmNode
             const int id = i + 1;
             const std::string topic = "/" + agent_name_ + std::to_string(id) + "/orca/setup";
             orca_setup_subs_[id] = nh_.subscribe<sunray_msgs::OrcaSetup>(
-                topic, 10, boost::bind(&UgvSwarmNode::orcaSetupCb, this, _1, i));
+                topic, 10, boost::bind(&UGVSwarmNode::orcaSetupCb, this, _1, i));
         }
 
         const std::string self_prefix = "/" + agent_name_ + std::to_string(agent_id_);
         self_odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(self_prefix + "/sunray/localization/local_odom", 10,
-                                                           &UgvSwarmNode::selfOdomCb, this);
+                                                           &UGVSwarmNode::selfOdomCb, this);
         ugv_swarm_cmd_sub_ = nh_.subscribe<sunray_msgs::UGVSwarmCMD>("/sunray/swarm/ugv_swarm_cmd", 10,
-                                                                     &UgvSwarmNode::onUgvSwarmCmd, this);
+                                                                     &UGVSwarmNode::onUGVSwarmCMD, this);
         formation_offsets_sub_ = nh_.subscribe<sunray_msgs::FormationOffsets>("/sunray/formation_offsets", 10,
-                                                                              &UgvSwarmNode::formationOffsetsCb, this);
+                                                                              &UGVSwarmNode::formationOffsetsCb, this);
         leader_goal_sub_ =
-            nh_.subscribe<geometry_msgs::PoseStamped>("/sunray/leader_goal", 10, &UgvSwarmNode::leaderGoalCb, this);
+            nh_.subscribe<geometry_msgs::PoseStamped>("/sunray/leader_goal", 10, &UGVSwarmNode::leaderGoalCb, this);
 
         double goal_rate = 20.0;
         double control_rate = 20.0;
@@ -226,13 +226,14 @@ class UgvSwarmNode
         nh_.param<double>("control_rate", control_rate, 20.0);
         nh_.param<double>("state_pub_rate", state_pub_rate, 20.0);
 
-        goal_timer_ = nh_.createTimer(ros::Duration(1.0 / goal_rate), &UgvSwarmNode::goalTimerCb, this);
-        control_timer_ = nh_.createTimer(ros::Duration(1.0 / control_rate), &UgvSwarmNode::controlTimerCb, this);
-        state_pub_timer_ = nh_.createTimer(ros::Duration(1.0 / state_pub_rate), &UgvSwarmNode::statePublishTimerCb, this);
+        goal_timer_ = nh_.createTimer(ros::Duration(1.0 / goal_rate), &UGVSwarmNode::goalTimerCb, this);
+        control_timer_ = nh_.createTimer(ros::Duration(1.0 / control_rate), &UGVSwarmNode::controlTimerCb, this);
+        state_pub_timer_ =
+            nh_.createTimer(ros::Duration(1.0 / state_pub_rate), &UGVSwarmNode::statePublishTimerCb, this);
     }
 
   private:
-    void onUgvSwarmCmd(const sunray_msgs::UGVSwarmCMD::ConstPtr &msg)
+    void onUGVSwarmCMD(const sunray_msgs::UGVSwarmCMD::ConstPtr &msg)
     {
         const SwarmState requested = state_machine_.requestedState();
         switch (msg->swarm_cmd)
@@ -259,15 +260,6 @@ class UgvSwarmNode
             state_machine_.setRequestedState(SwarmState::ORCA_RETURN_HOME);
             return;
 
-        case sunray_msgs::UGVSwarmCMD::MOVE:
-            clearCommandFlags();
-            direct_goal_.position = msg->desired_pos;
-            direct_goal_.orientation = tf::createQuaternionMsgFromYaw(msg->desired_yaw);
-            direct_goal_active_ = true;
-            last_goal_valid_ = false;
-            state_machine_.setRequestedState(SwarmState::FORMATION);
-            return;
-
         case sunray_msgs::UGVSwarmCMD::SWARM_FORMATION:
             if (requested == SwarmState::INIT || requested == SwarmState::ORCA_RETURN_HOME)
             {
@@ -284,7 +276,7 @@ class UgvSwarmNode
 
     void goalTimerCb(const ros::TimerEvent &)
     {
-        const bool leader_ok = direct_goal_active_ || leader_goal_active_ || leader_tracker_.isFresh(leader_timeout_);
+        const bool leader_ok = leader_goal_active_ || leader_tracker_.isFresh(leader_timeout_);
         const bool orca_ok = localOrcaFresh();
         const SwarmState state = state_machine_.effectiveState(leader_ok, orca_ok);
         if (state != SwarmState::FORMATION && state != SwarmState::ORCA_RETURN_HOME)
@@ -301,14 +293,6 @@ class UgvSwarmNode
             last_goal_ = home_pose_;
             last_goal_valid_ = true;
             dispatchOrcaGoal(home_pose_, true);
-            return;
-        }
-
-        if (direct_goal_active_)
-        {
-            last_goal_ = direct_goal_;
-            last_goal_valid_ = true;
-            dispatchOrcaGoal(direct_goal_, true);
             return;
         }
 
@@ -361,7 +345,7 @@ class UgvSwarmNode
 
     void controlTimerCb(const ros::TimerEvent &)
     {
-        const bool leader_ok = direct_goal_active_ || leader_goal_active_ || leader_tracker_.isFresh(leader_timeout_);
+        const bool leader_ok = leader_goal_active_ || leader_tracker_.isFresh(leader_timeout_);
         const bool orca_ok = localOrcaFresh();
         const SwarmState state = state_machine_.effectiveState(leader_ok, orca_ok);
         if (!last_effective_state_valid_ || state != last_effective_state_)
@@ -417,14 +401,13 @@ class UgvSwarmNode
         {
             return;
         }
-        orca_engine_.handleSetup(idx, toOrcaSetupCmd(*msg));
+        orca_engine_.handleSetup(idx, toOrcaSetupCMD(*msg));
     }
 
     void leaderGoalCb(const geometry_msgs::PoseStamped::ConstPtr &msg)
     {
         leader_goal_ = msg->pose;
         leader_goal_active_ = true;
-        direct_goal_active_ = false;
         return_home_active_ = false;
         formation_change_active_ = false;
         last_goal_valid_ = false;
@@ -505,14 +488,12 @@ class UgvSwarmNode
         formation_change_active_ = false;
         leader_goal_active_ = false;
         return_home_active_ = false;
-        direct_goal_active_ = false;
     }
 
     void applyFormationCommand(uint8_t formation, float formation_param, const geometry_msgs::Point &leader_pos,
                                float leader_yaw)
     {
         formation_change_active_ = true;
-        direct_goal_active_ = false;
         return_home_active_ = false;
         last_goal_valid_ = false;
 
@@ -557,7 +538,7 @@ class UgvSwarmNode
         {
             return false;
         }
-        if (!(formation_change_active_ || leader_goal_active_ || return_home_active_ || direct_goal_active_))
+        if (!(formation_change_active_ || leader_goal_active_ || return_home_active_))
         {
             return false;
         }
@@ -582,7 +563,7 @@ class UgvSwarmNode
         msg.desired_pos[2] = target_pose.position.z;
         msg.desired_yaw = tf::getYaw(target_pose.orientation);
 
-        orca_engine_.handleSetup(agent_id_ - 1, toOrcaSetupCmd(msg));
+        orca_engine_.handleSetup(agent_id_ - 1, toOrcaSetupCMD(msg));
         goal_dispatcher_.publishGoal(target_pose, run_mode);
     }
 
@@ -602,7 +583,7 @@ class UgvSwarmNode
         const ros::Time now = ros::Time::now();
         orca_swarm::OrcaOutput out;
         orca_engine_.step(now.toSec(), out);
-        last_orca_cmd_ = toRosOrcaCmd(out, now);
+        last_orca_cmd_ = toRosOrcaCMD(out, now);
         last_orca_cmd_stamp_ = now;
         has_orca_cmd_ = true;
     }
@@ -656,13 +637,11 @@ class UgvSwarmNode
     bool formation_change_active_{false};
     bool leader_goal_active_{false};
     bool return_home_active_{false};
-    bool direct_goal_active_{false};
     bool home_set_{false};
     bool hold_pose_valid_{false};
     geometry_msgs::Pose home_pose_{};
     geometry_msgs::Pose hold_pose_{};
     geometry_msgs::Pose leader_goal_{};
-    geometry_msgs::Pose direct_goal_{};
     geometry_msgs::Pose last_goal_{};
     bool last_goal_valid_{false};
     sunray_msgs::OrcaCmd last_orca_cmd_{};
@@ -672,14 +651,14 @@ class UgvSwarmNode
     bool last_effective_state_valid_{false};
 };
 
-} // namespace agent_swarm
+} // namespace swarm_control
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "ugv_swarm_node");
     ros::NodeHandle nh("~");
 
-    agent_swarm::UgvSwarmNode node(nh);
+    swarm_control::UGVSwarmNode node(nh);
     ros::spin();
     return 0;
 }

@@ -36,7 +36,7 @@
 
   <!-- agent 1 -->
   <group if="$(eval arg('agent_num') >= 1)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="1"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
@@ -62,13 +62,13 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_1"/>
+      <arg name="node_name" value="swarm_control_node_ugv_1"/>
     </include>
   </group>
 
   <!-- agent 2 -->
   <group if="$(eval arg('agent_num') >= 2)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="2"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
@@ -94,13 +94,13 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_2"/>
+      <arg name="node_name" value="swarm_control_node_ugv_2"/>
     </include>
   </group>
 
   <!-- agent 3 -->
   <group if="$(eval arg('agent_num') >= 3)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="3"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
@@ -126,13 +126,13 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_3"/>
+      <arg name="node_name" value="swarm_control_node_ugv_3"/>
     </include>
   </group>
 
   <!-- agent 4 -->
   <group if="$(eval arg('agent_num') >= 4)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="4"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
@@ -158,13 +158,13 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_4"/>
+      <arg name="node_name" value="swarm_control_node_ugv_4"/>
     </include>
   </group>
 
   <!-- agent 5 -->
   <group if="$(eval arg('agent_num') >= 5)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="5"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
@@ -190,13 +190,13 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_5"/>
+      <arg name="node_name" value="swarm_control_node_ugv_5"/>
     </include>
   </group>
 
   <!-- agent 6 -->
   <group if="$(eval arg('agent_num') >= 6)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="6"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
@@ -222,7 +222,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_6"/>
+      <arg name="node_name" value="swarm_control_node_ugv_6"/>
     </include>
   </group>
 </launch>
