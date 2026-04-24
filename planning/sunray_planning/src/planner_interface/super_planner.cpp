@@ -1,4 +1,4 @@
-#include "planner_interface/ego_planner.hpp"
+#include "planner_interface/super_planner.hpp"
 
 #include <cmath>
 
@@ -19,35 +19,31 @@ geometry_msgs::PoseStamped build_pose_goal(const PlanningTarget& target,
     goal_msg.pose.orientation.w = std::cos(half_yaw);
     return goal_msg;
 }
-
-bool is_invalid_flag(const uint8_t trajectory_flag) {
-    return trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_EMPTY ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTROY_STATUS_ABORT ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_START ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_FINAL ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_IMPOSSIBLE;
-}
 }  // namespace
 
-void EgoPlanner::bind_topics(ros::NodeHandle& nh) {
+void SuperPlannerInterface::bind_topics(ros::NodeHandle& nh) {
     goal_pub_ = nh.advertise<geometry_msgs::PoseStamped>(config_.goal_topic, 1);
     position_cmd_sub_ = nh.subscribe(
-        config_.position_cmd_topic, 10, &EgoPlanner::position_cmd_callback, this);
+        config_.position_cmd_topic, 10, &SuperPlannerInterface::position_cmd_callback, this);
 }
 
-bool EgoPlanner::send_goal(const PlanningTarget& target) {
+bool SuperPlannerInterface::send_goal(const PlanningTarget& target) {
     goal_pub_.publish(build_pose_goal(target, config_));
     mark_goal_sent(ros::Time::now());
     return true;
 }
 
-void EgoPlanner::position_cmd_callback(const ego_planner_msgs::PositionCommand::ConstPtr& msg) {
+void SuperPlannerInterface::position_cmd_callback(const quadrotor_msgs::PositionCommand::ConstPtr& msg) {
     if (!msg) {
         return;
     }
 
     const ros::Time stamp = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
-    if (is_invalid_flag(msg->trajectory_flag)) {
+    if (msg->trajectory_flag == quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_EMPTY ||
+        msg->trajectory_flag == quadrotor_msgs::PositionCommand::TRAJECTROY_STATUS_ABORT ||
+        msg->trajectory_flag == quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_START ||
+        msg->trajectory_flag == quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_FINAL ||
+        msg->trajectory_flag == quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_IMPOSSIBLE) {
         set_planner_state(PlannerExecState::FAIL, stamp);
         return;
     }
@@ -73,7 +69,7 @@ void EgoPlanner::position_cmd_callback(const ego_planner_msgs::PositionCommand::
     control_cmd.fixed_height = 0.0;
 
     set_latest_control_cmd(control_cmd);
-    set_planner_state(msg->trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_COMPLETED
+    set_planner_state(msg->trajectory_flag == quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_COMPLETED
                           ? PlannerExecState::SUCCESS
                           : PlannerExecState::EXEC,
                       stamp);

@@ -1,33 +1,199 @@
 #pragma once
 
-#include <eigen3/Eigen/Dense>
-#include <ros/ros.h>
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <string>
 
-// planner的具体执行状态
+#include <Eigen/Dense>
+#include <ros/ros.h>
+#include <sunray_msgs/UAVPlanningState.h>
+
+enum class PlannerType : uint8_t {
+    UNDEFINE = 0,
+    EGO = 1,
+    DIFF = 2,
+    FUEL = 3,
+    SUPER = 4
+};
+
 enum class PlannerExecState : uint8_t {
-    UNDEFINE = 0,       // 未定义状态
-    INIT = 1,           // 初始化状态
-    WAIT_TARGET = 2,    // 初始化完成，等待目标点
-    GENERATE = 3,       // 轨迹生成
-    REPLAN = 4,         // 轨迹重规划
-    EXEC = 5,           // 执行轨迹
-    PAUSE = 6,          // 暂停
-    SUCCESS = 7,        // 成功 对应无人机到达目标点
-    FAIL = 8,           // 失败，对应无人机无法到达目标点，比如规划失败，无可行路径
-    EMERGENCY_STOP = 9  // 紧急停止
+    UNDEFINE = 0,
+    INIT = 1,
+    WAIT_TARGET = 2,
+    GENERATE = 3,
+    REPLAN = 4,
+    EXEC = 5,
+    PAUSE = 6,
+    SUCCESS = 7,
+    FAIL = 8,
+    EMERGENCY_STOP = 9
+};
+
+enum class PlanningFsmState : uint8_t {
+    INIT = 0,
+    READY = 1,
+    PLANNING = 2,
+    ARRIVED = 3,
+    HOVER = 4,
+    LAND = 5,
+    TAKEOFF = 6,
+    RETURN = 7,
+    MOVE = 8,
+    EMERGENCY_KILL = 9
+};
+
+struct PlannerRuntimeConfig {
+    std::string planner_name;
+    std::string planner_type;
+    int planner_id{-1};
+    std::string goal_topic;
+    std::string goal_frame_id{"world"};
+    std::string position_cmd_topic;
+    std::string planner_state_topic;
+    double cmd_timeout_sec{0.3};
+    double state_timeout_sec{1.0};
 };
 
 struct PlannerSnapshot {
     bool ready{false};
     bool goal_active{false};
     bool has_valid_output{false};
+    PlannerType planner_type{PlannerType::UNDEFINE};
     PlannerExecState planner_state{PlannerExecState::UNDEFINE};
-    std::string planner_state_string;
+    std::string planner_state_string{"UNDEFINE"};
+    uint32_t current_waypoint_index{0};
     ros::Time last_goal_stamp;
     ros::Time last_output_stamp;
+    ros::Time last_state_stamp;
 };
 
 struct PlanningTarget {
     Eigen::Vector3d position{Eigen::Vector3d::Zero()};
     double yaw{0.0};
+    uint8_t planning_frame{sunray_msgs::UAVPlanningState::SUNRAY_LOCAL};
+    uint8_t cmd_source{sunray_msgs::UAVPlanningState::CONTROL_CMD};
+    uint32_t waypoint_count{1};
+    uint32_t waypoint_index{0};
 };
+
+inline std::string normalize_planner_type(const std::string& planner_type) {
+    std::string normalized = planner_type;
+    std::transform(normalized.begin(),
+                   normalized.end(),
+                   normalized.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return normalized;
+}
+
+inline PlannerType planner_type_from_string(const std::string& planner_type) {
+    const std::string normalized = normalize_planner_type(planner_type);
+    if (normalized == "ego") {
+        return PlannerType::EGO;
+    }
+    if (normalized == "diff") {
+        return PlannerType::DIFF;
+    }
+    if (normalized == "fuel") {
+        return PlannerType::FUEL;
+    }
+    if (normalized == "super") {
+        return PlannerType::SUPER;
+    }
+    return PlannerType::UNDEFINE;
+}
+
+inline std::string planner_type_to_string(const PlannerType planner_type) {
+    switch (planner_type) {
+    case PlannerType::EGO:
+        return "EGO";
+    case PlannerType::DIFF:
+        return "DIFF";
+    case PlannerType::FUEL:
+        return "FUEL";
+    case PlannerType::SUPER:
+        return "SUPER";
+    case PlannerType::UNDEFINE:
+    default:
+        return "UNDEFINE";
+    }
+}
+
+inline std::string planner_exec_state_to_string(const PlannerExecState planner_state) {
+    switch (planner_state) {
+    case PlannerExecState::INIT:
+        return "INIT";
+    case PlannerExecState::WAIT_TARGET:
+        return "WAIT_TARGET";
+    case PlannerExecState::GENERATE:
+        return "GENERATE";
+    case PlannerExecState::REPLAN:
+        return "REPLAN";
+    case PlannerExecState::EXEC:
+        return "EXEC";
+    case PlannerExecState::PAUSE:
+        return "PAUSE";
+    case PlannerExecState::SUCCESS:
+        return "SUCCESS";
+    case PlannerExecState::FAIL:
+        return "FAIL";
+    case PlannerExecState::EMERGENCY_STOP:
+        return "EMERGENCY_STOP";
+    case PlannerExecState::UNDEFINE:
+    default:
+        return "UNDEFINE";
+    }
+}
+
+inline PlannerExecState planner_exec_state_from_msg(const uint8_t planner_state) {
+    switch (planner_state) {
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_INIT:
+        return PlannerExecState::INIT;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_WAIT_TARGET:
+        return PlannerExecState::WAIT_TARGET;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_GENERATE:
+        return PlannerExecState::GENERATE;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN:
+        return PlannerExecState::REPLAN;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_EXEC:
+        return PlannerExecState::EXEC;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_PAUSE:
+        return PlannerExecState::PAUSE;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS:
+        return PlannerExecState::SUCCESS;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_FAIL:
+        return PlannerExecState::FAIL;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP:
+        return PlannerExecState::EMERGENCY_STOP;
+    case sunray_msgs::UAVPlanningState::PLANNER_STATE_UNDEFINE:
+    default:
+        return PlannerExecState::UNDEFINE;
+    }
+}
+
+inline std::string planning_fsm_state_to_string(const PlanningFsmState fsm_state) {
+    switch (fsm_state) {
+    case PlanningFsmState::INIT:
+        return "INIT";
+    case PlanningFsmState::READY:
+        return "READY";
+    case PlanningFsmState::PLANNING:
+        return "PLANNING";
+    case PlanningFsmState::ARRIVED:
+        return "ARRIVED";
+    case PlanningFsmState::HOVER:
+        return "HOVER";
+    case PlanningFsmState::LAND:
+        return "LAND";
+    case PlanningFsmState::TAKEOFF:
+        return "TAKEOFF";
+    case PlanningFsmState::RETURN:
+        return "RETURN";
+    case PlanningFsmState::MOVE:
+        return "MOVE";
+    case PlanningFsmState::EMERGENCY_KILL:
+        return "EMERGENCY_KILL";
+    default:
+        return "UNDEFINE";
+    }
+}

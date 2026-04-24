@@ -24,11 +24,19 @@ planner_list:
         # 规划器类型
         planner_type: ego
         # 目标点输入话题
-        goal_topic: "/move_base_simple/goal"
+        goal_topic: "${uav_ns}/planning/goal"
+        # 目标点frame_id，当前主要用于构造PoseStamped
+        goal_frame_id: "world"
         # 输出的位置控制指令话题
         position_cmd_topic: "${uav_ns}/pos_cmd"
+        # planner内部状态话题
+        planner_state_topic: "${uav_ns}/planning/ego_state"
         # 订阅的里程计话题
         odometry_topic: "odom_world"
+        # position_cmd失效超时时间
+        cmd_timeout_sec: 0.3
+        # planner_state失效超时时间
+        state_timeout_sec: 1.0
 
     DIFF:
         # 规划器序号
@@ -37,10 +45,14 @@ planner_list:
         planner_type: diff
         # 目标点输入话题
         goal_topic: "/goal"
+        goal_frame_id: "world"
         # 输出的位置控制指令话题
         position_cmd_topic: "/diff_planner_position_cmd"
+        planner_state_topic: ""
         # 订阅的里程计话题
         odometry_topic: "odom_world"
+        cmd_timeout_sec: 0.3
+        state_timeout_sec: 1.0
 
     FUEL:
         # 规划器序号
@@ -61,7 +73,11 @@ planner_list:
         planner_type: super
         # 目标点输入话题
         goal_topic: "/planning/click_goal"
+        goal_frame_id: "world"
         # 输出的位置控制指令话题
         position_cmd_topic: "/planning/pos_cmd"
+        planner_state_topic: ""
         # 订阅的里程计话题
         odometry_topic: "/lidar_slam/odom"
+        cmd_timeout_sec: 0.3
+        state_timeout_sec: 1.0

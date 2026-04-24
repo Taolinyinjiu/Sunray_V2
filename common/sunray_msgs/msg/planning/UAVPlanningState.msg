@@ -32,6 +32,10 @@ uint8 ARRIVED=3
 # ARRIVED与HOVER在正确执行时等价，在打断时，比如轨迹执行的中段发送悬停命令，进入HOVER而非ARRIVED
 uint8 HOVER=4
 uint8 LAND=5
+uint8 TAKEOFF=6
+uint8 RETURN=7
+uint8 MOVE=8
+uint8 EMERGENCY_KILL=9
 uint8 planning_fsm_state
 string planning_fsm_state_string
 

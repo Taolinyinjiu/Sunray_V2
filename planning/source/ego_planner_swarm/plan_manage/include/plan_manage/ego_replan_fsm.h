@@ -8,6 +8,7 @@
 #include <sensor_msgs/Imu.h>
 #include <ros/ros.h>
 #include <std_msgs/Empty.h>
+#include <sunray_msgs/UAVPlanningState.h>
 #include <vector>
 #include <visualization_msgs/Marker.h>
 
@@ -43,10 +44,9 @@ namespace ego_planner
     };
     enum TARGET_TYPE
     {
-      MANUAL_TARGET = 1,
+      EXTERNAL_TARGET = 1,
       PRESET_TARGET = 2,
-      REFENCE_PATH = 3,
-      CMD_TARGET = 4
+      REFENCE_PATH = 3
     };
 
     /* planning utils */
@@ -56,7 +56,7 @@ namespace ego_planner
     traj_utils::MultiBsplines multi_bspline_msgs_buf_;
 
     /* parameters */
-    int target_type_; // 1 mannual select, 2 hard code
+    int target_type_; // 1 external goal topic, 2 hard code
     double no_replan_thresh_, replan_thresh_;
     double waypoints_[50][3];
     int waypoint_num_, wp_id_;
@@ -88,7 +88,8 @@ namespace ego_planner
     ros::NodeHandle node_;
     ros::Timer exec_timer_, safety_timer_;
     ros::Subscriber waypoint_sub_, odom_sub_, swarm_trajs_sub_, broadcast_bspline_sub_, trigger_sub_;
-    ros::Publisher replan_pub_, new_pub_, bspline_pub_, data_disp_pub_, swarm_trajs_pub_, broadcast_bspline_pub_;
+    ros::Publisher replan_pub_, new_pub_, bspline_pub_, data_disp_pub_, swarm_trajs_pub_,
+        broadcast_bspline_pub_, planning_state_pub_;
 
     /* helper functions */
     bool callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj); // front-end and back-end method
@@ -100,6 +101,11 @@ namespace ego_planner
     void changeFSMExecState(FSM_EXEC_STATE new_state, string pos_call);
     std::pair<int, EGOReplanFSM::FSM_EXEC_STATE> timesOfConsecutiveStateCalls();
     void printFSMExecState();
+    void publishPlanningState();
+    void publishPlanningState(uint8_t planner_state, const std::string &planner_state_string);
+    uint8_t toSunrayPlannerState(FSM_EXEC_STATE state) const;
+    std::string toSunrayPlannerStateString(FSM_EXEC_STATE state) const;
+    void fillPlanningStateCommonFields(sunray_msgs::UAVPlanningState &msg) const;
 
     void readGivenWps();
     void planNextWaypoint(const Eigen::Vector3d next_wp);

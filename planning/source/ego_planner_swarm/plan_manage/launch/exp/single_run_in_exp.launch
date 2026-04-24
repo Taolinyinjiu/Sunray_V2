@@ -1,4 +1,7 @@
 <launch>
+    <arg name="uav_name" default="uav"/>
+    <arg name="uav_id" default="1"/>
+
     <!-- number of moving objects -->
     <arg name="obj_num" value="10" />
     <arg name="drone_id" value="0"/>
@@ -7,9 +10,18 @@
     <arg name="map_size_y" value="50"/>
     <arg name="map_size_z" value="3.0"/>
     <arg name="odom_topic" value="/vins_fusion/imu_propagate"/>
+    <arg name="planner_goal_topic" default="/$(arg uav_name)$(arg uav_id)/planning/goal"/>
+    <arg name="planner_state_topic" default="/$(arg uav_name)$(arg uav_id)/planning/ego_state"/>
+    <arg name="planning_cmd_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/planning_cmd"/>
+    <arg name="planning_state_pub_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/planning_state"/>
+    <arg name="control_pub_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/uav_control_cmd"/>
+    <arg name="position_cmd_topic" default="/$(arg uav_name)$(arg uav_id)/pos_cmd"/>
+    <arg name="rviz_goal_topic" default="/move_base_simple/goal"/>
+    <arg name="rviz_goal_height" default="0.6"/>
+    <arg name="log_save" default="false"/>
     
     <!-- main algorithm params -->
-    <include file="$(find ego_planner)/launch/advanced_param_exp.xml">
+    <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
         <arg name="drone_id" value="$(arg drone_id)"/>
         <arg name="map_size_x_" value="$(arg map_size_x)"/>
         <arg name="map_size_y_" value="$(arg map_size_y)"/>
@@ -38,6 +50,8 @@
         <!-- 1: use 2D Nav Goal to select goal  -->
         <!-- 2: use global waypoints below  -->
         <arg name="flight_type" value="1" />
+        <arg name="goal_name" value="$(arg planner_goal_topic)" />
+        <arg name="planner_state_topic" value="$(arg planner_state_topic)" />
         <!-- global waypoints -->
         <!-- It generates a piecewise min-snap traj passing all waypoints -->
         <arg name="point_num" value="1" />
@@ -57,10 +71,37 @@
         <arg name="point4_y" value="0.0" />
         <arg name="point4_z" value="1.0" />
     </include>
+
     <!-- trajectory server -->
     <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
-        <!-- <remap from="position_cmd" to="/setpoints_cmd"/> -->
+        <remap from="position_cmd" to="$(arg position_cmd_topic)"/>
         <remap from="~planning/bspline" to="drone_$(arg drone_id)_planning/bspline"/>
+        <remap from="~odom" to="$(arg odom_topic)"/>
+        <remap from="~goal" to="$(arg planner_goal_topic)"/>
         <param name="traj_server/time_forward" value="1.0" type="double"/>
     </node>
+
+    <include file="$(find sunray_planning)/launch/rviz_goal_bridge.launch">
+        <arg name="node_name" value="rviz_goal_bridge_1"/>
+        <arg name="rviz_goal_topic" value="$(arg rviz_goal_topic)"/>
+        <arg name="planning_cmd_pub_topic" value="$(arg planning_cmd_topic)"/>
+        <arg name="control_cmd" value="6"/>
+        <arg name="cmd_source" value="1"/>
+        <arg name="goal_height" value="$(arg rviz_goal_height)"/>
+        <arg name="use_goal_yaw" value="true"/>
+        <arg name="log_save" value="$(arg log_save)"/>
+    </include>
+
+    <include file="$(find sunray_planning)/launch/sunray_planning.launch">
+        <arg name="set_global_params" value="false" />
+        <arg name="planner_type" value="ego" />
+        <arg name="planner_id" value="0" />
+        <arg name="uav_name" value="$(arg uav_name)" />
+        <arg name="uav_id" value="$(arg uav_id)" />
+        <arg name="node_name" value="sunray_planning_node_1" />
+        <arg name="planning_cmd_sub_topic" value="$(arg planning_cmd_topic)" />
+        <arg name="control_pub_topic" value="$(arg control_pub_topic)" />
+        <arg name="planning_state_pub_topic" value="$(arg planning_state_pub_topic)" />
+        <arg name="log_save" value="$(arg log_save)" />
+    </include>
 </launch>

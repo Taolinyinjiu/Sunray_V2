@@ -21,7 +21,7 @@
   <arg name="goal_name_" default="/move_base_sample/goal"/>
 
   <!-- main algorithm params -->
-  <include file="$(find ego_planner)/launch/advanced_param.xml">
+  <include file="$(find ego_planner)/launch/include/advanced_param.xml">
 
     <arg name="drone_id" value="$(arg drone_id)"/>
 
@@ -92,6 +92,8 @@
   <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
     <remap from="position_cmd" to="drone_$(arg drone_id)_planning/pos_cmd"/>
     <remap from="~planning/bspline" to="drone_$(arg drone_id)_planning/bspline"/>
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~goal" to="$(arg goal_name_)"/>
 
     <param name="traj_server/time_forward" value="1.0" type="double"/>
   </node>
@@ -104,7 +106,7 @@
   </node-->
 
   <!-- use simulator -->
-  <include file="$(find ego_planner)/launch/simulator.xml">
+  <include file="$(find ego_planner)/launch/include/simulator.xml">
 
     <arg name="drone_id" value="$(arg drone_id)"/>
 

@@ -1,4 +1,4 @@
-#include "planner_interface/ego_planner.hpp"
+#include "planner_interface/diff_planner.hpp"
 
 #include <cmath>
 
@@ -21,27 +21,27 @@ geometry_msgs::PoseStamped build_pose_goal(const PlanningTarget& target,
 }
 
 bool is_invalid_flag(const uint8_t trajectory_flag) {
-    return trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_EMPTY ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTROY_STATUS_ABORT ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_START ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_FINAL ||
-           trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_IMPOSSIBLE;
+    return trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_EMPTY ||
+           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTROY_STATUS_ABORT ||
+           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_START ||
+           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_FINAL ||
+           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_IMPOSSIBLE;
 }
 }  // namespace
 
-void EgoPlanner::bind_topics(ros::NodeHandle& nh) {
+void DiffPlanner::bind_topics(ros::NodeHandle& nh) {
     goal_pub_ = nh.advertise<geometry_msgs::PoseStamped>(config_.goal_topic, 1);
     position_cmd_sub_ = nh.subscribe(
-        config_.position_cmd_topic, 10, &EgoPlanner::position_cmd_callback, this);
+        config_.position_cmd_topic, 10, &DiffPlanner::position_cmd_callback, this);
 }
 
-bool EgoPlanner::send_goal(const PlanningTarget& target) {
+bool DiffPlanner::send_goal(const PlanningTarget& target) {
     goal_pub_.publish(build_pose_goal(target, config_));
     mark_goal_sent(ros::Time::now());
     return true;
 }
 
-void EgoPlanner::position_cmd_callback(const ego_planner_msgs::PositionCommand::ConstPtr& msg) {
+void DiffPlanner::position_cmd_callback(const diff_planner_msgs::PositionCommand::ConstPtr& msg) {
     if (!msg) {
         return;
     }
@@ -62,9 +62,7 @@ void EgoPlanner::position_cmd_callback(const ego_planner_msgs::PositionCommand::
     control_cmd.desired_pos.z = msg->position.z;
     control_cmd.desired_vel = msg->velocity;
     control_cmd.desired_acc = msg->acceleration;
-    control_cmd.desired_jerk.x = 0.0;
-    control_cmd.desired_jerk.y = 0.0;
-    control_cmd.desired_jerk.z = 0.0;
+    control_cmd.desired_jerk = msg->jerk;
     control_cmd.desired_yaw = msg->yaw;
     control_cmd.desired_yaw_rate = 0.0;
     // MOVE_TRAJECTORY 当前在 uav_control 链路中无法同时无损表达 yaw 和 yaw_rate。
@@ -73,7 +71,7 @@ void EgoPlanner::position_cmd_callback(const ego_planner_msgs::PositionCommand::
     control_cmd.fixed_height = 0.0;
 
     set_latest_control_cmd(control_cmd);
-    set_planner_state(msg->trajectory_flag == ego_planner_msgs::PositionCommand::TRAJECTORY_STATUS_COMPLETED
+    set_planner_state(msg->trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_COMPLETED
                           ? PlannerExecState::SUCCESS
                           : PlannerExecState::EXEC,
                       stamp);
