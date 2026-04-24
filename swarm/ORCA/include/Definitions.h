@@ -1,4 +1,9 @@
-// 中文说明：RVO 常量与公共定义
+/*
+本程序功能：
+    1、定义 RVO 算法中复用的公共常量，如数值稳定所需的 RVO_EPSILON
+    2、提供点到线段距离、点在线段左右关系、平方等基础几何工具函数
+    3、为 Agent、Obstacle、RVOSimulator 等核心模块提供通用数学支撑
+*/
 /*
  * Definitions.h
  * RVO2 Library

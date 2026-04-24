@@ -18,15 +18,25 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(terminal_control_node
-  src/terminal_control/terminal_control.cpp
+add_executable(uav_terminal_control_node
+  src/terminal_control/uav_terminal_control.cpp
 )
 
-target_link_libraries(terminal_control_node
+target_link_libraries(uav_terminal_control_node
   ${catkin_LIBRARIES}
 )
 
-add_dependencies(terminal_control_node ${catkin_EXPORTED_TARGETS})
+add_dependencies(uav_terminal_control_node ${catkin_EXPORTED_TARGETS})
+
+add_executable(ugv_terminal_control_node
+  src/terminal_control/ugv_terminal_control.cpp
+)
+
+target_link_libraries(ugv_terminal_control_node
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(ugv_terminal_control_node ${catkin_EXPORTED_TARGETS})
 
 add_executable(triangle_velocity_test
   src/velocity_test/triangle_velocity_test.cpp

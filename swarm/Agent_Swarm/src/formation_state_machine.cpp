@@ -1,4 +1,10 @@
-// 中文说明：编队状态机实现，处理指令与安全兜底
+/*
+本程序功能：
+    1、实现 FormationStateMachine::effectiveState，根据 leader/ORCA 数据新鲜度裁决实际状态
+    2、INIT/TAKEOFF/LAND/HOVER 直接返回请求状态
+    3、ORCA_RETURN_HOME 在 ORCA 超时时降级为 HOVER
+    4、FORMATION 在 leader 或 ORCA 超时时降级为 HOVER（安全兜底）
+*/
 #include "formation_state_machine.h"
 
 namespace agent_swarm

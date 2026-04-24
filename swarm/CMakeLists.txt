@@ -23,8 +23,7 @@ include_directories(
   ${PROJECT_SOURCE_DIR}/ORCA/include
 )
 
-set(AGENT_SWARM_SRCS
-  ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/agent_swarm_node.cpp
+set(AGENT_SWARM_SUPPORT_SRCS
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/formation_state_machine.cpp
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/leader_tracker.cpp
   ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/formation_policies.cpp
@@ -51,9 +50,17 @@ add_library(orca_engine_lib ${ORCA_LIB_SRCS})
 add_dependencies(orca_engine_lib ${catkin_EXPORTED_TARGETS})
 target_include_directories(orca_engine_lib PUBLIC ${PROJECT_SOURCE_DIR}/ORCA/include)
 
-add_executable(agent_swarm_node ${AGENT_SWARM_SRCS})
-add_dependencies(agent_swarm_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(agent_swarm_node orca_engine_lib ${catkin_LIBRARIES})
+add_library(agent_swarm_support ${AGENT_SWARM_SUPPORT_SRCS})
+add_dependencies(agent_swarm_support ${catkin_EXPORTED_TARGETS})
+target_link_libraries(agent_swarm_support orca_engine_lib ${catkin_LIBRARIES})
+
+add_executable(uav_swarm_node ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/swarm_uav_control_fsm.cpp)
+add_dependencies(uav_swarm_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(uav_swarm_node agent_swarm_support orca_engine_lib ${catkin_LIBRARIES})
+
+add_executable(ugv_swarm_node ${PROJECT_SOURCE_DIR}/Agent_Swarm/src/swarm_ugv_control_fsm.cpp)
+add_dependencies(ugv_swarm_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(ugv_swarm_node agent_swarm_support orca_engine_lib ${catkin_LIBRARIES})
 
 add_executable(uav_command_pub ${PROJECT_SOURCE_DIR}/Agent_Swarm/utils/formation_switch.cpp)
 add_dependencies(uav_command_pub ${catkin_EXPORTED_TARGETS})

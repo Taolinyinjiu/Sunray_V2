@@ -1,0 +1,9 @@
+<launch>
+  <!-- UGV控制节点启动文件 -->
+  
+  <!-- 加载配置文件 -->
+  <rosparam file="$(find sunray_ugv_control)/config/sunray_control_config.yaml" />
+  
+  <!-- 启动UGV控制节点 -->
+  <node pkg="sunray_ugv_control" type="node" name="ugv_control_node" output="screen" />
+</launch>

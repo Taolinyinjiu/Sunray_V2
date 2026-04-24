@@ -1,4 +1,9 @@
-// 中文说明：目标点下发实现，发布 /orca/setup
+/*
+本程序功能：
+    1、实现 GoalDispatcher 的初始化，创建 /{agent_name}{id}/orca/setup 发布器
+    2、实现 publishGoal，将目标 Pose 打包为 OrcaSetup 消息（含位置和偏航角）
+    3、根据 run_mode 选择发布 GOAL（仅设目标）或 GOAL_RUN（设目标并启动）
+*/
 #include "goal_dispatcher.h"
 #include <tf/transform_datatypes.h>
 

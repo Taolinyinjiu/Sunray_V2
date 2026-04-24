@@ -1,3 +1,9 @@
+/*
+本程序功能：
+    1、定义 AgentState，描述单个智能体的二维位置、速度与时间戳输入
+    2、定义 OrcaSetupCmd，统一封装 GOAL、GOAL_RUN、RUN、STOP 等 ORCA 控制指令
+    3、定义 OrcaOutput，统一封装 ORCA 输出状态、线速度、角速度、目标点与时间戳
+*/
 #pragma once
 
 #include <cstdint>

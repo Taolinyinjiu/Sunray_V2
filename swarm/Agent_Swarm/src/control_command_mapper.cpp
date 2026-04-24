@@ -1,4 +1,11 @@
-// 中文说明：控制映射实现，输出控制指令
+/*
+本程序功能：
+    1、实现 ControlCommandMapper 的初始化，创建 uav_control_cmd 发布器
+    2、实现 publishHover：发布悬停指令（HOVER + KEEP_YAW）
+    3、实现 publishTakeoff/publishLand：发布起飞/降落指令（仅 UAV 有效）
+    4、实现 publishPosTarget：发布位置控制指令（MOVE_POINT）
+    5、实现 publishFromOrca：根据 ORCA 输出状态选择速度/位置控制，含 vz P 控制器
+*/
 #include "control_command_mapper.h"
 #include <algorithm>
 #include <tf/transform_datatypes.h>

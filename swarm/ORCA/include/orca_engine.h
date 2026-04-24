@@ -1,4 +1,9 @@
-// 中文说明：ORCA 引擎接口，RVO 避障计算
+/*
+本程序功能：
+    1、定义 OrcaParams、GeoFence 关联接口和 OrcaEngine 引擎封装
+    2、基于 RVO::RVOSimulator 管理多智能体状态、目标点、围栏障碍与避障参数
+    3、对外提供状态更新、指令处理和单步 ORCA 计算接口，输出统一的 OrcaOutput 结果
+*/
 #pragma once
 
 #include "RVO.h"

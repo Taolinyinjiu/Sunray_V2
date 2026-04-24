@@ -1,4 +1,9 @@
-// 中文说明：键盘控制节点，发布集群指令
+/*
+本程序功能：
+    1、实现命令行集群控制工具，通过键盘输入发布 UAVSwarmCMD 指令
+    2、支持 ring/line/column/v_shape/wedge 阵型切换，以及 expand/contract 阵型尺度调节
+    3、支持 takeoff/land/hover/return 和 leader 目标点输入，便于联调集群行为
+*/
 #include <iostream>
 #include <limits>
 #include <ros/ros.h>

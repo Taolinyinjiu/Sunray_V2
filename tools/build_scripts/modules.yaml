@@ -9,6 +9,11 @@ modules:
     source_path: "control/sunray_uav_control"
     build_path: "build/sunray_uav_control"
     dependencies: []
+  ugv_control:
+    description: "Sunray 重构中的ugv_control"
+    source_path: "control/sunray_ugv_control"
+    build_path: "build/sunray_ugv_control"
+    dependencies: [sunray_msgs, sunray_common]
   control_tools:
     description: "为控制模块设计的一些工具"
     source_path: "control/control_tools"
@@ -130,6 +135,11 @@ modules:
     source_path: "drivers/web_cam"
     build_path: "build/web_cam"
     dependencies: []
+  turn_on_wheeltec_robot:
+    description: "turn_on_wheeltec_robot 功能包"
+    source_path: "drivers/turn_on_wheeltec_robot"
+    build_path: "build/turn_on_wheeltec_robot"
+    dependencies: []
   # 定位模块功能包
   vins_fusion:
     description: "localization_fusion 功能包"
@@ -236,6 +246,21 @@ groups:
         "localization_fusion",
         "uav_control",
         "sunray_swarm",
+        "sunray_simulator"
+      ]
+
+  UGV:
+    description: "UGV 控制、定位、仿真与底盘驱动功能包"
+    modules:
+      [
+        "control_tools",
+        "sunray_common",
+        "sunray_msgs",
+        "vrpn_client_ros",
+        "sunray_mocap",
+        "localization_fusion",
+        "ugv_control",
+        "turn_on_wheeltec_robot",
         "sunray_simulator"
       ]
 

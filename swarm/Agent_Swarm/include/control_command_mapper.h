@@ -1,4 +1,11 @@
-// 中文说明：控制映射接口，ORCA->UAV/UGV 控制
+/*
+本程序功能：
+    1、定义 ControlCommandMapper 类，负责将 ORCA 避障输出映射为底层飞控指令
+    2、根据 ORCA 状态（RUN/ARRIVED/STOP）自动选择速度控制或位置控制模式
+    3、提供 publishHover/publishTakeoff/publishLand/publishPosTarget 等直接控制接口
+    4、publishFromOrca 内含纵向 P 控制器，根据目标高度与当前高度差生成 vz
+    5、发布 sunray_msgs::UAVControlCMD 到 /{agent_name}{id}/sunray/uav_control_cmd
+*/
 #pragma once
 
 #include <geometry_msgs/Pose.h>

@@ -1,4 +1,9 @@
-// 中文说明：状态缓存实现，订阅并缓存全部 agent odom
+/*
+本程序功能：
+    1、实现 AgentStateCache 的初始化，根据 agent_num 批量订阅所有 agent 的 local_odom 话题
+    2、odomCallback 收到里程计时加锁写入缓存，保证线程安全
+    3、混合编队时，UGV Leader 的话题前缀自动切换为 /ugv{id}/...
+*/
 #include "agent_state_cache.h"
 #include <boost/bind.hpp>
 
@@ -34,6 +39,7 @@ void AgentStateCache::init(ros::NodeHandle &nh, int agent_num, int agent_type, c
 
 void AgentStateCache::odomCallback(const nav_msgs::Odometry::ConstPtr &msg, int idx)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     agent_state_[idx] = *msg;
 }
 

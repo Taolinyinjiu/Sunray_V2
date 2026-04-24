@@ -1,4 +1,9 @@
-// 中文说明：围栏/障碍物构建实现
+/*
+本程序功能：
+    1、实现 ObstacleBuilder::init，缓存 ORCA 仿真所需的矩形围栏参数
+    2、实现 ObstacleBuilder::apply，将围栏四条边转换为 RVO 多边形障碍物
+    3、在仿真器中注册并处理围栏障碍，供 ORCA 避障与越界约束使用
+*/
 #include "obstacle_builder.h"
 
 namespace orca_swarm

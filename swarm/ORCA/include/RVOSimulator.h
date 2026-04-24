@@ -1,4 +1,9 @@
-// 中文说明：RVO 仿真器接口
+/*
+本程序功能：
+    1、声明 RVO::RVOSimulator 主仿真器接口，统一管理所有 Agent、Obstacle 与仿真时间
+    2、提供添加智能体、添加障碍物、设置默认参数、推进仿真的核心 API
+    3、提供读取和设置 Agent 状态、邻居、速度、目标点等对外访问接口
+*/
 /*
  * RVOSimulator.h
  * RVO2 Library

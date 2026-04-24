@@ -1,4 +1,9 @@
-// 中文说明：RVO 障碍物几何定义
+/*
+本程序功能：
+    1、定义 RVO::Obstacle 静态障碍物节点，保存顶点、方向、凸性与前后连接关系
+    2、作为多边形障碍物链表的基础单元，供 KdTree 与 Agent 进行障碍约束计算
+    3、为 RVOSimulator 组织和处理静态障碍物提供底层数据结构
+*/
 /*
  * Obstacle.h
  * RVO2 Library

@@ -1,4 +1,9 @@
-// 中文说明：RVO Agent 算法核心
+/*
+本程序功能：
+    1、定义 RVO::Agent 类，保存单个智能体的位置、速度、目标、邻居与 ORCA 约束线
+    2、声明邻居搜索、期望速度计算、新速度求解和状态更新等核心算法接口
+    3、声明 linearProgram1/2/3 线性规划求解函数，用于 ORCA 约束下的速度优化
+*/
 #ifndef RVO_AGENT_H_
 #define RVO_AGENT_H_
 

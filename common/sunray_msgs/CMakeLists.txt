@@ -25,6 +25,9 @@ add_message_files(
   UAVControlFSMState.msg
   UAVControllerState.msg
   UAVSwarmCMD.msg
+  UGVControlCMD.msg
+  UGVControlFSMState.msg
+  UGVControllerState.msg
   UGVSwarmCMD.msg
   Vector2.msg
 )

@@ -1,4 +1,9 @@
-// 中文说明：RVO 邻域 KD-Tree 结构定义
+/*
+本程序功能：
+    1、定义 RVO 使用的 KdTree 结构，用于高效组织智能体与静态障碍物
+    2、提供 Agent/Obstacle 树的构建、邻居查询和可视性查询接口
+    3、为 ORCA 近邻搜索与障碍物约束构建提供加速支撑
+*/
 /*
  * KdTree.h
  * RVO2 Library
