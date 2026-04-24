@@ -1,0 +1,6 @@
+<launch>
+    <arg name="config_path" default="$(find vins)/../config/realsense_d435i/test_fusion.yaml" />
+    <node name="vins_estimator" pkg="vins" type="vins_node" output="screen" args="$(arg config_path)">
+        </node>
+    <!-- <node name="vins_visual" pkg="rviz" type="rviz" args="-d $(find vins)/../config/vins_rviz.rviz" /> -->
+</launch>

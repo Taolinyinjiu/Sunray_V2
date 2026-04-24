@@ -1,0 +1,5 @@
+<launch>
+	<node name="vins_fusion" pkg="vins"  type="vins_node" output="screen">
+		<param name="config_file" value="/home/yundrone/vins_fusion/src/VINS-Fusion-gpu/config/realsense_d435i/realsense_stereo_imu_config.yaml" />
+	</node>
+</launch> 

@@ -131,6 +131,16 @@ modules:
     build_path: "build/web_cam"
     dependencies: []
   # 定位模块功能包
+  vins_fusion:
+    description: "localization_fusion 功能包"
+    source_path: "localization/vins-fusion"
+    build_path: "build/vins-fusion"
+    dependencies: [sunray_msgs]
+  vins_fusion[GPU]:
+    description: "localization_fusion 功能包"
+    source_path: "localization/vins-fusion-gpu"
+    build_path: "build/vins-fusion-gpu"
+    dependencies: [sunray_msgs]
   localization_fusion:
     description: "localization_fusion 功能包"
     source_path: "localization/localization_fusion"
