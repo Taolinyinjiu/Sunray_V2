@@ -146,7 +146,7 @@ modules:
     source_path: "localization/vins-fusion"
     build_path: "build/vins-fusion"
     dependencies: [sunray_msgs]
-  vins_fusion[GPU]:
+  vins_fusion_GPU:
     description: "localization_fusion 功能包"
     source_path: "localization/vins-fusion-gpu"
     build_path: "build/vins-fusion-gpu"
