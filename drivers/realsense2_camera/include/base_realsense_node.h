@@ -288,6 +288,8 @@ namespace realsense2_camera
         ros::Time _ros_time_base;
         bool _enable_emitter;
         bool _emitter_on_off;
+        bool _emitter_on_off_active;
+        int _emitter_on_off_depth_phase;
         bool _enable_auto_exposure;
         int _manual_exposure;
         bool _sync_frames;

@@ -648,14 +648,45 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle &nh, rs2::options 
             ROS_WARN_STREAM("Failed setting laser_power on module '" << module_name << "': " << ex.what());
         }
     }
+    if (sensor.supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
+    {
+        try
+        {
+            sensor.set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, _enable_auto_exposure ? 1.f : 0.f);
+            ROS_INFO_STREAM("Set enable_auto_exposure=" << (_enable_auto_exposure ? "true" : "false")
+                                                        << " on module '" << module_name << "'.");
+        }
+        catch (const std::exception &ex)
+        {
+            ROS_WARN_STREAM("Failed setting enable_auto_exposure on module '" << module_name << "': " << ex.what());
+        }
+    }
+    if (!_enable_auto_exposure && sensor.supports(RS2_OPTION_EXPOSURE))
+    {
+        try
+        {
+            sensor.set_option(RS2_OPTION_EXPOSURE, static_cast<float>(_manual_exposure));
+            ROS_INFO_STREAM("Set manual exposure=" << _manual_exposure << " on module '" << module_name << "'.");
+        }
+        catch (const std::exception &ex)
+        {
+            ROS_WARN_STREAM("Failed setting manual exposure on module '" << module_name << "': " << ex.what());
+        }
+    }
     if (sensor.supports(RS2_OPTION_EMITTER_ON_OFF)) // zxzx
     {
         try
         {
             if (_emitter_on_off)
+            {
                 sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 1.f); // Enable emitter
+                _emitter_on_off_active = true;
+                ROS_INFO_STREAM("Enabled emitter_on_off on module '" << module_name << "'.");
+            }
             else
+            {
                 sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 0.f); // Disable emitter
+            }
         }
         catch (const std::exception &ex)
         {
@@ -685,6 +716,44 @@ void BaseRealSenseNode::registerDynamicReconfigCb(ros::NodeHandle &nh)
         ROS_DEBUG_STREAM("module_name:" << module_name);
         registerDynamicOption(nh, sensor, module_name);
     }
+
+    if (_emitter_on_off && !_emitter_on_off_active)
+    {
+        ROS_WARN_STREAM("emitter_on_off was requested, but the device did not enable it. "
+                        << "Disabling the emitter so infrared images are not polluted by laser spots.");
+        _emitter_on_off = false;
+        _enable_emitter = false;
+
+        for (rs2::sensor sensor : _dev_sensors)
+        {
+            std::string module_name = create_graph_resource_name(sensor.get_info(RS2_CAMERA_INFO_NAME));
+            if (sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+            {
+                try
+                {
+                    sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f);
+                    ROS_INFO_STREAM("Disabled emitter_enabled on module '" << module_name << "'.");
+                }
+                catch (const std::exception &ex)
+                {
+                    ROS_WARN_STREAM("Failed disabling emitter_enabled on module '" << module_name << "': " << ex.what());
+                }
+            }
+            if (sensor.supports(RS2_OPTION_LASER_POWER))
+            {
+                try
+                {
+                    sensor.set_option(RS2_OPTION_LASER_POWER, 0.f);
+                    ROS_INFO_STREAM("Disabled laser_power on module '" << module_name << "'.");
+                }
+                catch (const std::exception &ex)
+                {
+                    ROS_WARN_STREAM("Failed disabling laser_power on module '" << module_name << "': " << ex.what());
+                }
+            }
+        }
+    }
+
     ROS_INFO("Done Setting Dynamic reconfig parameters.");
 }
 
@@ -722,6 +791,9 @@ void BaseRealSenseNode::getParameters()
     _pnh.param("enable_sync", _sync_frames, SYNC_FRAMES);
     _pnh.param("enable_emitter", _enable_emitter, true);
     _pnh.param("emitter_on_off", _emitter_on_off, false);
+    _emitter_on_off_active = false;
+    _pnh.param("emitter_on_off_depth_phase", _emitter_on_off_depth_phase, 0);
+    _emitter_on_off_depth_phase = (_emitter_on_off_depth_phase != 0) ? 1 : 0;
     _pnh.param("enable_auto_exposure", _enable_auto_exposure, true);
     _pnh.param("manual_exposure", _manual_exposure, 10000);
     if (_pointcloud || _align_depth || _filters_str.size() > 0)
@@ -2401,10 +2473,13 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time &t,
         cam_info.header.seq = seq[stream];
         info_publisher.publish(cam_info);
 
-        if (!_emitter_on_off ||
-            (stream.first == rs2_stream::RS2_STREAM_COLOR) ||
-            (stream.first == rs2_stream::RS2_STREAM_DEPTH && !(seq[stream] % 2)) ||
-            (stream.first == rs2_stream::RS2_STREAM_INFRARED && seq[stream] % 2))
+        const rs2_stream frame_stream = f.get_profile().stream_type();
+        const int frame_phase = static_cast<int>(f.get_frame_number() & 1);
+        const int infra_phase = 1 - _emitter_on_off_depth_phase;
+        if (!_emitter_on_off_active ||
+            (frame_stream == rs2_stream::RS2_STREAM_COLOR) ||
+            (frame_stream == rs2_stream::RS2_STREAM_DEPTH && frame_phase == _emitter_on_off_depth_phase) ||
+            (frame_stream == rs2_stream::RS2_STREAM_INFRARED && frame_phase == infra_phase))
         {
             sensor_msgs::ImagePtr img;
             img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();

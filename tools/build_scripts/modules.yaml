@@ -151,6 +151,11 @@ modules:
     source_path: "localization/vins-fusion-gpu"
     build_path: "build/vins-fusion-gpu"
     dependencies: [sunray_msgs]
+  realsense2_camera:
+    description: "localization_fusion 功能包"
+    source_path: "drivers/realsense2_camera"
+    build_path: "build/realsense2_camera"
+    dependencies: [sunray_msgs]
   localization_fusion:
     description: "localization_fusion 功能包"
     source_path: "localization/localization_fusion"

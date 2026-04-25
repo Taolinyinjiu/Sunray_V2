@@ -42,6 +42,9 @@
 
   <arg name="enable_emitter"      default="false"/>
   <arg name="emitter_on_off"      default="false"/>
+  <arg name="emitter_on_off_depth_phase" default="0"/>
+  <arg name="enable_auto_exposure" default="true"/>
+  <arg name="manual_exposure"      default="10000"/>
   <arg name="enable_sync"         default="false"/>
   <arg name="align_depth"         default="false"/>
 
@@ -135,6 +138,9 @@
     <param name="pointcloud_texture_index"  type="int" value="$(arg pointcloud_texture_index)"/>
     <param name="enable_emitter"            type="bool" value="$(arg enable_emitter)"/>
     <param name="emitter_on_off"            type="bool" value="$(arg emitter_on_off)"/>
+    <param name="emitter_on_off_depth_phase" type="int" value="$(arg emitter_on_off_depth_phase)"/>
+    <param name="enable_auto_exposure"      type="bool" value="$(arg enable_auto_exposure)"/>
+    <param name="manual_exposure"           type="int" value="$(arg manual_exposure)"/>
     <param name="enable_sync"              type="bool" value="$(arg enable_sync)"/>
     <param name="align_depth"              type="bool" value="$(arg align_depth)"/>
 

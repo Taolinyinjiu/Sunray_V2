@@ -25,15 +25,18 @@
   <arg name="infra_fps"           default="60"/>
   <!--If emitter_on_off=true, depth_fps must equal to infra_fps, and the actual output frame rate will be halved.-->
   <arg name="color_fps"           default="30"/>
-  <arg name="gyro_fps"            default="200"/>
-  <arg name="accel_fps"           default="200"/>
-  <arg name="enable_gyro"         default="true"/>
-  <arg name="enable_accel"        default="true"/>
+  <arg name="gyro_fps"            default="0"/>
+  <arg name="accel_fps"           default="0"/>
+  <arg name="enable_gyro"         default="false"/>
+  <arg name="enable_accel"        default="false"/>
   <arg name="enable_pointcloud"         default="false"/>
   <arg name="pointcloud_texture_stream" default="RS2_STREAM_COLOR"/>
   <arg name="pointcloud_texture_index"  default="0"/>
   <arg name="enable_emitter"            default="true"/>
   <arg name="emitter_on_off"            default="true"/>
+  <arg name="emitter_on_off_depth_phase" default="0"/>
+  <arg name="enable_auto_exposure"      default="true"/>
+  <arg name="manual_exposure"           default="10000"/>
   <!--If emitter_on_off=true, depth_fps must equal to infra_fps, and the actual output frame rate will be halved.-->
   <arg name="enable_sync"               default="true"/>
   <arg name="align_depth"               default="true"/>
@@ -61,6 +64,9 @@
       <arg name="pointcloud_texture_index"  value="$(arg pointcloud_texture_index)"/>
       <arg name="enable_emitter"           value="$(arg enable_emitter)"/>
       <arg name="emitter_on_off"           value="$(arg emitter_on_off)"/>
+      <arg name="emitter_on_off_depth_phase" value="$(arg emitter_on_off_depth_phase)"/>
+      <arg name="enable_auto_exposure"     value="$(arg enable_auto_exposure)"/>
+      <arg name="manual_exposure"          value="$(arg manual_exposure)"/>
       <arg name="enable_sync"              value="$(arg enable_sync)"/>
       <arg name="align_depth"              value="$(arg align_depth)"/>
       <arg name="fisheye_width"            value="$(arg fisheye_width)"/>
