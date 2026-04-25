@@ -1,0 +1,94 @@
+%YAML:1.0
+
+#common parameters
+#support: 1 imu 1 cam; 1 imu 2 cam: 2 cam; 
+imu: 1         
+num_of_cam: 2  
+
+imu_topic: "/uav1/mavros/imu/data_raw"
+image0_topic: "/camera/infra1/image_rect_raw"
+image1_topic: "/camera/infra2/image_rect_raw"
+output_path: "/home/taolin/Documents/GitHub/Sunray_V2_PR/vins_logs"
+
+cam0_calib: "left.yaml"
+cam1_calib: "right.yaml"
+image_width: 640
+image_height: 480
+   
+
+# Extrinsic parameter between IMU and Camera.
+estimate_extrinsic: 1   # 0  Have an accurate extrinsic parameters. We will trust the following imu^R_cam, imu^T_cam, don't change it.
+                        # 1  Have an initial guess about extrinsic parameters. We will optimize around your initial guess.
+
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ -2.3863426891221007e-02, 9.7978518204271947e-03,
+       9.9966721410513015e-01, 1.1542506779704360e-01,
+       -9.9957425187025151e-01, 1.6558575857080537e-02,
+       -2.4023500236482032e-02, 1.7253406378325425e-02,
+       -1.6788444092121158e-02, -9.9981489069991858e-01,
+       9.3985360389510220e-03, 3.5345954078120724e-02, 0., 0., 0., 1. ]
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ -2.3037210349611925e-02, 9.4245245425362834e-03,
+       9.9969018464545034e-01, 1.1456201536006175e-01,
+       -9.9959360723451429e-01, 1.6576664849774048e-02,
+       -2.3191260387258439e-02, -3.2583378317206244e-02,
+       -1.6790095747168388e-02, -9.9981817973049747e-01,
+       9.0388143689048572e-03, 3.4625657072591243e-02, 0., 0., 0., 1. ]
+
+
+# body_T_cam0: !!opencv-matrix
+#    rows: 4
+#    cols: 4
+#    dt: d
+#    # 修改后的矩阵：相机Z轴(前)对应IMU的X轴(红)
+#    data: [ 0,  0,  1,  0.0,   # IMU_X = Cam_Z
+#           -1,  0,  0, -0.03,   # IMU_Y = -Cam_X
+#            0, -1,  0,  0.03,   # IMU_Z = -Cam_Y
+#            0,  0,  0,  1 ]
+
+# body_T_cam1: !!opencv-matrix
+#    rows: 4
+#    cols: 4
+#    dt: d
+#    data: [ 0,  0,  1,  0.0, 
+#           -1,  0,  0,  0.03, 
+#            0, -1,  0,  0.03, 
+#            0,  0,  0,  1 ]
+
+#Multiple thread support
+multiple_thread: 1
+
+#feature traker paprameters
+max_cnt: 150            # max feature number in feature tracking
+min_dist: 30            # min distance between two features 
+freq: 10                # frequence (Hz) of publish tracking result. At least 10Hz for good estimation. If set 0, the frequence will be same as raw image 
+F_threshold: 1.0        # ransac threshold (pixel)
+show_track: 1           # publish tracking image as topic
+flow_back: 1            # perform forward and backward optical flow to improve feature tracking accuracy
+
+#optimization parameters
+max_solver_time: 0.04  # max solver itration time (ms), to guarantee real time
+max_num_iterations: 8   # max solver itrations, to guarantee real time
+keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
+
+#imu parameters       The more accurate parameters you provide, the better performance
+acc_n: 0.1          # accelerometer measurement noise standard deviation. #0.2   0.04
+gyr_n: 0.01         # gyroscope measurement noise standard deviation.     #0.05  0.004
+acc_w: 0.001         # accelerometer bias random work noise standard deviation.  #0.002
+gyr_w: 0.0001       # gyroscope bias random work noise standard deviation.     #4.0e-5
+g_norm: 9.805         # gravity magnitude
+
+#unsynchronization parameters
+estimate_td: 1                      # online estimate time offset between camera and imu
+td: 0.00                             # initial value of time offset. unit: s. readed image clock + td = real image clock (IMU clock)
+
+#loop closure parameters
+load_previous_pose_graph: 0        # load and reuse previous pose graph; load from 'pose_graph_save_path'
+pose_graph_save_path: "/home/taolin/VINS_output/pose_graph/" # save and load path
+save_image: 0                   # save image in pose graph for visualization prupose; you can close this function by setting 0 
