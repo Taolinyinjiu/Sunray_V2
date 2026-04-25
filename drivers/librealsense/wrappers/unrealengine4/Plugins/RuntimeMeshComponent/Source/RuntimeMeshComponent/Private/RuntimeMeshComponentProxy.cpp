@@ -65,7 +65,7 @@ FPrimitiveViewRelevance FRuntimeMeshComponentSceneProxy::GetViewRelevance(const 
 	Result.bDrawRelevance = IsShown(View);
 	Result.bShadowRelevance = IsShadowCast(View);
 
-	bool bForceDynamicPath = !IsStaticPathAvailable() || IsRichView(*View->Family) || IsSelected() || View->Family->EngineShowFlags.Wireframe;
+	bool bForceDynamicPath = !IsStatic() || IsRichView(*View->Family) || IsSelected() || View->Family->EngineShowFlags.Wireframe;
 	Result.bStaticRelevance = !bForceDynamicPath && bHasStaticSections;
 	Result.bDynamicRelevance = bForceDynamicPath || bHasDynamicSections;
 
@@ -100,12 +100,7 @@ void FRuntimeMeshComponentSceneProxy::DrawStaticElements(FStaticPrimitiveDrawInt
 		if (SectionRenderData.Contains(SectionEntry.Key) && Section.IsValid() && Section->ShouldRender() && Section->WantsToRenderInStaticPath())
 		{
 			const FRuntimeMeshSectionRenderData& RenderData = SectionRenderData[SectionEntry.Key];
-
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION < 22
-			FMaterialRenderProxy* Material = RenderData.Material->GetRenderProxy(false);
-#else
 			FMaterialRenderProxy* Material = RenderData.Material->GetRenderProxy();
-#endif
 
 			FMeshBatch MeshBatch;
 			CreateMeshBatch(MeshBatch, Section, RenderData, Material, nullptr);
@@ -123,11 +118,7 @@ void FRuntimeMeshComponentSceneProxy::GetDynamicMeshElements(const TArray<const 
 	if (bWireframe)
 	{
 		WireframeMaterialInstance = new FColoredMaterialRenderProxy(
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION < 22
-			GEngine->WireframeMaterial ? GEngine->WireframeMaterial->GetRenderProxy(IsSelected()) : nullptr,
-#else
 			GEngine->WireframeMaterial ? GEngine->WireframeMaterial->GetRenderProxy() : nullptr,
-#endif
 			FLinearColor(0, 0.5f, 1.f)
 		);
 
@@ -145,16 +136,12 @@ void FRuntimeMeshComponentSceneProxy::GetDynamicMeshElements(const TArray<const 
 			{
 				if (VisibilityMap & (1 << ViewIndex))
 				{
-					bool bForceDynamicPath = IsRichView(*Views[ViewIndex]->Family) || Views[ViewIndex]->Family->EngineShowFlags.Wireframe || IsSelected() || !IsStaticPathAvailable();
+					bool bForceDynamicPath = IsRichView(*Views[ViewIndex]->Family) || Views[ViewIndex]->Family->EngineShowFlags.Wireframe || IsSelected() || !IsStatic();
 
 					if (bForceDynamicPath || !Section->WantsToRenderInStaticPath())
 					{
 						const FRuntimeMeshSectionRenderData& RenderData = SectionRenderData[SectionEntry.Key];
-#if ENGINE_MAJOR_VERSION >= 4 && ENGINE_MINOR_VERSION < 22
-						FMaterialRenderProxy* Material = RenderData.Material->GetRenderProxy(IsSelected());
-#else
 						FMaterialRenderProxy* Material = RenderData.Material->GetRenderProxy();
-#endif
 
 						FMeshBatch& MeshBatch = Collector.AllocateMesh();
 						CreateMeshBatch(MeshBatch, Section, RenderData, Material, WireframeMaterialInstance);
@@ -167,7 +154,7 @@ void FRuntimeMeshComponentSceneProxy::GetDynamicMeshElements(const TArray<const 
 	}
 
 	// Draw bounds
-#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+#if RUNTIMEMESH_ENABLE_DEBUG_RENDERING
 	for (int32 ViewIndex = 0; ViewIndex < Views.Num(); ViewIndex++)
 	{
 		if (VisibilityMap & (1 << ViewIndex))
@@ -176,7 +163,7 @@ void FRuntimeMeshComponentSceneProxy::GetDynamicMeshElements(const TArray<const 
 			if (ViewFamily.EngineShowFlags.Collision && IsCollisionEnabled() && BodySetup && BodySetup->GetCollisionTraceFlag() != ECollisionTraceFlag::CTF_UseComplexAsSimple)
 			{
 				FTransform GeomTransform(GetLocalToWorld());
-				BodySetup->AggGeom.GetAggGeom(GeomTransform, GetSelectionColor(FColor(157, 149, 223, 255), IsSelected(), IsHovered()).ToFColor(true), NULL, false, false, UseEditorDepthTest(), ViewIndex, Collector);
+				BodySetup->AggGeom.GetAggGeom(GeomTransform, GetSelectionColor(FColor(157, 149, 223, 255), IsSelected(), IsHovered()).ToFColor(true), NULL, false, false, false /*UseEditorDepthTest()*/, ViewIndex, Collector);
 			}
 
 			// Render bounds

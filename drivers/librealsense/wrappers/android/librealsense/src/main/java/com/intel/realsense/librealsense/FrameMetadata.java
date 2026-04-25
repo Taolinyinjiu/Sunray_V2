@@ -29,8 +29,14 @@ public enum FrameMetadata {
     GAMMA(25),
     MANUAL_WHITE_BALANCE(26),
     POWER_LINE_FREQUENCY(27),
-    LOW_LIGHT_COMPENSATION(28);
-
+    LOW_LIGHT_COMPENSATION(28),
+    FRAME_EMITTER_MODE(29),
+    FRAME_LED_POWER(30),
+    RAW_FRAME_SIZE(31),
+    GPIO_INPUT_DATA(32),
+    SEQUENCE_NAME(33),
+    SEQUENCE_ID(34),
+    SEQUENCE_SIZE(35);
     private final int mValue;
 
     private FrameMetadata(int value) { mValue = value; }

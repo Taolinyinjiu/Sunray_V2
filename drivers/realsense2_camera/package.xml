@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>realsense2_camera</name>
-  <version>2.2.10</version>
-  <description>RealSense Camera package allowing access to Intel T265 Tracking module and SR300 and D400 3D cameras</description>
+  <version>2.55.1</version>
+  <description>Sunray RealSense ROS1 camera package for D400 FW 5.16.0.1 and librealsense 2.55.1</description>
   <maintainer email="sergey.dorodnicov@intel.com">Sergey Dorodnicov</maintainer>
   <maintainer email="doron.hirshberg@intel.com">Doron Hirshberg</maintainer>
   <license>Apache 2.0</license>

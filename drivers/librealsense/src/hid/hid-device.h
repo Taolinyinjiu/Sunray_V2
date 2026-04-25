@@ -4,9 +4,10 @@
 #pragma once
 #include "../backend.h"
 #include "hid-types.h"
+#include "../platform/hid-device.h"
 #include "../usb/usb-messenger.h"
 #include "../usb/usb-enumerator.h"
-#include "../concurrency.h"
+#include <rsutils/concurrency/concurrency.h>
 #include "stdio.h"
 #include "stdlib.h"
 
@@ -15,6 +16,10 @@
 #include <chrono>
 #include <thread>
 #include "../types.h"
+
+#ifdef __APPLE__
+#include <hidapi.h>
+#endif
 
 namespace librealsense
 {
@@ -38,21 +43,29 @@ namespace librealsense
             virtual std::vector<uint8_t> get_custom_report_data(const std::string& custom_sensor_name,
                                                                 const std::string& report_name,
                                                                 custom_sensor_report_field report_field) override { return {}; }
+            void set_gyro_scale_factor( double scale_factor ) override{};
 
         private:
             void handle_interrupt();
             rs_usb_endpoint get_hid_endpoint();
             rs_usb_interface get_hid_interface();
             usb_status set_feature_report(unsigned char power, int report_id, int fps = 0);
+#ifdef __APPLE__
+           int hidapi_PowerDevice(unsigned char reportId);
+#endif
 
             bool _running = false;
             dispatcher _action_dispatcher;
 
             hid_callback _callback;
             rs_usb_device _usb_device;
+#ifdef __APPLE__
+            hidapi_device* _hidapi_device = nullptr;
+#else
             rs_usb_messenger _messenger;
             std::vector<rs_usb_request> _requests;
             std::shared_ptr<platform::usb_request_callback> _request_callback;
+#endif
 
             std::vector<hid_profile> _hid_profiles;
             std::map<int, std::string> _id_to_sensor;

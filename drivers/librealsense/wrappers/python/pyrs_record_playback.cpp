@@ -1,8 +1,8 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
 Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 
-#include "python.hpp"
-#include "../include/librealsense2/hpp/rs_record_playback.hpp"
+#include "pyrealsense2.h"
+#include <librealsense2/hpp/rs_record_playback.hpp>
 
 void init_record_playback(py::module &m) {
     /** rs_record_playback.hpp **/
@@ -32,6 +32,7 @@ void init_record_playback(py::module &m) {
 
     py::class_<rs2::recorder, rs2::device> recorder(m, "recorder", "Records the given device and saves it to the given file as rosbag format.");
     recorder.def(py::init<const std::string&, rs2::device>())
+        .def(py::init<const std::string&, rs2::device, bool>())
         .def("pause", &rs2::recorder::pause, "Pause the recording device without stopping the actual device from streaming.")
         .def("resume", &rs2::recorder::resume, "Unpauses the recording device, making it resume recording.");
     // filename?

@@ -6,12 +6,13 @@ project(RealsenseWrappers)
 set(DEPENDENCIES realsense2)
 
 if (BUILD_PYTHON_BINDINGS OR BUILD_PYTHON_DOCS)
-  add_subdirectory(python)
+    if (NOT INTERNET_CONNECTION)
+        message(WARNING "No internet connection. Cloning Python bindings may fail")
+    endif()
+    add_subdirectory(python)
+
 endif()
 
-if (BUILD_NODEJS_BINDINGS)
-  add_subdirectory(nodejs)
-endif()
 
 if (BUILD_CV_EXAMPLES)
   add_subdirectory(opencv)
@@ -19,6 +20,14 @@ endif()
 
 if (BUILD_DLIB_EXAMPLES)
   add_subdirectory(dlib)
+endif()
+
+if (BUILD_OPENVINO_EXAMPLES)
+  add_subdirectory(openvino)
+endif()
+
+if (BUILD_OPEN3D_EXAMPLES)
+  add_subdirectory(open3d)
 endif()
 
 if(BUILD_MATLAB_BINDINGS)
@@ -52,4 +61,8 @@ endif()
 
 if(BUILD_OPENNI2_BINDINGS)
 	add_subdirectory(openni2)
+endif()
+
+if(BUILD_PC_STITCHING)
+	add_subdirectory(pointcloud/pointcloud-stitching)
 endif()

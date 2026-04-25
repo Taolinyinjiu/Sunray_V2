@@ -14,7 +14,7 @@ function check_folder {
           if [[ $(grep -oP "Software License Agreement" $filename | wc -l) -ne 0 ]]; then
                echo "[WARNING] $filename contains 3rd-party license agreement"
           else
-               if [[ ! $filename == *"libuvc"* ]]; then
+               if [[ ! $filename == *"usbhost"* ]]; then
                     # Only check files that are not .gitignore-d
                     if [[ $(git check-ignore $filename | wc -l) -eq 0 ]]; then
                          if [[ $(grep -oP "(?<=\(c\) )(.*)(?= Intel)" $filename | wc -l) -eq 0 ]]; then
@@ -121,12 +121,15 @@ if [[ $1 == *"help"* ]]; then
      echo "    --fix    Try to auto-fix defects"
      exit 0
 fi
-	
+
 cd ..
+check_folder CMake $1
+check_folder common $1
 check_folder include $1
 check_folder src $1
 check_folder examples $1
-check_folder third-party/libtm $1
+check_folder third-party/realdds $1
+check_folder third-party/rsutils $1
 check_folder tools $1
 cd scripts
 

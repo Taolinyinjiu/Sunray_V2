@@ -1,7 +1,8 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
-
+// Copyright(c) 2024 Intel Corporation. All Rights Reserved.
 #pragma once
+
+#include <src/float3.h>
 
 #include <map>
 #include <vector>
@@ -36,7 +37,7 @@ namespace librealsense {
         {
             if (_max == _min) return *_data;
             auto t = (value - _min) / (_max - _min);
-            t = clamp_val(t, 0.f, 1.f);
+            t = std::max( 0.f, std::min( t, 1.f ) );
             return _data[(int)(t * (_size - 1))];
         }
 
@@ -107,7 +108,7 @@ namespace librealsense {
             for (auto i = 0; i < w*h; ++i)
             {
                 T depth_val = depth_data[i];
-                int index = depth_val;
+                int index = static_cast< int >( depth_val );
                 hist[index] += 1;
             }
 

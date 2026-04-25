@@ -217,10 +217,11 @@ namespace realsense2_camera
                           std::map<stream_index_pair, sensor_msgs::CameraInfo>& camera_info,
                           const std::map<stream_index_pair, std::string>& optical_frame_id,
                           const std::map<rs2_stream, std::string>& encoding,
-                          bool copy_data_from_frame = true);
+                          bool copy_data_from_frame = true,
+                          int emitter_on_off_fallback_phase = -1);
         bool getEnabledProfile(const stream_index_pair& stream_index, rs2::stream_profile& profile);
 
-        void publishAlignedDepthToOthers(rs2::frameset frames, const ros::Time& t);
+        void publishAlignedDepthToOthers(rs2::frameset frames, const ros::Time& t, int emitter_on_off_fallback_phase = -1);
         sensor_msgs::Imu CreateUnitedMessage(const CimuData accel_data, const CimuData gyro_data);
 
         void FillImuData_Copy(const CimuData imu_data, std::deque<sensor_msgs::Imu>& imu_msgs);
@@ -289,7 +290,9 @@ namespace realsense2_camera
         bool _enable_emitter;
         bool _emitter_on_off;
         bool _emitter_on_off_active;
+        bool _emitter_on_off_use_metadata;
         int _emitter_on_off_depth_phase;
+        int _emitter_on_off_fallback_sequence;
         bool _enable_auto_exposure;
         int _manual_exposure;
         bool _sync_frames;

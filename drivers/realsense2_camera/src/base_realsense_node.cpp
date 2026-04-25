@@ -14,6 +14,44 @@ using namespace ddynamic_reconfigure;
 #define OPTICAL_FRAME_ID(sip) (static_cast<std::ostringstream &&>(std::ostringstream() << "camera_" << STREAM_NAME(sip) << "_optical_frame")).str()
 #define ALIGNED_DEPTH_TO_FRAME_ID(sip) (static_cast<std::ostringstream &&>(std::ostringstream() << "camera_aligned_depth_to_" << STREAM_NAME(sip) << "_frame")).str()
 
+namespace
+{
+bool getFrameEmitterState(const rs2::frame &frame, bool &emitter_on,
+                          rs2_metadata_type &metadata_value,
+                          const char *&metadata_name)
+{
+    try
+    {
+        if (frame.supports_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE))
+        {
+            metadata_value = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE);
+            metadata_name = "FRAME_EMITTER_MODE";
+            emitter_on = metadata_value != 0;
+            return true;
+        }
+        if (frame.supports_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE))
+        {
+            metadata_value = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER_MODE);
+            metadata_name = "FRAME_LASER_POWER_MODE";
+            emitter_on = metadata_value != 0;
+            return true;
+        }
+        if (frame.supports_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER))
+        {
+            metadata_value = frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_LASER_POWER);
+            metadata_name = "FRAME_LASER_POWER";
+            emitter_on = metadata_value > 0;
+            return true;
+        }
+    }
+    catch (const std::exception &ex)
+    {
+        ROS_DEBUG_STREAM("Failed reading emitter metadata: " << ex.what());
+    }
+    return false;
+}
+}
+
 SyncedImuPublisher::SyncedImuPublisher(ros::Publisher imu_publisher, std::size_t waiting_list_size) : _publisher(imu_publisher), _pause_mode(false),
                                                                                                       _waiting_list_size(waiting_list_size)
 {
@@ -463,6 +501,13 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle &nh, rs2::options 
         rs2_option option = static_cast<rs2_option>(i);
         const std::string option_name(create_graph_resource_name(rs2_option_to_string(option)));
         // std::cout << option_name << std::endl;
+        if (option == RS2_OPTION_EMITTER_ON_OFF)
+        {
+            // FW 5.16.0.1 reports this state through GETSUBPRESETID. When no
+            // sub-preset is active, querying can return "No data to return".
+            // Keep this feature under the dedicated launch parameter below.
+            continue;
+        }
         if (!sensor.supports(option) || sensor.is_option_read_only(option))
         {
             continue;
@@ -792,8 +837,21 @@ void BaseRealSenseNode::getParameters()
     _pnh.param("enable_emitter", _enable_emitter, true);
     _pnh.param("emitter_on_off", _emitter_on_off, false);
     _emitter_on_off_active = false;
+    _pnh.param("emitter_on_off_use_metadata", _emitter_on_off_use_metadata, false);
     _pnh.param("emitter_on_off_depth_phase", _emitter_on_off_depth_phase, 0);
     _emitter_on_off_depth_phase = (_emitter_on_off_depth_phase != 0) ? 1 : 0;
+    _emitter_on_off_fallback_sequence = 0;
+    if (_emitter_on_off)
+    {
+        ROS_INFO_STREAM("emitter_on_off filtering uses "
+                        << (_emitter_on_off_use_metadata ? "frame metadata with alternating phase fallback" : "alternating phase")
+                        << "; depth_phase=" << _emitter_on_off_depth_phase);
+    }
+    if (_emitter_on_off && !_enable_emitter)
+    {
+        ROS_WARN("emitter_on_off requires the laser emitter; forcing enable_emitter=true.");
+        _enable_emitter = true;
+    }
     _pnh.param("enable_auto_exposure", _enable_auto_exposure, true);
     _pnh.param("manual_exposure", _manual_exposure, 10000);
     if (_pointcloud || _align_depth || _filters_str.size() > 0)
@@ -815,6 +873,20 @@ void BaseRealSenseNode::getParameters()
         param_name = "enable_" + STREAM_NAME(stream);
         ROS_DEBUG_STREAM("reading parameter:" << param_name);
         _pnh.param(param_name, _enable[stream], true);
+    }
+
+    if (_emitter_on_off)
+    {
+        if (_enable[DEPTH] && _enable[INFRA1] && _fps[DEPTH] != _fps[INFRA1])
+        {
+            ROS_WARN_STREAM("emitter_on_off expects depth_fps and infra_fps to match. depth_fps="
+                            << _fps[DEPTH] << ", infra_fps=" << _fps[INFRA1]);
+        }
+        if (_enable[DEPTH] && _enable[INFRA2] && _fps[DEPTH] != _fps[INFRA2])
+        {
+            ROS_WARN_STREAM("emitter_on_off expects depth_fps and infra_fps to match. depth_fps="
+                            << _fps[DEPTH] << ", infra2_fps=" << _fps[INFRA2]);
+        }
     }
 
     for (auto &stream : HID_STREAMS)
@@ -1048,7 +1120,10 @@ void BaseRealSenseNode::setupPublishers()
             image_raw << stream_name << "/image_" << ((rectified_image) ? "rect_" : "") << "raw";
             camera_info << stream_name << "/camera_info";
 
-            std::shared_ptr<FrequencyDiagnostics> frequency_diagnostics(new FrequencyDiagnostics(_fps[stream], stream_name, _serial_no));
+            const double expected_frequency = (_emitter_on_off && (stream == DEPTH || stream == INFRA1 || stream == INFRA2))
+                                                  ? static_cast<double>(_fps[stream]) / 2.0
+                                                  : static_cast<double>(_fps[stream]);
+            std::shared_ptr<FrequencyDiagnostics> frequency_diagnostics(new FrequencyDiagnostics(expected_frequency, stream_name, _serial_no));
             _image_publishers[stream] = {image_transport.advertise(image_raw.str(), 1), frequency_diagnostics};
             _info_publisher[stream] = _node_handle.advertise<sensor_msgs::CameraInfo>(camera_info.str(), 1);
 
@@ -1059,7 +1134,7 @@ void BaseRealSenseNode::setupPublishers()
                 aligned_camera_info << "aligned_depth_to_" << stream_name << "/camera_info";
 
                 std::string aligned_stream_name = "aligned_depth_to_" + stream_name;
-                std::shared_ptr<FrequencyDiagnostics> frequency_diagnostics(new FrequencyDiagnostics(_fps[stream], aligned_stream_name, _serial_no));
+                std::shared_ptr<FrequencyDiagnostics> frequency_diagnostics(new FrequencyDiagnostics(expected_frequency, aligned_stream_name, _serial_no));
                 _depth_aligned_image_publishers[stream] = {image_transport.advertise(aligned_image_raw.str(), 1), frequency_diagnostics};
                 _depth_aligned_info_publisher[stream] = _node_handle.advertise<sensor_msgs::CameraInfo>(aligned_camera_info.str(), 1);
             }
@@ -1120,7 +1195,7 @@ void BaseRealSenseNode::setupPublishers()
     }
 }
 
-void BaseRealSenseNode::publishAlignedDepthToOthers(rs2::frameset frames, const ros::Time &t)
+void BaseRealSenseNode::publishAlignedDepthToOthers(rs2::frameset frames, const ros::Time &t, int emitter_on_off_fallback_phase)
 {
     for (auto it = frames.begin(); it != frames.end(); ++it)
     {
@@ -1160,7 +1235,8 @@ void BaseRealSenseNode::publishAlignedDepthToOthers(rs2::frameset frames, const 
                          _depth_aligned_info_publisher,
                          _depth_aligned_image_publishers, _depth_aligned_seq,
                          _depth_aligned_camera_info, _optical_frame_id,
-                         _depth_aligned_encoding);
+                         _depth_aligned_encoding, true,
+                         emitter_on_off_fallback_phase);
         }
     }
 }
@@ -1721,6 +1797,9 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
             ROS_DEBUG("Frameset arrived.");
             bool is_depth_arrived = false;
             auto frameset = frame.as<rs2::frameset>();
+            const int emitter_on_off_fallback_phase = _emitter_on_off_active
+                                                          ? (_emitter_on_off_fallback_sequence++ & 1)
+                                                          : -1;
             ROS_DEBUG("List of frameset before applying filters: size: %d", static_cast<int>(frameset.size()));
             for (auto it = frameset.begin(); it != frameset.end(); ++it)
             {
@@ -1825,13 +1904,14 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                              _info_publisher,
                              _image_publishers, _seq,
                              _camera_info, _optical_frame_id,
-                             _encoding);
+                             _encoding, true,
+                             emitter_on_off_fallback_phase);
             }
 
             if (_align_depth && is_depth_arrived)
             {
                 ROS_DEBUG("publishAlignedDepthToOthers(...)");
-                publishAlignedDepthToOthers(frameset, t);
+                publishAlignedDepthToOthers(frameset, t, emitter_on_off_fallback_phase);
             }
         }
         else if (frame.is<rs2::video_frame>())
@@ -2420,7 +2500,8 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time &t,
                                      std::map<stream_index_pair, sensor_msgs::CameraInfo> &camera_info,
                                      const std::map<stream_index_pair, std::string> &optical_frame_id,
                                      const std::map<rs2_stream, std::string> &encoding,
-                                     bool copy_data_from_frame)
+                                     bool copy_data_from_frame,
+                                     int emitter_on_off_fallback_phase)
 {
     ROS_DEBUG("publishFrame(...)");
     unsigned int width = 0;
@@ -2474,12 +2555,110 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time &t,
         info_publisher.publish(cam_info);
 
         const rs2_stream frame_stream = f.get_profile().stream_type();
-        const int frame_phase = static_cast<int>(f.get_frame_number() & 1);
-        const int infra_phase = 1 - _emitter_on_off_depth_phase;
-        if (!_emitter_on_off_active ||
-            (frame_stream == rs2_stream::RS2_STREAM_COLOR) ||
-            (frame_stream == rs2_stream::RS2_STREAM_DEPTH && frame_phase == _emitter_on_off_depth_phase) ||
-            (frame_stream == rs2_stream::RS2_STREAM_INFRARED && frame_phase == infra_phase))
+        bool should_publish = true;
+        if (_emitter_on_off_active)
+        {
+            bool emitter_on = false;
+            rs2_metadata_type emitter_metadata_value = 0;
+            const char *emitter_metadata_name = nullptr;
+            const bool has_emitter_metadata = _emitter_on_off_use_metadata &&
+                                              getFrameEmitterState(f, emitter_on,
+                                                                   emitter_metadata_value,
+                                                                   emitter_metadata_name);
+            if (frame_stream == rs2_stream::RS2_STREAM_DEPTH)
+            {
+                if (has_emitter_metadata)
+                {
+                    should_publish = emitter_on;
+                    ROS_INFO_STREAM_THROTTLE(5.0, "emitter_on_off metadata frame_stream=" << rs2_stream_to_string(frame_stream)
+                                                                                     << " output_stream=" << STREAM_NAME(stream)
+                                                                                     << " frame=" << f.get_frame_number()
+                                                                                     << " " << emitter_metadata_name
+                                                                                     << "=" << emitter_metadata_value
+                                                                                     << " emitter_on=" << emitter_on
+                                                                                     << " publish=" << should_publish);
+                }
+                else
+                {
+                    const int frame_phase = (emitter_on_off_fallback_phase >= 0)
+                                                ? emitter_on_off_fallback_phase
+                                                : static_cast<int>(f.get_frame_number() & 1);
+                    should_publish = frame_phase == _emitter_on_off_depth_phase;
+                    if (_emitter_on_off_use_metadata)
+                    {
+                        ROS_WARN_STREAM_THROTTLE(5.0, "emitter_on_off metadata unavailable for frame_stream="
+                                                          << rs2_stream_to_string(frame_stream)
+                                                          << " output_stream="
+                                                          << STREAM_NAME(stream)
+                                                          << "; falling back to alternating phase. frame="
+                                                          << f.get_frame_number()
+                                                          << " phase=" << frame_phase
+                                                          << " phase_source=" << ((emitter_on_off_fallback_phase >= 0) ? "frameset" : "frame_number")
+                                                          << " depth_phase=" << _emitter_on_off_depth_phase
+                                                          << " publish=" << should_publish);
+                    }
+                    else
+                    {
+                        ROS_DEBUG_STREAM_THROTTLE(5.0, "emitter_on_off metadata disabled; using alternating phase for frame_stream="
+                                                           << rs2_stream_to_string(frame_stream)
+                                                           << " output_stream=" << STREAM_NAME(stream)
+                                                           << ". frame=" << f.get_frame_number()
+                                                           << " phase=" << frame_phase
+                                                           << " phase_source=" << ((emitter_on_off_fallback_phase >= 0) ? "frameset" : "frame_number")
+                                                           << " depth_phase=" << _emitter_on_off_depth_phase
+                                                           << " publish=" << should_publish);
+                    }
+                }
+            }
+            else if (frame_stream == rs2_stream::RS2_STREAM_INFRARED)
+            {
+                if (has_emitter_metadata)
+                {
+                    should_publish = !emitter_on;
+                    ROS_INFO_STREAM_THROTTLE(5.0, "emitter_on_off metadata frame_stream=" << rs2_stream_to_string(frame_stream)
+                                                                                     << " output_stream=" << STREAM_NAME(stream)
+                                                                                     << " frame=" << f.get_frame_number()
+                                                                                     << " " << emitter_metadata_name
+                                                                                     << "=" << emitter_metadata_value
+                                                                                     << " emitter_on=" << emitter_on
+                                                                                     << " publish=" << should_publish);
+                }
+                else
+                {
+                    const int frame_phase = (emitter_on_off_fallback_phase >= 0)
+                                                ? emitter_on_off_fallback_phase
+                                                : static_cast<int>(f.get_frame_number() & 1);
+                    const int infra_phase = 1 - _emitter_on_off_depth_phase;
+                    should_publish = frame_phase == infra_phase;
+                    if (_emitter_on_off_use_metadata)
+                    {
+                        ROS_WARN_STREAM_THROTTLE(5.0, "emitter_on_off metadata unavailable for frame_stream="
+                                                          << rs2_stream_to_string(frame_stream)
+                                                          << " output_stream="
+                                                          << STREAM_NAME(stream)
+                                                          << "; falling back to alternating phase. frame="
+                                                          << f.get_frame_number()
+                                                          << " phase=" << frame_phase
+                                                          << " phase_source=" << ((emitter_on_off_fallback_phase >= 0) ? "frameset" : "frame_number")
+                                                          << " infra_phase=" << infra_phase
+                                                          << " publish=" << should_publish);
+                    }
+                    else
+                    {
+                        ROS_DEBUG_STREAM_THROTTLE(5.0, "emitter_on_off metadata disabled; using alternating phase for frame_stream="
+                                                           << rs2_stream_to_string(frame_stream)
+                                                           << " output_stream=" << STREAM_NAME(stream)
+                                                           << ". frame=" << f.get_frame_number()
+                                                           << " phase=" << frame_phase
+                                                           << " phase_source=" << ((emitter_on_off_fallback_phase >= 0) ? "frameset" : "frame_number")
+                                                           << " infra_phase=" << infra_phase
+                                                           << " publish=" << should_publish);
+                    }
+                }
+            }
+        }
+
+        if (should_publish)
         {
             sensor_msgs::ImagePtr img;
             img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();

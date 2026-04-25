@@ -1,8 +1,9 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
 Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 
-#include "python.hpp"
-#include "../include/librealsense2/rsutil.h"
+#include "pyrealsense2.h"
+#include <librealsense2/rsutil.h>
+
 
 void init_util(py::module &m) {
     /** rsutil.h **/
@@ -36,5 +37,21 @@ void init_util(py::module &m) {
         rs2_fov(&intrin, to_fow.data());
         return to_fow;
     }, "Calculate horizontal and vertical field of view, based on video intrinsics", "intrin"_a);
+
+    auto cp_to_dp = [](BufData data, float depth_scale, float depth_min, float depth_max,
+            const rs2_intrinsics& depth_intrin, const rs2_intrinsics& color_intrin,
+            const rs2_extrinsics& color_to_depth, const rs2_extrinsics& depth_to_color,
+            std::array<float, 2> from_pixel)->std::array<float, 2>
+    {
+        std::array<float, 2> to_pixel{-1.0f, -1.0f};
+        rs2_project_color_pixel_to_depth_pixel(to_pixel.data(), static_cast<const uint16_t*>(data._ptr), 
+                depth_scale, depth_min, depth_max, &depth_intrin, &color_intrin, &color_to_depth,
+                &depth_to_color, from_pixel.data());
+        return to_pixel;
+    };
+
+    m.def("rs2_project_color_pixel_to_depth_pixel", cp_to_dp, "Given pixel coordinates of the color image and a minimum and maximum depth, compute the corresponding pixel coordinates in the depth image. Returns [-1 -1] on failure.",
+          "data"_a, "depth_scale"_a, "depth_min"_a, "depth_max"_a, "depth_intrin"_a, "color_intrin"_a, "color_to_depth"_a,
+          "depth_to_color"_a, "from_pixel"_a);
     /** end rsutil.h **/
 }

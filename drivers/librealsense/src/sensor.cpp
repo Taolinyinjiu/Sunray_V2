@@ -1,37 +1,75 @@
 // License: Apache 2.0. See LICENSE file in root directory.
 // Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+
+#include "uvc-sensor.h"
+
+#include "source.h"
+#include "device.h"
+#include "stream.h"
+#include "proc/synthetic-stream.h"
+#include "proc/decimation-filter.h"
+#include "global_timestamp_reader.h"
+#include "device-calibration.h"
+#include "core/notification.h"
+#include "platform/uvc-option.h"
+#include "core/depth-frame.h"
+#include "core/stream-profile-interface.h"
+#include "core/frame-callback.h"
+#include "core/notification.h"
+#include <src/metadata-parser.h>
+
+
+#include <rsutils/string/from.h>
+#include <rsutils/json.h>
+
 #include <array>
 #include <set>
 #include <unordered_set>
-
-#include "source.h"
-#include "proc/synthetic-stream.h"
 #include <iomanip>
 
-#include "device.h"
-#include "stream.h"
-#include "sensor.h"
-#include "proc/decimation-filter.h"
-#include "global_timestamp_reader.h"
-#include "metadata.h"
 
-namespace librealsense
+namespace librealsense {
+
+void log_callback_end( uint32_t fps,
+                       rs2_time_t callback_start_time,
+                       rs2_time_t const current_time,
+                       rs2_stream stream_type,
+                       unsigned long long frame_number )
 {
-    sensor_base::sensor_base(std::string name, device* dev,
-        recommended_proccesing_blocks_interface* owner)
-        : recommended_proccesing_blocks_base(owner),
-        _is_streaming(false),
-          _is_opened(false),
-          _notifications_processor(std::shared_ptr<notifications_processor>(new notifications_processor())),
-          _on_before_frame_callback(nullptr),
-          _metadata_parsers(std::make_shared<metadata_parser_map>()),
-          _on_open(nullptr),
-          _owner(dev),
-          _profiles([this]() {
-                auto profiles = this->init_stream_profiles();
-                _owner->tag_profiles(profiles);
-                return profiles;
-          })
+    auto callback_warning_duration = 1000.f / ( fps + 1 );
+    auto callback_duration = current_time - callback_start_time;
+
+    LOG_DEBUG( "CallbackFinished," << librealsense::get_string( stream_type ) << ",#" << std::dec
+                                   << frame_number << ",@" << std::fixed << current_time
+                                   << ", callback duration: " << callback_duration << " ms" );
+
+    if( callback_duration > callback_warning_duration )
+    {
+        LOG_INFO( "Frame Callback " << librealsense::get_string( stream_type ) << " #" << std::dec
+                                    << frame_number << " overdue. (FPS: " << fps
+                                    << ", max duration: " << callback_warning_duration << " ms)" );
+    }
+}
+
+    //////////////////////////////////////////////////////
+    /////////////////// Sensor Base //////////////////////
+    //////////////////////////////////////////////////////
+
+    sensor_base::sensor_base( std::string const & name, device * dev )
+    : _is_streaming( false )
+    , _is_opened( false )
+    , _notifications_processor( std::make_shared< notifications_processor >() )
+    , _on_open( nullptr )
+    , _metadata_modifier( nullptr )
+    , _metadata_parsers( std::make_shared< metadata_parser_map >() )
+    , _owner( dev )
+    , _profiles(
+          [this]()
+          {
+              auto profiles = this->init_stream_profiles();
+              _owner->tag_profiles( profiles );
+              return profiles;
+          } )
     {
         register_option(RS2_OPTION_FRAMES_QUEUE_SIZE, _source.get_published_size_option());
 
@@ -53,229 +91,148 @@ namespace librealsense
 
     stream_profiles sensor_base::get_active_streams() const
     {
+        std::lock_guard<std::mutex> lock(_active_profile_mutex);
         return _active_profiles;
     }
 
-    void sensor_base::register_notifications_callback(notifications_callback_ptr callback)
+    void sensor_base::register_notifications_callback( rs2_notifications_callback_sptr callback )
     {
         if (supports_option(RS2_OPTION_ERROR_POLLING_ENABLED))
         {
-            auto& opt = get_option(RS2_OPTION_ERROR_POLLING_ENABLED);
+            auto&& opt = get_option(RS2_OPTION_ERROR_POLLING_ENABLED);
             opt.set(1.0f);
         }
         _notifications_processor->set_callback(std::move(callback));
     }
 
-    notifications_callback_ptr sensor_base::get_notifications_callback() const
+    rs2_notifications_callback_sptr sensor_base::get_notifications_callback() const
     {
         return _notifications_processor->get_callback();
     }
 
     int sensor_base::register_before_streaming_changes_callback(std::function<void(bool)> callback)
     {
-        int token = (on_before_streaming_changes += callback);
-        LOG_DEBUG("Registered token #" << token << " to \"on_before_streaming_changes\"");
-        return token;
+        int slot = _on_before_streaming_changes.add( std::move( callback ) );
+        LOG_DEBUG("Registered token #" << slot << " to \"on_before_streaming_changes\"");
+        return slot;
     }
 
-    void sensor_base::unregister_before_start_callback(int token)
+    void sensor_base::unregister_before_start_callback( int slot )
     {
-        bool successful_unregister = on_before_streaming_changes -= token;
-        if (!successful_unregister)
-        {
-            LOG_WARNING("Failed to unregister token #" << token << " from \"on_before_streaming_changes\"");
-        }
+        _on_before_streaming_changes.remove( slot );
     }
 
-    frame_callback_ptr sensor_base::get_frames_callback() const
+    rs2_frame_callback_sptr sensor_base::get_frames_callback() const
     {
         return _source.get_callback();
     }
-    void sensor_base::set_frames_callback(frame_callback_ptr callback)
+    void sensor_base::set_frames_callback( rs2_frame_callback_sptr callback )
     {
         return _source.set_callback(callback);
     }
-    std::shared_ptr<notifications_processor> sensor_base::get_notifications_processor()
+
+    bool sensor_base::is_streaming() const
+    {
+        return _is_streaming;
+    }
+
+    bool sensor_base::is_opened() const
+    {
+        return _is_opened;
+    }
+
+    std::shared_ptr<notifications_processor> sensor_base::get_notifications_processor() const
     {
         return _notifications_processor;
     }
 
+    void sensor_base::register_metadata(rs2_frame_metadata_value metadata, std::shared_ptr<md_attribute_parser_base> metadata_parser) const
+    {
+        if (_metadata_parsers.get()->end() != _metadata_parsers.get()->find(metadata))
+        {
+            std::string metadata_type_str(rs2_frame_metadata_to_string(metadata));
+            std::string metadata_found_str = "Metadata attribute parser for " + metadata_type_str + " was previously defined";
+            LOG_DEBUG(metadata_found_str.c_str());
+        }
+        _metadata_parsers.get()->insert(std::pair<rs2_frame_metadata_value, std::shared_ptr<md_attribute_parser_base>>(metadata, metadata_parser));
+    }
+
+    std::shared_ptr<std::map<uint32_t, rs2_format>>& raw_sensor_base::get_fourcc_to_rs2_format_map()
+    {
+        return _fourcc_to_rs2_format;
+    }
+
+    std::shared_ptr<std::map<uint32_t, rs2_stream>>& raw_sensor_base::get_fourcc_to_rs2_stream_map()
+    {
+        return _fourcc_to_rs2_stream;
+    }
+
+    rs2_format raw_sensor_base::fourcc_to_rs2_format(uint32_t fourcc_format) const
+    {
+        auto it = _fourcc_to_rs2_format->find( fourcc_format );
+        if( it != _fourcc_to_rs2_format->end() )
+            return it->second;
+
+        return RS2_FORMAT_ANY;
+    }
+
+    rs2_stream raw_sensor_base::fourcc_to_rs2_stream(uint32_t fourcc_format) const
+    {
+        auto it = _fourcc_to_rs2_stream->find( fourcc_format );
+        if( it != _fourcc_to_rs2_stream->end() )
+            return it->second;
+
+        return RS2_STREAM_ANY;
+    }
+
     void sensor_base::raise_on_before_streaming_changes(bool streaming)
     {
-        on_before_streaming_changes(streaming);
+        _on_before_streaming_changes.raise( streaming );
     }
     void sensor_base::set_active_streams(const stream_profiles& requests)
     {
+        std::lock_guard<std::mutex> lock(_active_profile_mutex);
         _active_profiles = requests;
     }
 
-    bool sensor_base::try_get_pf(const platform::stream_profile& p, native_pixel_format& result) const
+    void sensor_base::register_profile(std::shared_ptr<stream_profile_interface> target) const
     {
-        auto it = std::find_if(begin(_pixel_formats), end(_pixel_formats),
-            [&p](const native_pixel_format& pf)
-        {
-            return pf.fourcc == p.format;
-        });
-        if (it != end(_pixel_formats))
-        {
-            result = *it;
-            return true;
-        }
-        return false;
+        environment::get_instance().get_extrinsics_graph().register_profile(*target);
     }
 
     void sensor_base::assign_stream(const std::shared_ptr<stream_interface>& stream, std::shared_ptr<stream_profile_interface> target) const
     {
         environment::get_instance().get_extrinsics_graph().register_same_extrinsics(*stream, *target);
-        target->set_unique_id(stream->get_unique_id());
+        auto uid = stream->get_unique_id();
+        target->set_unique_id(uid);
     }
 
-    std::vector<request_mapping> sensor_base::resolve_requests(stream_profiles requests)
+    void sensor_base::set_source_owner(sensor_base* owner)
     {
-        // per requested profile, find all 4ccs that support that request.
-        std::map<int, std::set<uint32_t>> legal_fourccs;
-        auto profiles = get_stream_profiles();
-        for (auto&& r : requests)
-        {
-            auto sp = to_profile(r.get());
-            for (auto&& mode : profiles)
-            {
-                if (auto backend_profile = dynamic_cast<backend_stream_profile*>(mode.get()))
-                {
-                    auto m = to_profile(mode.get());
-
-                    if (m.fps == sp.fps && m.height == sp.height && m.width == sp.width)
-                        legal_fourccs[sp.index].insert(backend_profile->get_backend_profile().format); // TODO: Stread ID???
-                }
-            }
-        }
-
-        //if you want more efficient data structure use std::unordered_set
-        //with well-defined hash function
-        std::set<request_mapping> results;
-        while (!requests.empty() && !_pixel_formats.empty())
-        {
-            auto max = 0;
-            size_t best_size = 0;
-            auto best_pf = &_pixel_formats.front();
-            auto best_unpacker = &_pixel_formats.front().unpackers.front();
-            platform::stream_profile uvc_profile{};
-            for (auto&& pf : _pixel_formats)
-            {
-                // Speeds up algorithm by skipping obviously useless 4ccs
-                // if (std::none_of(begin(legal_fourccs), end(legal_fourccs), [&](const uint32_t fourcc) {return fourcc == pf.fourcc; })) continue;
-
-                for (auto&& unpacker : pf.unpackers)
-                {
-                    auto count = static_cast<int>(std::count_if(begin(requests), end(requests),
-                        [&pf, &legal_fourccs, &unpacker, this](const std::shared_ptr<stream_profile_interface>& r)
-                    {
-                        // only count if the 4cc can be unpacked into the relevant stream/format
-                        // and also, the pixel format can be streamed in the requested dimensions/fps.
-                        return unpacker.satisfies(to_profile(r.get()), pf.fourcc, _uvc_profiles) && legal_fourccs[r->get_stream_index()].count(pf.fourcc);
-                    }));
-
-                    // Here we check if the current pixel format / unpacker combination is better than the current best.
-                    // We judge on two criteria. A: how many of the requested streams can we supply? B: how many total streams do we open?
-                    // Optimally, we want to find a combination that supplies all the requested streams, and no additional streams.
-                    if (
-                        count > max                                 // If the current combination supplies more streams, it is better.
-                        || (count == max                            // Alternatively, if it supplies the same number of streams,
-                            && unpacker.outputs.size() < best_size) // but this combination opens fewer total streams, it is also better
-                        )
-                    {
-                        max = count;
-                        best_size = unpacker.outputs.size();
-                        best_pf = &pf;
-                        best_unpacker = &unpacker;
-                    }
-                }
-            }
-
-            if (max == 0) break;
-
-            requests.erase(std::remove_if(begin(requests), end(requests),
-                [best_unpacker, best_pf, &results, &legal_fourccs, this](const std::shared_ptr<stream_profile_interface>& r)
-            {
-                if (best_unpacker->satisfies(to_profile(r.get()), best_pf->fourcc, _uvc_profiles) && legal_fourccs[r->get_stream_index()].count(best_pf->fourcc))
-                {
-                    auto request = dynamic_cast<const video_stream_profile*>(r.get());
-
-                    request_mapping mapping;
-                    mapping.unpacker = best_unpacker;
-                    mapping.pf = best_pf;
-                    auto uvc_profile = best_unpacker->get_uvc_profile(to_profile(r.get()), best_pf->fourcc, _uvc_profiles);
-                    if (!request) {
-                        mapping.profile = { 0, 0, r->get_framerate(), best_pf->fourcc };
-                    }
-                    else
-                    {
-                        mapping.profile = { uvc_profile.width, uvc_profile.height, uvc_profile.fps, best_pf->fourcc };
-                    }
-
-                    results.insert(mapping);
-
-                    auto it = results.find(mapping);
-                    if (it != results.end())
-                    {
-                        it->original_requests.push_back(map_requests(r));
-                    }
-
-                    return true;
-                }
-                return false;
-            }), end(requests));
-        }
-
-        if (requests.empty()) return{ begin(results), end(results) };
-
-        throw invalid_value_exception("Subdevice unable to satisfy stream requests!");
+        _source_owner = owner;
     }
 
-    std::shared_ptr<stream_profile_interface> sensor_base::map_requests(std::shared_ptr<stream_profile_interface> request)
+    stream_profiles sensor_base::get_stream_profiles( int tag ) const
     {
-        stream_profiles results;
-        auto profiles = get_stream_profiles();
-
-        auto it = std::find_if(profiles.begin(), profiles.end(), [&](std::shared_ptr<stream_profile_interface> p) {
-            return to_profile(p.get()) == to_profile(request.get());
-        });
-
-        if (it == profiles.end())
-            throw invalid_value_exception("Subdevice could not map requests!");
-
-        return *it;
-    }
-
-    uvc_sensor::~uvc_sensor()
-    {
-        try
-        {
-            if (_is_streaming)
-                uvc_sensor::stop();
-
-            if (_is_opened)
-                uvc_sensor::close();
-        }
-        catch(...)
-        {
-            LOG_ERROR("An error has occurred while stop_streaming()!");
-        }
-    }
-
-    stream_profiles sensor_base::get_stream_profiles(int tag) const
-    {
-        if (tag == profile_tag::PROFILE_TAG_ANY)
-            return *_profiles;
+        bool const need_debug = (tag & profile_tag::PROFILE_TAG_DEBUG) != 0;
+        bool const need_any = (tag & profile_tag::PROFILE_TAG_ANY) != 0;
+        
+        auto & all_profiles = initialized_profiles();
+        if( need_debug && need_any )
+            return all_profiles;
 
         stream_profiles results;
-        for (auto p : *_profiles)
+        for( auto p : all_profiles )
         {
             auto curr_tag = p->get_tag();
-            if (curr_tag & tag)
-                results.push_back(p);
-        }
+            if( ! need_debug && ( curr_tag & profile_tag::PROFILE_TAG_DEBUG ) )
+                continue;
 
+            if( curr_tag & tag || need_any )
+            {
+                results.push_back( p );
+            }
+        }
         return results;
     }
 
@@ -294,6 +251,7 @@ namespace librealsense
     processing_blocks get_depth_recommended_proccesing_blocks()
     {
         processing_blocks res;
+
         auto dec = std::make_shared<decimation_filter>();
         if (dec->supports_option(RS2_OPTION_STREAM_FILTER))
         {
@@ -304,387 +262,76 @@ namespace librealsense
         return res;
     }
 
-    stream_profiles uvc_sensor::init_stream_profiles()
-    {
-        std::unordered_set<std::shared_ptr<video_stream_profile>> results;
-        std::set<uint32_t> unregistered_formats;
-        std::set<uint32_t> supported_formats;
-
-        power on(std::dynamic_pointer_cast<uvc_sensor>(shared_from_this()));
-        if (_uvc_profiles.empty()){}
-            _uvc_profiles = _device->get_profiles();
-
-        for (auto&& p : _uvc_profiles)
-        {
-            supported_formats.insert(p.format);
-            native_pixel_format pf{};
-            if (try_get_pf(p, pf))
-            {
-                for (auto&& unpacker : pf.unpackers)
-                {
-                    for (auto&& output : unpacker.outputs)
-                    {
-                        auto profile = std::make_shared<video_stream_profile>(p);
-                        auto res = output.stream_resolution({ p.width, p.height });
-                        profile->set_dims(res.width, res.height);
-                        profile->set_stream_type(output.stream_desc.type);
-                        profile->set_stream_index(output.stream_desc.index);
-                        profile->set_format(output.format);
-                        profile->set_framerate(p.fps);
-                        results.insert(profile);
-                    }
-                }
-            }
-            else
-            {
-                unregistered_formats.insert(p.format);
-            }
-        }
-
-        if (unregistered_formats.size())
-        {
-            std::stringstream ss;
-            ss << "Unregistered Media formats : [ ";
-            for (auto& elem : unregistered_formats)
-            {
-                uint32_t device_fourcc = reinterpret_cast<const big_endian<uint32_t>&>(elem);
-                char fourcc[sizeof(device_fourcc) + 1];
-                librealsense::copy(fourcc, &device_fourcc, sizeof(device_fourcc));
-                fourcc[sizeof(device_fourcc)] = 0;
-                ss << fourcc << " ";
-            }
-
-            ss << "]; Supported: [ ";
-            for (auto& elem : supported_formats)
-            {
-                uint32_t device_fourcc = reinterpret_cast<const big_endian<uint32_t>&>(elem);
-                char fourcc[sizeof(device_fourcc) + 1];
-                librealsense::copy(fourcc, &device_fourcc, sizeof(device_fourcc));
-                fourcc[sizeof(device_fourcc)] = 0;
-                ss << fourcc << " ";
-            }
-            ss << "]";
-            LOG_INFO(ss.str());
-        }
-
-        // Sort the results to make sure that the user will receive predictable deterministic output from the API
-        stream_profiles res{ begin(results), end(results) };
-        std::sort(res.begin(), res.end(), [](const std::shared_ptr<stream_profile_interface>& ap,
-                                             const std::shared_ptr<stream_profile_interface>& bp)
-        {
-            auto a = to_profile(ap.get());
-            auto b = to_profile(bp.get());
-
-            // stream == RS2_STREAM_COLOR && format == RS2_FORMAT_RGB8 element works around the fact that Y16 gets priority over RGB8 when both
-            // are available for pipeline stream resolution
-            auto at = std::make_tuple(a.stream, a.width, a.height, a.fps, a.stream == RS2_STREAM_COLOR && a.format == RS2_FORMAT_RGB8, a.format);
-            auto bt = std::make_tuple(b.stream, b.width, b.height, b.fps, b.stream == RS2_STREAM_COLOR && b.format == RS2_FORMAT_RGB8, b.format);
-
-            return at > bt;
-        });
-
-        return res;
-    }
-
-    rs2_extension uvc_sensor::stream_to_frame_types(rs2_stream stream) const
-    {
-        // TODO: explicitly return video_frame for relevant streams and default to an error?
-        switch (stream)
-        {
-        case RS2_STREAM_DEPTH:  return RS2_EXTENSION_DEPTH_FRAME;
-        default:                return RS2_EXTENSION_VIDEO_FRAME;
-        }
-    }
-
     device_interface& sensor_base::get_device()
     {
         return *_owner;
     }
 
-    void sensor_base::register_pixel_format(native_pixel_format pf)
+    // TODO - make this method more efficient, using parralel computation, with SSE or CUDA, when available
+    std::vector<uint8_t> sensor_base::align_width_to_64(int width, int height, int bpp, uint8_t * pix) const
     {
-        if (_pixel_formats.end() == std::find_if(_pixel_formats.begin(), _pixel_formats.end(),
-            [&pf](const native_pixel_format& cur) { return cur.fourcc == pf.fourcc; }))
-            _pixel_formats.push_back(pf);
-        else
-            throw invalid_value_exception(to_string()
-                << "Pixel format " << std::hex << std::setw(8) << std::setfill('0') << pf.fourcc
-                << " has been already registered with the sensor " << get_info(RS2_CAMERA_INFO_NAME));
-    }
-
-    void sensor_base::remove_pixel_format(native_pixel_format pf)
-    {
-        auto it = std::find_if(_pixel_formats.begin(), _pixel_formats.end(), [&pf](const native_pixel_format& cur) { return cur.fourcc == pf.fourcc; });
-        if (it != _pixel_formats.end())
-            _pixel_formats.erase(it);
-    }
-
-    void uvc_sensor::open(const stream_profiles& requests)
-    {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (_is_streaming)
-            throw wrong_api_call_sequence_exception("open(...) failed. UVC device is streaming!");
-        else if (_is_opened)
-            throw wrong_api_call_sequence_exception("open(...) failed. UVC device is already opened!");
-
-        auto on = std::unique_ptr<power>(new power(std::dynamic_pointer_cast<uvc_sensor>(shared_from_this())));
-
-        _source.init(_metadata_parsers);
-        _source.set_sensor(this->shared_from_this());
-        auto mapping = resolve_requests(requests);
-
-        auto timestamp_reader = _timestamp_reader.get();
-
-        std::vector<platform::stream_profile> commited;
-
-        for (auto&& mode : mapping)
+        int factor = bpp >> 3;
+        int bytes_in_width = width * factor;
+        int actual_input_bytes_in_width = (((bytes_in_width / 64 ) + 1) * 64);
+        std::vector<uint8_t> pixels;
+        for (int j = 0; j < height; ++j)
         {
-            try
-            {
-                unsigned long long last_frame_number = 0;
-                rs2_time_t last_timestamp = 0;
-                _device->probe_and_commit(mode.profile,
-                [this, mode, timestamp_reader, requests, last_frame_number, last_timestamp](platform::stream_profile p, platform::frame_object f, std::function<void()> continuation) mutable
-                {
-                    auto system_time = environment::get_instance().get_time_service()->get_time();
-                    if (!this->is_streaming())
-                    {
-                        LOG_WARNING("Frame received with streaming inactive,"
-                            << librealsense::get_string(mode.unpacker->outputs.front().stream_desc.type)
-                            << mode.unpacker->outputs.front().stream_desc.index
-                                << ", Arrived," << std::fixed << f.backend_time << " " << system_time);
-                        return;
-                    }
-
-                    frame_continuation release_and_enqueue(continuation, f.pixels);
-
-                    // Ignore any frames which appear corrupted or invalid
-                    // Determine the timestamp for this frame
-                    auto timestamp = timestamp_reader->get_frame_timestamp(mode, f);
-                    auto timestamp_domain = timestamp_reader->get_frame_timestamp_domain(mode, f);
-                    auto frame_counter = timestamp_reader->get_frame_counter(mode, f);
-
-                    auto requires_processing = mode.requires_processing();
-
-                    std::vector<byte *> dest;
-                    std::vector<frame_holder> refs;
-
-                    auto&& unpacker = *mode.unpacker;
-                    for (auto&& output : unpacker.outputs)
-                    {
-                        LOG_DEBUG("FrameAccepted," << librealsense::get_string(output.stream_desc.type)
-                            << ",Counter," << std::dec << frame_counter
-                            << ",Index," << output.stream_desc.index
-                            << ",BackEndTS," << std::fixed << f.backend_time
-                            << ",SystemTime," << std::fixed << system_time
-                            <<" ,diff_ts[Sys-BE],"<< system_time- f.backend_time
-                            << ",TS," << std::fixed << timestamp << ",TS_Domain," << rs2_timestamp_domain_to_string(timestamp_domain)
-                            <<",last_frame_number,"<< last_frame_number<<",last_timestamp,"<< last_timestamp);
-
-                        std::shared_ptr<stream_profile_interface> request = nullptr;
-                        for (auto&& original_prof : mode.original_requests)
-                        {
-                            if (original_prof->get_format() == output.format &&
-                                original_prof->get_stream_type() == output.stream_desc.type &&
-                                original_prof->get_stream_index() == output.stream_desc.index)
-                            {
-                                request = original_prof;
-                            }
-                        }
-
-                        auto bpp = get_image_bpp(output.format);
-                        frame_additional_data additional_data(timestamp,
-                            frame_counter,
-                            system_time,
-                            static_cast<uint8_t>(f.metadata_size),
-                            (const uint8_t*)f.metadata,
-                            f.backend_time,
-                            last_timestamp,
-                            last_frame_number,
-                            false);
-
-                        last_frame_number = frame_counter;
-                        last_timestamp = timestamp;
-
-                        auto res = output.stream_resolution({ mode.profile.width, mode.profile.height });
-                        auto width = res.width;
-                        auto height = res.height;
-
-                        frame_holder frame = _source.alloc_frame(stream_to_frame_types(output.stream_desc.type), width * height * bpp / 8, additional_data, requires_processing);
-                        if (frame.frame)
-                        {
-                            auto video = (video_frame*)frame.frame;
-                            video->assign(width, height, width * bpp / 8, bpp);
-                            video->set_timestamp_domain(timestamp_domain);
-                            dest.push_back(const_cast<byte*>(video->get_frame_data()));
-                            frame->set_stream(request);
-                            refs.push_back(std::move(frame));
-                        }
-                        else
-                        {
-                            LOG_INFO("Dropped frame. alloc_frame(...) returned nullptr");
-                            return;
-                        }
-
-                        // Obtain buffers for unpacking the frame
-                        //dest.push_back(archive->alloc_frame(output.first, additional_data, requires_processing));
-                    }
-
-                    // Unpack the frame
-                    if (requires_processing && (dest.size() > 0))
-                    {
-                        unpacker.unpack(dest.data(), reinterpret_cast<const byte *>(f.pixels), mode.profile.width, mode.profile.height, f.frame_size);
-                    }
-
-                    // If any frame callbacks were specified, dispatch them now
-                    for (auto&& pref : refs)
-                    {
-                        if (!requires_processing)
-                        {
-                            pref->attach_continuation(std::move(release_and_enqueue));
-                        }
-
-                        if (_on_before_frame_callback)
-                        {
-                            auto callback = _source.begin_callback();
-                            auto stream_type = pref->get_stream()->get_stream_type();
-                            _on_before_frame_callback(stream_type, pref, std::move(callback));
-                        }
-
-                        if (pref->get_stream().get())
-                            _source.invoke_callback(std::move(pref));
-                    }
-                });
-            }
-            catch(...)
-            {
-                for (auto&& commited_profile : commited)
-                {
-                    _device->close(commited_profile);
-                }
-                throw;
-            }
-            commited.push_back(mode.profile);
+            int start_index = j * actual_input_bytes_in_width;
+            int end_index = (width * factor) + (j * actual_input_bytes_in_width);
+            pixels.insert(pixels.end(), pix + start_index, pix + end_index);
         }
-
-        _internal_config = commited;
-
-        if (_on_open)
-            _on_open(_internal_config);
-
-        _power = move(on);
-        _is_opened = true;
-
-        try {
-            _device->stream_on([&](const notification& n)
-            {
-                _notifications_processor->raise_notification(n);
-            });
-        }
-        catch (...)
-        {
-            for (auto& profile : _internal_config)
-            {
-                try {
-                    _device->close(profile);
-                }
-                catch (...) {}
-            }
-            reset_streaming();
-            _power.reset();
-            _is_opened = false;
-            throw;
-        }
-        if (Is<librealsense::global_time_interface>(_owner))
-        {
-            As<librealsense::global_time_interface>(_owner)->enable_time_diff_keeper(true);
-        }
-        set_active_streams(requests);
+        return pixels;
     }
 
-    void uvc_sensor::close()
+    std::shared_ptr< frame >
+    sensor_base::generate_frame_from_data( const platform::frame_object & fo,
+                                           rs2_time_t const system_time,
+                                           frame_timestamp_reader * timestamp_reader,
+                                           const rs2_time_t & last_timestamp,
+                                           const unsigned long long & last_frame_number,
+                                           std::shared_ptr< stream_profile_interface > profile )
     {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (_is_streaming)
-            throw wrong_api_call_sequence_exception("close() failed. UVC device is streaming!");
-        else if (!_is_opened)
-            throw wrong_api_call_sequence_exception("close() failed. UVC device was not opened!");
+        auto fr = std::make_shared<frame>();
+        
+        fr->set_stream(profile);
 
-        for (auto& profile : _internal_config)
-        {
-            try // Handle disconnect event
-            {
-                _device->close(profile);
-            }
-            catch (...) {}
-        }
-        reset_streaming();
-        if (Is<librealsense::global_time_interface>(_owner))
-        {
-            As<librealsense::global_time_interface>(_owner)->enable_time_diff_keeper(false);
-        }
-        _power.reset();
-        _is_opened = false;
-        set_active_streams({});
+        // D457 dev - computing relevant frame size
+        const auto&& vsp = As<video_stream_profile, stream_profile_interface>(profile);
+        int width = vsp ? vsp->get_width() : 0;
+        int height = vsp ? vsp->get_height() : 0;
+        int bpp = get_image_bpp(profile->get_format());
+        auto frame_size = compute_frame_expected_size(width, height, bpp);
+
+        frame_additional_data additional_data(0,
+            0,
+            system_time,
+            static_cast<uint8_t>(fo.metadata_size),
+            (const uint8_t*)fo.metadata,
+            fo.backend_time,
+            last_timestamp,
+            last_frame_number,
+            false,
+            0,
+            (uint32_t)frame_size);
+
+        if (_metadata_modifier)
+            _metadata_modifier(additional_data);
+        fr->additional_data = additional_data;
+
+        // update additional data
+        additional_data.timestamp = timestamp_reader->get_frame_timestamp(fr);
+        additional_data.last_frame_number = last_frame_number;
+        additional_data.frame_number = timestamp_reader->get_frame_counter(fr);
+        fr->additional_data = additional_data;
+
+        return fr;
     }
 
-    void uvc_sensor::register_xu(platform::extension_unit xu)
-    {
-        _xus.push_back(std::move(xu));
-    }
+    //////////////////////////////////////////////////////
+    /////////////////// UVC Sensor ///////////////////////
+    //////////////////////////////////////////////////////
 
-    void uvc_sensor::start(frame_callback_ptr callback)
-    {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (_is_streaming)
-            throw wrong_api_call_sequence_exception("start_streaming(...) failed. UVC device is already streaming!");
-        else if(!_is_opened)
-            throw wrong_api_call_sequence_exception("start_streaming(...) failed. UVC device was not opened!");
-
-        _source.set_callback(callback);
-        _is_streaming = true;
-        raise_on_before_streaming_changes(true); //Required to be just before actual start allow recording to work
-        _device->start_callbacks();
-    }
-
-    void uvc_sensor::stop()
-    {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (!_is_streaming)
-            throw wrong_api_call_sequence_exception("stop_streaming() failed. UVC device is not streaming!");
-
-        _is_streaming = false;
-        _device->stop_callbacks();
-        raise_on_before_streaming_changes(false);
-    }
-
-
-    void uvc_sensor::reset_streaming()
-    {
-        _source.flush();
-        _source.reset();
-        _timestamp_reader->reset();
-    }
-
-    void uvc_sensor::acquire_power()
-    {
-        std::lock_guard<std::mutex> lock(_power_lock);
-        if (_user_count.fetch_add(1) == 0)
-        {
-            _device->set_power_state(platform::D0);
-            for (auto& xu : _xus) _device->init_xu(xu);
-        }
-    }
-
-    void uvc_sensor::release_power()
-    {
-        std::lock_guard<std::mutex> lock(_power_lock);
-        if (_user_count.fetch_add(-1) == 1)
-        {
-            _device->set_power_state(platform::D3);
-        }
-    }
-
+    
     bool info_container::supports_info(rs2_camera_info info) const
     {
         auto it = _camera_info.find(info);
@@ -695,11 +342,11 @@ namespace librealsense
     {
         if (info_container::supports_info(info) && (info_container::get_info(info) != val)) // Append existing infos
         {
-            _camera_info[info] += "\n" + std::move(val);
+            _camera_info[info] += "\n" + val;
         }
         else
         {
-            _camera_info[info] = std::move(val);
+            _camera_info[info] = val;
         }
     }
 
@@ -707,7 +354,7 @@ namespace librealsense
     {
         if (info_container::supports_info(info))
         {
-            _camera_info[info] = std::move(val);
+            _camera_info[info] = val;
         }
     }
     const std::string& info_container::get_info(rs2_camera_info info) const
@@ -724,12 +371,12 @@ namespace librealsense
     }
     void info_container::enable_recording(std::function<void(const info_interface&)> record_action)
     {
-       //info container is a read only class, nothing to record
+        //info container is a read only class, nothing to record
     }
 
     void info_container::update(std::shared_ptr<extension_snapshot> ext)
     {
-        if (auto info_api = As<info_interface>(ext))
+        if (auto&& info_api = As<info_interface>(ext))
         {
             for (int i = 0; i < RS2_CAMERA_INFO_COUNT; ++i)
             {
@@ -742,448 +389,353 @@ namespace librealsense
         }
     }
 
-    void uvc_sensor::register_pu(rs2_option id)
-    {
-        register_option(id, std::make_shared<uvc_pu_option>(*this, id));
-    }
 
-    void uvc_sensor::try_register_pu(rs2_option id)
+    //////////////////////////////////////////////////////
+    ///////////////// Synthetic Sensor ///////////////////
+    //////////////////////////////////////////////////////
+
+    synthetic_sensor::synthetic_sensor( std::string const & name,
+                                        std::shared_ptr< raw_sensor_base > const & raw_sensor,
+                                        device * device,
+                                        const std::map< uint32_t, rs2_format > & fourcc_to_rs2_format_map,
+                                        const std::map< uint32_t, rs2_stream > & fourcc_to_rs2_stream_map )
+        : sensor_base( name, device )
+        , _raw_sensor( raw_sensor )
+        , _options_watcher( _raw_sensor )
     {
-        auto opt = std::make_shared<uvc_pu_option>(*this, id);
-        try
+        rsutils::json const & settings = device->get_context()->get_settings();
+        if( auto interval_j = settings.nested( std::string( "options-update-interval", 23 ) ) )
         {
-            auto range = opt->get_range();
-            if (range.max <= range.min || range.step <= 0 || range.def < range.min || range.def > range.max) return;
-
-            auto val = opt->query();
-            if (val < range.min || val > range.max) return;
-            opt->set(val);
-
-            register_option(id, opt);
+            auto interval = interval_j.get< uint32_t >();  // NOTE: can throw!
+            _options_watcher.set_update_interval( std::chrono::milliseconds( interval ) );
         }
-        catch (...)
-        {
-            LOG_WARNING("Exception was thrown when inspecting " << this->get_info(RS2_CAMERA_INFO_NAME) << " property " << opt->get_description());
-        }
+
+        // synthetic sensor and its raw sensor will share the formats and streams mapping
+        auto& raw_fourcc_to_rs2_format_map = _raw_sensor->get_fourcc_to_rs2_format_map();
+        raw_fourcc_to_rs2_format_map = std::make_shared<std::map<uint32_t, rs2_format>>(fourcc_to_rs2_format_map);
+
+        auto& raw_fourcc_to_rs2_stream_map = _raw_sensor->get_fourcc_to_rs2_stream_map();
+        raw_fourcc_to_rs2_stream_map = std::make_shared<std::map<uint32_t, rs2_stream>>(fourcc_to_rs2_stream_map);
     }
 
-    void sensor_base::register_metadata(rs2_frame_metadata_value metadata, std::shared_ptr<md_attribute_parser_base> metadata_parser) const
-    {
-        if (_metadata_parsers.get()->end() != _metadata_parsers.get()->find(metadata))
-            throw invalid_value_exception( to_string() << "Metadata attribute parser for " << rs2_frame_metadata_to_string(metadata)
-                                           <<  " is already defined");
-
-        _metadata_parsers.get()->insert(std::pair<rs2_frame_metadata_value, std::shared_ptr<md_attribute_parser_base>>(metadata, metadata_parser));
-    }
-
-    hid_sensor::hid_sensor(std::shared_ptr<platform::hid_device> hid_device, std::unique_ptr<frame_timestamp_reader> hid_iio_timestamp_reader,
-        std::unique_ptr<frame_timestamp_reader> custom_hid_timestamp_reader,
-        std::map<rs2_stream, std::map<unsigned, unsigned>> fps_and_sampling_frequency_per_rs2_stream,
-        std::vector<std::pair<std::string, stream_profile>> sensor_name_and_hid_profiles,
-        device* dev)
-    : sensor_base("Motion Module", dev, (recommended_proccesing_blocks_interface*)this), _sensor_name_and_hid_profiles(sensor_name_and_hid_profiles),
-      _fps_and_sampling_frequency_per_rs2_stream(fps_and_sampling_frequency_per_rs2_stream),
-      _hid_device(hid_device),
-      _is_configured_stream(RS2_STREAM_COUNT),
-      _hid_iio_timestamp_reader(move(hid_iio_timestamp_reader)),
-      _custom_hid_timestamp_reader(move(custom_hid_timestamp_reader))
-    {
-        register_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP, make_additional_data_parser(&frame_additional_data::backend_timestamp));
-
-
-        std::map<std::string, uint32_t> frequency_per_sensor;
-        for (auto& elem : sensor_name_and_hid_profiles)
-            frequency_per_sensor.insert(make_pair(elem.first, elem.second.fps));
-
-        std::vector<platform::hid_profile> profiles_vector;
-        for (auto& elem : frequency_per_sensor)
-            profiles_vector.push_back(platform::hid_profile{elem.first, elem.second});
-
-        _hid_device->register_profiles(profiles_vector);
-        for (auto& elem : _hid_device->get_sensors())
-            _hid_sensors.push_back(elem);
-    }
-
-    hid_sensor::~hid_sensor()
+    synthetic_sensor::~synthetic_sensor()
     {
         try
         {
-            if (_is_streaming)
+            if (is_streaming())
                 stop();
 
-            if (_is_opened)
+            if (is_opened())
                 close();
         }
-        catch(...)
+        catch (...)
         {
             LOG_ERROR("An error has occurred while stop_streaming()!");
         }
     }
 
-    stream_profiles hid_sensor::get_sensor_profiles(std::string sensor_name) const
+    // Register the option to both raw sensor and synthetic sensor.
+    void synthetic_sensor::register_option( rs2_option id, std::shared_ptr< option > option )
     {
-        stream_profiles profiles{};
-        for (auto& elem : _sensor_name_and_hid_profiles)
-        {
-            if (!elem.first.compare(sensor_name))
-            {
-                auto p = elem.second;
-                platform::stream_profile sp{ 1, 1, p.fps, stream_to_fourcc(p.stream) };
-                auto profile = std::make_shared<motion_stream_profile>(sp);
-                profile->set_stream_index(p.index);
-                profile->set_stream_type(p.stream);
-                profile->set_format(p.format);
-                profile->set_framerate(p.fps);
-                profiles.push_back(profile);
-            }
-        }
-
-        return profiles;
+        _raw_sensor->register_option( id, option );
+        sensor_base::register_option( id, option );
+        _options_watcher.register_option( id, option );
     }
 
-    void hid_sensor::open(const stream_profiles& requests)
+    // Used in dynamic discovery of supported controls in generic UVC devices
+    bool synthetic_sensor::try_register_option(rs2_option id, std::shared_ptr<option> option)
     {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (_is_streaming)
-            throw wrong_api_call_sequence_exception("open(...) failed. Hid device is streaming!");
-        else if (_is_opened)
-            throw wrong_api_call_sequence_exception("Hid device is already opened!");
-
-        auto mapping = resolve_requests(requests);
-        for (auto& request : requests)
+        bool res=false;
+        try
         {
-            auto sensor_name = rs2_stream_to_sensor_name(request->get_stream_type());
-            for (auto& map : mapping)
-            {
-                auto it = std::find_if(begin(map.unpacker->outputs), end(map.unpacker->outputs),
-                                       [&](const stream_output& pair)
-                {
-                    return pair.stream_desc.type == request->get_stream_type() &&
-                           pair.stream_desc.index == request->get_stream_index();
-                });
+            auto range = option->get_range();
+            bool invalid_opt = (range.max < range.min || range.step < 0 || range.def < range.min || range.def > range.max) ||
+                    (range.max == range.min && range.min == range.def && range.def == range.step);
+            bool readonly_opt = ((range.max == range.min ) && (0.f != range.min ) && ( 0.f == range.step));
 
-                if (it != end(map.unpacker->outputs))
-                {
-                    _configured_profiles.insert(std::make_pair(sensor_name,
-                                                               stream_profile{ request->get_stream_type(), request->get_stream_index(),
-                                                                              0,
-                                                                              0,
-                                                                              fps_to_sampling_frequency(request->get_stream_type(), request->get_framerate()),
-                                                                              request->get_format()}));
-                    _is_configured_stream[request->get_stream_type()] = true;
-                    _hid_mapping.insert(std::make_pair(sensor_name, map));
-                }
+            if (invalid_opt)
+            {
+                LOG_WARNING(this->get_info(RS2_CAMERA_INFO_NAME) << ": skipping " << rs2_option_to_string(id)
+                            << " control. descriptor: [min/max/step/default]= ["
+                            << range.min << "/" << range.max << "/" << range.step << "/" << range.def << "]");
+                return res;
+            }
+
+            if (readonly_opt)
+            {
+                LOG_INFO(this->get_info(RS2_CAMERA_INFO_NAME) << ": " << rs2_option_to_string(id)
+                        << " control was added as read-only. descriptor: [min/max/step/default]= ["
+                        << range.min << "/" << range.max << "/" << range.step << "/" << range.def << "]");
+            }
+
+            // Check getter only due to options coupling (e.g. Exposure<->AutoExposure)
+            auto val = option->query();
+            if (val < range.min || val > range.max)
+            {
+                LOG_WARNING(this->get_info(RS2_CAMERA_INFO_NAME) << ": Invalid reading for " << rs2_option_to_string(id)
+                            << ", val = " << val << " range [min..max] = [" << range.min << "/" << range.max << "]");
+            }
+
+            register_option(id, option);
+            res = true;
+        }
+        catch (...)
+        {
+            LOG_WARNING("Failed to add " << rs2_option_to_string(id)<< " control for " << this->get_info(RS2_CAMERA_INFO_NAME));
+        }
+        return res;
+    }
+
+    void synthetic_sensor::unregister_option( rs2_option id )
+    {
+        _raw_sensor->unregister_option( id );
+        sensor_base::unregister_option( id );
+        _options_watcher.unregister_option( id );
+    }
+
+    void synthetic_sensor::register_pu(rs2_option id)
+    {
+        const auto raw_uvc_sensor = As<uvc_sensor, sensor_base>(_raw_sensor);
+        register_option(id, std::make_shared<uvc_pu_option>(raw_uvc_sensor, id));
+    }
+
+    bool synthetic_sensor::try_register_pu(rs2_option id)
+    {
+        const auto raw_uvc_sensor = As<uvc_sensor, sensor_base>(_raw_sensor);
+        return try_register_option(id, std::make_shared<uvc_pu_option>(raw_uvc_sensor, id));
+    }
+
+    void sensor_base::sort_profiles( stream_profiles & profiles )
+    {
+        std::sort(profiles.begin(), profiles.end(), [](const std::shared_ptr<stream_profile_interface>& ap,
+            const std::shared_ptr<stream_profile_interface>& bp)
+        {
+            const auto&& a = to_profile(ap.get());
+            const auto&& b = to_profile(bp.get());
+
+            // stream == RS2_STREAM_COLOR && format == RS2_FORMAT_RGB8 element works around the fact that Y16 gets priority over RGB8 when both
+            // are available for pipeline stream resolution
+            // Note: Sort Stream Index decsending to make sure IR1 is chosen over IR2
+            const auto&& at = std::make_tuple(a.stream, -a.index, a.width, a.height, a.stream == RS2_STREAM_COLOR && a.format == RS2_FORMAT_RGB8, a.format, a.fps);
+            const auto&& bt = std::make_tuple(b.stream, -b.index, b.width, b.height, b.stream == RS2_STREAM_COLOR && b.format == RS2_FORMAT_RGB8, b.format, b.fps);
+
+            return at > bt;
+        });
+    }
+
+    void synthetic_sensor::register_processing_block_options(const processing_block & pb)
+    {
+        // Register the missing processing block's options to the sensor
+        const auto&& options = pb.get_supported_options();
+
+        for (auto&& opt : options)
+        {
+            const auto&& already_registered_predicate = [&opt](const rs2_option& o) {return o == opt; };
+            if (std::none_of(begin(options), end(options), already_registered_predicate))
+            {
+                this->register_option(opt, std::shared_ptr<option>(const_cast<option*>(&pb.get_option(opt))));
+                _cached_processing_blocks_options.push_back(opt);
             }
         }
+    }
 
-        std::vector<platform::hid_profile> configured_hid_profiles;
-        for (auto& elem : _configured_profiles)
+    void synthetic_sensor::unregister_processing_block_options(const processing_block & pb)
+    {
+        const auto&& options = pb.get_supported_options();
+
+        // Unregister the cached options related to the processing blocks.
+        for (auto&& opt : options)
         {
-            configured_hid_profiles.push_back(platform::hid_profile{elem.first, elem.second.fps});
+            const auto&& cached_option_predicate = [&opt](const rs2_option& o) {return o == opt; };
+            auto&& cached_opt = std::find_if(begin(_cached_processing_blocks_options), end(_cached_processing_blocks_options), cached_option_predicate);
+
+            if (cached_opt != end(_cached_processing_blocks_options))
+            {
+                this->unregister_option(*cached_opt);
+                _cached_processing_blocks_options.erase(cached_opt);
+            }
         }
-        _hid_device->open(configured_hid_profiles);
-        if (Is<librealsense::global_time_interface>(_owner))
+    }
+
+    stream_profiles synthetic_sensor::init_stream_profiles()
+    {
+        stream_profiles result_profiles;
+        switch( get_format_conversion() )
         {
-            As<librealsense::global_time_interface>(_owner)->enable_time_diff_keeper(true);
+        case format_conversion::basic:
+            _formats_converter.drop_non_basic_formats();
+            // fall-thru
+        case format_conversion::full:
+            result_profiles = _formats_converter.get_all_possible_profiles( get_raw_stream_profiles() );
+            break;
+
+        case format_conversion::raw:
+            result_profiles = get_raw_stream_profiles();
+            // NOTE: this is not meant for actual streaming at this time -- actual behavior of the
+            // formats_converter has not been implemented!
+            break;
         }
-        _is_opened = true;
+
+        _owner->tag_profiles( result_profiles );
+        sort_profiles( result_profiles );
+
+        return result_profiles;
+    }
+
+    void synthetic_sensor::open(const stream_profiles & requests)
+    {
+        if( get_format_conversion() == format_conversion::raw )
+            throw wrong_api_call_sequence_exception( "'raw' format-conversion is not meant for streaming" );
+
+        std::lock_guard<std::mutex> lock(_synthetic_configure_lock);
+
+        _formats_converter.prepare_to_convert( requests );
+
+        const auto & resolved_req = _formats_converter.get_active_source_profiles();
+        std::vector< std::shared_ptr< processing_block > > active_pbs = _formats_converter.get_active_converters();
+        for( auto & pb : active_pbs )
+            register_processing_block_options( *pb );
+
+        _raw_sensor->set_source_owner(this);
+        try
+        {
+            _raw_sensor->open( resolved_req );
+        }
+        catch (const std::runtime_error& e)
+        {
+            // Throw a more informative exception
+            std::stringstream requests_info;
+            for (auto&& r : requests)
+            {
+                auto p = to_profile(r.get());
+                requests_info << "\tFormat: " + std::string(rs2_format_to_string(p.format)) << ", width: " << p.width << ", height: " << p.height << std::endl;
+            }
+            throw recoverable_exception("\nFailed to resolve the request: \n" + requests_info.str() + "\nInto:\n" + e.what(),
+                RS2_EXCEPTION_TYPE_INVALID_VALUE);
+        }
+
         set_active_streams(requests);
     }
 
-    void hid_sensor::close()
+    void synthetic_sensor::close()
     {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (_is_streaming)
-            throw wrong_api_call_sequence_exception("close() failed. Hid device is streaming!");
-        else if (!_is_opened)
-            throw wrong_api_call_sequence_exception("close() failed. Hid device was not opened!");
+        std::lock_guard<std::mutex> lock(_synthetic_configure_lock);
+        _raw_sensor->close();
 
-        _hid_device->close();
-        _configured_profiles.clear();
-        _is_configured_stream.clear();
-        _is_configured_stream.resize(RS2_STREAM_COUNT);
-        _hid_mapping.clear();
-        _is_opened = false;
-        if (Is<librealsense::global_time_interface>(_owner))
-        {
-            As<librealsense::global_time_interface>(_owner)->enable_time_diff_keeper(false);
-        }
+        std::vector< std::shared_ptr< processing_block > > active_pbs = _formats_converter.get_active_converters();
+        for( auto & pb : active_pbs )
+            unregister_processing_block_options( *pb );
+
+        _formats_converter.set_frames_callback( nullptr );
         set_active_streams({});
+        _post_process_callback.reset();
     }
 
-    // TODO:
-    static rs2_stream custom_gpio_to_stream_type(uint32_t custom_gpio)
+    void synthetic_sensor::start( rs2_frame_callback_sptr callback )
     {
-        if (custom_gpio < 4)
-        {
-            return static_cast<rs2_stream>(RS2_STREAM_GPIO);
-        }
+        std::lock_guard<std::mutex> lock(_synthetic_configure_lock);
 
-        LOG_ERROR("custom_gpio " << std::to_string(custom_gpio) << " is incorrect!");
-        return RS2_STREAM_ANY;
+        // Set the post-processing callback as the user callback.
+        // This callback might be modified by other object.
+        set_frames_callback(callback);
+        _formats_converter.set_frames_callback( callback );  // TODO duplicate?! Something fishy here!
+
+        // Call the processing block on the frame
+        _raw_sensor->start(
+            make_frame_callback( [&, this]( frame_holder f ) { _formats_converter.convert_frame( f ); } ) );
     }
 
-    void hid_sensor::start(frame_callback_ptr callback)
+    void synthetic_sensor::stop()
     {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (_is_streaming)
-            throw wrong_api_call_sequence_exception("start_streaming(...) failed. Hid device is already streaming!");
-        else if(!_is_opened)
-            throw wrong_api_call_sequence_exception("start_streaming(...) failed. Hid device was not opened!");
-
-        _source.set_callback(callback);
-
-        _source.init(_metadata_parsers);
-        _source.set_sensor(this->shared_from_this());
-        unsigned long long last_frame_number = 0;
-        rs2_time_t last_timestamp = 0;
-        raise_on_before_streaming_changes(true); //Required to be just before actual start allow recording to work
-        _hid_device->start_capture([this,last_frame_number,last_timestamp](const platform::sensor_data& sensor_data) mutable
-        {
-            auto system_time = environment::get_instance().get_time_service()->get_time();
-            auto timestamp_reader = _hid_iio_timestamp_reader.get();
-
-            // TODO:
-            static const std::string custom_sensor_name = "custom";
-            auto sensor_name = sensor_data.sensor.name;
-            bool is_custom_sensor = false;
-            static const uint32_t custom_source_id_offset = 16;
-            uint8_t custom_gpio = 0;
-            auto custom_stream_type = RS2_STREAM_ANY;
-            if (sensor_name == custom_sensor_name)
-            {
-                custom_gpio = *(reinterpret_cast<uint8_t*>((uint8_t*)(sensor_data.fo.pixels) + custom_source_id_offset));
-                custom_stream_type = custom_gpio_to_stream_type(custom_gpio);
-
-                if (!_is_configured_stream[custom_stream_type])
-                {
-                    LOG_DEBUG("Unrequested " << rs2_stream_to_string(custom_stream_type) << " frame was dropped.");
-                    return;
-                }
-
-                is_custom_sensor = true;
-                timestamp_reader = _custom_hid_timestamp_reader.get();
-            }
-
-            if (!this->is_streaming())
-            {
-                LOG_INFO("HID Frame received when Streaming is not active,"
-                            << get_string(_configured_profiles[sensor_name].stream)
-                            << ",Arrived," << std::fixed << system_time);
-                return;
-            }
-
-            auto mode = _hid_mapping[sensor_name];
-            auto request = *(mode.original_requests.begin());
-            auto data_size = sensor_data.fo.frame_size;
-            mode.profile.width = (uint32_t)data_size;
-            mode.profile.height = 1;
-
-            // Determine the timestamp for this HID frame
-            auto timestamp = timestamp_reader->get_frame_timestamp(mode, sensor_data.fo);
-            auto frame_counter = timestamp_reader->get_frame_counter(mode, sensor_data.fo);
-            auto ts_domain = timestamp_reader->get_frame_timestamp_domain(mode, sensor_data.fo);
-
-            frame_additional_data additional_data(timestamp,
-                frame_counter,
-                system_time,
-                static_cast<uint8_t>(sensor_data.fo.metadata_size),
-                (const uint8_t*)sensor_data.fo.metadata,
-                sensor_data.fo.backend_time,
-                last_timestamp,
-                last_frame_number,
-                false);
-
-            additional_data.timestamp_domain = ts_domain;
-            additional_data.backend_timestamp = sensor_data.fo.backend_time;
-
-            LOG_DEBUG("FrameAccepted," << get_string(request->get_stream_type())
-                    << ",Counter," << std::dec << frame_counter << ",Index,0"
-                    << ",BackEndTS," << std::fixed << sensor_data.fo.backend_time
-                    << ",SystemTime," << std::fixed << system_time
-                    <<" ,diff_ts[Sys-BE],"<< system_time- sensor_data.fo.backend_time
-                    << ",TS," << std::fixed << timestamp << ",TS_Domain," << rs2_timestamp_domain_to_string(ts_domain)
-                    <<",last_frame_number,"<< last_frame_number<<",last_timestamp,"<< last_timestamp);
-
-            last_frame_number = frame_counter;
-            last_timestamp = timestamp;
-            auto frame = _source.alloc_frame(RS2_EXTENSION_MOTION_FRAME, data_size, additional_data, true);
-            if (!frame)
-            {
-                LOG_INFO("Dropped frame. alloc_frame(...) returned nullptr");
-                return;
-            }
-            frame->set_stream(request);
-
-            std::vector<byte*> dest{const_cast<byte*>(frame->get_frame_data())};
-            mode.unpacker->unpack(dest.data(),(const byte*)sensor_data.fo.pixels, mode.profile.width, mode.profile.height, data_size);
-
-            if (_on_before_frame_callback)
-            {
-                auto callback = _source.begin_callback();
-                auto stream_type = frame->get_stream()->get_stream_type();
-                _on_before_frame_callback(stream_type, frame, std::move(callback));
-            }
-
-            _source.invoke_callback(std::move(frame));
-        });
-
-        _is_streaming = true;
+        std::lock_guard<std::mutex> lock(_synthetic_configure_lock);
+        _raw_sensor->stop();
     }
 
-    void hid_sensor::stop()
+    float librealsense::synthetic_sensor::get_preset_max_value() const
     {
-        std::lock_guard<std::mutex> lock(_configure_lock);
-        if (!_is_streaming)
-            throw wrong_api_call_sequence_exception("stop_streaming() failed. Hid device is not streaming!");
-
-
-        _hid_device->stop_capture();
-        _is_streaming = false;
-        _source.flush();
-        _source.reset();
-        _hid_iio_timestamp_reader->reset();
-        _custom_hid_timestamp_reader->reset();
-        raise_on_before_streaming_changes(false);
+        // to be overriden by depth sensors which need this api
+        return 0.0f;
     }
 
-    std::vector<uint8_t> hid_sensor::get_custom_report_data(const std::string& custom_sensor_name,
-        const std::string& report_name, platform::custom_sensor_report_field report_field) const
+    void synthetic_sensor::register_processing_block(const std::vector< stream_profile > & from,
+                                                     const std::vector< stream_profile > & to,
+                                                     std::function< std::shared_ptr< processing_block >( void ) > generate_func )
     {
-        return _hid_device->get_custom_report_data(custom_sensor_name, report_name, report_field);
+        _formats_converter.register_converter( from, to, generate_func );
     }
 
-    stream_profiles hid_sensor::init_stream_profiles()
+    void synthetic_sensor::register_processing_block( const processing_block_factory & pbf )
     {
-        stream_profiles stream_requests;
-        for (auto it = _hid_sensors.rbegin(); it != _hid_sensors.rend(); ++it)
-        {
-            auto profiles = get_sensor_profiles(it->name);
-            stream_requests.insert(stream_requests.end(), profiles.begin() ,profiles.end());
-        }
-
-        return stream_requests;
+        _formats_converter.register_converter( pbf );
     }
 
-    const std::string& hid_sensor::rs2_stream_to_sensor_name(rs2_stream stream) const
+    void synthetic_sensor::register_processing_block( const std::vector< processing_block_factory > & pbfs )
     {
-        for (auto& elem : _sensor_name_and_hid_profiles)
-        {
-            if (stream == elem.second.stream)
-                return elem.first;
-        }
-        throw invalid_value_exception("rs2_stream not found!");
+        _formats_converter.register_converters( pbfs );
     }
 
-    uint32_t hid_sensor::stream_to_fourcc(rs2_stream stream) const
+    rs2_frame_callback_sptr synthetic_sensor::get_frames_callback() const
     {
-        uint32_t fourcc;
-        try{
-            fourcc = stream_and_fourcc.at(stream);
-        }
-        catch(std::out_of_range)
-        {
-            throw invalid_value_exception(to_string() << "fourcc of stream " << rs2_stream_to_string(stream) << " not found!");
-        }
-
-        return fourcc;
+        return _formats_converter.get_frames_callback();
     }
 
-    uint32_t hid_sensor::fps_to_sampling_frequency(rs2_stream stream, uint32_t fps) const
+    void synthetic_sensor::set_frames_callback( rs2_frame_callback_sptr callback )
     {
-        // TODO: Add log prints
-        auto it = _fps_and_sampling_frequency_per_rs2_stream.find(stream);
-        if (it == _fps_and_sampling_frequency_per_rs2_stream.end())
-            return fps;
-
-        auto fps_mapping = it->second.find(fps);
-        if (fps_mapping != it->second.end())
-            return fps_mapping->second;
-        else
-            return fps;
+        // This callback is mutable, might be modified.
+        // For instance, record_sensor modifies this callback in order to hook it to record frames.
+        _formats_converter.set_frames_callback( callback );
     }
 
-    uvc_sensor::uvc_sensor(std::string name, std::shared_ptr<platform::uvc_device> uvc_device, std::unique_ptr<frame_timestamp_reader> timestamp_reader, device* dev)
-       :   sensor_base(name, dev, (recommended_proccesing_blocks_interface*)this),
-          _device(move(uvc_device)),
-          _user_count(0),
-          _timestamp_reader(std::move(timestamp_reader))
+    void synthetic_sensor::register_notifications_callback( rs2_notifications_callback_sptr callback )
     {
-        register_metadata(RS2_FRAME_METADATA_BACKEND_TIMESTAMP,     make_additional_data_parser(&frame_additional_data::backend_timestamp));
+        sensor_base::register_notifications_callback(callback);
+        _raw_sensor->register_notifications_callback(callback);
     }
 
-    iio_hid_timestamp_reader::iio_hid_timestamp_reader()
+    int synthetic_sensor::register_before_streaming_changes_callback(std::function<void(bool)> callback)
     {
-        counter.resize(sensors);
-        reset();
+        return _raw_sensor->register_before_streaming_changes_callback(callback);
     }
 
-    void iio_hid_timestamp_reader::reset()
+    void synthetic_sensor::unregister_before_start_callback(int token)
     {
-        std::lock_guard<std::recursive_mutex> lock(_mtx);
-        started = false;
-        for (auto i = 0; i < sensors; ++i)
-        {
-            counter[i] = 0;
-        }
+        _raw_sensor->unregister_before_start_callback(token);
     }
 
-    rs2_time_t iio_hid_timestamp_reader::get_frame_timestamp(const request_mapping& mode, const platform::frame_object& fo)
+    void synthetic_sensor::register_metadata(rs2_frame_metadata_value metadata, std::shared_ptr<md_attribute_parser_base> metadata_parser) const
     {
-        std::lock_guard<std::recursive_mutex> lock(_mtx);
-
-        if (has_metadata(mode, fo.metadata, fo.metadata_size))
-        {
-            //  The timestamps conversions path comprise of:
-            // FW TS (32bit) ->    USB Phy Layer (no changes)  -> Host Driver TS (Extend to 64bit) ->  LRS read as 64 bit
-            // The flow introduces discrepancy with UVC stream which timestamps are not extended to 64 bit by host driver both for Win and v4l backends.
-            // In order to allow for hw timestamp-based synchronization of Depth and IMU streams the latter will be trimmed to 32 bit.
-            // To revert to the extended 64 bit TS uncomment the next line instead
-            //auto timestamp = *((uint64_t*)((const uint8_t*)fo.metadata));
-            // The ternary operator is replaced by explicit assignment due to an issue with GCC for RaspberryPi that causes segfauls in optimized build.
-            auto timestamp = *(reinterpret_cast<uint32_t*>(const_cast<void*>(fo.metadata)));
-            if (fo.metadata_size >= platform::hid_header_size)
-                timestamp = static_cast<uint32_t>(reinterpret_cast<const platform::hid_header*>(fo.metadata)->timestamp);
-
-            // HID timestamps are aligned to FW Default - usec units
-            return static_cast<rs2_time_t>(timestamp * TIMESTAMP_USEC_TO_MSEC);
-        }
-
-        if (!started)
-        {
-            LOG_WARNING("HID timestamp not found, switching to Host timestamps.");
-            started = true;
-        }
-
-        return std::chrono::duration<rs2_time_t, std::milli>(std::chrono::system_clock::now().time_since_epoch()).count();
+        sensor_base::register_metadata(metadata, metadata_parser);
+        _raw_sensor->register_metadata(metadata, metadata_parser);
     }
 
-    bool iio_hid_timestamp_reader::has_metadata(const request_mapping& mode, const void * metadata, size_t metadata_size) const
+    bool synthetic_sensor::is_streaming() const
     {
-        if (metadata != nullptr && metadata_size > 0)
-        {
-            return true;
-        }
-        return false;
+        return _raw_sensor->is_streaming();
     }
 
-    unsigned long long iio_hid_timestamp_reader::get_frame_counter(const request_mapping & mode, const platform::frame_object& fo) const
+    bool synthetic_sensor::is_opened() const
     {
-        std::lock_guard<std::recursive_mutex> lock(_mtx);
-        if (nullptr == mode.pf) return 0;                   // Windows support is limited
-        int index = 0;
-        if (mode.pf->fourcc == rs_fourcc('G','Y','R','O'))
-            index = 1;
-
-        return ++counter[index];
+        return _raw_sensor->is_opened();
     }
 
-    rs2_timestamp_domain iio_hid_timestamp_reader::get_frame_timestamp_domain(const request_mapping & mode, const platform::frame_object& fo) const
+    format_conversion sensor_base::get_format_conversion() const
     {
-        if (has_metadata(mode, fo.metadata, fo.metadata_size))
-        {
-            return RS2_TIMESTAMP_DOMAIN_HARDWARE_CLOCK;
-        }
-        return RS2_TIMESTAMP_DOMAIN_SYSTEM_TIME;
+        return _owner->get_format_conversion();
     }
+
+    rsutils::subscription synthetic_sensor::register_options_changed_callback( options_watcher::callback && cb )
+    {
+        return _options_watcher.subscribe( std::move( cb ) );
+    }
+
+    void synthetic_sensor::register_option_to_update( rs2_option id, std::shared_ptr< option > option )
+    {
+        _options_watcher.register_option( id, option );
+    }
+
+    void synthetic_sensor::unregister_option_from_update( rs2_option id )
+    {
+        _options_watcher.unregister_option( id );
+    }
+
 }
