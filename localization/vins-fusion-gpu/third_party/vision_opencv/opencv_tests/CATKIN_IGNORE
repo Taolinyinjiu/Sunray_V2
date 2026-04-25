@@ -1,0 +1,1 @@
+Ignored intentionally for the Sunray VINS build; tests are not required for the vendored cv_bridge runtime.

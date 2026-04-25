@@ -8,6 +8,7 @@
  *******************************************************/
 
 #include "parameters.h"
+#include <stdexcept>
 
 double INIT_DEPTH;
 double MIN_PARALLAX;
@@ -81,7 +82,9 @@ void readParameters(std::string config_file)
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
     if(!fsSettings.isOpened())
     {
-        std::cerr << "ERROR: Wrong path to settings" << std::endl;
+        const std::string error = "Failed to open VINS config with OpenCV FileStorage: " + config_file;
+        ROS_FATAL_STREAM(error);
+        throw std::runtime_error(error);
     }
 
     fsSettings["image0_topic"] >> IMAGE0_TOPIC;
@@ -96,6 +99,14 @@ void readParameters(std::string config_file)
 
     USE_GPU = fsSettings["use_gpu"];
     USE_GPU_ACC_FLOW = fsSettings["use_gpu_acc_flow"];
+#ifndef VINS_HAS_OPENCV_CUDA
+    if(USE_GPU || USE_GPU_ACC_FLOW)
+    {
+        ROS_WARN("OpenCV4 was found without CUDA feature-tracker modules; disabling use_gpu and use_gpu_acc_flow.");
+    }
+    USE_GPU = 0;
+    USE_GPU_ACC_FLOW = 0;
+#endif
 
     USE_IMU = fsSettings["imu"];
     printf("USE_IMU: %d\n", USE_IMU);

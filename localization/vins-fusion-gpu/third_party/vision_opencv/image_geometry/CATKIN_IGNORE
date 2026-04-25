@@ -1,0 +1,1 @@
+Ignored intentionally for the Sunray VINS build; only cv_bridge is vendored for OpenCV 4.6 CUDA linkage.

@@ -16,9 +16,9 @@
 #include <ceres/ceres.h>
 #include <unordered_map>
 #include <queue>
-#include <opencv2/core/eigen.hpp>
 #include <eigen3/Eigen/Dense>
 #include <eigen3/Eigen/Geometry>
+#include <opencv2/core/eigen.hpp>
 
 #include "parameters.h"
 #include "feature_manager.h"

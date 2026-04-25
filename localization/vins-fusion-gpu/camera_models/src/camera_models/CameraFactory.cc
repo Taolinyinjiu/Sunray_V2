@@ -1,6 +1,7 @@
 #include "camodocal/camera_models/CameraFactory.h"
 
 #include <boost/algorithm/string.hpp>
+#include <stdexcept>
 
 #include "camodocal/camera_models/CataCamera.h"
 #include "camodocal/camera_models/EquidistantCamera.h"
@@ -99,7 +100,7 @@ CameraFactory::generateCameraFromYamlFile( const std::string& filename )
 
     if ( !fs.isOpened( ) )
     {
-        return CameraPtr( );
+        throw std::runtime_error( "Failed to open camera calibration YAML: " + filename );
     }
 
     Camera::ModelType modelType = Camera::MEI;

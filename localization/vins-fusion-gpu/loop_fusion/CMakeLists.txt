@@ -15,10 +15,10 @@ find_package(catkin REQUIRED COMPONENTS
     roslib
     )
 
-#find_package(OpenCV)
-#include(/home/dji/opencv/build/OpenCVConfig.cmake)
-set(OpenCV_DIR "/home/yundrone/app/opencv-3.4.16/build")
-find_package(OpenCV)
+find_package(OpenCV 4 REQUIRED)
+if(OpenCV_VERSION VERSION_LESS "4.0.0")
+    message(FATAL_ERROR "loop_fusion requires OpenCV 4. Found ${OpenCV_VERSION}")
+endif()
 message(STATUS "###########################################")
 
 find_package(Ceres REQUIRED)
@@ -26,7 +26,7 @@ find_package(Ceres REQUIRED)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 find_package(Eigen3)
 
-include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS}  ${EIGEN3_INCLUDE_DIR})
+include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS})
 
 catkin_package()
 

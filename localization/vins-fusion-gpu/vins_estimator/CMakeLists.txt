@@ -16,12 +16,31 @@ find_package(catkin REQUIRED COMPONENTS
     camera_models
     image_transport)
 
-#find_package(OpenCV REQUIRED)
-#include(/home/dji/opencv/build/OpenCVConfig.cmake)
-#message(WARNING "OpenCV_VERSION: ${OpenCV_VERSION}")
-set(OpenCV_DIR "/home/yundrone/app/opencv-3.4.16/build")
-find_package(OpenCV)
+find_package(OpenCV 4 REQUIRED)
+if(OpenCV_VERSION VERSION_LESS "4.0.0")
+    message(FATAL_ERROR "vins-fusion-gpu requires OpenCV 4. Found ${OpenCV_VERSION}")
+endif()
 message(STATUS "###########################################")
+
+option(VINS_REQUIRE_OPENCV_CUDA "Require OpenCV CUDA feature tracker modules" OFF)
+
+include(CheckIncludeFileCXX)
+set(CMAKE_REQUIRED_INCLUDES ${OpenCV_INCLUDE_DIRS})
+check_include_file_cxx("opencv2/cudaoptflow.hpp" VINS_HAS_OPENCV_CUDAOPTFLOW)
+check_include_file_cxx("opencv2/cudaimgproc.hpp" VINS_HAS_OPENCV_CUDAIMGPROC)
+check_include_file_cxx("opencv2/cudaarithm.hpp" VINS_HAS_OPENCV_CUDAARITHM)
+unset(CMAKE_REQUIRED_INCLUDES)
+
+if(VINS_HAS_OPENCV_CUDAOPTFLOW AND VINS_HAS_OPENCV_CUDAIMGPROC AND VINS_HAS_OPENCV_CUDAARITHM)
+    add_definitions(-DVINS_HAS_OPENCV_CUDA=1)
+    message(STATUS "OpenCV CUDA feature tracker support: enabled")
+else()
+    if(VINS_REQUIRE_OPENCV_CUDA)
+        message(FATAL_ERROR "OpenCV CUDA feature tracker support is required but missing cudaoptflow/cudaimgproc/cudaarithm headers")
+    else()
+        message(WARNING "OpenCV CUDA feature tracker support: disabled; missing cudaoptflow/cudaimgproc/cudaarithm headers")
+    endif()
+endif()
 
 find_package(Ceres REQUIRED)
 
@@ -70,4 +89,3 @@ target_link_libraries(kitti_odom_test vins_lib)
 
 add_executable(kitti_gps_test src/KITTIGPSTest.cpp)
 target_link_libraries(kitti_gps_test vins_lib) 
-

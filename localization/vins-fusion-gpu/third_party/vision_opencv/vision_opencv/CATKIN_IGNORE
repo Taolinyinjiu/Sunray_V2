@@ -1,0 +1,1 @@
+Ignored intentionally for the Sunray VINS build; the metapackage depends on image_geometry, which is not needed here.

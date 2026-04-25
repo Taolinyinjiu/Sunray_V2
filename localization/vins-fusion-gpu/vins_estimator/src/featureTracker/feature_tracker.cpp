@@ -10,6 +10,7 @@
  *******************************************************/
 
 #include "feature_tracker.h"
+#include <stdexcept>
 
 bool FeatureTracker::inBorder(const cv::Point2f &pt)
 {
@@ -123,7 +124,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     if (prev_pts.size() > 0)
     {
         vector<uchar> status;
+#ifdef VINS_HAS_OPENCV_CUDA
         if(!USE_GPU_ACC_FLOW)
+#else
+        if(true)
+#endif
         {
             TicToc t_o;
             
@@ -165,6 +170,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             }
             // printf("temporal optical flow costs: %fms\n", t_o.toc());
         }
+#ifdef VINS_HAS_OPENCV_CUDA
         else
         {
             TicToc t_og;
@@ -249,6 +255,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             }
             // printf("gpu temporal optical flow costs: %f ms\n",t_og.toc());
         }
+#endif
     
         for (int i = 0; i < int(cur_pts.size()); i++)
             if (status[i] && !inBorder(cur_pts[i]))
@@ -276,7 +283,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         ROS_DEBUG("detect feature begins");
         
         int n_max_cnt = MAX_CNT - static_cast<int>(cur_pts.size());
+#ifdef VINS_HAS_OPENCV_CUDA
         if(!USE_GPU)
+#else
+        if(true)
+#endif
         {
             if (n_max_cnt > 0)
             {
@@ -297,6 +308,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         
         // ROS_DEBUG("detect feature costs: %fms", t_t.toc());
         // printf("good feature to track costs: %fms\n", t_t.toc());
+#ifdef VINS_HAS_OPENCV_CUDA
         else
         {
             if (n_max_cnt > 0)
@@ -326,6 +338,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             else 
                 n_pts.clear();
         }
+#endif
 
         ROS_DEBUG("add feature begins");
         TicToc t_a;
@@ -350,7 +363,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             
             vector<cv::Point2f> reverseLeftPts;
             vector<uchar> status, statusRightLeft;
+#ifdef VINS_HAS_OPENCV_CUDA
             if(!USE_GPU_ACC_FLOW)
+#else
+            if(true)
+#endif
             {
                 TicToc t_check;
                 vector<float> err;
@@ -370,6 +387,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 }
                 // printf("left right optical flow cost %fms\n",t_check.toc());
             }
+#ifdef VINS_HAS_OPENCV_CUDA
             else
             {
                 TicToc t_og1;
@@ -415,6 +433,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 }
                 // printf("gpu left right optical flow cost %fms\n",t_og1.toc());
             }
+#endif
             ids_right = ids;
             reduceVector(cur_right_pts, status);
             reduceVector(ids_right, status);
@@ -534,6 +553,10 @@ void FeatureTracker::readIntrinsicParameter(const vector<string> &calib_file)
     {
         ROS_INFO("reading paramerter of camera %s", calib_file[i].c_str());
         camodocal::CameraPtr camera = CameraFactory::instance()->generateCameraFromYamlFile(calib_file[i]);
+        if (!camera)
+        {
+            throw std::runtime_error("Failed to load camera calibration YAML: " + calib_file[i]);
+        }
         m_camera.push_back(camera);
     }
     if (calib_file.size() == 2)
