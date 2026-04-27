@@ -61,9 +61,13 @@ add_executable(ugv_swarm_node ${PROJECT_SOURCE_DIR}/swarm_control/src/swarm_ugv_
 add_dependencies(ugv_swarm_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ugv_swarm_node swarm_control_support orca_engine_lib ${catkin_LIBRARIES})
 
-add_executable(uav_command_pub ${PROJECT_SOURCE_DIR}/swarm_control/utils/formation_switch.cpp)
-add_dependencies(uav_command_pub ${catkin_EXPORTED_TARGETS})
-target_link_libraries(uav_command_pub ${catkin_LIBRARIES})
+add_executable(uav_formation_switch ${PROJECT_SOURCE_DIR}/swarm_control/utils/uav_formation_switch.cpp)
+add_dependencies(uav_formation_switch ${catkin_EXPORTED_TARGETS})
+target_link_libraries(uav_formation_switch ${catkin_LIBRARIES})
+
+add_executable(ugv_formation_switch ${PROJECT_SOURCE_DIR}/swarm_control/utils/ugv_formation_switch.cpp)
+add_dependencies(ugv_formation_switch ${catkin_EXPORTED_TARGETS})
+target_link_libraries(ugv_formation_switch ${catkin_LIBRARIES})
 
 add_executable(formation_tui ${PROJECT_SOURCE_DIR}/swarm_control/utils/formation_tui.cpp)
 add_dependencies(formation_tui ${catkin_EXPORTED_TARGETS})

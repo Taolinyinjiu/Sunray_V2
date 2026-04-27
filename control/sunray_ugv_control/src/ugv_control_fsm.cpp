@@ -85,7 +85,7 @@ void UGVControlFSM::load_config() {
                                                 "${ugv_ns}/sunray/ugv_control/control_cmd"),
                        ugv_ns_);
     config_.basic.cmd_vel_topic_name =
-        replace_ugv_ns(load_scalar<std::string>(basic, "cmd_vel_topic_name", "${ugv_ns}/cmd_vel"),
+        replace_ugv_ns(load_scalar<std::string>(basic, "cmd_vel_topic_name", "${ugv_ns}/sunray/ugv_control/cmd_vel"),
                        ugv_ns_);
     config_.basic.fsm_state_topic_name =
         replace_ugv_ns(load_scalar<std::string>(basic,

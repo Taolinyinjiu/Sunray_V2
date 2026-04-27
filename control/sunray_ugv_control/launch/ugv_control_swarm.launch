@@ -1,0 +1,23 @@
+<launch>
+  <arg name="config_yamlfile_path"
+       default="$(find sunray_ugv_control)/config/sunray_control_config.yaml" />
+  <arg name="ugv_name" default="ugv" />
+  <arg name="ugv_id" default="1" />
+  <arg name="ugv_num" default="3" />
+
+  <include file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <arg name="ugv_name" value="$(arg ugv_name)" />
+    <arg name="ugv_id" value="$(arg ugv_id)" />
+    <arg name="node_name" value="$(eval 'ugv_control_node_' + str(int(arg('ugv_id'))))" />
+    <arg name="set_global_params" value="false" />
+  </include>
+
+  <include file="$(find sunray_ugv_control)/launch/ugv_control_swarm.launch"
+           if="$(eval int(arg('ugv_num')) > int(arg('ugv_id')))">
+    <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <arg name="ugv_name" value="$(arg ugv_name)" />
+    <arg name="ugv_id" value="$(eval int(arg('ugv_id')) + 1)" />
+    <arg name="ugv_num" value="$(arg ugv_num)" />
+  </include>
+</launch>
