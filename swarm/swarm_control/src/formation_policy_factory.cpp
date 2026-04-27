@@ -2,7 +2,7 @@
 本程序功能：
     1、实现 FormationPolicyFactory::create，将策略名称映射到具体策略类实例
     2、支持 ring/line/column/v_shape(v)/wedge/custom 六种名称
-    3、未知名称默认返回 RingPolicy
+    3、keep_formation 或未知名称返回空策略，避免隐式切到 ring
 */
 #include "formation_policy_factory.h"
 #include "formation_policies.h"
@@ -36,8 +36,7 @@ std::shared_ptr<FormationPolicy> FormationPolicyFactory::create(const std::strin
     {
         return std::make_shared<CustomPolicy>();
     }
-    // 默认策略
-    return std::make_shared<RingPolicy>();
+    return nullptr;
 }
 
 } // namespace swarm_control

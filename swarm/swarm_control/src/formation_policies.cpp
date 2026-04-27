@@ -20,30 +20,9 @@ namespace swarm_control
 namespace
 {
 
-// leader_id > 100 时取低位作为索引
-int leaderIndexFromId(int leader_id)
-{
-    return (leader_id > 100) ? (leader_id - 100) : leader_id;
-}
-
-bool isLeaderAgent(const FormationContext &ctx)
-{
-    return ctx.agent_id == leaderIndexFromId(ctx.leader_id);
-}
-
-// 返回该 agent 在 follower 序列中的下标（0-based），leader 返回 -1
 int followerIndex(const FormationContext &ctx)
 {
-    int li = leaderIndexFromId(ctx.leader_id);
-    if (ctx.agent_id == li)
-    {
-        return -1;
-    }
-    if (ctx.agent_id < li)
-    {
-        return ctx.agent_id - 1;
-    }
-    return ctx.agent_id - 2; // agent_id > li
+    return ctx.agent_id - 1;
 }
 
 std::vector<Offset2D> generateRingOffsets(int n)
@@ -62,23 +41,41 @@ std::vector<Offset2D> generateRingOffsets(int n)
     return offsets;
 }
 
+void centerOffsets(std::vector<Offset2D> &offsets)
+{
+    if (offsets.empty())
+    {
+        return;
+    }
+    double sum_x = 0.0;
+    double sum_y = 0.0;
+    for (const auto &offset : offsets)
+    {
+        sum_x += offset.x;
+        sum_y += offset.y;
+    }
+    const double mean_x = sum_x / static_cast<double>(offsets.size());
+    const double mean_y = sum_y / static_cast<double>(offsets.size());
+    for (auto &offset : offsets)
+    {
+        offset.x -= mean_x;
+        offset.y -= mean_y;
+    }
+}
+
 } // namespace
 
 // ========== OffsetBasedPolicy 通用 computeTarget ==========
 
-bool OffsetBasedPolicy::computeTarget(const geometry_msgs::Pose &leader_pose, const FormationContext &ctx,
+bool OffsetBasedPolicy::computeTarget(const geometry_msgs::Pose &reference_pose, const FormationContext &ctx,
                                       geometry_msgs::Pose &target_pose) const
 {
-    if (isLeaderAgent(ctx))
-    {
-        return false; // leader 自身不产生目标
-    }
     int idx = followerIndex(ctx);
     if (idx < 0)
     {
         return false;
     }
-    int followers = ctx.agent_num - 1;
+    int followers = ctx.agent_num;
     if (followers <= 0)
     {
         return false;
@@ -95,15 +92,15 @@ bool OffsetBasedPolicy::computeTarget(const geometry_msgs::Pose &leader_pose, co
     double ox = offsets[idx].x * ctx.spacing;
     double oy = offsets[idx].y * ctx.spacing;
 
-    // 3. 旋转到世界系（按 leader 朝向）
-    double yaw = tf::getYaw(leader_pose.orientation);
+    // 3. 旋转到世界系（按虚拟参考中心朝向）
+    double yaw = tf::getYaw(reference_pose.orientation);
     double c = std::cos(yaw);
     double s = std::sin(yaw);
     double rx = c * ox - s * oy;
     double ry = s * ox + c * oy;
 
     // 4. 平移
-    target_pose = leader_pose;
+    target_pose = reference_pose;
     target_pose.position.x += rx;
     target_pose.position.y += ry;
     return true;
@@ -111,7 +108,7 @@ bool OffsetBasedPolicy::computeTarget(const geometry_msgs::Pose &leader_pose, co
 
 // ========== Ring —— 圆环 ==========
 //
-//  所有 follower 均匀分布在以 leader 为圆心的圆周上。
+//  所有 agent 均匀分布在以虚拟参考中心为圆心的圆周上。
 //  归一化半径使得相邻 follower 的弦长 = 1（乘 spacing 后 = spacing）。
 //
 //       2
@@ -127,7 +124,7 @@ std::vector<Offset2D> RingPolicy::generateOffsets(int n) const
 
 // ========== Line —— 一字横队 ==========
 //
-//  follower 交替分布在 leader 左右，垂直于朝向方向。
+//  所有 agent 围绕虚拟参考中心横向连续分布，垂直于朝向方向。
 //  编号 0 在左侧 y=+1，编号 1 在右侧 y=-1，编号 2 在 y=+2 ……
 //
 //   2  0  L  1  3
@@ -135,18 +132,17 @@ std::vector<Offset2D> RingPolicy::generateOffsets(int n) const
 std::vector<Offset2D> LinePolicy::generateOffsets(int n) const
 {
     std::vector<Offset2D> offsets(n);
+    const double center = 0.5 * static_cast<double>(n - 1);
     for (int i = 0; i < n; ++i)
     {
-        int rank = i / 2 + 1;
-        double sign = (i % 2 == 0) ? 1.0 : -1.0;
-        offsets[i] = {0.0, sign * static_cast<double>(rank)};
+        offsets[i] = {0.0, static_cast<double>(i) - center};
     }
     return offsets;
 }
 
 // ========== Column —— 纵队 ==========
 //
-//  所有 follower 排在 leader 正后方（沿 -x 方向）。
+//  所有 agent 围绕虚拟参考中心纵向连续分布。
 //
 //   L
 //   0
@@ -156,9 +152,10 @@ std::vector<Offset2D> LinePolicy::generateOffsets(int n) const
 std::vector<Offset2D> ColumnPolicy::generateOffsets(int n) const
 {
     std::vector<Offset2D> offsets(n);
+    const double center = 0.5 * static_cast<double>(n - 1);
     for (int i = 0; i < n; ++i)
     {
-        offsets[i] = {-static_cast<double>(i + 1), 0.0};
+        offsets[i] = {center - static_cast<double>(i), 0.0};
     }
     return offsets;
 }
@@ -182,6 +179,7 @@ std::vector<Offset2D> VFormationPolicy::generateOffsets(int n) const
         double sign = (i % 2 == 0) ? 1.0 : -1.0;
         offsets[i] = {-static_cast<double>(rank), sign * static_cast<double>(rank)};
     }
+    centerOffsets(offsets);
     return offsets;
 }
 
@@ -204,6 +202,7 @@ std::vector<Offset2D> WedgePolicy::generateOffsets(int n) const
         double sign = (i % 2 == 0) ? 1.0 : -1.0;
         offsets[i] = {-static_cast<double>(rank), sign * static_cast<double>(rank) * 0.5};
     }
+    centerOffsets(offsets);
     return offsets;
 }
 

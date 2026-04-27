@@ -53,10 +53,10 @@ tmux new-window -d -t "${SESSION_NAME}:" -n localization -c "${WORKSPACE_ROOT}"
 send_window_command localization "cd ${WORKSPACE_ROOT} && sleep 10 && roslaunch localization_fusion localization_fusion_swarm.launch uav_num:=${UAV_NUM} uav_name:=${UAV_NAME} source_id:=${SOURCE_ID} health_rate_hz:=${HEALTH_RATE_HZ} use_receive_time:=${USE_RECEIVE_TIME}"
 
 tmux new-window -d -t "${SESSION_NAME}:" -n swarm -c "${WORKSPACE_ROOT}"
-send_window_command swarm "cd ${WORKSPACE_ROOT} && sleep 12 && roslaunch sunray_swarm swarm_sim.launch agent_num:=${UAV_NUM} agent_name:=${UAV_NAME}"
+send_window_command swarm "cd ${WORKSPACE_ROOT} && sleep 12 && roslaunch sunray_swarm_control swarm_sim.launch agent_num:=${UAV_NUM} agent_name:=${UAV_NAME}"
 
 tmux new-window -d -t "${SESSION_NAME}:" -n tui -c "${WORKSPACE_ROOT}"
-send_window_command tui "cd ${WORKSPACE_ROOT} && sleep 14 && roslaunch sunray_swarm formation_tui.launch"
+send_window_command tui "cd ${WORKSPACE_ROOT} && sleep 14 && roslaunch sunray_swarm_control formation_tui.launch"
 
 tmux select-window -t "${SESSION_NAME}:tui"
 attach_or_switch

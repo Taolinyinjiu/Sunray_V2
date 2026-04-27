@@ -16,7 +16,6 @@ find_package(catkin REQUIRED COMPONENTS
 ## Add message definitions after creating files under msg/
 add_message_files(
   FILES
-  FormationOffsets.msg
   OdomStatus.msg
   OrcaCmd.msg
   OrcaSetup.msg
@@ -25,7 +24,12 @@ add_message_files(
   UAVControlFSMState.msg
   UAVControllerState.msg
   UAVSwarmCMD.msg
+  UAVSwarmState.msg
+  UGVControlCMD.msg
+  UGVControlFSMState.msg
+  UGVControllerState.msg
   UGVSwarmCMD.msg
+  UGVSwarmState.msg
   Vector2.msg
 )
 

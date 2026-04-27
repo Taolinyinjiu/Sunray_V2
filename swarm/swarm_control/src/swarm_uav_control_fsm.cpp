@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <boost/bind.hpp>
 #include <cmath>
-#include <geometry_msgs/PoseStamped.h>
 #include <map>
 #include <memory>
 #include <nav_msgs/Odometry.h>
@@ -16,11 +15,11 @@
 #include <string>
 #include <tf/transform_datatypes.h>
 
-#include <sunray_msgs/FormationOffsets.h>
 #include <sunray_msgs/OrcaCmd.h>
 #include <sunray_msgs/OrcaSetup.h>
 #include <sunray_msgs/UAVControlFSMState.h>
 #include <sunray_msgs/UAVSwarmCMD.h>
+#include <sunray_msgs/UAVSwarmState.h>
 
 #include "agent_state_cache.h"
 #include "control_command_mapper.h"
@@ -28,7 +27,6 @@
 #include "formation_policy_factory.h"
 #include "formation_state_machine.h"
 #include "goal_dispatcher.h"
-#include "leader_tracker.h"
 #include "orca_engine.h"
 
 namespace swarm_control
@@ -61,6 +59,11 @@ const char *toStateString(SwarmState state)
     default:
         return "UNKNOWN";
     }
+}
+
+uint8_t toSwarmStateMsg(SwarmState state)
+{
+    return static_cast<uint8_t>(state);
 }
 
 bool hasExplicitLeaderGoal(const geometry_msgs::Point &pt, float yaw)
@@ -146,9 +149,8 @@ class UAVSwarmNode
     {
         nh_.param<int>("agent_id", agent_id_, 1);
         nh_.param<int>("agent_num", agent_num_, 1);
-        nh_.param<int>("leader_id", leader_id_, 1);
         nh_.param<std::string>("agent_name", agent_name_, std::string("uav"));
-        nh_.param<std::string>("formation_policy", policy_name_, std::string("ring"));
+        nh_.param<std::string>("formation_policy", policy_name_, std::string("keep_formation"));
         nh_.param<double>("spacing", spacing_, 1.0);
         nh_.param<bool>("use_fixed_altitude", use_fixed_altitude_, true);
         nh_.param<double>("fixed_altitude", fixed_altitude_, 1.0);
@@ -156,10 +158,12 @@ class UAVSwarmNode
         nh_.param<double>("spacing_max", spacing_max_, 5.0);
         nh_.param<double>("spacing_scale_up", spacing_scale_up_, 1.2);
         nh_.param<double>("spacing_scale_down", spacing_scale_down_, 0.8);
-        nh_.param<double>("leader_timeout", leader_timeout_, 1.0);
         nh_.param<double>("orca_timeout", orca_timeout_, 1.0);
         nh_.param<double>("goal_z_tolerance", goal_z_tolerance_, 0.2);
-        nh_.param<bool>("leader_publish_goal", leader_publish_goal_, true);
+        nh_.param<double>("virtual_leader_x", virtual_leader_x_, 0.0);
+        nh_.param<double>("virtual_leader_y", virtual_leader_y_, 0.0);
+        nh_.param<double>("virtual_leader_z", virtual_leader_z_, fixed_altitude_);
+        nh_.param<double>("virtual_leader_yaw", virtual_leader_yaw_, 0.0);
 
         orca_swarm::OrcaParams orca_params;
         double neighbor_dist = static_cast<double>(orca_params.neighbor_dist);
@@ -199,11 +203,11 @@ class UAVSwarmNode
         policy_ = (policy_name_ == "custom") ? std::static_pointer_cast<FormationPolicy>(custom_policy_)
                                              : policy_factory_.create(policy_name_);
 
-        leader_tracker_.init(nh_, leader_id_, agent_name_);
-        state_cache_.init(nh_, agent_num_, 0, agent_name_, leader_id_);
+        state_cache_.init(nh_, agent_num_, 0, agent_name_);
         goal_dispatcher_.init(nh_, agent_name_, agent_id_);
         orca_engine_.init(agent_id_, agent_num_, orca_params, fence);
         control_mapper_.init(nh_, agent_name_, agent_id_, 0);
+        initVirtualLeaderGoal();
 
         for (int i = 0; i < agent_num_; ++i)
         {
@@ -220,11 +224,7 @@ class UAVSwarmNode
                                                                              &UAVSwarmNode::selfFsmStateCb, this);
         uav_swarm_cmd_sub_ = nh_.subscribe<sunray_msgs::UAVSwarmCMD>("/sunray/swarm/uav_swarm_cmd", 10,
                                                                      &UAVSwarmNode::onUAVSwarmCMD, this);
-        formation_offsets_sub_ = nh_.subscribe<sunray_msgs::FormationOffsets>("/sunray/formation_offsets", 10,
-                                                                              &UAVSwarmNode::formationOffsetsCb, this);
-        leader_goal_sub_ =
-            nh_.subscribe<geometry_msgs::PoseStamped>("/sunray/leader_goal", 10, &UAVSwarmNode::leaderGoalCb, this);
-
+        uav_swarm_state_pub_ = nh_.advertise<sunray_msgs::UAVSwarmState>("/sunray/swarm/uav_swarm_state", 10, true);
         double goal_rate = 20.0;
         double control_rate = 20.0;
         double state_pub_rate = 20.0;
@@ -243,7 +243,7 @@ class UAVSwarmNode
         const SwarmState requested = state_machine_.requestedState();
         switch (msg->swarm_cmd)
         {
-        case sunray_msgs::UAVSwarmCMD::TAKEOFF:
+        case sunray_msgs::UAVSwarmCMD::SWARM_TAKEOFF:
             if (requested != SwarmState::INIT)
             {
                 return;
@@ -252,9 +252,10 @@ class UAVSwarmNode
             hold_pose_valid_ = false;
             cacheHomeFromCurrentPose();
             state_machine_.setRequestedState(SwarmState::TAKEOFF);
+            acceptSwarmCommand(*msg);
             return;
 
-        case sunray_msgs::UAVSwarmCMD::LAND:
+        case sunray_msgs::UAVSwarmCMD::SWARM_LAND:
             if (requested == SwarmState::INIT || requested == SwarmState::TAKEOFF)
             {
                 return;
@@ -262,9 +263,10 @@ class UAVSwarmNode
             clearCommandFlags();
             hold_pose_valid_ = false;
             state_machine_.setRequestedState(SwarmState::LAND);
+            acceptSwarmCommand(*msg);
             return;
 
-        case sunray_msgs::UAVSwarmCMD::HOVER:
+        case sunray_msgs::UAVSwarmCMD::SWARM_HOVER:
             if (requested == SwarmState::INIT || requested == SwarmState::TAKEOFF || requested == SwarmState::LAND)
             {
                 return;
@@ -272,6 +274,7 @@ class UAVSwarmNode
             clearCommandFlags();
             cacheHoldFromCurrentPose();
             state_machine_.setRequestedState(SwarmState::HOVER);
+            acceptSwarmCommand(*msg);
             return;
 
         case sunray_msgs::UAVSwarmCMD::SWARM_RETURN:
@@ -284,6 +287,7 @@ class UAVSwarmNode
             return_home_active_ = true;
             last_goal_valid_ = false;
             state_machine_.setRequestedState(SwarmState::ORCA_RETURN_HOME);
+            acceptSwarmCommand(*msg);
             return;
 
         case sunray_msgs::UAVSwarmCMD::SWARM_FORMATION:
@@ -292,8 +296,13 @@ class UAVSwarmNode
             {
                 return;
             }
-            applyFormationCommand(msg->formation, msg->formation_param, msg->leader_pos, msg->leader_yaw);
+            if (!applyFormationCommand(msg->formation, msg->formation_param, msg->leader_pos, msg->leader_yaw,
+                                       msg->custom_offsets))
+            {
+                return;
+            }
             state_machine_.setRequestedState(SwarmState::FORMATION);
+            acceptSwarmCommand(*msg);
             return;
 
         default:
@@ -303,7 +312,7 @@ class UAVSwarmNode
 
     void goalTimerCb(const ros::TimerEvent &)
     {
-        const bool leader_ok = leader_goal_active_ || leader_tracker_.isFresh(leader_timeout_);
+        const bool leader_ok = true;
         const bool orca_ok = localOrcaFresh();
         const SwarmState state = state_machine_.effectiveState(leader_ok, orca_ok);
         if (state != SwarmState::FORMATION && state != SwarmState::ORCA_RETURN_HOME)
@@ -328,25 +337,11 @@ class UAVSwarmNode
             return;
         }
 
-        geometry_msgs::Pose ref_pose;
-        geometry_msgs::Pose leader_pose;
-        if (leader_goal_active_)
-        {
-            ref_pose = leader_goal_;
-        }
-        else
-        {
-            if (!leader_tracker_.getLeaderPose(leader_pose))
-            {
-                return;
-            }
-            ref_pose = leader_pose;
-        }
+        geometry_msgs::Pose ref_pose = leader_goal_;
 
         FormationContext ctx;
         ctx.agent_id = agent_id_;
         ctx.agent_num = agent_num_;
-        ctx.leader_id = leader_id_;
         ctx.spacing = spacing_;
 
         geometry_msgs::Pose target;
@@ -362,30 +357,12 @@ class UAVSwarmNode
             return;
         }
 
-        if (!leader_publish_goal_)
-        {
-            return;
-        }
-
-        const int leader_index = (leader_id_ > 100) ? (leader_id_ - 100) : leader_id_;
-        if (ctx.agent_id != leader_index)
-        {
-            return;
-        }
-
-        geometry_msgs::Pose passthrough_pose = leader_goal_active_ ? leader_goal_ : leader_pose;
-        if (use_fixed_altitude_)
-        {
-            passthrough_pose.position.z = fixed_altitude_;
-        }
-        last_goal_ = passthrough_pose;
-        last_goal_valid_ = true;
-        dispatchOrcaGoal(passthrough_pose, true);
+        return;
     }
 
     void controlTimerCb(const ros::TimerEvent &)
     {
-        const bool leader_ok = leader_goal_active_ || leader_tracker_.isFresh(leader_timeout_);
+        const bool leader_ok = true;
         const bool orca_ok = localOrcaFresh();
         const SwarmState state = state_machine_.effectiveState(leader_ok, orca_ok);
         if (!last_effective_state_valid_ || state != last_effective_state_)
@@ -394,6 +371,7 @@ class UAVSwarmNode
                      orca_ok ? 1 : 0);
             last_effective_state_ = state;
             last_effective_state_valid_ = true;
+            publishSwarmState(state);
         }
 
         if (state == SwarmState::INIT)
@@ -430,6 +408,7 @@ class UAVSwarmNode
                 {
                     control_mapper_.publishHover();
                 }
+                publishSwarmState(SwarmState::HOVER);
             }
             return;
         }
@@ -442,6 +421,7 @@ class UAVSwarmNode
             {
                 hold_pose_valid_ = false;
                 state_machine_.setRequestedState(SwarmState::INIT);
+                publishSwarmState(SwarmState::INIT);
             }
             return;
         }
@@ -457,6 +437,7 @@ class UAVSwarmNode
             clearCommandFlags();
             state_machine_.setRequestedState(SwarmState::HOVER);
             control_mapper_.publishPosTarget(hold_pose_);
+            publishSwarmState(SwarmState::HOVER);
             return;
         }
 
@@ -467,6 +448,26 @@ class UAVSwarmNode
     void statePublishTimerCb(const ros::TimerEvent &)
     {
         updateLocalOrca();
+    }
+
+    void acceptSwarmCommand(const sunray_msgs::UAVSwarmCMD &msg)
+    {
+        current_swarm_cmd_ = msg;
+        has_current_swarm_cmd_ = true;
+        publishSwarmState(state_machine_.requestedState());
+    }
+
+    void publishSwarmState(SwarmState state)
+    {
+        sunray_msgs::UAVSwarmState msg;
+        msg.header.stamp = ros::Time::now();
+        if (has_current_swarm_cmd_)
+        {
+            msg.current_cmd = current_swarm_cmd_;
+        }
+        msg.state = toSwarmStateMsg(state);
+        msg.swarm_num = static_cast<uint32_t>(agent_num_);
+        uav_swarm_state_pub_.publish(msg);
     }
 
     void selfOdomCb(const nav_msgs::Odometry::ConstPtr &msg)
@@ -490,33 +491,89 @@ class UAVSwarmNode
         orca_engine_.handleSetup(idx, toOrcaSetupCMD(*msg));
     }
 
-    void leaderGoalCb(const geometry_msgs::PoseStamped::ConstPtr &msg)
+    void initVirtualLeaderGoal()
     {
-        leader_goal_ = msg->pose;
+        geometry_msgs::Point pt;
+        pt.x = virtual_leader_x_;
+        pt.y = virtual_leader_y_;
+        pt.z = virtual_leader_z_;
+        leader_goal_ = makePose(pt, static_cast<float>(virtual_leader_yaw_));
         leader_goal_active_ = true;
-        return_home_active_ = false;
-        formation_change_active_ = false;
-        last_goal_valid_ = false;
         if (use_fixed_altitude_)
         {
             fixed_altitude_ = leader_goal_.position.z;
         }
-        state_machine_.setRequestedState(SwarmState::FORMATION);
     }
 
-    void formationOffsetsCb(const sunray_msgs::FormationOffsets::ConstPtr &msg)
+    void applyCustomOffsets(const std::vector<geometry_msgs::Point> &custom_offsets)
     {
         if (!custom_policy_)
         {
             return;
         }
         std::vector<Offset2D> offsets;
-        offsets.reserve(msg->offsets.size());
-        for (const auto &pt : msg->offsets)
+        offsets.reserve(custom_offsets.size());
+        for (const auto &pt : custom_offsets)
         {
             offsets.push_back({pt.x, pt.y});
         }
         custom_policy_->setOffsets(offsets);
+    }
+
+    bool captureCurrentFormationAsCustom(float reference_yaw)
+    {
+        if (!custom_policy_)
+        {
+            return false;
+        }
+
+        auto all_states = state_cache_.states();
+        if (self_odom_ready_)
+        {
+            all_states[agent_id_] = self_odom_;
+        }
+        if (static_cast<int>(all_states.size()) < agent_num_)
+        {
+            ROS_WARN("KEEP_FORMATION: current formation capture skipped, only %zu/%d odometry states available.",
+                     all_states.size(), agent_num_);
+            return false;
+        }
+
+        double center_x = 0.0;
+        double center_y = 0.0;
+        for (int id = 1; id <= agent_num_; ++id)
+        {
+            auto it = all_states.find(id);
+            if (it == all_states.end())
+            {
+                ROS_WARN("KEEP_FORMATION: current formation capture skipped, missing odometry for %s%d.",
+                         agent_name_.c_str(), id);
+                return false;
+            }
+            center_x += it->second.pose.pose.position.x;
+            center_y += it->second.pose.pose.position.y;
+        }
+        center_x /= static_cast<double>(agent_num_);
+        center_y /= static_cast<double>(agent_num_);
+
+        const double c = std::cos(static_cast<double>(reference_yaw));
+        const double s = std::sin(static_cast<double>(reference_yaw));
+        const double spacing = std::max(spacing_, 1e-6);
+        std::vector<Offset2D> offsets;
+        offsets.reserve(agent_num_);
+        for (int id = 1; id <= agent_num_; ++id)
+        {
+            const auto &pose = all_states[id].pose.pose;
+            const double dx = pose.position.x - center_x;
+            const double dy = pose.position.y - center_y;
+            offsets.push_back({(c * dx + s * dy) / spacing, (-s * dx + c * dy) / spacing});
+        }
+
+        custom_policy_->setOffsets(offsets);
+        policy_name_ = "custom";
+        policy_ = custom_policy_;
+        ROS_INFO("KEEP_FORMATION: captured current physical formation as custom offsets.");
+        return true;
     }
 
     bool cacheHomeFromCurrentPose()
@@ -576,23 +633,32 @@ class UAVSwarmNode
     void clearCommandFlags()
     {
         formation_change_active_ = false;
-        leader_goal_active_ = false;
         return_home_active_ = false;
     }
 
-    void applyFormationCommand(uint8_t formation, float formation_param, const geometry_msgs::Point &leader_pos,
-                               float leader_yaw)
+    bool applyFormationCommand(uint8_t formation, float formation_param, const geometry_msgs::Point &leader_pos,
+                               float leader_yaw, const std::vector<geometry_msgs::Point> &custom_offsets)
     {
         formation_change_active_ = true;
         return_home_active_ = false;
         last_goal_valid_ = false;
+        const bool explicit_leader_goal = hasExplicitLeaderGoal(leader_pos, leader_yaw);
 
         if (formation_param > 0.0f)
         {
             spacing_ = clampValue<double>(formation_param, spacing_min_, spacing_max_);
         }
 
-        if (formation == sunray_msgs::UAVSwarmCMD::EXPAND)
+        if (formation == sunray_msgs::UAVSwarmCMD::KEEP_FORMATION && explicit_leader_goal)
+        {
+            if (!captureCurrentFormationAsCustom(leader_yaw))
+            {
+                formation_change_active_ = false;
+                ROS_WARN("KEEP_FORMATION command ignored: unable to capture current physical formation.");
+                return false;
+            }
+        }
+        else if (formation == sunray_msgs::UAVSwarmCMD::EXPAND)
         {
             spacing_ = std::min(spacing_ * spacing_scale_up_, spacing_max_);
         }
@@ -602,6 +668,10 @@ class UAVSwarmNode
         }
         else
         {
+            if (formation == sunray_msgs::UAVSwarmCMD::CUSTOM)
+            {
+                applyCustomOffsets(custom_offsets);
+            }
             const std::string next_policy = formationNameFromEnum(formation);
             if (!next_policy.empty())
             {
@@ -611,7 +681,7 @@ class UAVSwarmNode
             }
         }
 
-        if (hasExplicitLeaderGoal(leader_pos, leader_yaw))
+        if (explicit_leader_goal)
         {
             leader_goal_ = makePose(leader_pos, leader_yaw);
             leader_goal_active_ = true;
@@ -622,8 +692,9 @@ class UAVSwarmNode
         }
         else
         {
-            leader_goal_active_ = false;
+            leader_goal_active_ = true;
         }
+        return true;
     }
 
     bool isActiveGoalReached(const sunray_msgs::OrcaCmd &orca_cmd) const
@@ -705,9 +776,8 @@ class UAVSwarmNode
 
     int agent_id_{1};
     int agent_num_{1};
-    int leader_id_{1};
     std::string agent_name_{"uav"};
-    std::string policy_name_{"ring"};
+    std::string policy_name_{"keep_formation"};
     double spacing_{1.0};
     bool use_fixed_altitude_{true};
     double fixed_altitude_{1.0};
@@ -715,13 +785,14 @@ class UAVSwarmNode
     double spacing_max_{5.0};
     double spacing_scale_up_{1.2};
     double spacing_scale_down_{0.8};
-    double leader_timeout_{1.0};
     double orca_timeout_{1.0};
     double goal_z_tolerance_{0.2};
-    bool leader_publish_goal_{true};
+    double virtual_leader_x_{0.0};
+    double virtual_leader_y_{0.0};
+    double virtual_leader_z_{1.0};
+    double virtual_leader_yaw_{0.0};
 
     FormationStateMachine state_machine_{};
-    LeaderTracker leader_tracker_{};
     FormationPolicyFactory policy_factory_{};
     std::shared_ptr<FormationPolicy> policy_{};
     std::shared_ptr<CustomPolicy> custom_policy_{};
@@ -731,10 +802,9 @@ class UAVSwarmNode
     ControlCommandMapper control_mapper_{};
 
     ros::Subscriber uav_swarm_cmd_sub_{};
-    ros::Subscriber formation_offsets_sub_{};
+    ros::Publisher uav_swarm_state_pub_{};
     ros::Subscriber self_odom_sub_{};
     ros::Subscriber self_fsm_state_sub_{};
-    ros::Subscriber leader_goal_sub_{};
     std::map<int, ros::Subscriber> orca_setup_subs_{};
     ros::Timer goal_timer_{};
     ros::Timer control_timer_{};
@@ -755,8 +825,10 @@ class UAVSwarmNode
     geometry_msgs::Pose last_goal_{};
     bool last_goal_valid_{false};
     sunray_msgs::OrcaCmd last_orca_cmd_{};
+    sunray_msgs::UAVSwarmCMD current_swarm_cmd_{};
     ros::Time last_orca_cmd_stamp_{};
     bool has_orca_cmd_{false};
+    bool has_current_swarm_cmd_{false};
     SwarmState last_effective_state_{SwarmState::INIT};
     bool last_effective_state_valid_{false};
 };

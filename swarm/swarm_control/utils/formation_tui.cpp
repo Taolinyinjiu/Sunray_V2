@@ -1,19 +1,17 @@
 /*
 本程序功能：
     1、实现基于 ncurses 的编队交互界面，在 20x20 网格上编辑 follower 相对 Leader 的自定义位置
-    2、支持保存/加载自定义阵型文件，并发布 FormationOffsets 与 UAVSwarmCMD 消息
+    2、支持保存/加载自定义阵型文件，并通过 UAVSwarmCMD.custom_offsets 发布自定义阵型
     3、集成 ring/line/column/v_shape/wedge、起飞、降落、悬停、返航和 leader 移动等快捷控制
 */
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <geometry_msgs/PoseStamped.h>
 #include <ncurses.h>
 #include <ros/ros.h>
 #include <sstream>
 #include <string>
-#include <sunray_msgs/FormationOffsets.h>
 #include <sunray_msgs/UAVSwarmCMD.h>
 #include <vector>
 
@@ -40,6 +38,11 @@ struct AppState
     ros::Time status_time{};
     int agent_num{1};
 };
+
+int expectedSeatCount(const AppState &state)
+{
+    return state.agent_num;
+}
 
 void setStatus(AppState &state, const std::string &msg)
 {
@@ -177,7 +180,7 @@ void drawUi(const AppState &state)
     drawKeyLine(line++, info_x, "q:", "quit");
 
     int selected_count = countSelected(state.grid);
-    int follower_count = std::max(0, state.agent_num - 1);
+    int follower_count = expectedSeatCount(state);
     line++;
     mvprintw(line++, info_x, "Selected seats: %d", selected_count);
     mvprintw(line++, info_x, "Followers: %d", follower_count);
@@ -311,8 +314,9 @@ bool loadOffsets(const std::string &path, GridState &grid)
 }
 
 void publishUAVSwarmCMD(ros::Publisher &pub, uint8_t swarm_cmd,
-                        uint8_t formation = sunray_msgs::UAVSwarmCMD::FORMATION_NONE, float formation_param = 0.0f,
-                        double x = 0.0, double y = 0.0, double z = 0.0, double yaw = 0.0)
+                        uint8_t formation = sunray_msgs::UAVSwarmCMD::KEEP_FORMATION, float formation_param = 0.0f,
+                        double x = 0.0, double y = 0.0, double z = 0.0, double yaw = 0.0,
+                        const std::vector<geometry_msgs::Point> &custom_offsets = {})
 {
     sunray_msgs::UAVSwarmCMD msg;
     msg.header.stamp = ros::Time::now();
@@ -324,6 +328,7 @@ void publishUAVSwarmCMD(ros::Publisher &pub, uint8_t swarm_cmd,
     msg.leader_pos.y = y;
     msg.leader_pos.z = z;
     msg.leader_yaw = yaw;
+    msg.custom_offsets = custom_offsets;
     pub.publish(msg);
 }
 
@@ -335,7 +340,6 @@ int main(int argc, char **argv)
     ros::NodeHandle nh("~");
 
     ros::Publisher swarm_pub = nh.advertise<sunray_msgs::UAVSwarmCMD>("/sunray/swarm/uav_swarm_cmd", 10);
-    ros::Publisher offsets_pub = nh.advertise<sunray_msgs::FormationOffsets>("/sunray/formation_offsets", 10);
 
     AppState state;
     if (!nh.getParam("agent_num", state.agent_num))
@@ -345,7 +349,6 @@ int main(int argc, char **argv)
             ros::param::param<int>("/agent_num", state.agent_num, 1);
         }
     }
-
     initscr();
     cbreak();
     noecho();
@@ -399,7 +402,7 @@ int main(int argc, char **argv)
             {
                 if (!state.grid.selected[r][c])
                 {
-                    int follower_count = std::max(0, state.agent_num - 1);
+                    int follower_count = expectedSeatCount(state);
                     int selected_count = countSelected(state.grid);
                     if (selected_count >= follower_count)
                     {
@@ -449,19 +452,16 @@ int main(int argc, char **argv)
         }
         else if (ch == 'c')
         {
-            int follower_count = std::max(0, state.agent_num - 1);
+            int follower_count = expectedSeatCount(state);
             int selected_count = countSelected(state.grid);
             if (selected_count != follower_count)
             {
                 setStatus(state, "Seat count must equal follower count");
                 continue;
             }
-            sunray_msgs::FormationOffsets offsets_msg;
-            offsets_msg.header.stamp = ros::Time::now();
-            offsets_msg.header.frame_id = "leader";
-            offsets_msg.offsets = collectOffsets(state.grid);
-            offsets_pub.publish(offsets_msg);
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::CUSTOM);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
+                               sunray_msgs::UAVSwarmCMD::CUSTOM, 0.0f, 0.0, 0.0, 0.0, 0.0,
+                               collectOffsets(state.grid));
             setStatus(state, "Custom formation sent");
         }
         else if (ch == 'm')
@@ -472,7 +472,7 @@ int main(int argc, char **argv)
             if (ss >> x >> y >> z >> yaw)
             {
                 publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
-                                   sunray_msgs::UAVSwarmCMD::FORMATION_NONE, 0.0f, x, y, z, yaw);
+                                   sunray_msgs::UAVSwarmCMD::KEEP_FORMATION, 0.0f, x, y, z, yaw);
                 setStatus(state, "Leader goal sent");
             }
             else
@@ -520,17 +520,17 @@ int main(int argc, char **argv)
         }
         else if (ch == 't')
         {
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::TAKEOFF);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_TAKEOFF);
             setStatus(state, "Takeoff sent");
         }
         else if (ch == 'g')
         {
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::LAND);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_LAND);
             setStatus(state, "Land sent");
         }
         else if (ch == 'h')
         {
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::HOVER);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_HOVER);
             setStatus(state, "Hover sent");
         }
         else if (ch == 'b')

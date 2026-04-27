@@ -1,18 +1,17 @@
 <launch>
   <!-- swarm_control 单机启动文件，直接选择 UAV 或 UGV 专用节点 -->
   <!-- 可调参数范围：agent_id >=1，agent_num >=1 -->
-  <!-- formation_policy: ring（推荐）；spacing > 0 -->
+  <!-- formation_policy: keep_formation 表示不在启动时指定阵型；spacing > 0 -->
   <!-- use_fixed_altitude: true/false；fixed_altitude > 0 -->
   <!-- goal_z_tolerance: 到位判定的 Z 误差容差 (m)，仅 UAV 有效 -->
-  <!-- leader_timeout/orca_timeout: 秒；rate 参数建议 5~50 -->
+  <!-- orca_timeout: 秒；rate 参数建议 5~50 -->
   <!-- ORCA 参数已并入本 launch，由专用 swarm 节点内部直接初始化 -->
   
   <arg name="agent_id" default="1"/>
   <arg name="agent_num" default="1"/>
   <arg name="agent_type" default="0"/>
-  <arg name="leader_id" default="1"/>
   <arg name="agent_name" default="uav"/>
-  <arg name="formation_policy" default="ring"/>
+  <arg name="formation_policy" default="keep_formation"/>
   <arg name="spacing" default="1.0"/>
   <arg name="spacing_min" default="0.3"/>
   <arg name="spacing_max" default="5.0"/>
@@ -20,12 +19,14 @@
   <arg name="spacing_scale_down" default="0.8"/>
   <arg name="use_fixed_altitude" default="true"/>
   <arg name="fixed_altitude" default="1.0"/>
-  <arg name="leader_timeout" default="1.0"/>
   <arg name="orca_timeout" default="1.0"/>
   <arg name="goal_rate" default="20.0"/>
   <arg name="control_rate" default="20.0"/>
   <arg name="state_pub_rate" default="20.0"/>
-  <arg name="leader_publish_goal" default="true"/>
+  <arg name="virtual_leader_x" default="0.0"/>
+  <arg name="virtual_leader_y" default="0.0"/>
+  <arg name="virtual_leader_z" default="1.0"/>
+  <arg name="virtual_leader_yaw" default="0.0"/>
   <arg name="goal_z_tolerance" default="0.2"/>
   <arg name="neighborDist" default="3.0"/>
   <arg name="timeHorizon" default="2.0"/>
@@ -44,7 +45,6 @@
     <param name="agent_id" value="$(arg agent_id)"/>
     <param name="agent_num" value="$(arg agent_num)"/>
     <param name="agent_type" value="$(arg agent_type)"/>
-    <param name="leader_id" value="$(arg leader_id)"/>
     <param name="agent_name" value="$(arg agent_name)"/>
     <param name="formation_policy" value="$(arg formation_policy)"/>
     <param name="spacing" value="$(arg spacing)"/>
@@ -54,12 +54,14 @@
     <param name="spacing_scale_down" value="$(arg spacing_scale_down)"/>
     <param name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
     <param name="fixed_altitude" value="$(arg fixed_altitude)"/>
-    <param name="leader_timeout" value="$(arg leader_timeout)"/>
     <param name="orca_timeout" value="$(arg orca_timeout)"/>
     <param name="goal_rate" value="$(arg goal_rate)"/>
     <param name="control_rate" value="$(arg control_rate)"/>
     <param name="state_pub_rate" value="$(arg state_pub_rate)"/>
-    <param name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+    <param name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+    <param name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+    <param name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+    <param name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
     <param name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
     <param name="orca_params/neighborDist" value="$(arg neighborDist)"/>
     <param name="orca_params/timeHorizon" value="$(arg timeHorizon)"/>

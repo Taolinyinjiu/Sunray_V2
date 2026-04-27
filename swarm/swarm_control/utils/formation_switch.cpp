@@ -24,7 +24,7 @@ namespace
 {
 
 void publishUAVSwarmCMD(ros::Publisher &pub, uint8_t swarm_cmd,
-                        uint8_t formation = sunray_msgs::UAVSwarmCMD::FORMATION_NONE, float formation_param = 0.0f,
+                        uint8_t formation = sunray_msgs::UAVSwarmCMD::KEEP_FORMATION, float formation_param = 0.0f,
                         double x = 0.0, double y = 0.0, double z = 0.0, double yaw = 0.0)
 {
     sunray_msgs::UAVSwarmCMD msg;
@@ -109,13 +109,13 @@ int main(int argc, char **argv)
             publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION, sunray_msgs::UAVSwarmCMD::WEDGE);
             break;
         case 101:
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::TAKEOFF);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_TAKEOFF);
             break;
         case 102:
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::LAND);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_LAND);
             break;
         case 103:
-            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::HOVER);
+            publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_HOVER);
             break;
         case 105:
             publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_RETURN);
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
             double yaw = 0.0;
             cin >> x >> y >> z >> yaw;
             publishUAVSwarmCMD(swarm_pub, sunray_msgs::UAVSwarmCMD::SWARM_FORMATION,
-                               sunray_msgs::UAVSwarmCMD::FORMATION_NONE, 0.0f, x, y, z, yaw);
+                               sunray_msgs::UAVSwarmCMD::KEEP_FORMATION, 0.0f, x, y, z, yaw);
             break;
         }
         default:

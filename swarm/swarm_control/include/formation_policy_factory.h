@@ -2,7 +2,7 @@
 本程序功能：
     1、定义 FormationPolicyFactory 工厂类，根据策略名称字符串创建对应的 FormationPolicy 实例
     2、支持 ring/line/column/v_shape/wedge/custom 六种策略
-    3、未知名称默认返回 RingPolicy
+    3、keep_formation 或未知名称返回空策略，避免隐式切到 ring
 */
 #pragma once
 
