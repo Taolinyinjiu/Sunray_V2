@@ -33,6 +33,14 @@ add_message_files(
   Vector2.msg
 )
 
+add_message_files(
+  DIRECTORY msg/planning
+  FILES
+  PlanningWaypoint.msg
+  UAVPlanningCMD.msg
+  UAVPlanningState.msg
+)
+
 ## Add service definitions after creating files under srv/
 # add_service_files(
 #   FILES

@@ -51,12 +51,12 @@
 		<remap from="~grid_map/pose"   to = "/drone_$(arg drone_id)_$(arg camera_pose_topic)"/> 
 		<!-- 地图中相机深度话题 -->
 		<remap from="~grid_map/depth" to = "/drone_$(arg drone_id)_$(arg depth_topic)"/>
-		<!-- 手动目标点话题 -->
+		<!-- planner_interface转发后的目标点话题 -->
 		<remap from="~move_base_simple/goal" to="/move_base_sample/goal"/>
 
 		<!-- 规划器状态机参数-->
-		<!-- 1 MANUAL_TARGET: use 2D Nav Goal to select goal  -->
-		<!-- 2 PRESET_TARGET: use global waypoints below  -->
+		<!-- 1 EXTERNAL_TARGET: subscribe to planner_interface goal topic via remapped ~move_base_simple/goal -->
+		<!-- 2 PRESET_TARGET: use global waypoints below -->
 		<param name="fsm/flight_type" value="1" type="int"/>
 		<!-- 重规划时间间隔，如果要增大规划频率，则减小该数值 -->
 		<param name="fsm/thresh_replan_time" value="1.0" type="double"/>
@@ -160,6 +160,8 @@
 	<node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
 		<remap from="position_cmd" to="drone_$(arg drone_id)_planning/pos_cmd"/>
 		<remap from="~planning/bspline" to="drone_$(arg drone_id)_planning/bspline"/>
+		<remap from="~odom" to="/drone_$(arg drone_id)_$(arg odom_topic)"/>
+		<remap from="~goal" to="/move_base_sample/goal"/>
 
 		<param name="traj_server/time_forward" value="1.0" type="double"/>
 	</node>

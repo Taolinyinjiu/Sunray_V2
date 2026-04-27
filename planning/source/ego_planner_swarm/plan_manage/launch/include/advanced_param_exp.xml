@@ -36,6 +36,8 @@
 
   <arg name="flight_type"/>
   <arg name="use_distinctive_trajs"/>
+  <arg name="goal_name"/>
+  <arg name="planner_state_topic"/>
 
   <arg name="obj_num_set"/>
 
@@ -49,6 +51,7 @@
     <remap from="~odom_world" to="$(arg odometry_topic)"/>
     <remap from="~planning/bspline" to = "/drone_$(arg drone_id)_planning/bspline"/>
     <remap from="~planning/data_display" to = "/drone_$(arg drone_id)_planning/data_display"/>
+    <remap from="~planning/state" to="$(arg planner_state_topic)"/>
     <remap from="~planning/broadcast_bspline_from_planner" to = "/broadcast_bspline"/>
     <remap from="~planning/broadcast_bspline_to_planner" to = "/broadcast_bspline"/>
 
@@ -56,6 +59,7 @@
     <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
     <remap from="~grid_map/pose"   to = "$(arg camera_pose_topic)"/> 
     <remap from="~grid_map/depth" to = "$(arg depth_topic)"/>
+    <remap from="~move_base_simple/goal" to="$(arg goal_name)"/>
     
 
     <!-- planning fsm -->

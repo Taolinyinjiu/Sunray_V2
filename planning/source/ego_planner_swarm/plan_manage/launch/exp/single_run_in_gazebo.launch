@@ -28,6 +28,24 @@
   <arg name="odom_topic" default="/uav1/sunray/gazebo_pose" />
   <!-- 点云信息，仿真中由map_generator产生 or 激光雷达 -->
   <arg name="cloud_topic" default="/uav1/mid360_point" />
+  <!-- planner内部目标话题 -->
+  <arg name="planner_goal_topic" default="/uav1/planning/goal" />
+  <!-- EGO内部统一状态话题 -->
+  <arg name="planner_state_topic" default="/uav1/planning/ego_state" />
+  <!-- sunray_planning任务输入话题 -->
+  <arg name="planning_cmd_topic" default="/uav1/sunray/planning_cmd" />
+  <!-- sunray_planning状态输出话题 -->
+  <arg name="planning_state_pub_topic" default="/uav1/sunray/planning_state" />
+  <!-- sunray_planning控制输出话题 -->
+  <arg name="control_pub_topic" default="/uav1/sunray/uav_control_cmd" />
+  <!-- traj_server位置控制指令话题 -->
+  <arg name="position_cmd_topic" default="/uav1/pos_cmd" />
+  <!-- RViz目标输入话题 -->
+  <arg name="rviz_goal_topic" default="/move_base_simple/goal" />
+  <!-- RViz目标默认高度 -->
+  <arg name="rviz_goal_height" default="0.6" />
+  <!-- sunray_planning 是否保存日志 -->
+  <arg name="log_save" default="false" />
 
   <!-- 相机及深度信息仿真中没有使用，此处可忽略(真机中使用) -->
   <arg name="camera_pose_topic" default="pcl_render_node/camera_pose" />
@@ -44,6 +62,8 @@
     <remap from="~planning/bspline" to="/drone_$(arg drone_id)_planning/bspline" />
     <!-- 显示话题 -->
     <remap from="~planning/data_display" to="/drone_$(arg drone_id)_planning/data_display" />
+    <!-- 规划器统一状态话题 -->
+    <remap from="~planning/state" to="$(arg planner_state_topic)" />
     <!-- 订阅 其他无人机广播的B样条 -->
     <remap from="~planning/broadcast_bspline_from_planner" to="/broadcast_bspline" />
     <!-- 发布 本无人机广播的B样条 -->
@@ -56,12 +76,12 @@
     <remap from="~grid_map/pose" to="$(arg camera_pose_topic)" />
     <!-- 地图中相机深度话题 -->
     <remap from="~grid_map/depth" to="$(arg depth_topic)" />
-    <!-- 手动目标点话题 -->
-    <remap from="~move_base_simple/goal" to="/goal_1" />
+    <!-- planner内部目标话题 -->
+    <remap from="~move_base_simple/goal" to="$(arg planner_goal_topic)" />
 
     <!-- 规划器状态机参数-->
-    <!-- 1 MANUAL_TARGET: use 2D Nav Goal to select goal  -->
-    <!-- 2 PRESET_TARGET: use global waypoints below  -->
+    <!-- 1 EXTERNAL_TARGET: subscribe to planner_interface goal topic via remapped ~move_base_simple/goal -->
+    <!-- 2 PRESET_TARGET: use global waypoints below -->
     <param name="fsm/flight_type" value="1" type="int" />
     <!-- 重规划时间间隔，如果要增大规划频率，则减小该数值 -->
     <param name="fsm/thresh_replan_time" value="0.2" type="double" />
@@ -163,10 +183,37 @@
 
   <!-- trajectory server : 将ego输出的B样条转换为position_cmd类型发布 -->
   <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
-    <remap from="position_cmd" to="/uav1/pos_cmd" />
+    <remap from="position_cmd" to="$(arg position_cmd_topic)" />
     <remap from="~planning/bspline" to="drone_$(arg drone_id)_planning/bspline" />
+    <remap from="~odom" to="$(arg odom_topic)" />
+    <remap from="~goal" to="$(arg planner_goal_topic)" />
     <param name="traj_server/time_forward" value="1.0" type="double" />
   </node>
+
+  <!-- 独立桥节点：捕获RViz目标并转发为sunray_planning任务 -->
+  <include file="$(find sunray_planning)/launch/rviz_goal_bridge.launch">
+    <arg name="node_name" value="rviz_goal_bridge_1" />
+    <arg name="rviz_goal_topic" value="$(arg rviz_goal_topic)" />
+    <arg name="planning_cmd_pub_topic" value="$(arg planning_cmd_topic)" />
+    <arg name="control_cmd" value="6" />
+    <arg name="cmd_source" value="1" />
+    <arg name="goal_height" value="$(arg rviz_goal_height)" />
+    <arg name="use_goal_yaw" value="true" />
+    <arg name="log_save" value="$(arg log_save)" />
+  </include>
+
+  <include file="$(find sunray_planning)/launch/sunray_planning.launch">
+    <arg name="set_global_params" value="false" />
+    <arg name="planner_type" value="ego" />
+    <arg name="planner_id" value="0" />
+    <arg name="uav_name" value="uav" />
+    <arg name="uav_id" value="1" />
+    <arg name="node_name" value="sunray_planning_node_1" />
+    <arg name="planning_cmd_sub_topic" value="$(arg planning_cmd_topic)" />
+    <arg name="control_pub_topic" value="$(arg control_pub_topic)" />
+    <arg name="planning_state_pub_topic" value="$(arg planning_state_pub_topic)" />
+    <arg name="log_save" value="$(arg log_save)" />
+  </include>
 
   <!-- 点云转换为世界坐标系（EGO订阅的点云必须是全局坐标系的） -->
   <node name="pointcloud_remap_directly_node" pkg="pointcloud_remap" type="pointcloud_remap_directly_node" output="screen">

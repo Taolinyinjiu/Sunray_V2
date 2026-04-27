@@ -15,6 +15,9 @@ find_package(catkin REQUIRED COMPONENTS
   geographic_msgs
   sunray_common
   sunray_msgs
+  geometry_msgs
+  nav_msgs
+  roscpp
 )
 
 catkin_package(
@@ -33,6 +36,7 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
 
 add_library(sunray_ugv_control_lib

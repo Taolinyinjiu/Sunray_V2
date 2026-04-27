@@ -1,16 +1,141 @@
 #include <plan_manage/ego_replan_fsm.h>
 namespace ego_planner
 {
+  uint8_t EGOReplanFSM::toSunrayPlannerState(FSM_EXEC_STATE state) const
+  {
+    switch (state)
+    {
+    case INIT:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_INIT;
+    case WAIT_TARGET:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_WAIT_TARGET;
+    case GEN_NEW_TRAJ:
+    case SEQUENTIAL_START:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_GENERATE;
+    case REPLAN_TRAJ:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN;
+    case EXEC_TRAJ:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_EXEC;
+    case EMERGENCY_STOP:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP;
+    default:
+      return sunray_msgs::UAVPlanningState::PLANNER_STATE_UNDEFINE;
+    }
+  }
+
+  std::string EGOReplanFSM::toSunrayPlannerStateString(FSM_EXEC_STATE state) const
+  {
+    switch (state)
+    {
+    case INIT:
+      return "INIT";
+    case WAIT_TARGET:
+      return "WAIT_TARGET";
+    case GEN_NEW_TRAJ:
+      return "GENERATE";
+    case REPLAN_TRAJ:
+      return "REPLAN";
+    case EXEC_TRAJ:
+      return "EXEC";
+    case EMERGENCY_STOP:
+      return "EMERGENCY_STOP";
+    case SEQUENTIAL_START:
+      return "GENERATE";
+    default:
+      return "UNDEFINE";
+    }
+  }
+
+  void EGOReplanFSM::fillPlanningStateCommonFields(sunray_msgs::UAVPlanningState &msg) const
+  {
+    msg.header.stamp = ros::Time::now();
+    msg.planner_type = sunray_msgs::UAVPlanningState::PLANNER_EGO;
+    msg.planner_type_string = "EGO";
+    msg.planning_fsm_state = sunray_msgs::UAVPlanningState::INIT;
+    msg.planning_fsm_state_string = "INIT";
+    msg.planning_frame = sunray_msgs::UAVPlanningState::SUNRAY_LOCAL;
+    msg.planning_frame_string = "SUNRAY_LOCAL";
+    msg.cmd_source = sunray_msgs::UAVPlanningState::CONTROL_CMD;
+    msg.cmd_source_string = "CONTROL_CMD";
+
+    const bool has_any_target = have_target_ || waypoint_num_ > 0;
+    const bool is_multi_waypoint = waypoint_num_ > 1;
+    msg.goal_type = has_any_target
+                        ? (is_multi_waypoint ? sunray_msgs::UAVPlanningState::GOAL_MULTI
+                                             : sunray_msgs::UAVPlanningState::GOAL_SINGLE)
+                        : 0;
+    msg.goal_type_string = has_any_target ? (is_multi_waypoint ? "GOAL_MULTI" : "GOAL_SINGLE")
+                                          : "UNDEFINE";
+
+    msg.waypoint_count = waypoint_num_ > 0 ? waypoint_num_ : (has_any_target ? 1 : 0);
+    msg.current_waypoint_index = wp_id_ >= 0 ? static_cast<uint32_t>(wp_id_) : 0;
+
+    const Eigen::Vector3d current_target = has_any_target ? end_pt_ : Eigen::Vector3d::Zero();
+    msg.current_target.position.x = current_target(0);
+    msg.current_target.position.y = current_target(1);
+    msg.current_target.position.z = current_target(2);
+    msg.current_target.yaw = 0.0f;
+    msg.current_target.hold_time = 0.0f;
+
+    Eigen::Vector3d final_target = current_target;
+    if (waypoint_num_ > 0)
+    {
+      const int final_index = std::max(0, waypoint_num_ - 1);
+      final_target = wps_.empty() ? Eigen::Vector3d(waypoints_[final_index][0],
+                                                    waypoints_[final_index][1],
+                                                    waypoints_[final_index][2])
+                                  : wps_[final_index];
+    }
+
+    msg.final_target.position.x = final_target(0);
+    msg.final_target.position.y = final_target(1);
+    msg.final_target.position.z = final_target(2);
+    msg.final_target.yaw = 0.0f;
+    msg.final_target.hold_time = 0.0f;
+  }
+
+  void EGOReplanFSM::publishPlanningState()
+  {
+    publishPlanningState(toSunrayPlannerState(exec_state_), toSunrayPlannerStateString(exec_state_));
+  }
+
+  void EGOReplanFSM::publishPlanningState(uint8_t planner_state, const std::string &planner_state_string)
+  {
+    sunray_msgs::UAVPlanningState planning_state_msg;
+    fillPlanningStateCommonFields(planning_state_msg);
+    planning_state_msg.planner_state = planner_state;
+    planning_state_msg.planner_state_string = planner_state_string;
+    planning_state_pub_.publish(planning_state_msg);
+  }
+
   void EGOReplanFSM::init(ros::NodeHandle &nh)
   {
     current_wp_ = 0;
+    waypoint_num_ = 0;
+    wp_id_ = -1;
     exec_state_ = FSM_EXEC_STATE::INIT;
     have_target_ = false;
     have_odom_ = false;
+    have_new_target_ = false;
     have_recv_pre_agent_ = false;
+    have_trigger_ = false;
+    flag_escape_emergency_ = false;
+    odom_pos_.setZero();
+    odom_vel_.setZero();
+    odom_acc_.setZero();
+    init_pt_.setZero();
+    start_pt_.setZero();
+    start_vel_.setZero();
+    start_acc_.setZero();
+    start_yaw_.setZero();
+    end_pt_.setZero();
+    end_vel_.setZero();
+    local_target_pt_.setZero();
+    local_target_vel_.setZero();
+    wps_.clear();
 
     /*  fsm param  */
-   // 目标点类型：1，手动设定目标点；2，预设目标点
+   // 目标点类型：1，通过planner_interface转发的目标接口；2，预设目标点
     nh.param("fsm/flight_type", target_type_, -1);
     // 重规划时间间隔
     nh.param("fsm/thresh_replan_time", replan_thresh_, -1.0);
@@ -79,16 +204,13 @@ namespace ego_planner
 
     bspline_pub_ = nh.advertise<traj_utils::Bspline>("planning/bspline", 10);
     data_disp_pub_ = nh.advertise<traj_utils::DataDisp>("planning/data_display", 100);
+    planning_state_pub_ = nh.advertise<sunray_msgs::UAVPlanningState>("planning/state", 10);
 
-    // 三种目标点输入模式
-    if (target_type_ == TARGET_TYPE::MANUAL_TARGET)
+    // 目标点输入模式
+    if (target_type_ == TARGET_TYPE::EXTERNAL_TARGET)
     {
-      // MANUAL_TARGET：RVIZ手动输入
-      waypoint_sub_ = nh.subscribe("/move_base_simple/goal", 1, &EGOReplanFSM::waypointCallback, this);
-    }
-    else if (target_type_ == TARGET_TYPE::CMD_TARGET)
-    {
-      // CMD_TARGET：？
+      // 统一通过planner_interface持有的目标接口输入。
+      // launch负责将~move_base_simple/goal重映射到具体planner goal topic。
       waypoint_sub_ = nh.subscribe("move_base_simple/goal", 1, &EGOReplanFSM::waypointCallback, this);
     }
     else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
@@ -120,6 +242,8 @@ namespace ego_planner
     {
         cout << RED << node_name << "Wrong target_type_ value! target_type_=" << target_type_<< TAIL << endl;
     }
+
+    publishPlanningState();
   }
 
   void EGOReplanFSM::readGivenWps()
@@ -210,12 +334,7 @@ namespace ego_planner
     // trigger_ = true;
     init_pt_ = odom_pos_;
 
-    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, 1.0);
-
-    if(target_type_ == TARGET_TYPE::CMD_TARGET)
-    {
-      end_wp = Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
-    }
+    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
 
     // 发布目标点用于显示 - [目标点,颜色,大小,id]
     visualization_->displayGoalPoint(end_wp, Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, 1);
@@ -427,6 +546,7 @@ namespace ego_planner
     exec_state_ = new_state;
 
     cout << WHITE_IN_BLUE << node_name << "[" + pos_call + "]: from " + state_str[pre_s] + " to " + state_str[int(new_state)]<< TAIL << endl;
+    publishPlanningState();
   }
 
   std::pair<int, EGOReplanFSM::FSM_EXEC_STATE> EGOReplanFSM::timesOfConsecutiveStateCalls()
@@ -572,6 +692,7 @@ namespace ego_planner
       {
         if (t_cur > info->duration_ - 1e-2)
         {
+          publishPlanningState(sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS, "SUCCESS");
           have_target_ = false;
           have_trigger_ = false;
 
@@ -617,6 +738,7 @@ namespace ego_planner
 
     data_disp_.header.stamp = ros::Time::now();
     data_disp_pub_.publish(data_disp_);
+    publishPlanningState();
 
   force_return:;
     exec_timer_.start();

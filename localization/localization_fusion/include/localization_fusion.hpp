@@ -112,6 +112,7 @@ class LocalizationFusion {
     double health_rate_hz_{10};
     bool use_receive_time_{false}; // 使用接收时刻时间戳替换里程计信息时间戳
     bool log_save_{false};         // 是否保存文件日志
+    
     // 输出topic约定
     std::string global_odometry_topic_{"${uav_ns}/sunray/localization/global_odom"};
     std::string local_odometry_topic_{"${uav_ns}/sunray/localization/local_odom"};
