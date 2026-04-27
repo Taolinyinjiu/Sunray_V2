@@ -38,6 +38,16 @@ target_link_libraries(ugv_terminal_control_node
 
 add_dependencies(ugv_terminal_control_node ${catkin_EXPORTED_TARGETS})
 
+add_executable(terminal_control_ugv_node
+  src/terminal_control/terminal_control_ugv.cpp
+)
+
+target_link_libraries(terminal_control_ugv_node
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(terminal_control_ugv_node ${catkin_EXPORTED_TARGETS})
+
 add_executable(triangle_velocity_test
   src/velocity_test/triangle_velocity_test.cpp
 )

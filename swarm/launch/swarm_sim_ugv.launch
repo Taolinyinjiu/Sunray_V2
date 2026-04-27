@@ -1,14 +1,13 @@
 <launch>
   <!-- 中文说明：多机仿真启动文件（最多 6 台） -->
   <!-- 可调参数范围：agent_num 1~6，agent_type=0(UAV)/1(UGV) -->
-  <!-- formation_policy: ring（推荐）；spacing > 0 -->
+  <!-- formation_policy: keep_formation 表示不在启动时指定阵型；spacing > 0 -->
   <!-- 注意：agent_num 超过 6 需要手动扩展本文件 -->
 
   <arg name="agent_num" default="1"/>
   <arg name="agent_type" default="1"/>
-  <arg name="leader_id" default="1"/>
   <arg name="agent_name" default="ugv"/>
-  <arg name="formation_policy" default="ring"/>
+  <arg name="formation_policy" default="keep_formation"/>
   <arg name="spacing" default="2.5"/>
   <arg name="spacing_min" default="0.3"/>
   <arg name="spacing_max" default="5.0"/>
@@ -17,7 +16,10 @@
   <arg name="use_fixed_altitude" default="true"/>
   <arg name="fixed_altitude" default="1.0"/>
   <arg name="goal_z_tolerance" default="0.2"/>
-  <arg name="leader_publish_goal" default="true"/>
+  <arg name="virtual_leader_x" default="0.0"/>
+  <arg name="virtual_leader_y" default="0.0"/>
+  <arg name="virtual_leader_z" default="0.0"/>
+  <arg name="virtual_leader_yaw" default="0.0"/>
 
   <arg name="neighborDist" default="3.0"/>
   <arg name="timeHorizon" default="2.0"/>
@@ -36,11 +38,10 @@
 
   <!-- agent 1 -->
   <group if="$(eval arg('agent_num') >= 1)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="1"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
-      <arg name="leader_id" value="$(arg leader_id)"/>
       <arg name="agent_name" value="$(arg agent_name)"/>
       <arg name="formation_policy" value="$(arg formation_policy)"/>
       <arg name="spacing" value="$(arg spacing)"/>
@@ -51,7 +52,10 @@
       <arg name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
-      <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+      <arg name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+      <arg name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+      <arg name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+      <arg name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -62,17 +66,16 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_1"/>
+      <arg name="node_name" value="swarm_control_node_ugv_1"/>
     </include>
   </group>
 
   <!-- agent 2 -->
   <group if="$(eval arg('agent_num') >= 2)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="2"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
-      <arg name="leader_id" value="$(arg leader_id)"/>
       <arg name="agent_name" value="$(arg agent_name)"/>
       <arg name="formation_policy" value="$(arg formation_policy)"/>
       <arg name="spacing" value="$(arg spacing)"/>
@@ -83,7 +86,10 @@
       <arg name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
-      <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+      <arg name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+      <arg name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+      <arg name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+      <arg name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -94,17 +100,16 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_2"/>
+      <arg name="node_name" value="swarm_control_node_ugv_2"/>
     </include>
   </group>
 
   <!-- agent 3 -->
   <group if="$(eval arg('agent_num') >= 3)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="3"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
-      <arg name="leader_id" value="$(arg leader_id)"/>
       <arg name="agent_name" value="$(arg agent_name)"/>
       <arg name="formation_policy" value="$(arg formation_policy)"/>
       <arg name="spacing" value="$(arg spacing)"/>
@@ -115,7 +120,10 @@
       <arg name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
-      <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+      <arg name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+      <arg name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+      <arg name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+      <arg name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -126,17 +134,16 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_3"/>
+      <arg name="node_name" value="swarm_control_node_ugv_3"/>
     </include>
   </group>
 
   <!-- agent 4 -->
   <group if="$(eval arg('agent_num') >= 4)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="4"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
-      <arg name="leader_id" value="$(arg leader_id)"/>
       <arg name="agent_name" value="$(arg agent_name)"/>
       <arg name="formation_policy" value="$(arg formation_policy)"/>
       <arg name="spacing" value="$(arg spacing)"/>
@@ -147,7 +154,10 @@
       <arg name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
-      <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+      <arg name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+      <arg name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+      <arg name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+      <arg name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -158,17 +168,16 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_4"/>
+      <arg name="node_name" value="swarm_control_node_ugv_4"/>
     </include>
   </group>
 
   <!-- agent 5 -->
   <group if="$(eval arg('agent_num') >= 5)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="5"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
-      <arg name="leader_id" value="$(arg leader_id)"/>
       <arg name="agent_name" value="$(arg agent_name)"/>
       <arg name="formation_policy" value="$(arg formation_policy)"/>
       <arg name="spacing" value="$(arg spacing)"/>
@@ -179,7 +188,10 @@
       <arg name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
-      <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+      <arg name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+      <arg name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+      <arg name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+      <arg name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -190,17 +202,16 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_5"/>
+      <arg name="node_name" value="swarm_control_node_ugv_5"/>
     </include>
   </group>
 
   <!-- agent 6 -->
   <group if="$(eval arg('agent_num') >= 6)">
-    <include file="$(find sunray_swarm)/Agent_Swarm/launch/agent_swarm.launch">
+    <include file="$(find sunray_swarm_control)/swarm_control/launch/swarm_control.launch">
       <arg name="agent_id" value="6"/>
       <arg name="agent_num" value="$(arg agent_num)"/>
       <arg name="agent_type" value="$(arg agent_type)"/>
-      <arg name="leader_id" value="$(arg leader_id)"/>
       <arg name="agent_name" value="$(arg agent_name)"/>
       <arg name="formation_policy" value="$(arg formation_policy)"/>
       <arg name="spacing" value="$(arg spacing)"/>
@@ -211,7 +222,10 @@
       <arg name="use_fixed_altitude" value="$(arg use_fixed_altitude)"/>
       <arg name="fixed_altitude" value="$(arg fixed_altitude)"/>
       <arg name="goal_z_tolerance" value="$(arg goal_z_tolerance)"/>
-      <arg name="leader_publish_goal" value="$(arg leader_publish_goal)"/>
+      <arg name="virtual_leader_x" value="$(arg virtual_leader_x)"/>
+      <arg name="virtual_leader_y" value="$(arg virtual_leader_y)"/>
+      <arg name="virtual_leader_z" value="$(arg virtual_leader_z)"/>
+      <arg name="virtual_leader_yaw" value="$(arg virtual_leader_yaw)"/>
       <arg name="neighborDist" value="$(arg neighborDist)"/>
       <arg name="timeHorizon" value="$(arg timeHorizon)"/>
       <arg name="timeHorizonObst" value="$(arg timeHorizonObst)"/>
@@ -222,7 +236,7 @@
       <arg name="geo_max_x" value="$(arg geo_max_x)"/>
       <arg name="geo_min_y" value="$(arg geo_min_y)"/>
       <arg name="geo_max_y" value="$(arg geo_max_y)"/>
-      <arg name="node_name" value="agent_swarm_node_ugv_6"/>
+      <arg name="node_name" value="swarm_control_node_ugv_6"/>
     </include>
   </group>
 </launch>

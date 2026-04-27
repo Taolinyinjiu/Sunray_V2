@@ -1,0 +1,38 @@
+<launch>
+  <!-- 仅保留两种定位源：
+       1: MOCAP
+       3: GAZEBO -->
+  <arg name="source_id" default="3" />
+  <arg name="config_yamlfile_path"
+       default="$(find localization_fusion)/config/localization_sources_ugv.yaml" />
+  <arg name="health_rate_hz" default="10.0" />
+  <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
+
+  <arg name="ugv_name" default="ugv" />
+  <arg name="ugv_id" default="1" />
+  <arg name="node_name" default="localization_fusion_ugv" />
+  <arg name="set_global_params" default="true" />
+  <arg name="vrpn_server" default="192.168.20.15" />
+
+  <param if="$(arg set_global_params)" name="/ugv_name" value="$(arg ugv_name)" />
+  <param if="$(arg set_global_params)" name="/ugv_id" value="$(arg ugv_id)" />
+
+  <group if="$(eval int(arg('source_id')) == 1)">
+    <include file="$(find localization_fusion)/launch/localization_mocap.launch">
+      <arg name="vrpn_server" value="$(arg vrpn_server)" />
+    </include>
+  </group>
+
+  <group if="$(eval int(arg('source_id')) == 3)">
+    <include file="$(find localization_fusion)/launch/localization_gazebo.launch" />
+  </group>
+
+  <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg node_name)" output="screen">
+    <param name="source_id" value="$(arg source_id)" />
+    <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <param name="health_rate_hz" value="$(arg health_rate_hz)" />
+    <param name="use_receive_time" value="$(arg use_receive_time)" />
+    <param name="ugv_name" value="$(arg ugv_name)" />
+    <param name="ugv_id" value="$(arg ugv_id)" />
+  </node>
+</launch>

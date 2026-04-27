@@ -1,9 +1,20 @@
 <launch>
-  <!-- UGV控制节点启动文件 -->
-  
-  <!-- 加载配置文件 -->
-  <rosparam file="$(find sunray_ugv_control)/config/sunray_control_config.yaml" />
-  
-  <!-- 启动UGV控制节点 -->
-  <node pkg="sunray_ugv_control" type="node" name="ugv_control_node" output="screen" />
+  <arg name="config_yamlfile_path"
+       default="$(find sunray_ugv_control)/config/sunray_control_config.yaml" />
+  <arg name="ugv_name" default="ugv" />
+  <arg name="ugv_id" default="1" />
+  <arg name="node_name" default="ugv_control_node" />
+  <arg name="set_global_params" default="true" />
+
+  <param if="$(arg set_global_params)" name="/ugv_name" value="$(arg ugv_name)" />
+  <param if="$(arg set_global_params)" name="/ugv_id" value="$(arg ugv_id)" />
+
+  <node pkg="sunray_ugv_control"
+        type="ugv_control_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <param name="ugv_name" value="$(arg ugv_name)" />
+    <param name="ugv_id" value="$(arg ugv_id)" />
+  </node>
 </launch>

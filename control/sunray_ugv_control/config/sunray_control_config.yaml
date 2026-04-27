@@ -1,40 +1,65 @@
-# UGV控制配置文件
+# ------------------- basic -----------------------
+basic_param:
+  ugv_types: 0
+  controller_update_frequency: 100.0
+  supervisor_update_frequency: 20.0
+  controller_state_pub_frequency: 100.0
+  odom_topic_name: "${ugv_ns}/sunray/localization/local_odom"
+  odom_status_topic_name: "${ugv_ns}/sunray/localization/odom_status"
+  control_cmd_topic_name: "${ugv_ns}/sunray/ugv_control/control_cmd"
+  cmd_vel_topic_name: "${ugv_ns}/cmd_vel"
+  fsm_state_topic_name: "${ugv_ns}/sunray/ugv_control/ugv_control_fsm_state"
+  controller_state_topic_name: "${ugv_ns}/sunray/ugv_control/ugv_controller_state"
 
-# 无人车ID
-ugv_id: "ugv_1"
+# ------------------- timeout -----------------------
+timeout_param:
+  wait_poscmd_time: 2.0
+  wait_velcmd_time: 0.3
+  odom_timeout: 0.5
 
-# 底盘类型：1=麦克纳姆轮，2=差速轮
-drive_type: 2
+# ------------------- fence -----------------------
+geo_fence_param:
+  x_min: -10.0
+  x_max: 10.0
+  y_min: -10.0
+  y_max: 10.0
+  z_min: -1.0
+  z_max: 1.0
 
-# 控制器参数
-kp_linear: 0.5
-kp_angular: 1.0
-max_linear_vel: 1.0
-max_angular_vel: 1.0
+# ------------------- home -----------------------
+home_param:
+  use_current_pose_as_home: true
+  home_x: 0.0
+  home_y: 0.0
+  home_z: 0.0
+  home_yaw: 0.0
 
-# 差速轮 MOVE_POINT 倒车策略
-# enable_reverse: true 时，近距离目标在车身后方可倒车抵达
-# reverse_angle_threshold: 触发倒车的最小后方夹角，单位 rad，2.09rad 约等于 120deg
-# reverse_distance_threshold: 只在目标距离不超过该值时允许倒车，单位 m
-# reverse_speed_ratio: 倒车速度相对前进限速的比例
-# final_yaw_distance_threshold: 距目标多近时切换为原地收最终 yaw，单位 m
-enable_reverse: true
-reverse_angle_threshold: 2.09
-reverse_distance_threshold: 0.8
-reverse_speed_ratio: 0.6
-final_yaw_distance_threshold: 0.05
+# ------------------- controller -----------------------
+controller_param:
+  point_x_kp: 1.2
+  point_x_ki: 0.0
+  point_x_kd: 0.0
+  point_y_kp: 1.2
+  point_y_ki: 0.0
+  point_y_kd: 0.0
+  point_yaw_kp: 1.5
+  point_yaw_ki: 0.0
+  point_yaw_kd: 0.0
 
-# 速度命令超时参数
-wait_velcmd_time: 5.0
+  vel_x_kp: 1.0
+  vel_x_ki: 0.0
+  vel_x_kd: 0.0
+  vel_y_kp: 1.0
+  vel_y_ki: 0.0
+  vel_y_kd: 0.0
+  vel_yaw_kp: 1.2
+  vel_yaw_ki: 0.0
+  vel_yaw_kd: 0.0
 
-# 点位到达判定阈值
-point_pos_tolerance: 0.05
-point_yaw_tolerance: 0.10
-
-# 地理围栏参数
-fence_min_x: -10.0
-fence_min_y: -10.0
-fence_min_z: -1.0
-fence_max_x: 10.0
-fence_max_y: 10.0
-fence_max_z: 1.0
+  lateral_to_yaw_gain: 1.0
+  max_linear_x: 1.0
+  max_linear_y: 1.0
+  max_angular_z: 1.2
+  goal_pos_tolerance: 0.15
+  goal_yaw_tolerance: 0.20
+  

@@ -1,20 +1,31 @@
 std_msgs/Header header
 
-# UGV控制状态机状态枚举
-uint8 INIT=0    # 初始化状态
-uint8 HOLD=1     # 停止状态
-uint8 RETURN=2   # 返航状态
-uint8 MOVE=3     # 移动状态
+uint8 FSM_INIT=0
+uint8 FSM_HOLD=1
+uint8 FSM_RETURN=2
+uint8 FSM_MOVE=3
 
-# 当前的状态机状态
+float64 geo_fence_x_min
+float64 geo_fence_x_max
+float64 geo_fence_y_min
+float64 geo_fence_y_max
+float64 geo_fence_z_min
+float64 geo_fence_z_max
+
+geometry_msgs/Point home_point
+UGVControlCMD active_control_cmd
 uint8 fsm_state
 
-## 上一条收到的指令
-sunray_msgs/UGVControlCMD ugv_control_cmd
+geometry_msgs/Point desired_pos
+geometry_msgs/Vector3 desired_vel
+float64 desired_yaw
 
-##返航点
+geometry_msgs/Point current_pos
+geometry_msgs/Vector3 current_vel
+float64 current_yaw
 
+geometry_msgs/Twist controller_cmd_vel
 
-## 下发到底层的控制指令
-geometry_msgs/Twist cmd_vel
-
+bool odom_valid
+bool control_cmd_valid
+bool inside_geo_fence

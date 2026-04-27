@@ -1,100 +1,119 @@
-#ifndef UGV_CONTROL_FSM_H
-#define UGV_CONTROL_FSM_H
+#pragma once
 
-#include <ros/ros.h>
-#include <geometry_msgs/Twist.h>
-#include <nav_msgs/Odometry.h>
-#include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/OdomStatus.h>
-#include <sunray_msgs/UGVControlFSMState.h>
-#include <memory>
-#include <Eigen/Eigen>
-#include "sunray_ugv_control/ugv_controller.h"
 #include "sunray_ugv_control/ugv_control_utils.h"
+#include "sunray_ugv_control/ugv_controller.h"
+#include <memory>
+#include <mutex>
+#include <nav_msgs/Odometry.h>
+#include <ros/ros.h>
+#include <sunray_msgs/OdomStatus.h>
+#include <sunray_msgs/UGVControlCMD.h>
+#include <sunray_msgs/UGVControlFSMState.h>
 
 namespace sunray_ugv_control {
 
-class UGVControlFSM {
-public:
-  UGVControlFSM(ros::NodeHandle& nh);
-  ~UGVControlFSM();
+// ROS 话题连接关系与监督循环频率配置。
+struct BasicConfig {
+    int ugv_type{sunray_msgs::UGVControllerState::MECANUM};
+    double controller_update_frequency{100.0};
+    double supervisor_update_frequency{20.0};
+    double controller_state_pub_frequency{100.0};
 
-private:
-  // 状态枚举
-  enum State {
-    INIT,
-    HOLD,
-    RETURN,
-    MOVE
-  };
-
-  // ROS节点
-  ros::NodeHandle nh_;
-  std::string ugv_id_; // 无人车id
-  std::string localization_ns_;
-  int drive_type_;
-  std::string drive_type_name_;
-  ros::Subscriber sub_odom_;
-  ros::Subscriber sub_odom_status_;
-  ros::Subscriber sub_control_cmd_;
-  ros::Publisher pub_cmd_vel_;
-  ros::Publisher pub_fsm_state_;
-  ros::Publisher pub_debug_;
-
-  // 控制器
-  std::unique_ptr<UGVController> controller_;
-
-  // 当前状态
-  State current_state_;
-  Eigen::Vector3d current_pos_;
-  double current_yaw_;
-  bool have_odom_;
-
-  // 控制指令
-  sunray_msgs::UGVControlCMD ugv_control_cmd_;
-  
-  // 最后发布的控制指令
-  geometry_msgs::Twist last_cmd_vel;
-
-  // 返航点
-  Eigen::Vector3d return_point_;
-  double return_yaw_;
-
-  // 地理围栏
-  Eigen::Vector3d fence_min_;
-  Eigen::Vector3d fence_max_;
-
-  // 时间参数
-  double WAIT_VELCMD_TIME_;
-  double point_pos_tolerance_;
-  double point_yaw_tolerance_;
-
-  // 定时器
-  ros::Timer control_timer_;
-  ros::Timer geo_fence_timer_;
-  ros::Timer status_print_timer_;
-
-  // 回调函数
-  void odom_callback(const nav_msgs::Odometry::ConstPtr& msg);
-  void odom_status_callback(const sunray_msgs::OdomStatus::ConstPtr& msg);
-  void control_cmd_callback(const sunray_msgs::UGVControlCMD::ConstPtr& msg);
-  void control_timer_callback(const ros::TimerEvent& event);
-  void geo_fence_timer_callback(const ros::TimerEvent& event);
-
-  // 状态机处理函数
-  void process_init();
-  void process_hold();
-  void process_return();
-  void process_move();
-
-  // 辅助函数
-  bool is_point_reached(const sunray_msgs::UGVControlCMD& cmd) const;
-  void switch_to_hold();
-  void publish_fsm_state();
-  void publish_debug();
-  void print_status_info(const ros::TimerEvent& event);
+    std::string odom_topic_name;
+    std::string odom_status_topic_name;
+    std::string control_cmd_topic_name;
+    std::string cmd_vel_topic_name;
+    std::string fsm_state_topic_name;
+    std::string controller_state_topic_name;
 };
 
-} // namespace sunray_ugv_control
+// 触发安全回退到 HOLD 的各类超时阈值。
+struct TimeoutConfig {
+    double wait_poscmd_time{2.0};
+    double wait_velcmd_time{0.3};
+    double odom_timeout{0.5};
+};
 
-#endif // UGV_CONTROL_FSM_H
+// RETURN 模式使用的返航点配置。
+struct HomeConfig {
+    bool use_current_pose_as_home{true};
+    geometry_msgs::Point home_point;
+    double home_yaw{0.0};
+};
+
+struct UGVFSMConfig {
+    BasicConfig basic;
+    TimeoutConfig timeout;
+    GeoFence fence;
+    HomeConfig home;
+    UGVControllerConfig controller;
+};
+
+class UGVControlFSM {
+  public:
+    explicit UGVControlFSM(ros::NodeHandle& nh);
+
+    void init();
+    double get_update_frequency() const;
+    void process();
+
+  private:
+    // UGV 状态机刻意保持精简：
+    // INIT 用于上电初始化，HOLD 用于安全静止，
+    // RETURN 用于单次返航，MOVE 统一承接外部运动指令。
+    enum class State : uint8_t {
+        INIT = sunray_msgs::UGVControlFSMState::FSM_INIT,
+        HOLD = sunray_msgs::UGVControlFSMState::FSM_HOLD,
+        RETURN = sunray_msgs::UGVControlFSMState::FSM_RETURN,
+        MOVE = sunray_msgs::UGVControlFSMState::FSM_MOVE,
+    };
+
+    void load_config();
+    void init_subscribers();
+    void init_publishers();
+
+    void odom_callback(const nav_msgs::Odometry::ConstPtr& msg);
+    void odom_status_callback(const sunray_msgs::OdomStatus::ConstPtr& msg);
+    void control_cmd_callback(const sunray_msgs::UGVControlCMD::ConstPtr& msg);
+    void control_timer_callback(const ros::TimerEvent&);
+
+    bool is_command_fresh(const sunray_msgs::UGVControlCMD& cmd, const ros::Time& now) const;
+    bool is_motion_command(const sunray_msgs::UGVControlCMD& cmd) const;
+    bool odom_is_valid_locked(const ros::Time& now) const;
+
+    void enter_hold(const std::string& reason);
+    void publish_fsm_state();
+    void publish_zero_cmd();
+    sunray_msgs::UGVControlCMD make_hold_command() const;
+    sunray_msgs::UGVControlCMD make_return_point_command() const;
+
+    static double quaternion_to_yaw(const geometry_msgs::Quaternion& q);
+
+    ros::NodeHandle nh_;
+    std::string ugv_ns_;
+    UGVFSMConfig config_;
+
+    ros::Subscriber odom_sub_;
+    ros::Subscriber odom_status_sub_;
+    ros::Subscriber control_cmd_sub_;
+    ros::Publisher cmd_vel_pub_;
+    ros::Publisher fsm_state_pub_;
+    ros::Timer control_timer_;
+
+    std::shared_ptr<UGVController> controller_;
+
+    mutable std::mutex mutex_;
+    State state_{State::INIT};
+    nav_msgs::Odometry last_odom_;
+    ros::Time last_odom_stamp_;
+    bool odom_received_{false};
+    bool odom_status_received_{false};
+    bool odom_status_valid_{true};
+    bool inside_geo_fence_{true};
+    bool home_initialized_{false};
+    // 运行时 home 点既可以来自 yaml，也可以来自首个有效里程计位置。
+    HomeConfig home_runtime_;
+    sunray_msgs::UGVControlCMD active_cmd_;
+};
+
+}  // namespace sunray_ugv_control

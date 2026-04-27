@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>sunray_swarm</name>
+  <name>sunray_swarm_control</name>
   <version>0.1.0</version>
   <description>Swarm formation control and ORCA avoidance package.</description>
   <maintainer email="you@example.com">sunray</maintainer>

@@ -8,7 +8,7 @@
     <arg name="y_max" default="100.0"/>
 
     <!-- 加载 UGV 参数 -->
-    <rosparam command="load" file="$(find sunray_swarm)/launch_sim/ugv_params_wheeltec.yaml" />
+    <rosparam command="load" file="$(find sunray_swarm_control)/launch_sim/ugv_params_wheeltec.yaml" />
 
     <!-- <group ns="/sunray_swarm/wheeltec_$(arg ugv_id)"> -->
     <group>
@@ -22,7 +22,7 @@
     </group>
 
     <!-- 启动ugv_control_node -->
-    <node pkg="sunray_swarm" type="ugv_control_node" name="ugv_control_node" output="screen">
+    <node pkg="sunray_swarm_control" type="ugv_control_node" name="ugv_control_node" output="screen">
         <param name="pose_source" type="int" value="2"/>
     </node>
 </launch>
