@@ -1,0 +1,6 @@
+<launch>
+  <!-- 中文说明：UGV 集群键盘控制节点启动文件 -->
+  <!-- 用途：人工发布 /sunray/swarm/ugv_swarm_cmd 指令（切阵型/保持/返航） -->
+
+  <node pkg="sunray_swarm_control" type="ugv_formation_switch" name="ugv_formation_switch_node" output="screen" />
+</launch>

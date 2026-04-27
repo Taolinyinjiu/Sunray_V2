@@ -16,7 +16,7 @@ using std::endl;
 
 static void SigintHandler(int)
 {
-    ROS_INFO("[uav_command_pub] exit...");
+    ROS_INFO("[uav_formation_switch] exit...");
     ros::shutdown();
 }
 
@@ -44,7 +44,7 @@ void publishUAVSwarmCMD(ros::Publisher &pub, uint8_t swarm_cmd,
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "uav_command_pub");
+    ros::init(argc, argv, "uav_formation_switch");
     ros::NodeHandle nh("~");
     signal(SIGINT, SigintHandler);
 
