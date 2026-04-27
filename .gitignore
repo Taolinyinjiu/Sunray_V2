@@ -69,3 +69,4 @@ docs/
 # Machine-specific VINS configuration
 localization/vins-fusion/config/
 localization/vins-fusion-gpu/config/
+localization/vins-fusion-gpu/config/sunray_150/sunray_nx_150.yaml

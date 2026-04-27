@@ -156,7 +156,7 @@ class PX4_OriginController : public Controller_Interface {
     ros::Time last_arm_time_{ros::Time(0)};
     // 到达稳定判定参数
     arrival_helper::Config arrival_judge_config_{};
-    arrival_helper::Config takeoff_arrival_config_{};  // 起飞阶段使用, 限制 velocity-only 回退
+    arrival_helper::Config takeoff_arrival_config_{};  // 起飞阶段使用, 先进入位置窗口再允许 velocity-only 回退
     Eigen::Vector3d max_velocity_{Eigen::Vector3d::Ones()};
     double max_yaw_rate_rad_s_{0.5};
     // 降落阶段开始的时间

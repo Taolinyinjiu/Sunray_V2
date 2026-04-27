@@ -8,12 +8,14 @@ struct Config {
     double stable_time_s{0.5};
     double pos_err_m{0.15};
     double vel_err_mps{0.15};
-    double vel_only_max_pos_err_m{0.0};  // velocity-only 回退的最大允许位置误差, 0 = 不限制
+    double vel_only_max_pos_err_m{0.0};
+    bool require_pos_ok_before_vel_only{false};
 };
 
 struct State {
     ros::Time both_ok_since{ros::Time(0)};
     ros::Time vel_ok_since{ros::Time(0)};
+    bool has_seen_pos_ok{false};
 };
 
 inline bool update_and_check(State& state,
@@ -23,6 +25,10 @@ inline bool update_and_check(State& state,
                              const ros::Time& now) {
     const bool pos_ok = pos_err < config.pos_err_m;
     const bool vel_ok = vel_err < config.vel_err_mps;
+
+    if (pos_ok) {
+        state.has_seen_pos_ok = true;
+    }
 
     if (pos_ok && vel_ok) {
         if (state.both_ok_since == ros::Time(0)) {
@@ -34,7 +40,8 @@ inline bool update_and_check(State& state,
 
     const bool vel_only_pos_ok = config.vel_only_max_pos_err_m <= 0.0 ||
                                  pos_err < config.vel_only_max_pos_err_m;
-    if (vel_ok && vel_only_pos_ok) {
+    const bool vel_only_armed = !config.require_pos_ok_before_vel_only || state.has_seen_pos_ok;
+    if (vel_ok && vel_only_pos_ok && vel_only_armed) {
         if (state.vel_ok_since == ros::Time(0)) {
             state.vel_ok_since = now;
         }

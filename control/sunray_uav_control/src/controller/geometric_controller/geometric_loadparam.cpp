@@ -79,14 +79,8 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     arrival_judge_config_.pos_err_m = arrival_judge_param["pos_stabile_err_m"].as<double>();
     arrival_judge_config_.vel_err_mps = arrival_judge_param["vel_stabile_err_mps"].as<double>();
 
-    // 起飞阶段的到达判定: 限制 velocity-only 回退的最大允许位置误差
     takeoff_arrival_config_ = arrival_judge_config_;
-    if (arrival_judge_param["takeoff_vel_only_max_pos_err_m"]) {
-        takeoff_arrival_config_.vel_only_max_pos_err_m =
-            arrival_judge_param["takeoff_vel_only_max_pos_err_m"].as<double>();
-    } else {
-        takeoff_arrival_config_.vel_only_max_pos_err_m = 3.0 * arrival_judge_config_.pos_err_m;
-    }
+    takeoff_arrival_config_.require_pos_ok_before_vel_only = true;
 
     if (arrival_judge_config_.stable_time_s <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");

@@ -9,7 +9,7 @@ basic_param:
     # 归一化悬停推力 (从px4的日志中直接读取)
     hover_thrust_percent: 0.375 
     # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller(不支持速度接口)
-    controller_types: 1
+    controller_types: 2
     # 控制器更新频率(Hz)
     controller_update_frequency: 100
     # 状态机低频监督循环频率(Hz)
@@ -76,16 +76,13 @@ takeoff_land_param:
 # 起飞到位和 move_point 到位统一使用这一组阈值
 # 当位置误差和速度误差同时进入稳定范围，并持续保持 judge_stabile_time_s 秒后，
 # 控制器认为当前任务已经到达目标
-# 当速度误差达到允许的范围，并保持 3x judge_stabile_time_s 后，无论位置误差如何，都会认为达到目标
-# (这一点主要是为了防止在目标点附近震荡，无法切换到其他模式)
+# 当速度误差达到允许范围，并保持 3x judge_stabile_time_s 后，也可以作为 velocity-only 回退完成判定
+# 起飞阶段只有在位置误差曾经进入过 pos_stabile_err_m 后，才允许使用 velocity-only 回退
+# 这样可以避免起飞后水平漂移较大时，仅因为速度变小就结束 TAKEOFF
 arrival_judge_param:
     judge_stabile_time_s: 1
     pos_stabile_err_m: 0.08
     vel_stabile_err_mps: 0.12
-    # velocity-only 回退的最大允许位置误差 (仅起飞阶段使用)
-    # 当位置误差超过此值时, 仅速度达标不会触发到达判定, 需要位置同时收敛才能完成起飞
-    # 默认为 3 * pos_stabile_err_m, 设为 0 则不限制 (保持原始行为)
-    takeoff_vel_only_max_pos_err_m: 0.25
 
 # -------------------电子围栏参数-----------------------
 # local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上

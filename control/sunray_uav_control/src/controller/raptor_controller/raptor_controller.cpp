@@ -14,12 +14,12 @@ constexpr uint8_t kRaptorExternalModeIndex = 1;
 constexpr double kModeRequestIntervalS = 0.3;
 constexpr double kMinCurveVelocity = 0.05;
 constexpr double kLandLookaheadTimeS = 0.2;
-constexpr double kNearGroundHeightM = 0.20;
-constexpr double kNearGroundVelocityMps = 0.12;
-constexpr double kTouchdownVelocityMps = 0.06;
-constexpr double kLandDetectHeightM = 0.05;
-constexpr double kLandDetectVelocityMps = 0.10;
-constexpr double kLandDisarmHoldS = 0.5;
+constexpr double kLandSlowHeightM = 0.20;
+constexpr double kLandTouchdownHeightM = 0.05;
+constexpr double kLandTouchdownSpeedMps = 0.06;
+constexpr double kLandTouchdownDetectVelocityMps = 0.10;
+constexpr double kLandMinDurationS = 2.0;
+constexpr double kLandDisarmHoldS = 1.0;
 
 }  // namespace
 
@@ -178,10 +178,12 @@ bool Raptor_Controller::move_point_impl(controller_data_types::TargetPoint_t poi
 
     curve::QuinticCurveState curve_result = move_point_curve_.get_result();
     controller_data_types::TargetTrajectoryPoint_t trajpoint;
+    // Keep point mode close to historical "position hold" semantics:
+    // smooth only the position reference, and avoid quintic velocity/acceleration
+    // feedforward that can make move_point much more aggressive.
     trajpoint.position = curve_result.valid ? curve_result.position : point.position;
-    trajpoint.velocity = curve_result.valid ? curve_result.velocity : Eigen::Vector3d::Zero();
-    trajpoint.acceleration =
-        curve_result.valid ? curve_result.acceleration : Eigen::Vector3d::Zero();
+    trajpoint.velocity = Eigen::Vector3d::Zero();
+    trajpoint.acceleration = Eigen::Vector3d::Zero();
     trajpoint.jerk = Eigen::Vector3d::Zero();
     trajpoint.yaw = update_limited_yaw_target(point.yaw, ros::Time::now());
     trajpoint.yaw_rate = 0.0;
@@ -376,25 +378,35 @@ bool Raptor_Controller::land(bool land_type, double max_land_velocity) {
     }
 
     const control_common::Mavros_State px4_state = mavros_helper_.get_state();
+    const double height_above_ground =
+        std::max(0.0, uav_odometry_.position.z() - ground_height_ref_);
     if (!px4_state.armed) {
-        land_complete_.store(true, std::memory_order_relaxed);
-        takeoff_complete_.store(false, std::memory_order_relaxed);
-        start_land_time_ = ros::Time(0);
-        land_touchground_time_ = ros::Time(0);
-        return true;
+        if (height_above_ground <= kLandTouchdownHeightM) {
+            land_complete_.store(true, std::memory_order_relaxed);
+            takeoff_complete_.store(false, std::memory_order_relaxed);
+            start_land_time_ = ros::Time(0);
+            land_touchground_time_ = ros::Time(0);
+            return true;
+        }
+
+        return false;
     }
 
     const double descend_rate = std::max(kMinCurveVelocity, std::abs(max_land_velocity));
-    const double height_above_ground =
-        std::max(0.0, uav_odometry_.position.z() - ground_height_ref_);
+    const double clamped_far_speed = std::max(descend_rate, kLandTouchdownSpeedMps);
 
-    double target_velocity_z = -descend_rate;
-    if (height_above_ground <= kNearGroundHeightM) {
-        target_velocity_z = -std::min(descend_rate, kNearGroundVelocityMps);
+    double descend_speed = clamped_far_speed;
+    if (height_above_ground < kLandSlowHeightM) {
+        const double blend = std::clamp((height_above_ground - kLandTouchdownHeightM) /
+                                            std::max(kLandSlowHeightM - kLandTouchdownHeightM, 1e-3),
+                                        0.0,
+                                        1.0);
+        const double smooth_blend = blend * blend * (3.0 - 2.0 * blend);
+        descend_speed = kLandTouchdownSpeedMps +
+                        smooth_blend * (clamped_far_speed - kLandTouchdownSpeedMps);
     }
-    if (height_above_ground <= kLandDetectHeightM) {
-        target_velocity_z = -std::min(descend_rate, kTouchdownVelocityMps);
-    }
+
+    const double target_velocity_z = -descend_speed;
 
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = hover_point_;
@@ -408,11 +420,13 @@ bool Raptor_Controller::land(bool land_type, double max_land_velocity) {
     des_state.yaw_rate = 0.0;
     move_trajectory(des_state);
 
-    const bool near_ground = height_above_ground <= kLandDetectHeightM;
-    const bool velocity_low = std::abs(uav_odometry_.velocity.z()) <= kLandDetectVelocityMps;
-    const bool px4_landed = px4_state.landed_state == control_common::LandedState::OnGround;
+    const bool near_ground = height_above_ground <= kLandTouchdownHeightM;
+    const bool velocity_low =
+        std::abs(uav_odometry_.velocity.z()) <= kLandTouchdownDetectVelocityMps;
+    const bool land_duration_ok = (now - start_land_time_).toSec() >= kLandMinDurationS;
+    const bool touchdown_candidate = land_duration_ok && near_ground && velocity_low;
 
-    if (px4_landed || (near_ground && velocity_low)) {
+    if (touchdown_candidate) {
         if (land_touchground_time_ == ros::Time(0)) {
             land_touchground_time_ = now;
         }

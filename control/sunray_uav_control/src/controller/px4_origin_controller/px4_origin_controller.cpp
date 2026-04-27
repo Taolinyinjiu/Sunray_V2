@@ -242,10 +242,12 @@ bool PX4_OriginController::move_point_impl(controller_data_types::TargetPoint_t 
     control_common::Mavros_SetpointLocal send_setpoint;
     send_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
     const curve::QuinticCurveState curve_result = move_point_curve_.get_result();
+    // Keep point mode close to historical "position hold" semantics:
+    // smooth only the position reference, and avoid quintic velocity/acceleration
+    // feedforward that can make move_point much more aggressive.
     send_setpoint.position = curve_result.valid ? curve_result.position : point.position;
-    send_setpoint.velocity = curve_result.valid ? curve_result.velocity : Eigen::Vector3d::Zero();
-    send_setpoint.accel_or_force =
-        curve_result.valid ? curve_result.acceleration : Eigen::Vector3d::Zero();
+    send_setpoint.velocity = Eigen::Vector3d::Zero();
+    send_setpoint.accel_or_force = Eigen::Vector3d::Zero();
     send_setpoint.yaw = update_limited_yaw_target(point.yaw, ros::Time::now());
     send_setpoint.yaw_rate = 0.0;
     mavros_helper_.pub_local_setpoint(send_setpoint);
@@ -906,14 +908,8 @@ void PX4_OriginController::load_and_validate_config_or_throw() {
     arrival_judge_config_.pos_err_m = arrival_judge_param["pos_stabile_err_m"].as<double>();
     arrival_judge_config_.vel_err_mps = arrival_judge_param["vel_stabile_err_mps"].as<double>();
 
-    // 起飞阶段的到达判定: 限制 velocity-only 回退的最大允许位置误差
     takeoff_arrival_config_ = arrival_judge_config_;
-    if (arrival_judge_param["takeoff_vel_only_max_pos_err_m"]) {
-        takeoff_arrival_config_.vel_only_max_pos_err_m =
-            arrival_judge_param["takeoff_vel_only_max_pos_err_m"].as<double>();
-    } else {
-        takeoff_arrival_config_.vel_only_max_pos_err_m = 3.0 * arrival_judge_config_.pos_err_m;
-    }
+    takeoff_arrival_config_.require_pos_ok_before_vel_only = true;
 
     if (arrival_judge_config_.stable_time_s <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");
