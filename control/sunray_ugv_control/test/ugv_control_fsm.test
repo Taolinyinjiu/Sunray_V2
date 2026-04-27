@@ -1,0 +1,10 @@
+<launch>
+  <param name="/use_sim_time" value="false" />
+  <test test-name="ugv_control_fsm_test"
+        pkg="sunray_ugv_control"
+        type="ugv_control_fsm_test"
+        time-limit="20.0">
+    <param name="config_yamlfile_path"
+           value="$(find sunray_ugv_control)/test/ugv_control_test_config.yaml" />
+  </test>
+</launch>

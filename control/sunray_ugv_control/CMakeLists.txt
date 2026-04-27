@@ -82,3 +82,37 @@ install(TARGETS
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+
+if(CATKIN_ENABLE_TESTING)
+  find_package(rostest REQUIRED)
+
+  add_rostest_gtest(ugv_controller_test
+    test/ugv_controller.test
+    test/ugv_controller_test.cpp
+  )
+  if(TARGET ugv_controller_test)
+    target_include_directories(ugv_controller_test
+      PRIVATE
+        include
+        ${catkin_INCLUDE_DIRS}
+    )
+    target_link_libraries(ugv_controller_test
+      sunray_ugv_control_lib
+    )
+  endif()
+
+  add_rostest_gtest(ugv_control_fsm_test
+    test/ugv_control_fsm.test
+    test/ugv_control_fsm_test.cpp
+  )
+  if(TARGET ugv_control_fsm_test)
+    target_include_directories(ugv_control_fsm_test
+      PRIVATE
+        include
+        ${catkin_INCLUDE_DIRS}
+    )
+    target_link_libraries(ugv_control_fsm_test
+      sunray_ugv_control_lib
+    )
+  endif()
+endif()

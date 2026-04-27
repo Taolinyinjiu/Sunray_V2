@@ -80,6 +80,7 @@ class UGVControlFSM {
     bool is_command_fresh(const sunray_msgs::UGVControlCMD& cmd, const ros::Time& now) const;
     bool is_motion_command(const sunray_msgs::UGVControlCMD& cmd) const;
     bool odom_is_valid_locked(const ros::Time& now) const;
+    void try_initialize_home_locked(const ros::Time& now);
 
     void enter_hold(const std::string& reason);
     void publish_fsm_state();

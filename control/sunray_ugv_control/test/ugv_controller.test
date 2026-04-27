@@ -1,0 +1,6 @@
+<launch>
+  <test test-name="ugv_controller_test"
+        pkg="sunray_ugv_control"
+        type="ugv_controller_test"
+        time-limit="10.0" />
+</launch>

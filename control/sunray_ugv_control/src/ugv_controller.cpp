@@ -143,8 +143,10 @@ geometry_msgs::Twist UGVController::move_velocity(const sunray_msgs::UGVControlC
     const double yaw_error = normalize_angle(cmd.desired_yaw - current_state_.yaw);
 
     geometry_msgs::Twist cmd_vel;
-    cmd_vel.linear.x = vel_x_pid_.update(desired_vel_body.x - current_vel_body.x, dt);
-    cmd_vel.linear.y = vel_y_pid_.update(desired_vel_body.y - current_vel_body.y, dt);
+    cmd_vel.linear.x =
+        desired_vel_body.x + vel_x_pid_.update(desired_vel_body.x - current_vel_body.x, dt);
+    cmd_vel.linear.y =
+        desired_vel_body.y + vel_y_pid_.update(desired_vel_body.y - current_vel_body.y, dt);
     cmd_vel.angular.z = vel_yaw_pid_.update(yaw_error, dt);
 
     desired_pos_ = current_state_.position;

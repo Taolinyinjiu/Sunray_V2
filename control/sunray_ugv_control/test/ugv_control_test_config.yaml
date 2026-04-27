@@ -1,0 +1,57 @@
+basic_param:
+  ugv_types: 0
+  controller_update_frequency: 100.0
+  supervisor_update_frequency: 20.0
+  controller_state_pub_frequency: 100.0
+  odom_topic_name: "${ugv_ns}/sunray/localization/local_odom"
+  odom_status_topic_name: "${ugv_ns}/sunray/localization/odom_status"
+  control_cmd_topic_name: "${ugv_ns}/sunray/ugv_control/control_cmd"
+  cmd_vel_topic_name: "${ugv_ns}/cmd_vel"
+  fsm_state_topic_name: "${ugv_ns}/sunray/ugv_control/ugv_control_fsm_state"
+  controller_state_topic_name: "${ugv_ns}/sunray/ugv_control/ugv_controller_state"
+
+timeout_param:
+  wait_poscmd_time: 30.0
+  wait_velcmd_time: 0.3
+  odom_timeout: 0.5
+
+geo_fence_param:
+  x_min: -10.0
+  x_max: 10.0
+  y_min: -10.0
+  y_max: 10.0
+  z_min: -1.0
+  z_max: 1.0
+
+home_param:
+  use_current_pose_as_home: true
+  home_x: 0.0
+  home_y: 0.0
+  home_z: 0.0
+  home_yaw: 0.0
+
+controller_param:
+  point_x_kp: 1.2
+  point_x_ki: 0.0
+  point_x_kd: 0.0
+  point_y_kp: 1.2
+  point_y_ki: 0.0
+  point_y_kd: 0.0
+  point_yaw_kp: 1.5
+  point_yaw_ki: 0.0
+  point_yaw_kd: 0.0
+  vel_x_kp: 1.0
+  vel_x_ki: 0.0
+  vel_x_kd: 0.0
+  vel_y_kp: 1.0
+  vel_y_ki: 0.0
+  vel_y_kd: 0.0
+  vel_yaw_kp: 1.2
+  vel_yaw_ki: 0.0
+  vel_yaw_kd: 0.0
+  lateral_to_yaw_gain: 1.0
+  max_linear_x: 1.0
+  max_linear_y: 1.0
+  max_angular_z: 1.2
+  goal_pos_tolerance: 0.15
+  goal_yaw_tolerance: 0.20

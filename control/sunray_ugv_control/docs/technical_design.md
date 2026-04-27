@@ -45,6 +45,15 @@ FSM 相关配置结构体、成员变量、接口声明。
 - `launch/ugv_control.launch`
 启动入口。
 
+- `test/ugv_controller_test.cpp`
+控制器测试，覆盖坐标转换后的速度输出、HOLD 输出和底盘限幅等行为。
+
+- `test/ugv_control_fsm_test.cpp`
+FSM 级 rostest，覆盖 odom 状态门控、home 初始化、外部命令切状态、`MOVE_POINT` 到点自动 HOLD 等行为。
+
+- `test/ugv_control_test_config.yaml`
+测试专用配置。它会把 `wait_poscmd_time` 放宽到 30s，避免点位到达测试被命令超时抢先触发。
+
 ## 3. 节点与线程模型
 
 程序入口在 `ugv_control_node`。
@@ -214,9 +223,11 @@ UGVController::move_xxx()
 与这条主链并行的还有两条辅助链：
 
 ```text
-Odometry -> odom_callback -> 更新 last_odom_ / home 点 / 围栏状态
-OdomStatus -> odom_status_callback -> 更新 odom_status_valid_
+Odometry -> odom_callback -> 更新 last_odom_ / 围栏状态 / 尝试初始化 home
+OdomStatus -> odom_status_callback -> 更新 odom_status_received_ / odom_status_valid_
 ```
+
+其中自动 home 初始化比普通 odom 有效性更严格：必须已经收到有效 `OdomStatus`，并且本地 odom 未超时，`odom_callback()` 才会使用当前里程计初始化 home。
 
 以及一条安全监督链：
 
@@ -268,27 +279,27 @@ FSM 状态定义在 [ugv_control_fsm.h](/home/yyf/Sunray_v2/control/sunray_ugv_c
 
 1. 从共享状态中复制快照
 2. 调用 `controller_->set_current_state(current_state)`
-3. 如果 odom 无效，直接 `controller_->hold()` 并返回
+3. 如果 odom 无效，直接发布零速度并返回
 4. 根据 FSM 状态选择控制分支
 
 各分支行为：
 
 1. `INIT`
-不发运动，执行 `hold()`
+执行 `controller_->hold()` 并发布零速度 `cmd_vel`
 
 2. `HOLD`
-不发运动，执行 `hold()`
+执行 `controller_->hold()` 并发布零速度 `cmd_vel`
 
 3. `RETURN`
-把 home 点包装成一个 `MOVE_POINT` 命令，然后调用 `controller_->move_point(return_cmd)`，发布到 `cmd_vel`。如果 `controller_->reached_point(return_cmd)` 返回真，则切回 `HOLD`。
+如果 home 尚未初始化，执行 `hold()` 并发布零速度。home 可用时，把 home 点包装成一个 `MOVE_POINT` 命令，然后调用 `controller_->move_point(return_cmd)`，发布到 `cmd_vel`。如果 `controller_->reached_point(return_cmd)` 返回真，则切回 `HOLD`。
 
 4. `MOVE`
 根据 `active_cmd_.control_cmd` 进一步分发：
 
-- `MOVE_POINT` -> `controller_->move_point(active_cmd)`
+- `MOVE_POINT` -> `controller_->move_point(active_cmd)`，到点后自动切回 `HOLD`
 - `MOVE_VELOCITY` -> `controller_->move_velocity(active_cmd)`
 - `MOVE_VELOCITY_BODY` -> `controller_->move_velocity_body(active_cmd)`
-- `MOVE_WGS84` -> 当前不执行，只 `hold()`
+- `MOVE_WGS84` -> 当前不执行，执行 `hold()` 并发布零速度
 
 ### 8.4 低频安全监督
 
@@ -307,7 +318,7 @@ FSM 状态定义在 [ugv_control_fsm.h](/home/yyf/Sunray_v2/control/sunray_ugv_c
 
 ### 8.5 `enter_hold()` 的作用
 
-`enter_hold()` 做两件事：
+`enter_hold()` 做三件事：
 
 1. 把 FSM 状态切成 `HOLD`
 2. 把 `active_cmd_` 替换成内部构造的 `HOLD` 命令
@@ -323,17 +334,18 @@ home 点支持两种来源：
 当 `use_current_pose_as_home=false` 时，直接用 `home_x/home_y/home_z/home_yaw`
 
 2. 首帧有效定位自动记录
-当 `use_current_pose_as_home=true` 时，`odom_callback()` 在第一次收到有效里程计后，把当前位置和 yaw 记为 home
+当 `use_current_pose_as_home=true` 时，必须先收到有效的 `OdomStatus`，随后 `odom_callback()` 才会把第一帧有效里程计的位置和 yaw 记为 home。只有收到普通 `Odometry` 但没有收到有效 `OdomStatus` 时，home 不会初始化。
 
 返航逻辑很简单：
 
 - `RETURN` 状态下，不走特殊控制器
 - 只是把 home 点转换成一个内部 `MOVE_POINT`
 - 达到阈值后切回 `HOLD`
+- 如果 home 尚未初始化，则保持 `HOLD` 输出，不会盲目向默认 home 运动
 
 ## 10. 定位有效性判断
 
-定位是否有效不是只看一个地方，而是两级判断：
+控制环路里的 odom 有效性不是只看一个地方，而是两级判断：
 
 1. 本地超时判断
 `now - last_odom_stamp_ <= odom_timeout`
@@ -350,6 +362,8 @@ home 点支持两种来源：
 - 如果没收到 `OdomStatus`，只用本地超时判断
 
 默认 `odom_timeout=0.5s`。
+
+需要注意：这是“能不能控制运动”的一般 odom 有效性判断。自动 home 初始化额外要求 `odom_status_received_ == true`，所以系统启动后必须等到有效 `OdomStatus` 之后，才允许把当前里程计记录为 home。
 
 ## 11. 地理围栏
 
@@ -427,14 +441,14 @@ home 点支持两种来源：
 
 1. 将 `desired_vel` 从 ENU 转到车体系
 2. 将当前速度也从 ENU 转到车体系
-3. 做速度误差 PID
+3. 将车体系期望速度作为前馈，再叠加速度误差 PID 修正
 4. yaw 单独闭环到 `desired_yaw`
 5. 输出 `cmd_vel`
 
 因此 `MOVE_VELOCITY` 的语义是：
 
 - 输入是世界系期望速度
-- 控制内部转成车体系闭环
+- 控制内部转成车体系，输出为速度前馈 + 闭环误差修正
 
 ### 12.6 车体系速度控制 `move_velocity_body()`
 
@@ -459,9 +473,7 @@ home 点支持两种来源：
 - `goal_pos_tolerance = 0.15`
 - `goal_yaw_tolerance = 0.20`
 
-注意，这个函数当前只在 `RETURN` 分支里被 FSM 用来自动切回 `HOLD`。
-
-`MOVE_POINT` 当前不会因为 `reached_point()` 自动停下，而是主要受“命令是否过期”影响。这是当前实现里非常重要的行为特征。
+注意，这个函数当前在 `RETURN` 和外部 `MOVE_POINT` 分支里被 FSM 用来自动切回 `HOLD`。
 
 ## 13. 麦轮与差速底盘差异
 
@@ -505,28 +517,21 @@ home 点支持两种来源：
 
 ### 14.2 一个很关键的当前实现特征
 
-`MOVE_POINT` 现在是“单次点位命令 + 超时保持”语义，不是“持续跟踪直到真正到点”语义。
+`MOVE_POINT` 现在是“单次点位命令，在有效期内持续跟踪；到点自动 HOLD；若过期仍未到点也 HOLD”语义。
 
 具体表现：
 
 - 收到一条 `MOVE_POINT`
 - FSM 切到 `MOVE`
 - 高频控制器持续按这条命令算 `cmd_vel`
-- 一旦 `当前时间 - 命令时间戳 > wait_poscmd_time`
-- 低频监督循环就会 `enter_hold("control command timeout")`
+- 如果 `reached_point()` 返回真，控制定时器会 `enter_hold("move point target reached")`
+- 如果 `当前时间 - 命令时间戳 > wait_poscmd_time`，低频监督循环会 `enter_hold("control command timeout")`
 
-因此，如果车比较慢、目标比较远，或者控制增益偏保守，机器人可能还没走到目标点，就因为命令超时进入 `HOLD`。
-
-这也是出现“给 `x=5`，真值走到 `x=4.6` 左右就不动”的直接原因之一。不是到点阈值 0.15 导致的，而更可能是 2 秒点位命令超时导致的。
+因此，如果车比较慢、目标比较远，或者控制增益偏保守，机器人仍可能还没走到目标点就因为命令超时进入 `HOLD`；正常到点时则会立即自动 HOLD。
 
 ### 14.3 `RETURN` 和 `MOVE_POINT` 的差异
 
-当前代码里：
-
-- `RETURN` 会调用 `reached_point()`，真正到 home 点后切回 `HOLD`
-- `MOVE_POINT` 不会调用 `reached_point()` 自动停
-
-所以两者虽然都调用 `move_point()`，但上层 FSM 语义不同。
+当前代码里，`RETURN` 和 `MOVE_POINT` 都会调用 `reached_point()`，真正到目标点后切回 `HOLD`。差异在于 `RETURN` 的目标来自 home 点，`MOVE_POINT` 的目标来自外部控制指令。
 
 ## 15. 状态消息如何理解
 
@@ -590,7 +595,7 @@ home 点支持两种来源：
 ### 16.4 `home_param`
 
 - `use_current_pose_as_home`
-是否将第一帧定位作为 home
+是否将第一帧满足条件的定位作为 home。这里的“满足条件”指已经收到有效 `OdomStatus`，并且本地 odom 未超时；单独收到 `Odometry` 不会初始化 home。
 
 - `home_x/home_y/home_z/home_yaw`
 固定 home 配置
@@ -615,7 +620,30 @@ home 点支持两种来源：
 - `goal_yaw_tolerance`
 到点阈值
 
-## 17. 重新看代码时的推荐阅读顺序
+## 17. 测试与验证
+
+当前包已经接入 catkin/rostest 测试：
+
+- `ugv_controller_test`
+覆盖控制器输出语义，包括 `MOVE_VELOCITY` 的“车体系期望速度前馈 + PID 修正”、`MOVE_VELOCITY_BODY` 的直通限幅、`HOLD` 零速度输出等。
+
+- `ugv_control_fsm_test`
+覆盖 FSM 行为，包括有效 `OdomStatus` 之前不初始化 home、无效 odom 进入 HOLD、外部 `HOLD` 立即零速度、`MOVE_POINT` 到点自动切回 HOLD 等。
+
+这个仓库不是标准 `src/` 工作空间。单独构建本包时应从仓库根目录使用：
+
+```bash
+catkin_make --source control/sunray_ugv_control --build build/sunray_ugv_control
+```
+
+运行本包测试时使用：
+
+```bash
+ROS_LOG_DIR=/tmp/sunray_ros_logs catkin_make --source control/sunray_ugv_control --build build/sunray_ugv_control run_tests_sunray_ugv_control
+catkin_test_results build/sunray_ugv_control/test_results
+```
+
+## 18. 重新看代码时的推荐阅读顺序
 
 如果过了很久再回来，建议按这个顺序看：
 
@@ -643,7 +671,7 @@ home 点支持两种来源：
 8. [UGVControlCMD.msg](/home/yyf/Sunray_v2/common/sunray_msgs/msg/UGVControlCMD.msg)、[UGVControllerState.msg](/home/yyf/Sunray_v2/common/sunray_msgs/msg/UGVControllerState.msg)、[UGVControlFSMState.msg](/home/yyf/Sunray_v2/common/sunray_msgs/msg/UGVControlFSMState.msg)
 最后再看消息定义，对照调试话题理解字段含义
 
-## 18. 当前实现的边界与后续改进点
+## 19. 当前实现的边界与后续改进点
 
 当前实现已经可用，但有几个明确边界：
 
@@ -653,18 +681,16 @@ home 点支持两种来源：
 2. `MOVE_WGS84` 仅保留接口
 当前收到该命令不会执行全局导航
 
-3. `MOVE_POINT` 不是“到点即停”语义
-而是“单次点位命令，在有效期内持续控制，过期就 HOLD”
+3. `MOVE_POINT` 是“单次点位命令，到点自动 HOLD；若长期未到点，过期也 HOLD”语义
 
 4. 没有轨迹规划层
 只支持直接跟踪单目标点或速度指令
 
 如果后续要改功能，最值得优先关注的通常是：
 
-- 是否要让 `MOVE_POINT` 真正持续到点
 - 是否要对 `cmd_source` 做仲裁
 - 是否要增加更丰富的调试信息和控制模式
 
-## 19. 一句话总结
+## 20. 一句话总结
 
 `sunray_ugv_control` 当前本质上是一个“FSM 安全壳 + 二维局部控制器”的 ROS 包：FSM 负责决定能不能动、该按哪种模式动，Controller 负责把目标变成 `cmd_vel`，所有调试信息再通过状态消息统一暴露出来。

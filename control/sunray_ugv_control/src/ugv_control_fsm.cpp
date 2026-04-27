@@ -163,12 +163,7 @@ void UGVControlFSM::odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
                                         last_odom_.pose.pose.position.z,
                                         config_.fence);
 
-    // 默认配置下，第一帧有效里程计位置会被记录为返航目标点。
-    if (!home_initialized_ && config_.home.use_current_pose_as_home) {
-        home_runtime_.home_point = last_odom_.pose.pose.position;
-        home_runtime_.home_yaw = quaternion_to_yaw(last_odom_.pose.pose.orientation);
-        home_initialized_ = true;
-    }
+    try_initialize_home_locked(ros::Time::now());
 }
 
 void UGVControlFSM::odom_status_callback(const sunray_msgs::OdomStatus::ConstPtr& msg) {
@@ -231,11 +226,11 @@ bool UGVControlFSM::is_command_fresh(const sunray_msgs::UGVControlCMD& cmd, cons
     }
 
     const double age = (now - cmd.header.stamp).toSec();
-    // 单次点位指令的有效期可以比流式速度指令更长。
+    // 单次点位任务持续执行到到点或安全回退；流式速度指令必须持续刷新。
     switch (cmd.control_cmd) {
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
     case sunray_msgs::UGVControlCMD::MOVE_WGS84:
-        return age <= config_.timeout.wait_poscmd_time;
+        return true;
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
         return age <= config_.timeout.wait_velcmd_time;
@@ -256,6 +251,17 @@ bool UGVControlFSM::odom_is_valid_locked(const ros::Time& now) const {
         return odom_status_valid_ && !local_timeout;
     }
     return !local_timeout;
+}
+
+void UGVControlFSM::try_initialize_home_locked(const ros::Time& now) {
+    if (home_initialized_ || !config_.home.use_current_pose_as_home ||
+        !odom_status_received_ || !odom_is_valid_locked(now)) {
+        return;
+    }
+
+    home_runtime_.home_point = last_odom_.pose.pose.position;
+    home_runtime_.home_yaw = quaternion_to_yaw(last_odom_.pose.pose.orientation);
+    home_initialized_ = true;
 }
 
 void UGVControlFSM::enter_hold(const std::string& reason) {
@@ -314,19 +320,19 @@ void UGVControlFSM::control_timer_callback(const ros::TimerEvent&) {
     controller_->set_current_state(current_state);
 
     if (!odom_valid) {
-        controller_->hold();
+        cmd_vel_pub_.publish(controller_->hold());
         return;
     }
 
     switch (current_fsm_state) {
     case State::INIT:
     case State::HOLD:
-        controller_->hold();
+        cmd_vel_pub_.publish(controller_->hold());
         return;
 
     case State::RETURN: {
         if (!home_ready) {
-            controller_->hold();
+            cmd_vel_pub_.publish(controller_->hold());
             return;
         }
         // RETURN 被实现为朝缓存 home 点执行的一次性点位跟踪任务。
@@ -344,9 +350,14 @@ void UGVControlFSM::control_timer_callback(const ros::TimerEvent&) {
     }
 
     switch (active_cmd.control_cmd) {
-    case sunray_msgs::UGVControlCMD::MOVE_POINT:
-        cmd_vel_pub_.publish(controller_->move_point(active_cmd));
+    case sunray_msgs::UGVControlCMD::MOVE_POINT: {
+        const geometry_msgs::Twist cmd_vel = controller_->move_point(active_cmd);
+        cmd_vel_pub_.publish(cmd_vel);
+        if (controller_->reached_point(active_cmd)) {
+            enter_hold("move point target reached");
+        }
         break;
+    }
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
         cmd_vel_pub_.publish(controller_->move_velocity(active_cmd));
         break;
@@ -355,10 +366,10 @@ void UGVControlFSM::control_timer_callback(const ros::TimerEvent&) {
         break;
     case sunray_msgs::UGVControlCMD::MOVE_WGS84:
         // 需求中要求保留该接口；当前阶段为了安全起见，不执行 WGS84 控制。
-        controller_->hold();
+        cmd_vel_pub_.publish(controller_->hold());
         break;
     default:
-        controller_->hold();
+        cmd_vel_pub_.publish(controller_->hold());
         break;
     }
 }
