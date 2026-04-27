@@ -404,7 +404,7 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             const double pos_err = (uav_odometry_.position - quint_curve_.get_end_position()).norm();
             const double vel_err = uav_odometry_.velocity.norm();
             if (!arrival_helper::update_and_check(
-                    takeoff_arrival_state_, arrival_judge_config_, pos_err, vel_err, now)) {
+                    takeoff_arrival_state_, takeoff_arrival_config_, pos_err, vel_err, now)) {
                 return false;
             }
 
@@ -905,6 +905,15 @@ void PX4_OriginController::load_and_validate_config_or_throw() {
     arrival_judge_config_.stable_time_s = arrival_judge_param["judge_stabile_time_s"].as<double>();
     arrival_judge_config_.pos_err_m = arrival_judge_param["pos_stabile_err_m"].as<double>();
     arrival_judge_config_.vel_err_mps = arrival_judge_param["vel_stabile_err_mps"].as<double>();
+
+    // 起飞阶段的到达判定: 限制 velocity-only 回退的最大允许位置误差
+    takeoff_arrival_config_ = arrival_judge_config_;
+    if (arrival_judge_param["takeoff_vel_only_max_pos_err_m"]) {
+        takeoff_arrival_config_.vel_only_max_pos_err_m =
+            arrival_judge_param["takeoff_vel_only_max_pos_err_m"].as<double>();
+    } else {
+        takeoff_arrival_config_.vel_only_max_pos_err_m = 3.0 * arrival_judge_config_.pos_err_m;
+    }
 
     if (arrival_judge_config_.stable_time_s <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");

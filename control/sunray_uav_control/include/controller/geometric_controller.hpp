@@ -164,6 +164,7 @@ class Geometric_Controller : public Controller_Interface {
 
     // --------------------到达判断
     arrival_helper::Config arrival_judge_config_{};
+    arrival_helper::Config takeoff_arrival_config_{};  // 起飞阶段使用, 限制 velocity-only 回退
 
     // --------------------px4 状态缓存-----------------------
     double pub_px4_state_freq_{100.0};  // px4state 话题发布频率（Hz）

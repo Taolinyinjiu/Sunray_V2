@@ -1,94 +1,74 @@
 %YAML:1.0
-
+ 
 #common parameters
 #support: 1 imu 1 cam; 1 imu 2 cam: 2 cam; 
 imu: 1         
 num_of_cam: 2  
-
+ 
 imu_topic: "/uav1/mavros/imu/data_raw"
 image0_topic: "/camera/infra1/image_rect_raw"
 image1_topic: "/camera/infra2/image_rect_raw"
-output_path: "/home/taolin/Documents/GitHub/Sunray_V2_PR/vins_logs"
-
+output_path: "/home/yundrone/Documents/Sunray_V2_PR/vins_logs"
+ 
 cam0_calib: "left.yaml"
 cam1_calib: "right.yaml"
 image_width: 640
 image_height: 480
    
+use_gpu: 1
+use_gpu_acc_flow: 1
 
-# Extrinsic parameter between IMU and Camera.
-estimate_extrinsic: 1   # 0  Have an accurate extrinsic parameters. We will trust the following imu^R_cam, imu^T_cam, don't change it.
-                        # 1  Have an initial guess about extrinsic parameters. We will optimize around your initial guess.
-
+# IMU和Camera之间的外部参数。
+estimate_extrinsic : 1    # 0 有一个准确的外在参数。我们将信任以下 imu^R_cam，imu^T_cam，不要更改它。
+                        # 1 初步猜测外在参数。我们将围绕您最初的猜测进行优化。
+ 
 body_T_cam0: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ -2.3863426891221007e-02, 9.7978518204271947e-03,
-       9.9966721410513015e-01, 1.1542506779704360e-01,
-       -9.9957425187025151e-01, 1.6558575857080537e-02,
-       -2.4023500236482032e-02, 1.7253406378325425e-02,
-       -1.6788444092121158e-02, -9.9981489069991858e-01,
-       9.3985360389510220e-03, 3.5345954078120724e-02, 0., 0., 0., 1. ]
+   data: [ 1, 0, 0, -0.00552,
+           0, 1, 0, 0.0051,
+           0, 0, 1, 0.01174,
+           0, 0, 0, 1 ]
+
 body_T_cam1: !!opencv-matrix
    rows: 4
    cols: 4
    dt: d
-   data: [ -2.3037210349611925e-02, 9.4245245425362834e-03,
-       9.9969018464545034e-01, 1.1456201536006175e-01,
-       -9.9959360723451429e-01, 1.6576664849774048e-02,
-       -2.3191260387258439e-02, -3.2583378317206244e-02,
-       -1.6790095747168388e-02, -9.9981817973049747e-01,
-       9.0388143689048572e-03, 3.4625657072591243e-02, 0., 0., 0., 1. ]
-
-
-# body_T_cam0: !!opencv-matrix
-#    rows: 4
-#    cols: 4
-#    dt: d
-#    # 修改后的矩阵：相机Z轴(前)对应IMU的X轴(红)
-#    data: [ 0,  0,  1,  0.0,   # IMU_X = Cam_Z
-#           -1,  0,  0, -0.03,   # IMU_Y = -Cam_X
-#            0, -1,  0,  0.03,   # IMU_Z = -Cam_Y
-#            0,  0,  0,  1 ]
-
-# body_T_cam1: !!opencv-matrix
-#    rows: 4
-#    cols: 4
-#    dt: d
-#    data: [ 0,  0,  1,  0.0, 
-#           -1,  0,  0,  0.03, 
-#            0, -1,  0,  0.03, 
-#            0,  0,  0,  1 ]
-
-#Multiple thread support
+   data: [ 1, 0, 0, 0.0446571,
+           0, 1, 0, 0.0051,
+           0, 0, 1, 0.01174,
+           0, 0, 0, 1 ]
+ 
+ 
+#多线程支持
 multiple_thread: 1
-
-#feature traker paprameters
-max_cnt: 150            # max feature number in feature tracking
-min_dist: 30            # min distance between two features 
-freq: 10                # frequence (Hz) of publish tracking result. At least 10Hz for good estimation. If set 0, the frequence will be same as raw image 
-F_threshold: 1.0        # ransac threshold (pixel)
-show_track: 1           # publish tracking image as topic
-flow_back: 1            # perform forward and backward optical flow to improve feature tracking accuracy
-
-#optimization parameters
-max_solver_time: 0.04  # max solver itration time (ms), to guarantee real time
-max_num_iterations: 8   # max solver itrations, to guarantee real time
-keyframe_parallax: 10.0 # keyframe selection threshold (pixel)
-
-#imu parameters       The more accurate parameters you provide, the better performance
-acc_n: 0.1          # accelerometer measurement noise standard deviation. #0.2   0.04
-gyr_n: 0.01         # gyroscope measurement noise standard deviation.     #0.05  0.004
-acc_w: 0.001         # accelerometer bias random work noise standard deviation.  #0.002
-gyr_w: 0.0001       # gyroscope bias random work noise standard deviation.     #4.0e-5
-g_norm: 9.805         # gravity magnitude
-
-#unsynchronization parameters
-estimate_td: 1                      # online estimate time offset between camera and imu
-td: 0.00                             # initial value of time offset. unit: s. readed image clock + td = real image clock (IMU clock)
-
-#loop closure parameters
-load_previous_pose_graph: 0        # load and reuse previous pose graph; load from 'pose_graph_save_path'
-pose_graph_save_path: "/home/taolin/VINS_output/pose_graph/" # save and load path
-save_image: 0                   # save image in pose graph for visualization prupose; you can close this function by setting 0 
+ 
+#特征跟踪器参数
+max_cnt : 150             #特征跟踪中的最大特征数
+min_dist : 30             #两个特征之间的最小距离
+freq : 10                 #发布跟踪结果的频率 (Hz)。至少 10Hz 以获得良好的估计。如果设置为 0，则频率将与原始图像相同
+F_threshold : 1.0         # ransac 阈值（像素）
+show_track : 0            # 将跟踪图像发布为主题
+flow_back : 1             #执行正向和反向光流以提高特征跟踪精度
+ 
+#优化参数
+max_solver_time : 0.04   #最大求解器迭代时间（毫秒），保证实时
+max_num_iterations : 8    #最大求解器迭代次数，以保证实时
+keyframe_parallax : 10.0  #关键帧选择阈值（像素）
+ 
+# imu 参数 你提供的参数越准确，性能越好
+acc_n : 0.1           #加速度计测量噪声标准偏差。#0.2 0.04
+gyr_n : 0.01          #陀螺仪测量噪声标准偏差。#0.05 0.004
+acc_w : 0.001          #加速度计偏差随机工作噪声标准偏差。#0.002
+gyr_w : 0.0001        #陀螺仪偏差随机工作噪声标准偏差。#4.0e-5
+g_norm : 9.805          #重力大小
+ 
+#非同步参数
+estimate_td : 0                       #在线估计相机和imu之间的时间偏移
+td : 0.00                              #时间偏移的初始值。单位。读取图像时钟 + td = 真实图像时钟（IMU 时钟）
+ 
+#闭环参数
+load_previous_pose_graph : 0         #加载并重用之前的位姿图；从“pose_graph_save_path”加载
+pose_graph_save_path : " /home/yundrone/vins_fusion/"  #保存和加载路径
+save_image : 0                   # 将图像保存在姿势图中，以便可视化；您可以通过设置0来关闭此功能

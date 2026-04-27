@@ -8,6 +8,7 @@ struct Config {
     double stable_time_s{0.5};
     double pos_err_m{0.15};
     double vel_err_mps{0.15};
+    double vel_only_max_pos_err_m{0.0};  // velocity-only 回退的最大允许位置误差, 0 = 不限制
 };
 
 struct State {
@@ -31,7 +32,9 @@ inline bool update_and_check(State& state,
         state.both_ok_since = ros::Time(0);
     }
 
-    if (vel_ok) {
+    const bool vel_only_pos_ok = config.vel_only_max_pos_err_m <= 0.0 ||
+                                 pos_err < config.vel_only_max_pos_err_m;
+    if (vel_ok && vel_only_pos_ok) {
         if (state.vel_ok_since == ros::Time(0)) {
             state.vel_ok_since = now;
         }

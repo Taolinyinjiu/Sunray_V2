@@ -82,6 +82,10 @@ arrival_judge_param:
     judge_stabile_time_s: 1
     pos_stabile_err_m: 0.08
     vel_stabile_err_mps: 0.12
+    # velocity-only 回退的最大允许位置误差 (仅起飞阶段使用)
+    # 当位置误差超过此值时, 仅速度达标不会触发到达判定, 需要位置同时收敛才能完成起飞
+    # 默认为 3 * pos_stabile_err_m, 设为 0 则不限制 (保持原始行为)
+    takeoff_vel_only_max_pos_err_m: 0.25
 
 # -------------------电子围栏参数-----------------------
 # local系参数，针对local里程计，使用ROS标准右手系，X正方向超机头前方，Y正方向朝机头左侧，Z轴朝上

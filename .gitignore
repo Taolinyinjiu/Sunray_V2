@@ -3,6 +3,7 @@
 build/
 devel/
 logs/
+vins_logs/
 .catkin_tools/
 
 # Media files
@@ -63,3 +64,8 @@ CLAUDE.md
 
 # AI generated notes
 control/sunray_uav_control/ai_result/
+docs/
+
+# Machine-specific VINS configuration
+localization/vins-fusion/config/
+localization/vins-fusion-gpu/config/
