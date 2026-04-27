@@ -4,6 +4,8 @@ basic_param:
   controller_update_frequency: 100.0
   supervisor_update_frequency: 20.0
   controller_state_pub_frequency: 100.0
+  enable_status_print: true
+  status_print_hz: 1.0
   odom_topic_name: "${ugv_ns}/sunray/localization/local_odom"
   odom_status_topic_name: "${ugv_ns}/sunray/localization/odom_status"
   control_cmd_topic_name: "${ugv_ns}/sunray/ugv_control/control_cmd"

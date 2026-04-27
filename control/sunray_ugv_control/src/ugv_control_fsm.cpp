@@ -1,12 +1,30 @@
 #include "sunray_ugv_control/ugv_control_fsm.h"
 
 #include "sunray_ugv_control/ugv_param_utils.h"
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <sunray_msgs/UGVControlFSMState.h>
 #include <yaml-cpp/yaml.h>
 
 namespace sunray_ugv_control {
 
 namespace {
+
+constexpr char kColorReset[] = "\033[0m";
+constexpr char kColorCyan[] = "\033[1;36m";
+constexpr char kColorGreen[] = "\033[1;32m";
+constexpr char kColorYellow[] = "\033[1;33m";
+constexpr char kColorRed[] = "\033[1;31m";
+
+std::string color_text(const std::string& text, const char* color) {
+    return std::string(color) + text + kColorReset;
+}
+
+std::string format_flag(const bool value, const char* ok_text, const char* bad_text) {
+    return color_text(value ? ok_text : bad_text, value ? kColorGreen : kColorRed);
+}
 
 template <typename T>
 T load_scalar(const YAML::Node& node, const char* key, const T& fallback) {
@@ -22,6 +40,36 @@ PIDGains load_pid(const YAML::Node& node,
     gains.ki = load_scalar(node, ki_key, 0.0);
     gains.kd = load_scalar(node, kd_key, 0.0);
     return gains;
+}
+
+const char* ugv_type_to_string(const int ugv_type) {
+    switch (ugv_type) {
+    case sunray_msgs::UGVControllerState::MECANUM:
+        return "MECANUM";
+    case sunray_msgs::UGVControllerState::DIFFERENTIAL:
+        return "DIFFERENTIAL";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+const char* control_cmd_to_string(const uint8_t control_cmd) {
+    switch (control_cmd) {
+    case sunray_msgs::UGVControlCMD::HOLD:
+        return "HOLD";
+    case sunray_msgs::UGVControlCMD::RETURN:
+        return "RETURN";
+    case sunray_msgs::UGVControlCMD::MOVE_POINT:
+        return "MOVE_POINT";
+    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
+        return "MOVE_VELOCITY";
+    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
+        return "MOVE_VELOCITY_BODY";
+    case sunray_msgs::UGVControlCMD::MOVE_WGS84:
+        return "MOVE_WGS84";
+    default:
+        return "UNDEFINED";
+    }
 }
 
 }  // namespace
@@ -69,6 +117,8 @@ void UGVControlFSM::load_config() {
         load_scalar(basic, "supervisor_update_frequency", 20.0);
     config_.basic.controller_state_pub_frequency =
         load_scalar(basic, "controller_state_pub_frequency", 100.0);
+    config_.basic.enable_status_print = load_scalar(basic, "enable_status_print", true);
+    config_.basic.status_print_hz = load_scalar(basic, "status_print_hz", 1.0);
     config_.basic.odom_topic_name =
         replace_ugv_ns(load_scalar<std::string>(basic,
                                                 "odom_topic_name",
@@ -378,6 +428,7 @@ void UGVControlFSM::process() {
     const ros::Time now = ros::Time::now();
     bool odom_valid = false;
     bool inside_geo_fence = true;
+    bool home_ready = false;
     State current_state = State::INIT;
     sunray_msgs::UGVControlCMD active_cmd;
 
@@ -385,6 +436,7 @@ void UGVControlFSM::process() {
         std::lock_guard<std::mutex> lock(mutex_);
         odom_valid = odom_is_valid_locked(now);
         inside_geo_fence = inside_geo_fence_;
+        home_ready = home_initialized_;
         current_state = state_;
         active_cmd = active_cmd_;
     }
@@ -404,6 +456,7 @@ void UGVControlFSM::process() {
     }
 
     publish_fsm_state();
+    print_status(now, current_state, active_cmd, odom_valid, inside_geo_fence, home_ready);
 }
 
 void UGVControlFSM::publish_fsm_state() {
@@ -446,6 +499,65 @@ void UGVControlFSM::publish_fsm_state() {
     msg.inside_geo_fence = inside_geo_fence;
 
     fsm_state_pub_.publish(msg);
+}
+
+void UGVControlFSM::print_status(const ros::Time& now,
+                                 const State current_state,
+                                 const sunray_msgs::UGVControlCMD& active_cmd,
+                                 const bool odom_valid,
+                                 const bool inside_geo_fence,
+                                 const bool home_ready) const {
+    if (!config_.basic.enable_status_print || config_.basic.status_print_hz <= 0.0) {
+        return;
+    }
+
+    const sunray_msgs::UGVControllerState controller_state = controller_->get_status_snapshot();
+    const bool control_cmd_valid =
+        !is_motion_command(active_cmd) || is_command_fresh(active_cmd, now);
+    const double period = 1.0 / std::max(config_.basic.status_print_hz, 1e-3);
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2);
+    ss << '\n'
+       << kColorCyan << "================ UGV Control ================ " << ugv_ns_ << kColorReset
+       << '\n'
+       << kColorGreen << " Type   " << kColorReset
+       << color_text(ugv_type_to_string(config_.basic.ugv_type), kColorYellow)
+       << "  " << kColorGreen << "FSM" << kColorReset << "="
+       << color_text(state_to_string(current_state), kColorYellow)
+       << "  " << kColorGreen << "Cmd" << kColorReset << "="
+       << color_text(control_cmd_to_string(active_cmd.control_cmd), kColorYellow) << '\n'
+       << kColorGreen << " Health " << kColorReset
+       << "odom=" << format_flag(odom_valid, "OK", "BAD")
+       << "  cmd=" << format_flag(control_cmd_valid, "OK", "BAD")
+       << "  fence=" << format_flag(inside_geo_fence, "IN", "OUT")
+       << "  home=" << format_flag(home_ready, "READY", "WAIT") << '\n'
+       << kColorGreen << " Pose   " << kColorReset
+       << "xy=(" << controller_state.current_pos.x << ", " << controller_state.current_pos.y
+       << ")  yaw=" << controller_state.current_yaw * 180.0 / M_PI << " deg"
+       << "  vel=(" << controller_state.current_vel.x << ", " << controller_state.current_vel.y
+       << ")" << '\n'
+       << kColorGreen << " Output " << kColorReset
+       << "vx=" << controller_state.cmd_vel.linear.x
+       << "  vy=" << controller_state.cmd_vel.linear.y
+       << "  wz=" << controller_state.cmd_vel.angular.z;
+
+    ROS_INFO_STREAM_THROTTLE(period, ss.str());
+}
+
+const char* UGVControlFSM::state_to_string(const State state) {
+    switch (state) {
+    case State::INIT:
+        return "INIT";
+    case State::HOLD:
+        return "HOLD";
+    case State::RETURN:
+        return "RETURN";
+    case State::MOVE:
+        return "MOVE";
+    default:
+        return "UNKNOWN";
+    }
 }
 
 double UGVControlFSM::quaternion_to_yaw(const geometry_msgs::Quaternion& q) {

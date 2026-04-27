@@ -18,6 +18,8 @@ struct BasicConfig {
     double controller_update_frequency{100.0};
     double supervisor_update_frequency{20.0};
     double controller_state_pub_frequency{100.0};
+    bool enable_status_print{true};
+    double status_print_hz{1.0};
 
     std::string odom_topic_name;
     std::string odom_status_topic_name;
@@ -84,10 +86,17 @@ class UGVControlFSM {
 
     void enter_hold(const std::string& reason);
     void publish_fsm_state();
+    void print_status(const ros::Time& now,
+                      State current_state,
+                      const sunray_msgs::UGVControlCMD& active_cmd,
+                      bool odom_valid,
+                      bool inside_geo_fence,
+                      bool home_ready) const;
     void publish_zero_cmd();
     sunray_msgs::UGVControlCMD make_hold_command() const;
     sunray_msgs::UGVControlCMD make_return_point_command() const;
 
+    static const char* state_to_string(State state);
     static double quaternion_to_yaw(const geometry_msgs::Quaternion& q);
 
     ros::NodeHandle nh_;
