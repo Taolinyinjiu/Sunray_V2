@@ -5,14 +5,8 @@
         
         <!-- Topic names -->
         <param name="imu_topic" type="string" value="/livox/imu" />
-        <param name="odom_topic" type="string" value="/Odometry" />
-        <param name="imu_odom_topic" type="string" value="/sunray/ekf_odometry" />
-        
-        <!-- Frame IDs -->
-        <param name="output_frame" type="string" value="world" />
-        <param name="base_frame" type="string" value="base_link" />
+        <param name="odom_topic" type="string" value="/sunray/odometry" />
     
-        
     </node>
     
 </launch>

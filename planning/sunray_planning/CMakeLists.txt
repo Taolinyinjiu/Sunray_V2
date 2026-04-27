@@ -5,7 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
   diff_planner_msgs
-  ego_planner_msgs
+  sunray_planner_msgs
   geometry_msgs
   quadrotor_msgs
   roscpp
@@ -21,7 +21,7 @@ catkin_package(
   LIBRARIES sunray_planning
   CATKIN_DEPENDS
     diff_planner_msgs
-    ego_planner_msgs
+    sunray_planner_msgs
     geometry_msgs
     quadrotor_msgs
     roscpp

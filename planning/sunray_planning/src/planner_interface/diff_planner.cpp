@@ -21,11 +21,11 @@ geometry_msgs::PoseStamped build_pose_goal(const PlanningTarget& target,
 }
 
 bool is_invalid_flag(const uint8_t trajectory_flag) {
-    return trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_EMPTY ||
-           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTROY_STATUS_ABORT ||
-           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_START ||
-           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_ILLEGAL_FINAL ||
-           trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_IMPOSSIBLE;
+    return trajectory_flag == sunray_planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_EMPTY ||
+           trajectory_flag == sunray_planner_msgs::DiffPositionCommand::TRAJECTROY_STATUS_ABORT ||
+           trajectory_flag == sunray_planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_ILLEGAL_START ||
+           trajectory_flag == sunray_planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_ILLEGAL_FINAL ||
+           trajectory_flag == sunray_planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_IMPOSSIBLE;
 }
 }  // namespace
 
@@ -41,7 +41,7 @@ bool DiffPlanner::send_goal(const PlanningTarget& target) {
     return true;
 }
 
-void DiffPlanner::position_cmd_callback(const diff_planner_msgs::PositionCommand::ConstPtr& msg) {
+void DiffPlanner::position_cmd_callback(const sunray_planner_msgs::DiffPositionCommand::ConstPtr& msg) {
     if (!msg) {
         return;
     }
@@ -71,7 +71,7 @@ void DiffPlanner::position_cmd_callback(const diff_planner_msgs::PositionCommand
     control_cmd.fixed_height = 0.0;
 
     set_latest_control_cmd(control_cmd);
-    set_planner_state(msg->trajectory_flag == diff_planner_msgs::PositionCommand::TRAJECTORY_STATUS_COMPLETED
+    set_planner_state(msg->trajectory_flag == sunray_planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_COMPLETED
                           ? PlannerExecState::SUCCESS
                           : PlannerExecState::EXEC,
                       stamp);

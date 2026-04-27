@@ -27,54 +27,40 @@ modules:
     build_path: "build/sunray_uav_example"
     dependencies: []
 
-  pointcloud_remap:
-    description: "Pointcloud Remap"
-    source_path: "planning/adaptor/pointcloud_remap"
-    build_path: "build/pointcloud_remap"
-    dependencies: []
   # 规划模块功能包
-  ego_planner_adaptor:
-    description: "Ego Planner Adaptor"
-    source_path: "planning/adaptor/ego_planner_adaptor"
-    build_path: "build/ego_planner_adaptor"
-    dependencies: []
-  ego_planner_msgs:
-    description: "Ego Planner Messages"
-    source_path: "planning/adaptor/ego_planner_msgs"
-    build_path: "build/ego_planner_msgs"
-    dependencies: []
+
+  sunray_planner_msgs:
+    description: "planning模块内部使用消息,用于适配多个planner的自定义消息"
+    source_path: "planning/sunray_planner_msgs"
+    build_path: "build/sunray_planner_msgs"
+    dependencies: [""]
+
   ego_planner_swarm:
     description: "ego_planner_swarm 功能包"
-    source_path: "planning/source/ego_planner_swarm"
+    source_path: "planning/source_planners/ego_planner_swarm"
     build_path: "build/ego_planner_swarm"
-    dependencies: ["sunray_planning"]
+    dependencies: ["sunray_planner_msgs"]
 
-  diff_planner_adaptor:
-    description: "Diff Planner Adaptor"
-    source_path: "planning/adaptor/diff_planner_adaptor"
-    build_path: "build/diff_planner_adaptor"
-    dependencies: []
-  diff_planner_msgs:
-    description: "Diff Planner Messages"
-    source_path: "planning/adaptor/diff_planner_msgs"
-    build_path: "build/diff_planner_msgs"
-    dependencies: []
   diff_planner:
     description: "Diff Planner"
-    source_path: "planning/source/diff_planner"
+    source_path: "planning/source_planners/diff_planner"
     build_path: "build/diff_planner"
-    dependencies: []
+    dependencies: ["sunray_planner_msgs"]
 
+  # SUPER还在适配中
   super_planner:
     description: "MARS LAB Planner"
-    source_path: "planning/source/SUPER"
+    source_path: "planning/source_planners/SUPER"
     build_path: "build/SUPER"
     dependencies: []
+
+  # Sunray 系列无人机规划模块核心
   sunray_planning:
     description: "Sunray unified planning entry"
     source_path: "planning/sunray_planning"
     build_path: "build/sunray_planning"
-    dependencies: ["sunray_msgs", "sunray_common", "ego_planner_msgs", "diff_planner_msgs", "super_planner"]
+    dependencies: ["sunray_msgs", "sunray_common", "sunray_planner_msgs"]
+
   # Sunray 重构中的 PX4_Bridge
   px4_bridge:
     description: "Sunray 重构中的uav_control"
@@ -241,7 +227,7 @@ groups:
 
   Swarm:
     description: "集群功能包"
-    modules: 
+    modules:
       [
         "sunray_common",
         "sunray_msgs",
@@ -251,7 +237,7 @@ groups:
         "localization_fusion",
         "uav_control",
         "sunray_swarm_control",
-        "sunray_simulator"
+        "sunray_simulator",
       ]
 
   UGV:
@@ -266,7 +252,7 @@ groups:
         "localization_fusion",
         "ugv_control",
         "turn_on_wheeltec_robot",
-        "sunray_simulator"
+        "sunray_simulator",
       ]
 
 # ========== 构建配置 ==========

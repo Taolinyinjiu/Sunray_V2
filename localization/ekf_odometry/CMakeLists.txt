@@ -18,6 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(Eigen3 REQUIRED)
+find_package(Sophus REQUIRED )
+
 
 catkin_package(
   INCLUDE_DIRS include
@@ -33,20 +35,21 @@ catkin_package(
     tf2_ros
     tf2_geometry_msgs
     eigen_conversions
-  DEPENDS EIGEN3
+  DEPENDS EIGEN3 Sophus
 )
 
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
+  ${Sophus_INCLUDE_DIRS}
 )
 
-# IMU Preintegration library
-add_library(imu_preintegration
-  src/imu_preintegration.cpp
+# IMU Process library
+add_library(imu_process
+  src/imu_process.cpp
 )
-target_link_libraries(imu_preintegration
+target_link_libraries(imu_process
   ${catkin_LIBRARIES}
 )
 
@@ -56,6 +59,7 @@ add_library(ekf_filter
 )
 target_link_libraries(ekf_filter
   ${catkin_LIBRARIES}
+  ${Sophus_LIBRARIES}
 )
 
 # Main node executable
@@ -63,25 +67,7 @@ add_executable(ekf_odometry_node
   src/ekf_odometry_node.cpp
 )
 target_link_libraries(ekf_odometry_node
-  imu_preintegration
+  imu_process
   ekf_filter
   ${catkin_LIBRARIES}
-)
-
-install(TARGETS imu_preintegration ekf_filter ekf_odometry_node
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
-
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-)
-
-install(DIRECTORY launch/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
-)
-
-install(DIRECTORY config/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config
 )

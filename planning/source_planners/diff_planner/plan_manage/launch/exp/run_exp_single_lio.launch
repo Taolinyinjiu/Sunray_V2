@@ -1,0 +1,66 @@
+<!-- 值得注意的是，Diff_Planner配置文件中并没有看到与坐标系有关的参数，因此我们可以得到的推断是，Diff_Planner要求输入的数据，默认使用world坐标系 -->
+<launch>
+  <!-- 里程计话题名 -->
+  <arg name="odom_topic" value="${uav_ns}/sunray/localization/local_odom" />
+  <!-- 无人机ID -->
+  <arg name="drone_id" value="0" />
+
+  <!-- 向文件advanced_param_exp.xml中传递参数，并在xml文件中执行Diff_Planner的主节点 -->
+  <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
+    <!-- 导入开头定义的里程计话题与无人机ID -->
+    <arg name="odom_topic" value="$(arg odom_topic)" />
+    <arg name="drone_id" value="$(arg drone_id)" />
+
+    <!-- 注意，Diff_Planner在接受到相机深度图时，会将计算的点云重映射到world坐标系下，映射时使用的tf关系就是相机位姿 -->
+    <!-- camera pose: transform of camera frame in the world frame -->
+    <arg name="camera_pose_topic" value="no_use0" />
+    <!-- depth topic: depth image, 640x480 by default -->
+    <arg name="depth_topic" value="no_use1" />
+
+    <!-- 深度相机的内参 -->
+    <!-- intrinsic params of the depth camera -->
+    <arg name="cx" value="319.31427001953125" />
+    <arg name="cy" value="239.09725952148438" />
+    <arg name="fx" value="386.2706298828125" />
+    <arg name="fy" value="386.2706298828125" />
+
+    <!-- 默认只能选择一个输入源，因此当你选择vins算法并配置了上面的参数后，就不应该再配置cloud_topic参数 -->
+    <!-- 同样的，当你选择使用lidar算法时，也不应该再配置camera_pose_topic和depth_topic参数 -->
+    <!-- topic of point cloud measurement, such as from LIDAR  -->
+    <arg name="cloud_topic" value="/uav1/global_points" />
+
+    <!-- maximum velocity, acceleration and jerk the drone will reach -->
+    <arg name="max_vel" value="0.5" />
+    <arg name="max_acc" value="3.0" />
+    <arg name="max_jer" value="20.0" />
+
+    <!-- planning_horizon 可以认为是规划范围，该参数应始终设置为感知范围的1.5倍 -->
+    <!--always set to 1.5 times grater than sensing horizen-->
+    <arg name="planning_horizon" value="7.5" />
+
+    <!-- 地图参数 -->
+    <!-- map parameters  -->
+    <arg name="local_map_size_x" value="5.5" />
+    <arg name="local_map_size_y" value="5.5" />
+    <arg name="local_map_size_z" value="2.0" />
+    <arg name="enable_virtual_wall" value="true" />
+    <arg name="virtual_ceil" value="2.0" />
+    <!-- 虚拟地面的高度 -->
+    <arg name="virtual_ground" value="0.1" />
+    <!-- 地图的分辨率，越小地图越精细，内存占用也越大 -->
+    <arg name="map_resolution" value="0.15" />
+    <!-- 膨胀半径，该参数应设计为无人机自身轴距的一半或者更大 -->
+    <arg name="inflation_size" value="0.3" />
+  </include>
+
+  <!-- diff_planner traj_server 将Diff_Planner输出的B样条曲线转换为position_cmd -->
+  <!-- 节点工作流程: 从trajectory话题接收B样条曲线，转换为position_cmd发布 -->
+  <!-- time_forward表示前馈时间，也就是说，traj_server会将接收到的trajectory滞后time_forward秒发布，从而更好地计算输出 -->
+  <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+    <remap from="position_cmd" to="/diff_planner_position_cmd" />
+    <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory" />
+    <remap from="~planning/yaw" to="/drone_$(arg drone_id)_planning/yaw" />
+    <remap from="~heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat" />
+    <param name="traj_server/time_forward" value="1.0" type="double" />
+  </node>
+</launch>

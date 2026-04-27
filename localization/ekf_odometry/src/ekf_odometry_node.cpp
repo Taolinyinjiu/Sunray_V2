@@ -4,175 +4,181 @@
 #include <deque>
 #include <csignal>
 #include <condition_variable>
-#include "imu_process.hpp"
-#include "ekf_filter.hpp"
+#include "imu_process.h"
+#include "ekf_filter.h"
 
-typedef std::pair<double, Eigen::Matrix4d> OdomType;
-typedef std::pair<double, ImuData> ImuType;
+typedef std::pair<double, Eigen::Matrix4d> OdomDequeType;
+typedef std::pair<double, ImuData> ImuDequeType;
 
-std::deque<ImuType> imu_buffer;
-std::deque<OdomType> odom_buffer;
-std::mutex mtx_buffer;
+std::deque<ImuDequeType> imu_buffer;
+std::deque<OdomDequeType> odom_buffer;
 
-bool exit_flag = false;
-std::condition_variable sig_buffer;
-
+bool ros_exit_flag = false;
 
 void SigHandle(int sig) {
 
-    exit_flag = true;
+    ros_exit_flag = true;
     ROS_WARN("Catch sig %d", sig);
-    sig_buffer.notify_all();
 }
 
 void ImuCallback(const sensor_msgs::Imu::ConstPtr& msg) {
-    
-    std::lock_guard<std::mutex> lock(mtx_buffer);
-    double time = msg->header.stamp.toSec();
 
+    double time = msg->header.stamp.toSec();
     ImuData imu_data;
-    imu_data.cur_acc = Eigen::Vector3d(msg->linear_acceleration.x,
-                                       msg->linear_acceleration.y,
-                                       msg->linear_acceleration.z);
-    imu_data.cur_gyr = Eigen::Vector3d(msg->angular_velocity.x,
-                                       msg->angular_velocity.y,        
-                                       msg->angular_velocity.z);
-    imu_data.timestamp = time;
-    imu_buffer.push_back(ImuType(time, imu_data));
+    imu_data.timeStamp = time;
+    imu_data.cur_imu_gyr = Eigen::Vector3d(msg->angular_velocity.x, msg->angular_velocity.y, msg->angular_velocity.z);
+    imu_data.cur_imu_acc = Eigen::Vector3d(msg->linear_acceleration.x, msg->linear_acceleration.y, msg->linear_acceleration.z);
+    imu_buffer.push_back(ImuDequeType(time, imu_data));
 }
 
 void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
 
-    std::lock_guard<std::mutex> lock(mtx_buffer);
     double time = msg->header.stamp.toSec();
     Eigen::Matrix4d odom = Eigen::Matrix4d::Identity();
-    odom.block<3,3>(0,0) = Eigen::Quaterniond(msg->pose.pose.orientation.w,
-                                              msg->pose.pose.orientation.x,
-                                              msg->pose.pose.orientation.y,
-                                              msg->pose.pose.orientation.z).toRotationMatrix(); 
-
-    odom.block<3,1>(0,3) = Eigen::Vector3d(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
-    odom_buffer.push_back(OdomType(time, odom));
+    Eigen::Quaterniond q(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+    odom.block<3, 3>(0, 0) = q.toRotationMatrix();
+    odom.block<3, 1>(0, 3) = Eigen::Vector3d(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
+    odom_buffer.push_back(OdomDequeType(time, odom));
 }
-   
+
 void PublishOdometry(ros::Publisher& odom_pub, const EkfState& state) {
 
     nav_msgs::Odometry odom_msg;
-    
+
     odom_msg.header.stamp = ros::Time(state.timestamp);
-    
+    //odom_msg.header.stamp = ros::Time::now();
+
+
     // Set position
     odom_msg.pose.pose.position.x = state.pos.x();
     odom_msg.pose.pose.position.y = state.pos.y();
     odom_msg.pose.pose.position.z = state.pos.z();
-    
+
     // Set orientation
-    odom_msg.pose.pose.orientation.w = state.rot.w();
-    odom_msg.pose.pose.orientation.x = state.rot.x();
-    odom_msg.pose.pose.orientation.y = state.rot.y();
-    odom_msg.pose.pose.orientation.z = state.rot.z();
-    
+    Eigen::Quaterniond q(state.rot.matrix());
+    odom_msg.pose.pose.orientation.w = q.w();
+    odom_msg.pose.pose.orientation.x = q.x();
+    odom_msg.pose.pose.orientation.y = q.y();
+    odom_msg.pose.pose.orientation.z = q.z();
+
     // Set velocity
     odom_msg.twist.twist.linear.x = state.vel.x();
     odom_msg.twist.twist.linear.y = state.vel.y();
     odom_msg.twist.twist.linear.z = state.vel.z();
-    
+
     odom_pub.publish(odom_msg);
 }
-    
+
 int main(int argc, char** argv) {
 
     ros::init(argc, argv, "ekf_odometry_node");
 
     ros::NodeHandle nh("~");
-        
+
     std::string imu_topic, odom_topic;
 
     nh.param<std::string>("imu_topic", imu_topic, "/livox/imu");
-    nh.param<std::string>("odom_topic", odom_topic, "/Odometry");
+    nh.param<std::string>("odom_topic", odom_topic, "/sunray/odometry");
 
     // Setup subscriber
     ros::Subscriber imu_sub = nh.subscribe(imu_topic, 100, ImuCallback);
     ros::Subscriber odom_sub = nh.subscribe(odom_topic, 10, OdomCallback);
-        
+
     // Setup publisher
     ros::Publisher ekf_odom_pub = nh.advertise<nav_msgs::Odometry>("/sunray/ekf_odometry", 10);
-        
+
     ROS_INFO("EKF Odometry Node Starting...");
     ROS_INFO("Subscribing to IMU topic: %s", imu_topic.c_str());
     ROS_INFO("Subscribing to Odometry topic: %s", odom_topic.c_str());
     ROS_INFO("Publishing to: /sunray/ekf_odometry");
 
-    std::shared_ptr<EkfFilter> ekf_filter = std::make_shared<EkfFilter>();
+    ros::Rate rate(200);
+
+    // 初始化IMU重力，陀螺仪偏置
     std::shared_ptr<ImuProcess> imu_process = std::make_shared<ImuProcess>();
 
-    // TODO:初始化
-    ros::Rate rate(200);    
-    
-    bool imu_init_flag = false, system_initialized = false;
+    bool imu_init_flag = false;
 
     while (ros::ok()) {
 
-        if (exit_flag)
+        if (ros_exit_flag || imu_init_flag)
             break;
 
         ros::spinOnce();
 
-        // 初始化IMU重力，陀螺仪偏置
-        if (!imu_init_flag) {
-            
-            while (!imu_buffer.empty()) {
+        while (!imu_buffer.empty()) {
 
-                auto cur_imu = imu_buffer.front();
+            auto cur_imu = imu_buffer.front();
+            imu_buffer.pop_front();
+
+            if (imu_process->ImuInit(cur_imu.second)) {
+
+                imu_init_flag = true;
+                ROS_INFO("Imu Initialized!");
+                break;
+            }
+        }
+
+        rate.sleep();
+    }
+
+    // 初始化EKF滤波器
+    std::shared_ptr<EkfFilter> ekf_filter = std::make_shared<EkfFilter>();
+
+    ekf_filter->SetInitGyrBias(imu_process->GetInitGyrBias());
+    ekf_filter->SetInitGravity(imu_process->GetInitGravity());
+
+    bool ekf_init_flag = false;
+    while (ros::ok()) {
+
+        if (ros_exit_flag || ekf_init_flag)
+            break;
+
+        ros::spinOnce();
+
+        while (!imu_buffer.empty() && !odom_buffer.empty()) {
+
+            auto cur_imu = imu_buffer.front();
+            auto cur_odom = odom_buffer.front();
+
+            double dt = cur_imu.first - cur_odom.first;
+
+            if (dt < 0) {
+
                 imu_buffer.pop_front();
 
-                if (imu_process->ImuInit(cur_imu.second)) {
+            } else {
 
-                    ekf_filter->SetInitGyrBias(imu_process->GetInitGyrBias());
-                    imu_init_flag = true;
-                    ROS_INFO("Imu Initialized!");
+                if (dt > 0.1) {
+
+                    odom_buffer.pop_front();
+
+                } else {
+
+                    ekf_filter->SetInitPose(cur_odom.second);  //设置初始值
+
+                    odom_buffer.pop_front();
+
+                    // IMU预积分的第一帧
+                    ImuData imu_data;
+                    double dt = 0;
+                    imu_process->ProcssIMU(cur_imu.second, imu_data, dt);
+                    imu_buffer.pop_front();
+
+                    ekf_init_flag = true;
+                    ROS_INFO("EKF Initialized!");
                     break;
                 }
             }
-
-            continue;
         }
+    }
 
-        // 初始化EKF
-        if (!system_initialized) {
+    while (ros::ok()) {
 
-             while (!imu_buffer.empty() && !odom_buffer.empty()) {
+        if (ros_exit_flag)
+            break;
 
-                auto cur_imu = imu_buffer.front();
-                auto cur_odom = odom_buffer.front();
-                
-                double dt = cur_imu.first - cur_odom.first;
-
-                if (dt < 0) {
-                    
-                    imu_buffer.pop_front();
-
-                } else {
-                
-                    if (dt > 0.1) {
-
-                        odom_buffer.pop_front();
-
-                    } else {
-
-                        ekf_filter->SetInitState(cur_odom.second);  //设置初始值
-                        ImuData imu_data;
-                        imu_process->ProcssIMU(cur_imu.second, imu_data);
-                        imu_buffer.pop_front();
-                        system_initialized = true;
-                        ROS_INFO("EKF Initialized!");
-                        break;
-                    }
-                }
-            }
-
-            continue;
-        }
+        ros::spinOnce();
 
         // EKF预测-更新循环
         while (!imu_buffer.empty() && !odom_buffer.empty()) {
@@ -183,24 +189,21 @@ int main(int argc, char** argv) {
             if (cur_imu.first < cur_odom.first) {
 
                 ImuData imu_data;
-                imu_process->ProcssIMU(cur_imu.second, imu_data);
+                double dt = 0;
+                imu_process->ProcssIMU(cur_imu.second, imu_data, dt);
                 imu_buffer.pop_front();
-                ekf_filter->Predict(ekf_state, imu_data);
-                PublishOdometry(ekf_odom_pub, ekf_filter->GetState());
+                ekf_filter->Predict(imu_data, dt);
+                PublishOdometry(ekf_odom_pub, ekf_filter->GetEkfState());
 
             } else {
-            
-                ekf_filter->Update(ekf_state, cur_odom.second);
+
+                ekf_filter->Update(cur_odom.second);
                 odom_buffer.pop_front();
             }
         }
 
         rate.sleep();
     }
-  
+
     return 0;
 }
-
-
-
-      

@@ -1,2 +1,0 @@
-diff_planner_msgs/TrajectoryMatrix path
-time start

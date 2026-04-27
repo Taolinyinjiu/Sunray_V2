@@ -9,7 +9,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>diff_planner_msgs</depend>
-  <depend>ego_planner_msgs</depend>
+  <depend>sunray_planner_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>quadrotor_msgs</depend>
   <depend>roscpp</depend>

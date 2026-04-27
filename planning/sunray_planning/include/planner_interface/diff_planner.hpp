@@ -13,7 +13,7 @@ class DiffPlanner : public PlannerInterface {
 
   private:
     void bind_topics(ros::NodeHandle& nh) override;
-    void position_cmd_callback(const diff_planner_msgs::PositionCommand::ConstPtr& msg);
+    void position_cmd_callback(const sunray_planner_msgs::DiffPositionCommand::ConstPtr& msg);
 
     ros::Publisher goal_pub_;
     ros::Subscriber position_cmd_sub_;

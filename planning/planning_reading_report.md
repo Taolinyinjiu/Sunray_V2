@@ -485,7 +485,7 @@ SUPER 在 `planning/` 内不是一个简单算法子包，而是一个**近乎�
 
 将：
 
-- `diff_planner_msgs::PositionCommand`
+- `sunray_planner_msgs::DiffPositionCommand`
 
 转换为：
 
