@@ -16,6 +16,8 @@
 #include "sunray_log.hpp"
 
 namespace {
+constexpr double kControlFsmOverrideGraceSec = 2.0;
+
 std::string load_uav_namespace_or_throw(ros::NodeHandle& nh, ros::NodeHandle& private_nh) {
     std::string uav_name;
     int uav_id = 0;
@@ -494,6 +496,8 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
     }
 
     task_active_ = true;
+    control_fsm_trajectory_ack_ = false;
+    last_goal_accept_stamp_ = ros::Time::now();
     fsm_state_ = active_task_to_fsm_state();
 }
 
@@ -517,7 +521,20 @@ void PlanningFSM::control_fsm_state_callback(
         msg->control_cmd == sunray_msgs::UAVControlFSMState::MOVE_TRAJECTORY;
     const bool keep_arrived_state =
         task_arrived_ && msg->sunray_fsm_state == sunray_msgs::UAVControlFSMState::FSM_HOVER;
-    if (planner_generated_motion || keep_arrived_state) {
+    if (planner_generated_motion) {
+        control_fsm_trajectory_ack_ = true;
+        return;
+    }
+    if (keep_arrived_state) {
+        return;
+    }
+
+    const ros::Time now = ros::Time::now();
+    const bool in_goal_handshake_grace_window =
+        task_active_ && !control_fsm_trajectory_ack_ &&
+        (now - last_goal_accept_stamp_).toSec() <= kControlFsmOverrideGraceSec;
+    if (in_goal_handshake_grace_window &&
+        msg->sunray_fsm_state == sunray_msgs::UAVControlFSMState::FSM_HOVER) {
         return;
     }
 

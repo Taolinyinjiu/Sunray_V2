@@ -241,10 +241,18 @@ bool PX4_OriginController::move_point_impl(controller_data_types::TargetPoint_t 
 
     control_common::Mavros_SetpointLocal send_setpoint;
     send_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    send_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
     const curve::QuinticCurveState curve_result = move_point_curve_.get_result();
     // Keep point mode close to historical "position hold" semantics:
     // smooth only the position reference, and avoid quintic velocity/acceleration
-    // feedforward that can make move_point much more aggressive.
+    // feedforward that can make move_point much more aggressive. Mask them out as
+    // well so PX4 consumes this as a position+yaw reference instead of a mixed setpoint.
     send_setpoint.position = curve_result.valid ? curve_result.position : point.position;
     send_setpoint.velocity = Eigen::Vector3d::Zero();
     send_setpoint.accel_or_force = Eigen::Vector3d::Zero();

@@ -20,9 +20,12 @@ add_message_files(
   OrcaCmd.msg
   OrcaSetup.msg
   Px4State.msg
+  PlanningWaypoint.msg
   UAVControlCMD.msg
   UAVControlFSMState.msg
   UAVControllerState.msg
+  UAVPlanningCMD.msg
+  UAVPlanningState.msg
   UAVSwarmCMD.msg
   UAVSwarmState.msg
   UGVControlCMD.msg
@@ -31,14 +34,6 @@ add_message_files(
   UGVSwarmCMD.msg
   UGVSwarmState.msg
   Vector2.msg
-)
-
-add_message_files(
-  DIRECTORY msg/planning
-  FILES
-  PlanningWaypoint.msg
-  UAVPlanningCMD.msg
-  UAVPlanningState.msg
 )
 
 ## Add service definitions after creating files under srv/
