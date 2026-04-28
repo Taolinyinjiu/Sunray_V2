@@ -3,13 +3,12 @@
   <!-- 里程计话题名 -->
   <arg name="odom_topic" default="${uav_ns}/sunray/localization/local_odom" />
   <!-- 全局点云 -->
-  <arg name="cloud_topic" default="${uav_ns}/sunray/localization/global_points" />
-  <arg name="front_vis" default="false" />
-
+  <arg name="cloud_topic" default="/uav1/livox/lidar" />
+  <arg name="front_vis" default="true" />
   <!-- 向文件advanced_param_exp.xml中传递参数，并在xml文件中执行Diff_Planner的主节点 -->
   <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
     <arg name="odom_topic" value="$(arg odom_topic)" />
     <arg name="cloud_topic" value="$(arg cloud_topic)" />
-    <arg name="front_vis" value="$(arg front_vis)" />
+        <arg name="front_vis" value="$(arg front_vis)" />
   </include>
 </launch>

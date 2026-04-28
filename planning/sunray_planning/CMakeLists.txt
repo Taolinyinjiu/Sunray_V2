@@ -4,26 +4,21 @@ project(sunray_planning)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
-  diff_planner_msgs
   sunray_planner_msgs
   geometry_msgs
-  quadrotor_msgs
   roscpp
   roslib
   std_msgs
   sunray_common
   sunray_msgs
 )
-find_package(yaml-cpp REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES sunray_planning
   CATKIN_DEPENDS
-    diff_planner_msgs
     sunray_planner_msgs
     geometry_msgs
-    quadrotor_msgs
     roscpp
     roslib
     std_msgs
@@ -39,18 +34,14 @@ include_directories(
 )
 
 add_library(sunray_planning
-  src/planner_config.cpp
   src/planning_fsm.cpp
   src/planner_interface/diff_planner.cpp
   src/planner_interface/ego_planner.cpp
-  src/planner_interface/planner_factory.cpp
   src/planner_interface/planner_interface.cpp
-  src/planner_interface/super_planner.cpp
 )
 
 target_link_libraries(sunray_planning
   ${catkin_LIBRARIES}
-  yaml-cpp
 )
 
 add_executable(sunray_planning_node
@@ -60,7 +51,6 @@ add_executable(sunray_planning_node
 target_link_libraries(sunray_planning_node
   sunray_planning
   ${catkin_LIBRARIES}
-  yaml-cpp
 )
 
 add_executable(pose_goal_to_planning_cmd_node

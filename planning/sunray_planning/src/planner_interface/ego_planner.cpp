@@ -4,10 +4,10 @@
 
 namespace {
 geometry_msgs::PoseStamped build_pose_goal(const PlanningTarget& target,
-                                           const PlannerRuntimeConfig& config) {
+                                           const std::string& goal_frame_id) {
     geometry_msgs::PoseStamped goal_msg;
     goal_msg.header.stamp = ros::Time::now();
-    goal_msg.header.frame_id = config.goal_frame_id;
+    goal_msg.header.frame_id = goal_frame_id;
     goal_msg.pose.position.x = target.position.x();
     goal_msg.pose.position.y = target.position.y();
     goal_msg.pose.position.z = target.position.z();
@@ -29,14 +29,29 @@ bool is_invalid_flag(const uint8_t trajectory_flag) {
 }
 }  // namespace
 
+PlannerType EgoPlanner::planner_type() const { return PlannerType::EGO; }
+
+std::string EgoPlanner::default_goal_topic(const std::string& uav_ns) const {
+    return uav_ns + "/planning/goal";
+}
+
+std::string EgoPlanner::default_goal_frame_id() const { return "world"; }
+
+std::string EgoPlanner::default_position_cmd_topic(const std::string& uav_ns) const {
+    return uav_ns + "/pos_cmd";
+}
+
+std::string EgoPlanner::default_planner_state_topic(const std::string& uav_ns) const {
+    return uav_ns + "/planning/ego_state";
+}
+
 void EgoPlanner::bind_topics(ros::NodeHandle& nh) {
-    goal_pub_ = nh.advertise<geometry_msgs::PoseStamped>(config_.goal_topic, 1);
-    position_cmd_sub_ = nh.subscribe(
-        config_.position_cmd_topic, 10, &EgoPlanner::position_cmd_callback, this);
+    goal_pub_ = nh.advertise<geometry_msgs::PoseStamped>(goal_topic_, 1);
+    position_cmd_sub_ = nh.subscribe(position_cmd_topic_, 10, &EgoPlanner::position_cmd_callback, this);
 }
 
 bool EgoPlanner::send_goal(const PlanningTarget& target) {
-    goal_pub_.publish(build_pose_goal(target, config_));
+    goal_pub_.publish(build_pose_goal(target, goal_frame_id_));
     mark_goal_sent(ros::Time::now());
     return true;
 }
@@ -52,27 +67,17 @@ void EgoPlanner::position_cmd_callback(const sunray_planner_msgs::EgoPositionCom
         return;
     }
 
-    sunray_msgs::UAVControlCMD control_cmd;
-    control_cmd.header = msg->header;
-    control_cmd.header.stamp = stamp;
-    control_cmd.cmd_source = sunray_msgs::UAVControlCMD::CONTROL_CMD;
-    control_cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_TRAJECTORY;
-    control_cmd.desired_pos.x = msg->position.x;
-    control_cmd.desired_pos.y = msg->position.y;
-    control_cmd.desired_pos.z = msg->position.z;
-    control_cmd.desired_vel = msg->velocity;
-    control_cmd.desired_acc = msg->acceleration;
-    control_cmd.desired_jerk.x = 0.0;
-    control_cmd.desired_jerk.y = 0.0;
-    control_cmd.desired_jerk.z = 0.0;
-    control_cmd.desired_yaw = msg->yaw;
-    control_cmd.desired_yaw_rate = 0.0;
-    // MOVE_TRAJECTORY 当前在 uav_control 链路中无法同时无损表达 yaw 和 yaw_rate。
-    // 这里优先保留绝对 yaw，让下游按规划轨迹给出的朝向跟踪。
-    control_cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
-    control_cmd.fixed_height = 0.0;
+    PlannerPositionCommand planner_cmd;
+    planner_cmd.stamp = stamp;
+    planner_cmd.position = Eigen::Vector3d(msg->position.x, msg->position.y, msg->position.z);
+    planner_cmd.velocity = Eigen::Vector3d(msg->velocity.x, msg->velocity.y, msg->velocity.z);
+    planner_cmd.acceleration =
+        Eigen::Vector3d(msg->acceleration.x, msg->acceleration.y, msg->acceleration.z);
+    planner_cmd.jerk = Eigen::Vector3d::Zero();
+    planner_cmd.yaw = msg->yaw;
+    planner_cmd.yaw_rate = msg->yaw_dot;
 
-    set_latest_control_cmd(control_cmd);
+    set_latest_position_cmd(planner_cmd);
     set_planner_state(msg->trajectory_flag == sunray_planner_msgs::EgoPositionCommand::TRAJECTORY_STATUS_COMPLETED
                           ? PlannerExecState::SUCCESS
                           : PlannerExecState::EXEC,

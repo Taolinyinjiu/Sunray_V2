@@ -12,6 +12,7 @@
   <arg name="uav_name" default="uav" />
   <arg name="uav_id" default="1" />
   <arg name="node_name" default="localization_fusion" />
+  <arg name="world_frame_id" default="world" />
   <arg name="set_global_params" default="true" />
   <arg name="test" default="false" />
 
@@ -50,5 +51,6 @@
     <param name="log_save" value="$(arg log_save)" />
     <param name="uav_name" value="$(arg uav_name)" />
     <param name="uav_id" value="$(arg uav_id)" />
+    <param name="world_frame_id" value="$(arg world_frame_id)" />
   </node>
 </launch>

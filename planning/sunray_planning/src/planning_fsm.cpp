@@ -9,8 +9,8 @@
 
 #include <ros/package.h>
 
-#include "planner_config.hpp"
-#include "planner_interface/planner_factory.hpp"
+#include "planner_interface/diff_planner.hpp"
+#include "planner_interface/ego_planner.hpp"
 #include "planner_interface/planner_interface.hpp"
 #include "string_uav_namespace_utils.hpp"
 #include "sunray_log.hpp"
@@ -245,7 +245,7 @@ PlanningFsmState passthrough_control_cmd_to_fsm_state(const uint8_t control_cmd)
     }
 }
 
-PlanningFsmState active_task_to_fsm_state(const sunray_msgs::UAVPlanningCMD& planning_cmd) {
+PlanningFsmState active_task_to_fsm_state() {
     return PlanningFsmState::PLANNING;
 }
 
@@ -264,10 +264,28 @@ PlanningFSM::PlanningFSM(ros::NodeHandle& nh) : nh_(nh), private_nh_("~") {}
 void PlanningFSM::init() {
     load_param();
 
-    planner_config_ = load_selected_planner_config(
-        config_yamlfile_path_, planner_type_filter_, planner_id_filter_, uav_ns_);
-    planner_ = create_planner_interface(planner_config_);
-    planner_->init(nh_, planner_config_);
+    // The planner adapter is selected once at node startup from launch/config
+    // and kept behind the shared PlannerInterface contract for the whole run.
+    switch (planner_type_from_string(selected_planner_type_)) {
+    case PlannerType::EGO:
+        planner_.reset(new EgoPlanner());
+        break;
+    case PlannerType::DIFF:
+        planner_.reset(new DiffPlanner());
+        break;
+    case PlannerType::FUEL:
+        throw std::runtime_error(
+            "planner type 'fuel' is not supported by sunray_planning current adapter; "
+            "only ego and diff are enabled");
+    case PlannerType::SUPER:
+        throw std::runtime_error(
+            "planner type 'super' is not supported by sunray_planning current adapter; "
+            "only ego and diff are enabled");
+    case PlannerType::UNDEFINE:
+    default:
+        throw std::runtime_error("unsupported planner type '" + selected_planner_type_ + "'");
+    }
+    planner_->init(nh_, uav_ns_);
 
     planning_cmd_sub_ =
         nh_.subscribe(planning_cmd_sub_topic_, 10, &PlanningFSM::planning_cmd_callback, this);
@@ -286,32 +304,26 @@ void PlanningFSM::init() {
 
     SUNRAY_INFO(
         "[sunray_planning] planner={} type={} goal_topic={} cmd_topic={} control_pub={} control_fsm_topic={} follow_control_fsm={}",
-        planner_config_.planner_name,
-        planner_config_.planner_type,
-        planner_config_.goal_topic,
-        planner_config_.position_cmd_topic,
+        planner_type_to_string(planner_->planner_type()),
+        planner_type_to_string(planner_->planner_type()),
+        planner_->goal_topic(),
+        planner_->position_cmd_topic(),
         control_pub_topic_,
         control_fsm_state_sub_topic_,
         follow_control_fsm_ ? 1 : 0);
 }
 
 void PlanningFSM::load_param() {
-    if (!private_nh_.getParam("config_yamlfile_path", config_yamlfile_path_)) {
-        throw std::runtime_error("missing param ~config_yamlfile_path");
-    }
-
     uav_ns_ = load_uav_namespace_or_throw(nh_, private_nh_);
     private_nh_.param("log_save", log_save_, false);
     init_logger();
 
-    private_nh_.param("planner_type", planner_type_filter_, std::string(""));
-    planner_type_filter_ = normalize_planner_type(planner_type_filter_);
-    private_nh_.param("planner_id", planner_id_filter_, -1);
+    private_nh_.param("planner_type", selected_planner_type_, std::string(""));
+    selected_planner_type_ = normalize_planner_type(selected_planner_type_);
 
     private_nh_.param("process_rate_hz", process_rate_hz_, 50.0);
     private_nh_.param("state_pub_rate_hz", state_pub_rate_hz_, 10.0);
     private_nh_.param("auto_hover_on_timeout", auto_hover_on_timeout_, true);
-    private_nh_.param("special_cmd_repub_interval_sec", special_cmd_repub_interval_sec_, 0.5);
     private_nh_.param("control_fsm_state_timeout_sec", control_fsm_state_timeout_sec_, 1.0);
     private_nh_.param("follow_control_fsm", follow_control_fsm_, true);
 
@@ -320,9 +332,6 @@ void PlanningFSM::load_param() {
     }
     if (state_pub_rate_hz_ <= 0.0) {
         state_pub_rate_hz_ = 10.0;
-    }
-    if (special_cmd_repub_interval_sec_ < 0.0) {
-        special_cmd_repub_interval_sec_ = 0.5;
     }
     if (control_fsm_state_timeout_sec_ <= 0.0) {
         control_fsm_state_timeout_sec_ = 1.0;
@@ -476,7 +485,7 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
 
     if (!planner_ || !planner_->send_goal(active_target_)) {
         SUNRAY_ERROR("[sunray_planning] failed to send goal to planner '{}'",
-                     planner_config_.planner_name);
+                     planner_ ? planner_type_to_string(planner_->planner_type()) : "UNDEFINE");
         task_active_ = false;
         hover_hold_ = true;
         passthrough_control_cmd_ = sunray_msgs::UAVControlCMD::HOVER;
@@ -485,7 +494,7 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
     }
 
     task_active_ = true;
-    fsm_state_ = active_task_to_fsm_state(last_planning_cmd_);
+    fsm_state_ = active_task_to_fsm_state();
 }
 
 void PlanningFSM::control_fsm_state_callback(
@@ -543,7 +552,7 @@ void PlanningFSM::process() {
     }
 
     const ros::Time now = ros::Time::now();
-    const PlannerSnapshot snapshot = planner_->get_state();
+    const PlannerSnapshot snapshot = planner_->get_state(now);
 
     if (task_active_) {
         if (snapshot.planner_state == PlannerExecState::SUCCESS) {
@@ -559,15 +568,15 @@ void PlanningFSM::process() {
             hover_hold_ = true;
             passthrough_control_cmd_ = sunray_msgs::UAVControlCMD::HOVER;
             fsm_state_ = PlanningFsmState::HOVER;
-        } else if (auto_hover_on_timeout_ && !snapshot.last_output_stamp.isZero() &&
-                   (now - snapshot.last_output_stamp).toSec() > planner_config_.cmd_timeout_sec) {
+        } else if (auto_hover_on_timeout_ && !snapshot.has_valid_output &&
+                   !snapshot.last_output_stamp.isZero()) {
             task_active_ = false;
             task_arrived_ = false;
             hover_hold_ = true;
             passthrough_control_cmd_ = sunray_msgs::UAVControlCMD::HOVER;
             fsm_state_ = PlanningFsmState::HOVER;
         } else {
-            fsm_state_ = active_task_to_fsm_state(last_planning_cmd_);
+            fsm_state_ = active_task_to_fsm_state();
         }
     } else if (passthrough_control_cmd_ != sunray_msgs::UAVControlCMD::UNDEFINE) {
         fsm_state_ = passthrough_control_cmd_to_fsm_state(passthrough_control_cmd_);
@@ -589,12 +598,15 @@ void PlanningFSM::pub_control_cmd() {
     }
 
     const ros::Time now = ros::Time::now();
-    const PlannerSnapshot snapshot = planner_->get_state();
+    const PlannerSnapshot snapshot = planner_->get_state(now);
 
     if (task_active_) {
-        sunray_msgs::UAVControlCMD planner_cmd;
-        if (planner_->fetch_latest_control_cmd(planner_cmd, now)) {
-            control_pub_.publish(planner_cmd);
+        PlannerPositionCommand planner_cmd;
+        if (planner_->fetch_latest_position_cmd(planner_cmd, now)) {
+            const uint8_t cmd_source =
+                has_last_planning_cmd_ ? last_planning_cmd_.cmd_source
+                                       : sunray_msgs::UAVControlCMD::CONTROL_CMD;
+            control_pub_.publish(build_trajectory_control_cmd(planner_cmd, cmd_source));
         }
         return;
     }
@@ -604,10 +616,10 @@ void PlanningFSM::pub_control_cmd() {
     }
 
     const uint8_t control_cmd = passthrough_control_cmd_;
-    control_pub_.publish(
-        build_special_control_cmd(control_cmd, snapshot, last_planning_cmd_.cmd_source));
-    last_special_cmd_type_ = control_cmd;
-    last_special_cmd_pub_stamp_ = now;
+    const uint8_t cmd_source =
+        has_last_planning_cmd_ ? last_planning_cmd_.cmd_source
+                               : sunray_msgs::UAVControlCMD::CONTROL_CMD;
+    control_pub_.publish(build_special_control_cmd(control_cmd, snapshot, cmd_source));
     passthrough_control_cmd_ = sunray_msgs::UAVControlCMD::UNDEFINE;
 }
 
@@ -617,8 +629,9 @@ void PlanningFSM::pub_planning_state() {
     planning_state_msg.header.stamp = now;
     planning_state_msg.task_id = task_id_;
 
-    const PlannerSnapshot snapshot = planner_ ? planner_->get_state() : PlannerSnapshot{};
-    const PlannerType planner_type = planner_type_from_string(planner_config_.planner_type);
+    const PlannerSnapshot snapshot = planner_ ? planner_->get_state(now) : PlannerSnapshot{};
+    const PlannerType planner_type =
+        planner_ ? planner_->planner_type() : planner_type_from_string(selected_planner_type_);
     const PlanningFsmState effective_state = effective_fsm_state(now);
     const bool planning_context = has_planning_context(
         has_last_planning_cmd_, last_planning_cmd_, task_active_, task_arrived_, hover_hold_);
@@ -671,6 +684,33 @@ void PlanningFSM::pub_planning_state() {
     planning_state_pub_.publish(planning_state_msg);
 }
 
+sunray_msgs::UAVControlCMD PlanningFSM::build_trajectory_control_cmd(
+    const PlannerPositionCommand& planner_cmd, const uint8_t cmd_source) const {
+    sunray_msgs::UAVControlCMD control_cmd;
+    control_cmd.header.stamp = planner_cmd.stamp.isZero() ? ros::Time::now() : planner_cmd.stamp;
+    control_cmd.cmd_source = cmd_source;
+    control_cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_TRAJECTORY;
+    control_cmd.desired_pos.x = planner_cmd.position.x();
+    control_cmd.desired_pos.y = planner_cmd.position.y();
+    control_cmd.desired_pos.z = planner_cmd.position.z();
+    control_cmd.desired_vel.x = planner_cmd.velocity.x();
+    control_cmd.desired_vel.y = planner_cmd.velocity.y();
+    control_cmd.desired_vel.z = planner_cmd.velocity.z();
+    control_cmd.desired_acc.x = planner_cmd.acceleration.x();
+    control_cmd.desired_acc.y = planner_cmd.acceleration.y();
+    control_cmd.desired_acc.z = planner_cmd.acceleration.z();
+    control_cmd.desired_jerk.x = planner_cmd.jerk.x();
+    control_cmd.desired_jerk.y = planner_cmd.jerk.y();
+    control_cmd.desired_jerk.z = planner_cmd.jerk.z();
+    control_cmd.desired_yaw = planner_cmd.yaw;
+    control_cmd.desired_yaw_rate = planner_cmd.yaw_rate;
+    control_cmd.fixed_height = 0.0;
+    // The current UAVControlCMD contract can only select one yaw mode at a time.
+    // Prefer absolute yaw to keep trajectory heading deterministic across planners.
+    control_cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
+    return control_cmd;
+}
+
 sunray_msgs::UAVControlCMD PlanningFSM::build_special_control_cmd(
     const uint8_t control_cmd,
     const PlannerSnapshot& snapshot,
@@ -688,12 +728,6 @@ sunray_msgs::UAVControlCMD PlanningFSM::build_special_control_cmd(
     }
 
     return control_cmd_msg;
-}
-
-bool PlanningFSM::should_publish_special_cmd(const uint8_t control_cmd, const ros::Time& now) const {
-    (void)control_cmd;
-    (void)now;
-    return true;
 }
 
 bool PlanningFSM::has_fresh_control_fsm_state(const ros::Time& now) const {
@@ -765,7 +799,7 @@ PlanningFsmState PlanningFSM::effective_fsm_state(const ros::Time& now) const {
             is_planning_goal_cmd(last_planning_cmd_.control_cmd) &&
             last_control_fsm_state_.control_cmd ==
                 sunray_msgs::UAVControlFSMState::MOVE_TRAJECTORY) {
-            return active_task_to_fsm_state(last_planning_cmd_);
+            return active_task_to_fsm_state();
         }
         return PlanningFsmState::MOVE;
     case sunray_msgs::UAVControlFSMState::EMERGENCY_KILL:
@@ -786,13 +820,13 @@ void PlanningFSM::printf_terminal() {
     }
     last_terminal_log_stamp_ = now;
 
-    const PlannerSnapshot snapshot = planner_->get_state();
+    const PlannerSnapshot snapshot = planner_->get_state(now);
     const PlanningFsmState effective_state = effective_fsm_state(now);
 
     SUNRAY_INFO(
         "[sunray_planning] planner={}({}) fsm_local={} fsm_effective={} planner_state={} control_fsm={} task_cmd={} goal_active={} valid_output={} pending_special_cmd={}",
-        planner_config_.planner_name,
-        planner_config_.planner_type,
+        planner_ ? planner_type_to_string(planner_->planner_type()) : "UNDEFINE",
+        planner_ ? planner_type_to_string(planner_->planner_type()) : "UNDEFINE",
         planning_fsm_state_to_string(fsm_state_),
         planning_fsm_state_to_string(effective_state),
         snapshot.planner_state_string,

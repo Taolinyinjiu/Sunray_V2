@@ -4,16 +4,23 @@ using std::cout;
 using std::endl;
 namespace diff_planner
 {
-  PlanningVisualization::PlanningVisualization(ros::NodeHandle &nh)
+  PlanningVisualization::PlanningVisualization(ros::NodeHandle &nh, const std::string &uav_ns)
   {
     node = nh;
+    const std::string planner_topic_prefix = uav_ns + "/sunray/planning/diff_planner/";
 
-    goal_point_pub = nh.advertise<visualization_msgs::Marker>("goal_point", 2);
-    global_list_pub = nh.advertise<visualization_msgs::Marker>("global_list", 2);
-    init_list_pub = nh.advertise<visualization_msgs::Marker>("init_list", 2);
-    optimal_list_pub = nh.advertise<visualization_msgs::Marker>("optimal_list", 2);
-    failed_list_pub = nh.advertise<visualization_msgs::Marker>("failed_list", 2);
-    a_star_list_pub = nh.advertise<visualization_msgs::Marker>("a_star_list", 20);
+    goal_point_pub =
+        nh.advertise<visualization_msgs::Marker>(planner_topic_prefix + "visual_target_point", 2);
+    global_list_pub =
+        nh.advertise<visualization_msgs::Marker>(planner_topic_prefix + "planner_trajectory", 2);
+    init_list_pub =
+        nh.advertise<visualization_msgs::Marker>(planner_topic_prefix + "init_list", 2);
+    optimal_list_pub =
+        nh.advertise<visualization_msgs::Marker>(planner_topic_prefix + "optimal_list", 2);
+    failed_list_pub =
+        nh.advertise<visualization_msgs::Marker>(planner_topic_prefix + "failed_list", 2);
+    a_star_list_pub =
+        nh.advertise<visualization_msgs::Marker>(planner_topic_prefix + "a_star_list", 20);
 
     // intermediate_pt0_pub = nh.advertise<visualization_msgs::Marker>("pt0_dur_opt", 10);
     // intermediate_grad0_pub = nh.advertise<visualization_msgs::MarkerArray>("grad0_dur_opt", 10);

@@ -43,18 +43,6 @@ enum class PlanningFsmState : uint8_t {
     EMERGENCY_KILL = 9
 };
 
-struct PlannerRuntimeConfig {
-    std::string planner_name;
-    std::string planner_type;
-    int planner_id{-1};
-    std::string goal_topic;
-    std::string goal_frame_id{"world"};
-    std::string position_cmd_topic;
-    std::string planner_state_topic;
-    double cmd_timeout_sec{0.3};
-    double state_timeout_sec{1.0};
-};
-
 struct PlannerSnapshot {
     bool ready{false};
     bool goal_active{false};

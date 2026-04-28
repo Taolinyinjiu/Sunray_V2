@@ -34,17 +34,17 @@ class PlanningFSM {
     bool has_fresh_control_fsm_state(const ros::Time& now) const;
     bool control_fsm_allows_planning_goal(const ros::Time& now, std::string& reason) const;
     PlanningFsmState effective_fsm_state(const ros::Time& now) const;
+    sunray_msgs::UAVControlCMD build_trajectory_control_cmd(const PlannerPositionCommand& planner_cmd,
+                                                            uint8_t cmd_source) const;
 
     sunray_msgs::UAVControlCMD build_special_control_cmd(uint8_t control_cmd,
                                                          const PlannerSnapshot& snapshot,
                                                          uint8_t cmd_source =
                                                              sunray_msgs::UAVControlCMD::CONTROL_CMD) const;
-    bool should_publish_special_cmd(const uint8_t control_cmd, const ros::Time& now) const;
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
     std::unique_ptr<PlannerInterface> planner_;
-    PlannerRuntimeConfig planner_config_;
 
     ros::Subscriber planning_cmd_sub_;
     ros::Subscriber control_fsm_state_sub_;
@@ -53,18 +53,15 @@ class PlanningFSM {
     ros::Timer process_timer_;
     ros::Timer planning_state_timer_;
 
-    std::string config_yamlfile_path_;
-    std::string planner_type_filter_;
+    std::string selected_planner_type_;
     std::string uav_ns_;
     std::string planning_cmd_sub_topic_;
     std::string control_pub_topic_;
     std::string planning_state_pub_topic_;
     std::string control_fsm_state_sub_topic_;
 
-    int planner_id_filter_{-1};
     double process_rate_hz_{50.0};
     double state_pub_rate_hz_{10.0};
-    double special_cmd_repub_interval_sec_{0.5};
     double control_fsm_state_timeout_sec_{1.0};
     bool auto_hover_on_timeout_{true};
     bool follow_control_fsm_{true};
@@ -83,8 +80,6 @@ class PlanningFSM {
     sunray_msgs::UAVControlFSMState last_control_fsm_state_;
     PlanningTarget active_target_;
 
-    mutable ros::Time last_special_cmd_pub_stamp_;
-    mutable uint8_t last_special_cmd_type_{0};
     ros::Time last_terminal_log_stamp_;
     ros::Time last_control_fsm_state_stamp_;
     std::string log_file_path_;

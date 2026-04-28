@@ -12,7 +12,10 @@ namespace diff_planner
 
   DiffPlannerManager::~DiffPlannerManager() { std::cout << "des manager" << std::endl; }
 
-  void DiffPlannerManager::initPlanModules(ros::NodeHandle &nh, PlanningVisualization::Ptr vis)
+  void DiffPlannerManager::initPlanModules(ros::NodeHandle &nh,
+                                           PlanningVisualization::Ptr vis,
+                                           const Planner_Config_t_ &planner_config,
+                                           const std::string &uav_ns)
   {
     /* read algorithm parameters */
 
@@ -25,7 +28,13 @@ namespace diff_planner
     nh.param("manager/drone_id", pp_.drone_id, -1);
 
     grid_map_.reset(new GridMap);
-    grid_map_->initMap(nh);
+    grid_map_->initMap(nh,
+                       planner_config.odom_topic,
+                       planner_config.depth_topic,
+                       planner_config.pose_topic,
+                       planner_config.cloud_topic,
+                       planner_config.extrinsic_topic,
+                       uav_ns);
 
     ploy_traj_opt_.reset(new PolyTrajOptimizer);
     ploy_traj_opt_->setParam(nh);

@@ -1,72 +1,21 @@
 <!-- 值得注意的是，Diff_Planner配置文件中并没有看到与坐标系有关的参数，因此我们可以得到的推断是，Diff_Planner要求输入的数据，默认使用world坐标系 -->
 <launch>
-  <!-- 里程计话题名 -->
-  <!-- TODO: EGO使用VINS的外参矩阵,将深度图的点云映射回里程计所在的坐标系? -->
-  <arg name="odom_topic" value="/vins/imu_propagate" />
-  <!-- 无人机ID -->
-  <arg name="drone_id" value="$(env DRONE_ID)" />
 
+  <!-- 里程计话题名 -->
+  <arg name="odom_topic" default="${uav_ns}/sunray/localization/vins/imu_propagate" />
+  <arg name="extrinsic_topic" default="${uav_ns}/sunray/localization/vins_estimator/extrinsic" />
+  <arg name="front_vis" default="false" />
   <!-- 向文件advanced_param_exp.xml中传递参数，并在xml文件中执行Diff_Planner的主节点 -->
   <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
-    <!-- 导入开头定义的里程计话题与无人机ID -->
     <arg name="odom_topic" value="$(arg odom_topic)" />
-    <arg name="drone_id" value="$(arg drone_id)" />
-    <!-- 注意，Diff_Planner在接受到相机深度图时，会将计算的点云重映射到world坐标系下，映射时使用的tf关系就是相机位姿 -->
-    <!-- 相机位姿话题: 相机坐标系在world坐标系下的位姿 -->
-    <!-- camera pose: transform of camera frame in the world frame -->
-    <arg name="camera_pose_topic" value="no_use0" />
+    <arg name="extrinsic_topic" value="$(arg extrinsic_topic)" />
+    <arg name="front_vis" value="$(arg front_vis)" />
     <!-- 深度话题: 深度图像, 640x480 by default -->
     <arg name="depth_topic" value="/camera/depth/image_rect_raw" />
-    <!-- topic of point cloud measurement, such as from LIDAR  -->
-    <arg name="cloud_topic" value="no_use2" />
-    <!-- intrinsic params of the depth camera -->
+    <!-- 深度相机内参 -->
     <arg name="cx" value="322.5561828613281" />
     <arg name="cy" value="243.67318725585938" />
     <arg name="fx" value="386.5376281738281" />
     <arg name="fy" value="386.5376281738281" />
-    <!-- maximum velocity, acceleration and jerk the drone will reach -->
-    <arg name="max_vel" value="0.5" />
-    <arg name="max_acc" value="3.0" />
-    <arg name="max_jer" value="20.0" />
-    <!--always set to 1.5 times grater than sensing horizen-->
-    <arg name="planning_horizon" value="7.5" />
-    <!-- map parameters  -->
-    <arg name="local_map_size_x" value="5.5" />
-    <arg name="local_map_size_y" value="5.5" />
-    <arg name="local_map_size_z" value="2.0" />
-    <arg name="enable_virtual_wall" value="true" />
-    <arg name="virtual_ceil" value="2.0" />
-    <arg name="virtual_ground" value="0.1" />
-    <arg name="map_resolution" value="0.15" />
-    <arg name="inflation_size" value="0.3" />
-    <!-- 1: use 2D Nav Goal to select goal  -->
-    <!-- 2: use global waypoints below  -->
-    <arg name="flight_type" value="1" />
-    <!-- global waypoints -->
-    <!-- It generates a piecewise min-snap traj passing all waypoints -->
-    <arg name="point_num" value="2" />
-    <arg name="point0_x" value="8" />
-    <arg name="point0_y" value="0" />
-    <arg name="point0_z" value="1" />
-    <arg name="point1_x" value="0" />
-    <arg name="point1_y" value="0" />
-    <arg name="point1_z" value="1" />
-    <arg name="point2_x" value="0.0" />
-    <arg name="point2_y" value="30.0" />
-    <arg name="point2_z" value="1.0" />
-    <arg name="point3_x" value="-30.0" />
-    <arg name="point3_y" value="0.0" />
-    <arg name="point3_z" value="1.0" />
-    <arg name="point4_x" value="0.0" />
-    <arg name="point4_y" value="0.0" />
-    <arg name="point4_z" value="1.0" />
   </include>
-
-  <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
-    <remap from="position_cmd" to="/setpoints_cmd" />
-    <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory" />
-    <remap from="~planning/yaw" to="/drone_$(arg drone_id)_planning/yaw" />
-    <remap from="~heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat" />
-    <param name="traj_server/time_forward" value="1.0" type="double" />
-  </node>
 </launch>

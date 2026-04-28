@@ -188,6 +188,7 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
         throw std::runtime_error("missing param" + node_name + "/use_receive_time");
     }
     private_nh_.param("log_save", log_save_, false);
+    private_nh_.param("world_frame_id", world_frame_id_, std::string("world"));
     // 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
     uav_ns_ = localization_fusion::load_uav_namespace_or_throw(nh_);
     init_logger();
@@ -305,23 +306,33 @@ bool LocalizationFusion::Init() {
         ros::Duration(1.0 / health_rate_hz_), &LocalizationFusion::healthtimer_callback, this);
 
     // 初始化tf数据
-    // sunray_global -> sunray_local
-    global_to_local_tf_.header.frame_id = global_frame_id_;
-    global_to_local_tf_.child_frame_id = local_frame_id_;
-    // 设置为原点重合
-    global_to_local_tf_.transform.translation.x = 0.0;
-    global_to_local_tf_.transform.translation.y = 0.0;
-    global_to_local_tf_.transform.translation.z = 0.0;
-    // 姿态设置为单位阵
-    global_to_local_tf_.transform.rotation.x = 0.0;
-    global_to_local_tf_.transform.rotation.y = 0.0;
-    global_to_local_tf_.transform.rotation.z = 0.0;
-    global_to_local_tf_.transform.rotation.w = 1.0;
+    // sunray_global -> world
+    global_to_world_tf_.header.frame_id = global_frame_id_;
+    global_to_world_tf_.child_frame_id = world_frame_id_;
+    global_to_world_tf_.transform.translation.x = 0.0;
+    global_to_world_tf_.transform.translation.y = 0.0;
+    global_to_world_tf_.transform.translation.z = 0.0;
+    global_to_world_tf_.transform.rotation.x = 0.0;
+    global_to_world_tf_.transform.rotation.y = 0.0;
+    global_to_world_tf_.transform.rotation.z = 0.0;
+    global_to_world_tf_.transform.rotation.w = 1.0;
+
+    // world -> sunray_local
+    world_to_local_tf_.header.frame_id = world_frame_id_;
+    world_to_local_tf_.child_frame_id = local_frame_id_;
+    world_to_local_tf_.transform.translation.x = 0.0;
+    world_to_local_tf_.transform.translation.y = 0.0;
+    world_to_local_tf_.transform.translation.z = 0.0;
+    world_to_local_tf_.transform.rotation.x = 0.0;
+    world_to_local_tf_.transform.rotation.y = 0.0;
+    world_to_local_tf_.transform.rotation.z = 0.0;
+    world_to_local_tf_.transform.rotation.w = 1.0;
+    tf_static_broadcaster_.sendTransform(world_to_local_tf_);
 
     // 检查当前的重定位模式，如果是local和global模式，他们并不需要relocalization,因此只需要一次静态的tf
     if (selected_source_.localization_mode == LocalizationMode::LOCAL ||
         selected_source_.localization_mode == LocalizationMode::GLOBAL) {
-        tf_static_broadcaster_.sendTransform(global_to_local_tf_);
+        tf_static_broadcaster_.sendTransform(global_to_world_tf_);
     }
 
     // 返回初始化状态
@@ -367,15 +378,18 @@ void LocalizationFusion::publish_global_odom_from_local(const nav_msgs::Odometry
         return;
     }
     // 如果是aruco辅助的话，需要考虑当前的tf变换对是否被修改了已经
-    tf2::Transform T_global_local;
+    tf2::Transform T_global_world;
+    tf2::Transform T_world_local;
     tf2::Transform T_local_base;
 
-    // sunray_global -> sunray_local
-    tf2::fromMsg(global_to_local_tf_.transform, T_global_local);
+    // sunray_global -> world
+    tf2::fromMsg(global_to_world_tf_.transform, T_global_world);
+    // world -> sunray_local
+    tf2::fromMsg(world_to_local_tf_.transform, T_world_local);
     // sunray_local -> base_link
     tf2::fromMsg(msg.pose.pose, T_local_base);
     // sunray_global -> base_link
-    const tf2::Transform T_global_base = T_global_local * T_local_base;
+    const tf2::Transform T_global_base = T_global_world * T_world_local * T_local_base;
     tf2::toMsg(T_global_base, global_msg.pose.pose);
 
     // TODO: 这里对速度的处理需要考虑
@@ -428,7 +442,7 @@ void LocalizationFusion::relocalization_callback(const nav_msgs::OdometryConstPt
         global_odom_pub_.publish(global_msg);
     }
     // 重构tf树
-    // 先确认已经有 local odom，否则没法反推出 global -> local
+    // 先确认已经有 local odom，否则没法反推出 global -> world
     if (!has_odometry_data_) {
         return;
     }
@@ -440,21 +454,21 @@ void LocalizationFusion::relocalization_callback(const nav_msgs::OdometryConstPt
     // base_link in sunray_local
     tf2::fromMsg(last_odometry_data_.pose.pose, T_local_base);
 
-    // 反推出 sunray_global -> sunray_local
-    const tf2::Transform T_global_local = T_global_base * T_local_base.inverse();
+    // world 与 sunray_local 重合，因此反推出的 global->world 与原先的 global->local 数值一致
+    const tf2::Transform T_global_world = T_global_base * T_local_base.inverse();
 
-    global_to_local_tf_.header.stamp = global_msg.header.stamp;
-    global_to_local_tf_.header.frame_id = global_frame_id_;
-    global_to_local_tf_.child_frame_id = local_frame_id_;
-    global_to_local_tf_.transform = tf2::toMsg(T_global_local);
+    global_to_world_tf_.header.stamp = global_msg.header.stamp;
+    global_to_world_tf_.header.frame_id = global_frame_id_;
+    global_to_world_tf_.child_frame_id = world_frame_id_;
+    global_to_world_tf_.transform = tf2::toMsg(T_global_world);
 
     last_relocalization_data_ = global_msg;
     has_relocalization_data_ = true;
 
-    // 动态广播 global -> local
+    // 动态广播 global -> world
     if (selected_source_.localization_mode == LocalizationMode::LOCAL_AND_GLOBAL) {
         // 只有在lidar的高频里程计时，才选择在这里发布tf，因为aruco的频率不定，转移到healthtimer_callback更好
-        tf_broadcaster_.sendTransform(global_to_local_tf_);
+        tf_broadcaster_.sendTransform(global_to_world_tf_);
     }
 }
 
@@ -467,8 +481,8 @@ void LocalizationFusion::healthtimer_callback(const ros::TimerEvent& e) {
 
     if (selected_source_.localization_mode == LocalizationMode::LOCAL_WITH_ARUCO) {
         // 默认值为原点重合
-        global_to_local_tf_.header.stamp = ros::Time::now();
-        tf_broadcaster_.sendTransform(global_to_local_tf_);
+        global_to_world_tf_.header.stamp = ros::Time::now();
+        tf_broadcaster_.sendTransform(global_to_world_tf_);
     }
     // 对odometry通信链路的检查需要先接受到数据
     if (has_odometry_data_) {

@@ -86,7 +86,7 @@ Panels:
         - /drone181/Simulation1
         - /drone181/Simulation1/robot1
         - /drone191/Planning1
-        - /drone191/Planning1/goal_point1
+        - /drone191/Planning1/visual_target_point1
         - /drone191/Planning1/optimal_traj1
         - /drone191/Planning1/drone_path1
         - /drone191/Mapping1
@@ -268,16 +268,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: true
-              Marker Topic: /drone_0_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_0_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: true
             - Class: rviz/Marker
               Enabled: true
-              Marker Topic: /drone_0_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_0_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -404,16 +404,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone__diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone__diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -532,16 +532,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_2_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_2_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -660,16 +660,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_3_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_3_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -788,16 +788,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_4_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_4_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -916,16 +916,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_5_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_5_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1044,16 +1044,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_6_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_6_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1172,16 +1172,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_7_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_7_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1300,16 +1300,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_8_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_8_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1428,16 +1428,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1556,16 +1556,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1684,16 +1684,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1812,16 +1812,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -1940,16 +1940,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2068,16 +2068,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2196,16 +2196,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2324,16 +2324,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2452,16 +2452,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2580,16 +2580,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2708,16 +2708,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_19_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_19_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2836,16 +2836,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_9_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_9_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -2964,16 +2964,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_21_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_21_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_21_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_21_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3100,16 +3100,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_22_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_22_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_22_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_22_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3236,16 +3236,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_23_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_23_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_23_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_23_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3372,16 +3372,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_24_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_24_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_24_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_24_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3508,16 +3508,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_25_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_25_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_25_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_25_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3644,16 +3644,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_26_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_26_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_26_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_26_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3780,16 +3780,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_27_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_27_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_27_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_27_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -3916,16 +3916,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_28_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_28_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_28_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_28_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4052,16 +4052,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_29_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_29_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_29_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_29_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4188,16 +4188,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_30_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_30_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_30_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_30_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4324,16 +4324,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_31_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_31_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_31_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_31_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4460,16 +4460,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_32_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_32_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_32_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_32_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4596,16 +4596,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_33_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_33_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_33_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_33_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4732,16 +4732,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_34_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_34_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_34_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_34_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -4868,16 +4868,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_35_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_35_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_35_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_35_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -5004,16 +5004,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_36_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_36_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_36_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_36_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -5140,16 +5140,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_37_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_37_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_37_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_37_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -5276,16 +5276,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_38_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_38_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_38_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_38_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -5412,16 +5412,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_39_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_39_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_39_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_39_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -5548,16 +5548,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_40_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_40_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_40_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_40_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -5684,16 +5684,16 @@ Visualization Manager:
           Displays:
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_40_diff_planner_node/goal_point
-              Name: goal_point
+              Marker Topic: /drone_40_diff_planner_node/visual_target_point
+              Name: visual_target_point
               Namespaces:
                 {}
               Queue Size: 100
               Value: false
             - Class: rviz/Marker
               Enabled: false
-              Marker Topic: /drone_40_diff_planner_node/global_list
-              Name: global_path
+              Marker Topic: /drone_40_diff_planner_node/planner_trajectory
+              Name: planner_trajectory
               Namespaces:
                 {}
               Queue Size: 100
@@ -6063,7 +6063,7 @@ Visualization Manager:
       Single click: true
       Topic: /clicked_point
     - Class: rviz_plugins/Goal3DTool
-      Topic: goal
+      Topic: /move_base_simple/goal
     - Class: rviz_plugin_selected_points_publisher/SelectedPointsPublisher
   Value: true
   Views:

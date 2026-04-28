@@ -1,20 +1,25 @@
 #include "planner_interface/planner_interface.hpp"
 
-void PlannerInterface::init(ros::NodeHandle& nh, const PlannerRuntimeConfig& config) {
-    config_ = config;
+void PlannerInterface::init(ros::NodeHandle& nh, const std::string& uav_ns) {
+    uav_ns_ = uav_ns;
+    goal_topic_ = default_goal_topic(uav_ns_);
+    goal_frame_id_ = default_goal_frame_id();
+    position_cmd_topic_ = default_position_cmd_topic(uav_ns_);
+    planner_state_topic_ = default_planner_state_topic(uav_ns_);
+    cmd_timeout_sec_ = default_cmd_timeout_sec();
+    state_timeout_sec_ = default_state_timeout_sec();
     snapshot_ = PlannerSnapshot{};
-    snapshot_.planner_type = planner_type_from_string(config_.planner_type);
+    snapshot_.planner_type = planner_type();
     snapshot_.planner_state = PlannerExecState::WAIT_TARGET;
     snapshot_.planner_state_string = planner_exec_state_to_string(snapshot_.planner_state);
     snapshot_.current_waypoint_index = 0;
     snapshot_.ready = false;
-    latest_cmd_ = sunray_msgs::UAVControlCMD{};
-    latest_cmd_.control_cmd = sunray_msgs::UAVControlCMD::UNDEFINE;
+    latest_position_cmd_ = PlannerPositionCommand{};
 
     bind_topics(nh);
 
-    if (!config_.planner_state_topic.empty()) {
-        unified_state_sub_ = nh.subscribe(config_.planner_state_topic,
+    if (!planner_state_topic_.empty()) {
+        unified_state_sub_ = nh.subscribe(planner_state_topic_,
                                           10,
                                           &PlannerInterface::unified_state_callback,
                                           this);
@@ -26,33 +31,66 @@ void PlannerInterface::init(ros::NodeHandle& nh, const PlannerRuntimeConfig& con
 
 bool PlannerInterface::is_ready() const { return snapshot_.ready; }
 
-bool PlannerInterface::fetch_latest_control_cmd(sunray_msgs::UAVControlCMD& cmd,
-                                                const ros::Time& now) const {
-    if (!snapshot_.ready || !snapshot_.has_valid_output || snapshot_.last_output_stamp.isZero()) {
+bool PlannerInterface::fetch_latest_position_cmd(PlannerPositionCommand& cmd,
+                                                 const ros::Time& now) const {
+    const PlannerSnapshot snapshot = get_state(now);
+    if (!snapshot.ready || !snapshot.has_valid_output || snapshot.last_output_stamp.isZero()) {
         return false;
     }
-    if ((now - snapshot_.last_output_stamp).toSec() > config_.cmd_timeout_sec) {
-        return false;
+    cmd = latest_position_cmd_;
+    if (cmd.stamp.isZero()) {
+        cmd.stamp = snapshot.last_output_stamp;
     }
-    if (latest_cmd_.control_cmd == sunray_msgs::UAVControlCMD::UNDEFINE) {
-        return false;
-    }
-    cmd = latest_cmd_;
     return true;
 }
 
-PlannerSnapshot PlannerInterface::get_state() const { return snapshot_; }
+PlannerSnapshot PlannerInterface::get_state(const ros::Time& now) const {
+    PlannerSnapshot snapshot = snapshot_;
 
-const PlannerRuntimeConfig& PlannerInterface::get_config() const { return config_; }
+    if (!now.isZero()) {
+        if (!planner_state_topic_.empty() && state_timeout_sec_ > 0.0 &&
+            !snapshot.last_state_stamp.isZero() &&
+            (now - snapshot.last_state_stamp).toSec() > state_timeout_sec_) {
+            snapshot.planner_state = PlannerExecState::UNDEFINE;
+            snapshot.planner_state_string = "STALE";
+        }
 
-void PlannerInterface::set_latest_control_cmd(const sunray_msgs::UAVControlCMD& cmd) {
-    latest_cmd_ = cmd;
-    if (latest_cmd_.header.stamp.isZero()) {
-        latest_cmd_.header.stamp = ros::Time::now();
+        if (cmd_timeout_sec_ > 0.0 && !snapshot.last_output_stamp.isZero() &&
+            (now - snapshot.last_output_stamp).toSec() > cmd_timeout_sec_) {
+            snapshot.has_valid_output = false;
+        }
+    }
+
+    return snapshot;
+}
+
+const std::string& PlannerInterface::goal_topic() const { return goal_topic_; }
+
+const std::string& PlannerInterface::goal_frame_id() const { return goal_frame_id_; }
+
+const std::string& PlannerInterface::position_cmd_topic() const { return position_cmd_topic_; }
+
+const std::string& PlannerInterface::planner_state_topic() const { return planner_state_topic_; }
+
+std::string PlannerInterface::default_goal_frame_id() const { return "world"; }
+
+std::string PlannerInterface::default_planner_state_topic(const std::string& uav_ns) const {
+    (void)uav_ns;
+    return "";
+}
+
+double PlannerInterface::default_cmd_timeout_sec() const { return 0.3; }
+
+double PlannerInterface::default_state_timeout_sec() const { return 1.0; }
+
+void PlannerInterface::set_latest_position_cmd(const PlannerPositionCommand& cmd) {
+    latest_position_cmd_ = cmd;
+    if (latest_position_cmd_.stamp.isZero()) {
+        latest_position_cmd_.stamp = ros::Time::now();
     }
     snapshot_.ready = true;
     snapshot_.has_valid_output = true;
-    snapshot_.last_output_stamp = latest_cmd_.header.stamp;
+    snapshot_.last_output_stamp = latest_position_cmd_.stamp;
 }
 
 void PlannerInterface::set_planner_state(const PlannerExecState planner_state, const ros::Time& stamp) {
@@ -87,8 +125,11 @@ void PlannerInterface::set_planner_state(const PlannerExecState planner_state, c
 void PlannerInterface::mark_goal_sent(const ros::Time& stamp) {
     snapshot_.ready = true;
     snapshot_.goal_active = true;
+    snapshot_.has_valid_output = false;
     snapshot_.current_waypoint_index = 0;
     snapshot_.last_goal_stamp = stamp;
+    snapshot_.last_output_stamp = ros::Time();
+    latest_position_cmd_ = PlannerPositionCommand{};
     set_planner_state(PlannerExecState::GENERATE, stamp);
 }
 
@@ -97,7 +138,7 @@ void PlannerInterface::unified_state_callback(const sunray_msgs::UAVPlanningStat
         return;
     }
 
-    const PlannerType expected_planner_type = planner_type_from_string(config_.planner_type);
+    const PlannerType expected_planner_type = planner_type();
     if (msg->planner_type != 0 &&
         msg->planner_type != static_cast<uint8_t>(expected_planner_type)) {
         return;

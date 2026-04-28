@@ -8,16 +8,13 @@
   <license>TODO</license>
 
   <buildtool_depend>catkin</buildtool_depend>
-  <depend>diff_planner_msgs</depend>
   <depend>sunray_planner_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>quadrotor_msgs</depend>
   <depend>roscpp</depend>
   <depend>roslib</depend>
   <depend>std_msgs</depend>
   <depend>sunray_common</depend>
   <depend>sunray_msgs</depend>
-  <depend>yaml-cpp</depend>
 
   <export/>
 </package>

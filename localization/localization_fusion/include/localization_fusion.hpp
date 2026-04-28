@@ -63,7 +63,7 @@ class LocalizationFusion {
     对于持续输入重定位的模式，比如mid360使用点云匹配先验地图，得到持续的global输入，此时我们将tf直接在relocalization_callback进行更新，因为他是持续发布的
     */
     void odometry_callback(const nav_msgs::OdometryConstPtr& msg);  // 里程计输入
-    void relocalization_callback(const nav_msgs::OdometryConstPtr& msg);  // 重定位输入：local 在 global 下的位姿（global->local）
+    void relocalization_callback(const nav_msgs::OdometryConstPtr& msg);  // 重定位输入：local 在 global 下的位姿（global->world）
     void healthtimer_callback(const ros::TimerEvent &e);  // 周期检查 local/global 是否收到新数据,判断是否超时,更新local_odom_valid/global_odom_valid,发布 odom_state
 
     // ---- 发布相关----
@@ -119,8 +119,9 @@ class LocalizationFusion {
     std::string odom_status_topic_{"${uav_ns}/sunray/localization/odom_status"};
     std::string log_file_path_;    // 日志文件绝对路径（启用文件日志时有效）
 
-    // 输出 frame 约定：sunray_global -> sunray_local -> base_link
+    // 输出 frame 约定：sunray_global -> world -> sunray_local -> base_link
     std::string global_frame_id_{"sunray_global"};
+    std::string world_frame_id_{"world"};
     std::string local_frame_id_{"sunray_local"};
     std::string base_frame_id_{"base_link"};
 
@@ -143,7 +144,8 @@ class LocalizationFusion {
 
     bool odometry_data_timeout_{false};  // local系数据是否超时
 
-    geometry_msgs::TransformStamped global_to_local_tf_;  // sunray_global -> sunray_local
+    geometry_msgs::TransformStamped global_to_world_tf_;  // sunray_global -> world
+    geometry_msgs::TransformStamped world_to_local_tf_;   // world -> sunray_local
     geometry_msgs::TransformStamped local_to_base_tf_;    // sunray_local -> base_link
 };
 

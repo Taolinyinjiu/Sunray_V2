@@ -1,4 +1,5 @@
 #include <nav_msgs/Odometry.h>
+#include <plan_manage/uav_namespace_topic_utils.h>
 #include <traj_utils/PolyTraj.h>
 #include <optimizer/poly_traj_utils.hpp>
 #include <sunray_planner_msgs/DiffPositionCommand.h>
@@ -331,14 +332,26 @@ void cmdCallback(const ros::TimerEvent &e)
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "traj_server");
-  // ros::NodeHandle node;
+  ros::NodeHandle node;
   ros::NodeHandle nh("~");
+  const std::string uav_ns = diff_planner::loadUavNamespaceOrThrow(node, nh);
 
-  ros::Subscriber poly_traj_sub = nh.subscribe("planning/trajectory", 10, polyTrajCallback);
-  ros::Subscriber yaw_sub = nh.subscribe("/planning/yaw", 10, yawCallback);
-  ros::Subscriber heartbeat_sub = nh.subscribe("heartbeat", 10, heartbeatCallback);
+  ros::Subscriber poly_traj_sub = node.subscribe(
+      diff_planner::makePlannerTopic("trajectory", uav_ns),
+      10,
+      polyTrajCallback);
+  ros::Subscriber yaw_sub = node.subscribe(
+      diff_planner::makePlannerTopic("yaw", uav_ns),
+      10,
+      yawCallback);
+  ros::Subscriber heartbeat_sub = node.subscribe(
+      diff_planner::makePlannerTopic("heartbeat", uav_ns),
+      10,
+      heartbeatCallback);
 
-  pos_cmd_pub = nh.advertise<sunray_planner_msgs::DiffPositionCommand>("/position_cmd", 50);
+  pos_cmd_pub = node.advertise<sunray_planner_msgs::DiffPositionCommand>(
+      diff_planner::makePlannerTopic("position_cmd", uav_ns),
+      50);
 
   ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
 

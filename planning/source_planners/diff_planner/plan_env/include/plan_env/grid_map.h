@@ -67,6 +67,7 @@ struct MappingParameters
   double fading_time_;
 
   /* visualization and computation time display */
+  bool front_vis_;
   bool show_occ_time_;
 };
 
@@ -141,7 +142,13 @@ public:
   GridMap() {}
   ~GridMap() {}
 
-  void initMap(ros::NodeHandle &nh);
+  void initMap(ros::NodeHandle &nh,
+               const std::string &odom_topic,
+               const std::string &depth_topic,
+               const std::string &pose_topic,
+               const std::string &cloud_topic,
+               const std::string &extrinsic_topic,
+               const std::string &uav_ns);
   inline int getOccupancy(Eigen::Vector3d pos);
   inline int getInflateOccupancy(Eigen::Vector3d pos);
   inline double getResolution();
@@ -217,6 +224,12 @@ private:
   typedef shared_ptr<message_filters::Synchronizer<SyncPolicyImageOdom>> SynchronizerImageOdom;
 
   ros::NodeHandle node_;
+  std::string odom_topic_;
+  std::string depth_topic_;
+  std::string pose_topic_;
+  std::string cloud_topic_;
+  std::string extrinsic_topic_;
+  std::string planner_topic_prefix_;
   shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_sub_;
   shared_ptr<message_filters::Subscriber<geometry_msgs::PoseStamped>> pose_sub_;
   shared_ptr<message_filters::Subscriber<nav_msgs::Odometry>> odom_sub_;
