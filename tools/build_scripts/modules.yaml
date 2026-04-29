@@ -96,6 +96,7 @@ modules:
     build_path: "build/sunray_simulator"
     dependencies: ["sunray_planning"]
   # 驱动模块功能包
+
   sunray_mavros:
     description: "sunray_mavros 功能包"
     source_path: "drivers/sunray_mavros"
@@ -111,6 +112,11 @@ modules:
     source_path: "drivers/sunray_gimbal"
     build_path: "build/sunray_gimbal"
     dependencies: []
+  realsense2_camera:
+    description: "localization_fusion 功能包"
+    source_path: "drivers/realsense2_camera"
+    build_path: "build/realsense2_camera"
+    dependencies: [sunray_msgs]
   livox_ros_driver2:
     description: "livox_ros_driver2 功能包"
     source_path: "drivers/livox_ros_driver2"
@@ -127,6 +133,12 @@ modules:
     build_path: "build/turn_on_wheeltec_robot"
     dependencies: []
   # 定位模块功能包
+  localization_fusion:
+    description: "localization_fusion 功能包"
+    source_path: "localization/localization_fusion"
+    build_path: "build/localization_fusion"
+    dependencies: [sunray_msgs]
+  
   vins_fusion:
     description: "localization_fusion 功能包"
     source_path: "localization/vins-fusion"
@@ -137,21 +149,19 @@ modules:
     source_path: "localization/vins-fusion-gpu"
     build_path: "build/vins-fusion-gpu"
     dependencies: [sunray_msgs]
-  realsense2_camera:
-    description: "localization_fusion 功能包"
-    source_path: "drivers/realsense2_camera"
-    build_path: "build/realsense2_camera"
-    dependencies: [sunray_msgs]
-  localization_fusion:
-    description: "localization_fusion 功能包"
-    source_path: "localization/localization_fusion"
-    build_path: "build/localization_fusion"
-    dependencies: [sunray_msgs]
+
+
   fast_lio:
     description: "fast_lio 功能包"
     source_path: "localization/fast_lio"
     build_path: "build/fast_lio"
     dependencies: []
+  ekf_odometry:
+    description: "ekf_odometry 功能包"
+    source_path: "localization/ekf_odometry"
+    build_path: "build/ekf_odometry"
+    dependencies: []
+  
   sunray_mocap:
     description: "sunray_mocap 功能包"
     source_path: "localization/sunray_mocap"
