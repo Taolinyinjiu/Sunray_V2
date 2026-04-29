@@ -1,0 +1,7 @@
+<launch>
+  <arg name="rviz_goal_topic" default="/move_base_simple/goal" />
+
+  <node name="rviz_goal_bridge" pkg="sunray_planner_tools" type="rviz_goal_bridge" output="screen">
+    <param name="rviz_goal_topic" value="$(arg rviz_goal_topic)" />
+  </node>
+</launch>

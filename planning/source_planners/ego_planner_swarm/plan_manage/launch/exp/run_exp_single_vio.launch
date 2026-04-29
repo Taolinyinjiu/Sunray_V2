@@ -1,0 +1,19 @@
+<!-- EGO-Planner 实验版本 - 使用 VIO 里程计 -->
+<launch>
+  <!-- 里程计话题名 -->
+  <arg name="odom_topic" default="${uav_ns}/sunray/localization/local_odom"/>
+  <arg name="extrinsic_topic" default="${uav_ns}/sunray/localization/vins_estimator/extrinsic" />
+
+  <!-- 向文件 advanced_param_exp.xml 中传递参数，并在 xml 文件中执行 EGO-Planner 的主节点 -->
+  <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="extrinsic_topic" value="$(arg extrinsic_topic)" />
+    <!-- 深度话题: 深度图像, 640x480 by default -->
+    <arg name="depth_topic" value="/camera/depth/image_rect_raw" />
+    <!-- 深度相机内参 -->
+    <arg name="cx" value="322.5561828613281" />
+    <arg name="cy" value="243.67318725585938" />
+    <arg name="fx" value="386.5376281738281" />
+    <arg name="fy" value="386.5376281738281" />
+  </include>
+</launch>

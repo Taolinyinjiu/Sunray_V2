@@ -1,4 +1,5 @@
 #include <plan_manage/ego_replan_fsm.h>
+#include <plan_manage/uav_namespace_topic_utils.h>
 namespace ego_planner
 {
   uint8_t EGOReplanFSM::toSunrayPlannerState(FSM_EXEC_STATE state) const
@@ -110,6 +111,14 @@ namespace ego_planner
 
   void EGOReplanFSM::init(ros::NodeHandle &nh)
   {
+    const std::string uav_ns = loadUavNamespaceOrThrow(nh);
+    const std::string planner_target_topic = makePlannerTopic("target_point", uav_ns);
+    const std::string planner_state_topic = makePlannerTopic("state", uav_ns);
+    const std::string planner_trajectory_topic = makePlannerTopic("trajectory", uav_ns);
+    const std::string planner_data_display_topic = makePlannerTopic("data_display", uav_ns);
+    const std::string planner_broadcast_send_topic = makePlannerTopic("broadcast_bspline_from_planner", uav_ns);
+    const std::string planner_broadcast_recv_topic = makePlannerTopic("broadcast_bspline_to_planner", uav_ns);
+
     current_wp_ = 0;
     waypoint_num_ = 0;
     wp_id_ = -1;
@@ -198,20 +207,18 @@ namespace ego_planner
     swarm_trajs_pub_ = nh.advertise<traj_utils::MultiBsplines>(pub_topic_name.c_str(), 10);
 
     // 广播本机规划结果
-    broadcast_bspline_pub_ = nh.advertise<traj_utils::Bspline>("planning/broadcast_bspline_from_planner", 10);
+    broadcast_bspline_pub_ = nh.advertise<traj_utils::Bspline>(planner_broadcast_send_topic, 10);
     // 订阅其他无人机的规划结果
-    broadcast_bspline_sub_ = nh.subscribe("planning/broadcast_bspline_to_planner", 100, &EGOReplanFSM::BroadcastBsplineCallback, this, ros::TransportHints().tcpNoDelay());
+    broadcast_bspline_sub_ = nh.subscribe(planner_broadcast_recv_topic, 100, &EGOReplanFSM::BroadcastBsplineCallback, this, ros::TransportHints().tcpNoDelay());
 
-    bspline_pub_ = nh.advertise<traj_utils::Bspline>("planning/bspline", 10);
-    data_disp_pub_ = nh.advertise<traj_utils::DataDisp>("planning/data_display", 100);
-    planning_state_pub_ = nh.advertise<sunray_msgs::UAVPlanningState>("planning/state", 10);
+    bspline_pub_ = nh.advertise<traj_utils::Bspline>(planner_trajectory_topic, 10);
+    data_disp_pub_ = nh.advertise<traj_utils::DataDisp>(planner_data_display_topic, 100);
+    planning_state_pub_ = nh.advertise<sunray_msgs::UAVPlanningState>(planner_state_topic, 10);
 
     // 目标点输入模式
     if (target_type_ == TARGET_TYPE::EXTERNAL_TARGET)
     {
-      // 统一通过planner_interface持有的目标接口输入。
-      // launch负责将~move_base_simple/goal重映射到具体planner goal topic。
-      waypoint_sub_ = nh.subscribe("move_base_simple/goal", 1, &EGOReplanFSM::waypointCallback, this);
+      waypoint_sub_ = nh.subscribe(planner_target_topic, 1, &EGOReplanFSM::waypointCallback, this);
     }
     else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
     {

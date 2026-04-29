@@ -42,6 +42,7 @@ namespace ego_planner
       EMERGENCY_STOP,
       SEQUENTIAL_START
     };
+    
     enum TARGET_TYPE
     {
       EXTERNAL_TARGET = 1,

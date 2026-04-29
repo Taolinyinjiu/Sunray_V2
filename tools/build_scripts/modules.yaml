@@ -61,6 +61,12 @@ modules:
     build_path: "build/sunray_planning"
     dependencies: ["sunray_msgs", "sunray_common", "sunray_planner_msgs"]
 
+  sunray_planner_tools:
+    description: "Planning helper tools and bridge nodes"
+    source_path: "planning/sunray_planner_tools"
+    build_path: "build/sunray_planner_tools"
+    dependencies: ["sunray_msgs"]
+
   # Sunray 重构中的 PX4_Bridge
   px4_bridge:
     description: "Sunray 重构中的uav_control"

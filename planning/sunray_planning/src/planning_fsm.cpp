@@ -287,7 +287,7 @@ void PlanningFSM::init() {
     default:
         throw std::runtime_error("unsupported planner type '" + selected_planner_type_ + "'");
     }
-    planner_->init(nh_, uav_ns_);
+    planner_->init(private_nh_);
 
     planning_cmd_sub_ =
         nh_.subscribe(planning_cmd_sub_topic_, 10, &PlanningFSM::planning_cmd_callback, this);
@@ -304,12 +304,10 @@ void PlanningFSM::init() {
 
     fsm_state_ = is_ready() ? PlanningFsmState::READY : PlanningFsmState::INIT;
 
+    const PlannerType planner_type = planner_type_from_string(selected_planner_type_);
     SUNRAY_INFO(
-        "[sunray_planning] planner={} type={} goal_topic={} cmd_topic={} control_pub={} control_fsm_topic={} follow_control_fsm={}",
-        planner_type_to_string(planner_->planner_type()),
-        planner_type_to_string(planner_->planner_type()),
-        planner_->goal_topic(),
-        planner_->position_cmd_topic(),
+        "[sunray_planning] planner={} control_pub={} control_fsm_topic={} follow_control_fsm={}",
+        planner_type_to_string(planner_type),
         control_pub_topic_,
         control_fsm_state_sub_topic_,
         follow_control_fsm_ ? 1 : 0);
@@ -486,8 +484,9 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
     active_target_.waypoint_index = 0;
 
     if (!planner_ || !planner_->send_goal(active_target_)) {
+        const PlannerType planner_type = planner_type_from_string(selected_planner_type_);
         SUNRAY_ERROR("[sunray_planning] failed to send goal to planner '{}'",
-                     planner_ ? planner_type_to_string(planner_->planner_type()) : "UNDEFINE");
+                     planner_type_to_string(planner_type));
         task_active_ = false;
         hover_hold_ = true;
         passthrough_control_cmd_ = sunray_msgs::UAVControlCMD::HOVER;
@@ -568,8 +567,7 @@ void PlanningFSM::process() {
         return;
     }
 
-    const ros::Time now = ros::Time::now();
-    const PlannerSnapshot snapshot = planner_->get_state(now);
+    const PlannerSnapshot snapshot = planner_->get_planner_state();
 
     if (task_active_) {
         if (snapshot.planner_state == PlannerExecState::SUCCESS) {
@@ -614,12 +612,11 @@ void PlanningFSM::pub_control_cmd() {
         return;
     }
 
-    const ros::Time now = ros::Time::now();
-    const PlannerSnapshot snapshot = planner_->get_state(now);
+    const PlannerSnapshot snapshot = planner_->get_planner_state();
 
     if (task_active_) {
         PlannerPositionCommand planner_cmd;
-        if (planner_->fetch_latest_position_cmd(planner_cmd, now)) {
+        if (planner_->get_planner_positioncmd(planner_cmd)) {
             const uint8_t cmd_source =
                 has_last_planning_cmd_ ? last_planning_cmd_.cmd_source
                                        : sunray_msgs::UAVControlCMD::CONTROL_CMD;
@@ -646,9 +643,8 @@ void PlanningFSM::pub_planning_state() {
     planning_state_msg.header.stamp = now;
     planning_state_msg.task_id = task_id_;
 
-    const PlannerSnapshot snapshot = planner_ ? planner_->get_state(now) : PlannerSnapshot{};
-    const PlannerType planner_type =
-        planner_ ? planner_->planner_type() : planner_type_from_string(selected_planner_type_);
+    const PlannerSnapshot snapshot = planner_ ? planner_->get_planner_state() : PlannerSnapshot{};
+    const PlannerType planner_type = planner_ ? snapshot.planner_type : planner_type_from_string(selected_planner_type_);
     const PlanningFsmState effective_state = effective_fsm_state(now);
     const bool planning_context = has_planning_context(
         has_last_planning_cmd_, last_planning_cmd_, task_active_, task_arrived_, hover_hold_);
@@ -837,13 +833,12 @@ void PlanningFSM::printf_terminal() {
     }
     last_terminal_log_stamp_ = now;
 
-    const PlannerSnapshot snapshot = planner_->get_state(now);
+    const PlannerSnapshot snapshot = planner_->get_planner_state();
     const PlanningFsmState effective_state = effective_fsm_state(now);
 
     SUNRAY_INFO(
-        "[sunray_planning] planner={}({}) fsm_local={} fsm_effective={} planner_state={} control_fsm={} task_cmd={} goal_active={} valid_output={} pending_special_cmd={}",
-        planner_ ? planner_type_to_string(planner_->planner_type()) : "UNDEFINE",
-        planner_ ? planner_type_to_string(planner_->planner_type()) : "UNDEFINE",
+        "[sunray_planning] planner={} fsm_local={} fsm_effective={} planner_state={} control_fsm={} task_cmd={} goal_active={} valid_output={} pending_special_cmd={}",
+        planner_type_to_string(snapshot.planner_type),
         planning_fsm_state_to_string(fsm_state_),
         planning_fsm_state_to_string(effective_state),
         snapshot.planner_state_string,

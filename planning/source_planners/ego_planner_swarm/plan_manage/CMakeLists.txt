@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   geometry_msgs
+  sunray_common
   sunray_planner_msgs
   sunray_msgs
   plan_env
@@ -27,7 +28,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES ego_planner
- CATKIN_DEPENDS plan_env path_searching bspline_opt traj_utils sunray_msgs
+ CATKIN_DEPENDS plan_env path_searching bspline_opt traj_utils sunray_common sunray_msgs
 #  DEPENDS system_lib
 )
 
