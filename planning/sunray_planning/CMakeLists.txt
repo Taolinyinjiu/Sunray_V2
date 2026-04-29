@@ -11,6 +11,9 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sunray_common
   sunray_msgs
+  tf2
+  tf2_geometry_msgs
+  tf2_ros
 )
 
 catkin_package(
@@ -24,6 +27,9 @@ catkin_package(
     std_msgs
     sunray_common
     sunray_msgs
+    tf2
+    tf2_geometry_msgs
+    tf2_ros
 )
 
 include_directories(

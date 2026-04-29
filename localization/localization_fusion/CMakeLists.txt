@@ -46,11 +46,13 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
   ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../control/sunray_uav_control/include/utils
 )
 
 # Core library: class implementation (no main function)
 add_library(localization_fusion_core
   src/localization_fusion.cpp
+  src/localization_fusion_logs.cpp
   src/localization_fusion_utils.cpp
 )
 target_link_libraries(localization_fusion_core

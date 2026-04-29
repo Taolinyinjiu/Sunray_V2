@@ -1,0 +1,18 @@
+<launch>
+  <!--
+    Fast-LIO + EKF定位源启动栈
+    source_id=6
+    1. fast_lio/mapping_mid360.launch
+    2. ekf_odometry/ekf_odometry.launch
+  -->
+    
+  <!-- 启动MID360s的点云数据输出 -->
+  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360s.launch" />
+
+  <!-- 启动fast_lio建图 -->
+  <include file="$(find fast_lio)/launch/mapping_mid360.launch" />
+
+  <!-- 启动ekf融合imu -->
+  <include file="$(find ekf_odometry)/launch/ekf_odometry.launch" />
+
+</launch>
