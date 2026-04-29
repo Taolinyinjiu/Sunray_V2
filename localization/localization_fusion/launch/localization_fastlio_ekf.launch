@@ -2,23 +2,24 @@
   <!--
     Fast-LIO + EKF定位源启动栈
     source_id=6
-    1. fast_lio/mapping_mid360.launch
-    2. ekf_odometry/ekf_odometry.launch
+    1. livox_ros_driver2/launch_ROS1/msg_MID360s.launch
+    2. fast_lio/mapping_mid360.launch
+    3. ekf_odometry/ekf_odometry.launch
   -->
-    
+  <arg name="log_type" default="log" />
+
   <!-- 启动MID360s的点云数据输出 -->
-  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360s.launch"> 
-    <arg name="log_type" value="log" /> 
+  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360s.launch">
+    <arg name="log_type" value="$(arg log_type)" />
   </include>
 
   <!-- 启动fast_lio建图 -->
-  <include file="$(find fast_lio)/launch/mapping_mid360.launch" />
-    <arg name="log_type" value="log" /> 
-  </include>
-  
-  <!-- 启动ekf融合imu -->
-  <include file="$(find ekf_odometry)/launch/ekf_odometry.launch" />
-    <arg name="log_type" value="log" /> 
+  <include file="$(find fast_lio)/launch/mapping_mid360.launch">
+    <arg name="log_type" value="$(arg log_type)" />
   </include>
 
+  <!-- 启动ekf融合imu -->
+  <include file="$(find ekf_odometry)/launch/ekf_odometry.launch">
+    <arg name="log_type" value="$(arg log_type)" />
+  </include>
 </launch>
