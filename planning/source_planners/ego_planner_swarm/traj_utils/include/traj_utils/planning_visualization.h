@@ -6,6 +6,8 @@
 //#include <bspline_opt/uniform_bspline.h>
 #include <iostream>
 //#include <bspline_opt/polynomial_traj.h>
+#include <memory>
+#include <ros/ros.h>
 #include <string>
 #include <vector>
 #include <visualization_msgs/Marker.h>

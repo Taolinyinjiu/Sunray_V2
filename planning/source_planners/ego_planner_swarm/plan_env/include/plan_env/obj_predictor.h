@@ -166,7 +166,14 @@ public:
   int getObjNums() {return obj_num_;}
 
   Eigen::Vector3d evaluatePoly(int obs_id, double time);
-  Eigen::Vector3d evaluateConstVel(int obs_id, double time);
+  Eigen::Vector3d evaluateConstVel(int obs_id, double time) {
+    if (obs_id < obj_num_) {
+      return predict_trajs_->at(obs_id).evaluateConstVel(time);
+    }
+
+    double MAX = std::numeric_limits<double>::max();
+    return Eigen::Vector3d(MAX, MAX, MAX);
+  }
 
   typedef shared_ptr<ObjPredictor> Ptr;
 };

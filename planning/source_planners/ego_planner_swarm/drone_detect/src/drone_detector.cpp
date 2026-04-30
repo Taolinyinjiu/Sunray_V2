@@ -1,7 +1,54 @@
 #include "drone_detector/drone_detector.h"
 
-// STD
+#include <stdexcept>
 #include <string>
+
+namespace {
+
+std::string loadRequiredGlobalStringParamOrThrow(ros::NodeHandle& nh,
+                                                 const std::string& param_name) {
+  std::string value;
+  if (!nh.getParam(param_name, value)) {
+    throw std::runtime_error("missing param " + param_name);
+  }
+  if (value.empty()) {
+    throw std::runtime_error(param_name + " cannot be empty");
+  }
+  return value;
+}
+
+int loadRequiredGlobalIntParamOrThrow(ros::NodeHandle& nh,
+                                      const std::string& param_name) {
+  int value = 0;
+  if (!nh.getParam(param_name, value)) {
+    throw std::runtime_error("missing param " + param_name);
+  }
+  return value;
+}
+
+std::string loadUavNamespaceOrThrow(ros::NodeHandle& nh) {
+  const std::string uav_name = loadRequiredGlobalStringParamOrThrow(nh, "/uav_name");
+  const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
+  if (uav_id <= 0) {
+    throw std::runtime_error("/uav_id cannot <= 0");
+  }
+  return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
+}
+
+std::string loadExpandedTopicParamOrThrow(ros::NodeHandle& nh,
+                                          const std::string& param_name,
+                                          const std::string& uav_ns) {
+  std::string raw_topic;
+  if (!nh.getParam(param_name, raw_topic)) {
+    throw std::runtime_error("missing param " + param_name);
+  }
+  if (raw_topic.empty()) {
+    throw std::runtime_error(param_name + " cannot be empty");
+  }
+  return sunray_common::replace_uav_ns(raw_topic, uav_ns);
+}
+
+}  // namespace
 
 namespace detect {
 
@@ -14,19 +61,19 @@ DroneDetector::DroneDetector(ros::NodeHandle& nodeHandle)
   // colordepth_img_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(nh_, "colordepth", 50));
   // camera_pos_sub_.reset(new message_filters::Subscriber<geometry_msgs::PoseStamped>(nh_, "camera_pose", 50));
 
-  my_odom_sub_ = nh_.subscribe("odometry", 100, &DroneDetector::rcvMyOdomCallback, this, ros::TransportHints().tcpNoDelay());
-  depth_img_sub_ = nh_.subscribe("depth", 50, &DroneDetector::rcvDepthImgCallback, this, ros::TransportHints().tcpNoDelay());
+  my_odom_sub_ = nh_.subscribe(my_odom_topic_, 100, &DroneDetector::rcvMyOdomCallback, this, ros::TransportHints().tcpNoDelay());
+  depth_img_sub_ = nh_.subscribe(depth_topic_, 50, &DroneDetector::rcvDepthImgCallback, this, ros::TransportHints().tcpNoDelay());
   // sync_depth_color_img_pose_->registerCallback(boost::bind(&DroneDetector::rcvDepthColorCamPoseCallback, this, _1, _2, _3));
 
   // drone0_odom_sub_ = nh_.subscribe("drone0", 50, &DroneDetector::rcvDrone0OdomCallback, this); 
   // drone1_odom_sub_ = nh_.subscribe("drone1", 50, &DroneDetector::rcvDrone1OdomCallback, this); 
   // drone2_odom_sub_ = nh_.subscribe("drone2", 50, &DroneDetector::rcvDrone2OdomCallback, this); 
-  droneX_odom_sub_ = nh_.subscribe("/others_odom", 100, &DroneDetector::rcvDroneXOdomCallback, this, ros::TransportHints().tcpNoDelay());
+  droneX_odom_sub_ = nh_.subscribe(others_odom_topic_, 100, &DroneDetector::rcvDroneXOdomCallback, this, ros::TransportHints().tcpNoDelay());
 
   new_depth_img_pub_ = nh_.advertise<sensor_msgs::Image>("new_depth_image", 50);
   debug_depth_img_pub_ = nh_.advertise<sensor_msgs::Image>("debug_depth_image", 50);
 
-  debug_info_pub_ = nh_.advertise<std_msgs::String>("/debug_info", 50);
+  debug_info_pub_ = nh_.advertise<std_msgs::String>(debug_info_topic_, 50);
 
   cam2body_ << 0.0, 0.0, 1.0, 0.0,
       -1.0, 0.0, 0.0, 0.0,
@@ -48,6 +95,7 @@ DroneDetector::~DroneDetector()
 
 void DroneDetector::readParameters()
 {
+  const std::string uav_ns = loadUavNamespaceOrThrow(nh_);
   // camera params
   nh_.getParam("cam_width", img_width_);
   nh_.getParam("cam_height", img_height_);
@@ -56,13 +104,18 @@ void DroneDetector::readParameters()
   nh_.getParam("cam_cx", cx_);
   nh_.getParam("cam_cy", cy_);
 
-  // 
+  //
   nh_.getParam("debug_flag", debug_flag_);
   nh_.getParam("pixel_ratio", pixel_ratio_);
   nh_.getParam("my_id", my_id_);
   nh_.getParam("estimate/drone_width", drone_width_);
   nh_.getParam("estimate/drone_height", drone_height_);
   nh_.getParam("estimate/max_pose_error", max_pose_error_);
+
+  my_odom_topic_ = loadExpandedTopicParamOrThrow(nh_, "my_odom_topic", uav_ns);
+  depth_topic_ = loadExpandedTopicParamOrThrow(nh_, "depth_topic", uav_ns);
+  others_odom_topic_ = loadExpandedTopicParamOrThrow(nh_, "others_odom_topic", uav_ns);
+  debug_info_topic_ = loadExpandedTopicParamOrThrow(nh_, "debug_info_topic", uav_ns);
 
   max_pose_error2_ = max_pose_error_*max_pose_error_;
 }

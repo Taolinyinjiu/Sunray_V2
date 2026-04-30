@@ -383,11 +383,12 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "traj_server");
   ros::NodeHandle nh("~");
   const std::string uav_ns = ego_planner::loadUavNamespaceOrThrow(nh);
+  const ego_planner::Planner_Config_t_ planner_config = ego_planner::loadPlannerConfigOrThrow(nh, uav_ns);
   const std::string planner_trajectory_topic = ego_planner::makePlannerTopic("trajectory", uav_ns);
   const std::string planner_position_cmd_topic = ego_planner::makePlannerTopic("position_cmd", uav_ns);
 
   ros::Subscriber bspline_sub = nh.subscribe(planner_trajectory_topic, 10, bsplineCallback);
-  ros::Subscriber odom_sub = nh.subscribe("odom", 10, odomCallback);
+  ros::Subscriber odom_sub = nh.subscribe(planner_config.odom_topic, 10, odomCallback);
   pos_cmd_pub = nh.advertise<sunray_planner_msgs::EgoPositionCommand>(planner_position_cmd_topic, 50);
 
   ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);

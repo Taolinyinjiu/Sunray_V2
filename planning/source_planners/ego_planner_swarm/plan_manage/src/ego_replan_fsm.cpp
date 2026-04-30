@@ -165,12 +165,17 @@ namespace ego_planner
     node_ = ros::NodeHandle();
     uav_ns_ = loadUavNamespaceOrThrow(node_, nh);
     planner_config_ = loadPlannerConfigOrThrow(nh, uav_ns_);
+    const int uav_id = loadRequiredGlobalIntParamOrThrow(node_, "/uav_id");
     const std::string planner_target_topic = makePlannerTopic("target_point", uav_ns_);
     const std::string planner_state_topic = makePlannerTopic("state", uav_ns_);
     const std::string planner_trajectory_topic = makePlannerTopic("trajectory", uav_ns_);
     const std::string planner_data_display_topic = makePlannerTopic("data_display", uav_ns_);
     const std::string planner_broadcast_send_topic = makePlannerTopic("broadcast_bspline_from_planner", uav_ns_);
     const std::string planner_broadcast_recv_topic = makePlannerTopic("broadcast_bspline_to_planner", uav_ns_);
+    const std::string planner_swarm_trajs_topic = makePlannerTopic("swarm_trajs", uav_ns_);
+    const std::string planner_trigger_topic = makePlannerTopic("traj_start_trigger", uav_ns_);
+    const std::string prev_uav_ns = sunray_common::normalize_uav_ns(
+        loadRequiredGlobalStringParamOrThrow(node_, "/uav_name") + std::to_string(uav_id - 1));
 
     current_wp_ = 0;
     waypoint_num_ = 0;
@@ -254,11 +259,10 @@ namespace ego_planner
     // ego默认从0开始对无人机进行编号
     if (planner_manager_->pp_.drone_id >= 1)
     {
-      string sub_topic_name = string("/drone_") + std::to_string(planner_manager_->pp_.drone_id - 1) + string("_planning/swarm_trajs");
+      const std::string sub_topic_name = makePlannerTopic("swarm_trajs", prev_uav_ns);
       swarm_trajs_sub_ = nh.subscribe(sub_topic_name.c_str(), 10, &EGOReplanFSM::swarmTrajsCallback, this, ros::TransportHints().tcpNoDelay());
     }
-    string pub_topic_name = string("/drone_") + std::to_string(planner_manager_->pp_.drone_id) + string("_planning/swarm_trajs");
-    swarm_trajs_pub_ = nh.advertise<traj_utils::MultiBsplines>(pub_topic_name.c_str(), 10);
+    swarm_trajs_pub_ = nh.advertise<traj_utils::MultiBsplines>(planner_swarm_trajs_topic.c_str(), 10);
 
     // 广播本机规划结果
     broadcast_bspline_pub_ = nh.advertise<traj_utils::Bspline>(planner_broadcast_send_topic, 10);
@@ -276,8 +280,8 @@ namespace ego_planner
     }
     else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
     {
-      // PRESET_TARGET：预设目标点，并通过"/traj_start_trigger"话题触发
-      trigger_sub_ = nh.subscribe("/traj_start_trigger", 1, &EGOReplanFSM::triggerCallback, this);
+      // PRESET_TARGET：预设目标点，并通过 planner 私有 trigger 话题触发
+      trigger_sub_ = nh.subscribe(planner_trigger_topic, 1, &EGOReplanFSM::triggerCallback, this);
 
       ros::Duration(5.0).sleep();
 

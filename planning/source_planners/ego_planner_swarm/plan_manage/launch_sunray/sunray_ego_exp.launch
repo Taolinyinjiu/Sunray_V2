@@ -26,10 +26,8 @@
   <arg name="obj_num" default="0" />
 
   <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
-    <arg name="uav_name" value="$(arg uav_name)" />
-    <arg name="uav_id" value="$(arg uav_id)" />
-    <arg name="odom_topic" value="$(arg odom_topic)" />
-    <arg name="cloud_topic" value="$(arg global_pointcloud_topic)" />
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg global_pointcloud_topic)"/>
     <arg name="camera_pose_topic" value="$(arg camera_pose_topic)" />
     <arg name="depth_topic" value="$(arg depth_topic)" />
     <arg name="map_size_x" value="$(arg map_size_x)" />

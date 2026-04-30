@@ -33,8 +33,8 @@ namespace ego_planner
     nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);
     // ？
     nh.param("manager/use_distinctive_trajs", pp_.use_distinctive_trajs, false);
-    // 无人机ID
-    nh.param("manager/drone_id", pp_.drone_id, -1);
+    const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
+    pp_.drone_id = uav_id - 1;
     // 2D规划参数
     nh.param("manager/fix_height", pp_.fix_height_, false);
     nh.param("manager/fixed_height", pp_.fixed_height_, 0.5);

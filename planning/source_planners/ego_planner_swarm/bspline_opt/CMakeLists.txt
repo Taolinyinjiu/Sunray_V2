@@ -43,5 +43,7 @@ add_library( bspline_opt
     )
 target_link_libraries( bspline_opt
     ${catkin_LIBRARIES}
+    -Wl,--no-as-needed
     plan_env
-    )  
+    -Wl,--as-needed
+    )

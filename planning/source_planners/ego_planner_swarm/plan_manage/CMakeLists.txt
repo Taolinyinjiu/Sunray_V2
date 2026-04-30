@@ -48,9 +48,19 @@ add_executable(ego_planner_node
   )
 target_link_libraries(ego_planner_node
   ${catkin_LIBRARIES}
+  plan_env
+  path_searching
+  bspline_opt
+  traj_utils
   )
 #add_dependencies(ego_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 add_executable(traj_server src/traj_server.cpp)
-target_link_libraries(traj_server ${catkin_LIBRARIES})
+target_link_libraries(traj_server
+  ${catkin_LIBRARIES}
+  plan_env
+  path_searching
+  bspline_opt
+  traj_utils
+)
 #add_dependencies(traj_server ${${PROJECT_NAME}_EXPORTED_TARGETS})
