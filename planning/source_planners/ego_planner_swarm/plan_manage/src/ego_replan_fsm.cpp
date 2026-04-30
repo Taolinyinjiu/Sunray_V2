@@ -18,7 +18,8 @@ namespace ego_planner
     case EXEC_TRAJ:
       return sunray_msgs::UAVPlanningState::PLANNER_STATE_EXEC;
     case EMERGENCY_STOP:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP;
+      return emergency_recoverable_ ? sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN
+                                    : sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP;
     default:
       return sunray_msgs::UAVPlanningState::PLANNER_STATE_UNDEFINE;
     }
@@ -39,7 +40,7 @@ namespace ego_planner
     case EXEC_TRAJ:
       return "EXEC";
     case EMERGENCY_STOP:
-      return "EMERGENCY_STOP";
+      return emergency_recoverable_ ? "REPLAN" : "EMERGENCY_STOP";
     case SEQUENTIAL_START:
       return "GENERATE";
     default:
@@ -50,10 +51,48 @@ namespace ego_planner
   void EGOReplanFSM::fillPlanningStateCommonFields(sunray_msgs::UAVPlanningState &msg) const
   {
     msg.header.stamp = ros::Time::now();
+    msg.task_id = 0;
     msg.planner_type = sunray_msgs::UAVPlanningState::PLANNER_EGO;
     msg.planner_type_string = "EGO";
-    msg.planning_fsm_state = sunray_msgs::UAVPlanningState::INIT;
-    msg.planning_fsm_state_string = "INIT";
+
+    switch (exec_state_)
+    {
+    case INIT:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::INIT;
+      msg.planning_fsm_state_string = "INIT";
+      break;
+    case WAIT_TARGET:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::READY;
+      msg.planning_fsm_state_string = "READY";
+      break;
+    case GEN_NEW_TRAJ:
+    case REPLAN_TRAJ:
+    case SEQUENTIAL_START:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::PLANNING;
+      msg.planning_fsm_state_string = "PLANNING";
+      break;
+    case EXEC_TRAJ:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::MOVE;
+      msg.planning_fsm_state_string = "MOVE";
+      break;
+    case EMERGENCY_STOP:
+      if (enable_fail_safe_)
+      {
+        msg.planning_fsm_state = sunray_msgs::UAVPlanningState::PLANNING;
+        msg.planning_fsm_state_string = "PLANNING";
+      }
+      else
+      {
+        msg.planning_fsm_state = sunray_msgs::UAVPlanningState::EMERGENCY_KILL;
+        msg.planning_fsm_state_string = "EMERGENCY_KILL";
+      }
+      break;
+    default:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::UNDEFINE;
+      msg.planning_fsm_state_string = "UNDEFINE";
+      break;
+    }
+
     msg.planning_frame = sunray_msgs::UAVPlanningState::SUNRAY_LOCAL;
     msg.planning_frame_string = "SUNRAY_LOCAL";
     msg.cmd_source = sunray_msgs::UAVPlanningState::CONTROL_CMD;
@@ -106,6 +145,18 @@ namespace ego_planner
     fillPlanningStateCommonFields(planning_state_msg);
     planning_state_msg.planner_state = planner_state;
     planning_state_msg.planner_state_string = planner_state_string;
+
+    if (planner_state == sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS)
+    {
+      planning_state_msg.planning_fsm_state = sunray_msgs::UAVPlanningState::ARRIVED;
+      planning_state_msg.planning_fsm_state_string = "ARRIVED";
+    }
+    else if (planner_state == sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP)
+    {
+      planning_state_msg.planning_fsm_state = sunray_msgs::UAVPlanningState::EMERGENCY_KILL;
+      planning_state_msg.planning_fsm_state_string = "EMERGENCY_KILL";
+    }
+
     planning_state_pub_.publish(planning_state_msg);
   }
 
@@ -131,6 +182,7 @@ namespace ego_planner
     have_recv_pre_agent_ = false;
     have_trigger_ = false;
     flag_escape_emergency_ = false;
+    emergency_recoverable_ = true;
     odom_pos_.setZero();
     odom_vel_.setZero();
     odom_acc_.setZero();
@@ -838,6 +890,7 @@ namespace ego_planner
       cout << RED << node_name << "Depth Lost! EMERGENCY_STOP" << TAIL << endl;
 
       enable_fail_safe_ = false;
+      emergency_recoverable_ = false;
       changeFSMExecState(EMERGENCY_STOP, "SAFETY");
     }
 
@@ -889,6 +942,7 @@ namespace ego_planner
           {
             cout << RED << node_name << "Suddenly discovered obstacles. emergency stop! time = " <<  t - t_cur << TAIL << endl;
 
+            emergency_recoverable_ = true;
             changeFSMExecState(EMERGENCY_STOP, "SAFETY");
           }
           else

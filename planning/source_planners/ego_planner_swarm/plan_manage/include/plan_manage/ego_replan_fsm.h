@@ -87,6 +87,7 @@ namespace ego_planner
     int current_wp_;
 
     bool flag_escape_emergency_;
+    bool emergency_recoverable_{true};
 
     /* ROS utils */
     ros::NodeHandle node_;

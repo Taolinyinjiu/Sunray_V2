@@ -8,12 +8,8 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   roscpp
   roslib
-  std_msgs
   sunray_common
   sunray_msgs
-  tf2
-  tf2_geometry_msgs
-  tf2_ros
 )
 
 catkin_package(
@@ -24,12 +20,8 @@ catkin_package(
     geometry_msgs
     roscpp
     roslib
-    std_msgs
     sunray_common
     sunray_msgs
-    tf2
-    tf2_geometry_msgs
-    tf2_ros
 )
 
 include_directories(
@@ -40,7 +32,8 @@ include_directories(
 )
 
 add_library(sunray_planning
-  src/planning_fsm.cpp
+  src/sunray_planning_fsm.cpp
+  src/sunray_planning_logs.cpp
   src/planner_interface/diff_planner.cpp
   src/planner_interface/ego_planner.cpp
 )

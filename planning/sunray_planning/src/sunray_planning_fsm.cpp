@@ -1,4 +1,5 @@
 #include "planning_fsm.hpp"
+#include "sunray_planning_common.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -18,32 +19,15 @@
 namespace {
 constexpr double kControlFsmOverrideGraceSec = 2.0;
 
-std::string load_uav_namespace_or_throw(ros::NodeHandle& nh, ros::NodeHandle& private_nh) {
+std::string load_uav_namespace_or_throw(const ros::NodeHandle& nh) {
     std::string uav_name;
     int uav_id = 0;
 
-    if (private_nh.getParam("uav_name", uav_name)) {
-        if (uav_name.empty()) {
-            throw std::runtime_error("~uav_name cannot be empty");
-        }
-    } else if (nh.getParam("/uav_name", uav_name)) {
-        if (uav_name.empty()) {
-            throw std::runtime_error("/uav_name cannot be empty");
-        }
-    } else {
-        throw std::runtime_error("missing param ~uav_name or /uav_name");
+    if (!nh.getParam("/uav_name", uav_name) || uav_name.empty()) {
+        throw std::runtime_error("missing or empty param /uav_name");
     }
-
-    if (private_nh.getParam("uav_id", uav_id)) {
-        if (uav_id <= 0) {
-            throw std::runtime_error("~uav_id cannot <= 0");
-        }
-    } else if (nh.getParam("/uav_id", uav_id)) {
-        if (uav_id <= 0) {
-            throw std::runtime_error("/uav_id cannot <= 0");
-        }
-    } else {
-        throw std::runtime_error("missing param ~uav_id or /uav_id");
+    if (!nh.getParam("/uav_id", uav_id) || uav_id <= 0) {
+        throw std::runtime_error("missing or invalid param /uav_id");
     }
 
     return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
@@ -54,104 +38,6 @@ std::string expand_topic(const std::string& raw_topic, const std::string& uav_ns
         return raw_topic;
     }
     return sunray_common::replace_uav_ns(raw_topic, uav_ns);
-}
-
-std::string planning_frame_to_string(const uint8_t planning_frame) {
-    switch (planning_frame) {
-    case sunray_msgs::UAVPlanningState::SUNRAY_LOCAL:
-        return "SUNRAY_LOCAL";
-    case sunray_msgs::UAVPlanningState::SUNRAY_GLOBAL:
-        return "SUNRAY_GLOBAL";
-    default:
-        return "UNDEFINE";
-    }
-}
-
-std::string goal_type_to_string(const uint8_t goal_type) {
-    switch (goal_type) {
-    case sunray_msgs::UAVPlanningState::GOAL_SINGLE:
-        return "GOAL_SINGLE";
-    case sunray_msgs::UAVPlanningState::GOAL_MULTI:
-        return "GOAL_MULTI";
-    default:
-        return "UNDEFINE";
-    }
-}
-
-std::string cmd_source_to_string(const uint8_t cmd_source) {
-    switch (cmd_source) {
-    case sunray_msgs::UAVPlanningState::SUNRAY_STATION:
-        return "SUNRAY_STATION";
-    case sunray_msgs::UAVPlanningState::RC_CONTROLLER:
-        return "RC_CONTROLLER";
-    case sunray_msgs::UAVPlanningState::TERMINAL:
-        return "TERMINAL";
-    case sunray_msgs::UAVPlanningState::CONTROL_CMD:
-        return "CONTROL_CMD";
-    default:
-        return "UNDEFINE";
-    }
-}
-
-std::string planning_control_cmd_to_string(const uint8_t control_cmd) {
-    switch (control_cmd) {
-    case sunray_msgs::UAVPlanningCMD::TAKEOFF:
-        return "TAKEOFF";
-    case sunray_msgs::UAVPlanningCMD::LAND:
-        return "LAND";
-    case sunray_msgs::UAVPlanningCMD::RETURN:
-        return "RETURN";
-    case sunray_msgs::UAVPlanningCMD::KILL:
-        return "KILL";
-    case sunray_msgs::UAVPlanningCMD::HOVER:
-        return "HOVER";
-    case sunray_msgs::UAVPlanningCMD::PLANNING_LOCAL:
-        return "PLANNING_LOCAL";
-    case sunray_msgs::UAVPlanningCMD::PLANNING_GLOBAL:
-        return "PLANNING_GLOBAL";
-    case sunray_msgs::UAVPlanningCMD::UNDEFINE:
-    default:
-        return "UNDEFINE";
-    }
-}
-
-std::string control_fsm_state_to_string(const uint8_t control_fsm_state) {
-    switch (control_fsm_state) {
-    case sunray_msgs::UAVControlFSMState::FSM_OFF:
-        return "OFF";
-    case sunray_msgs::UAVControlFSMState::FSM_INIT:
-        return "INIT";
-    case sunray_msgs::UAVControlFSMState::FSM_TAKEOFF:
-        return "TAKEOFF";
-    case sunray_msgs::UAVControlFSMState::FSM_HOVER:
-        return "HOVER";
-    case sunray_msgs::UAVControlFSMState::FSM_RETURN:
-        return "RETURN";
-    case sunray_msgs::UAVControlFSMState::FSM_LAND:
-        return "LAND";
-    case sunray_msgs::UAVControlFSMState::FSM_MOVE:
-        return "MOVE";
-    case sunray_msgs::UAVControlFSMState::EMERGENCY_KILL:
-        return "EMERGENCY_KILL";
-    default:
-        return "UNDEFINE";
-    }
-}
-
-bool is_planning_goal_cmd(const uint8_t control_cmd) {
-    return control_cmd == sunray_msgs::UAVPlanningCMD::PLANNING_LOCAL ||
-           control_cmd == sunray_msgs::UAVPlanningCMD::PLANNING_GLOBAL;
-}
-
-uint8_t planning_cmd_to_frame(const uint8_t control_cmd) {
-    switch (control_cmd) {
-    case sunray_msgs::UAVPlanningCMD::PLANNING_LOCAL:
-        return sunray_msgs::UAVPlanningState::SUNRAY_LOCAL;
-    case sunray_msgs::UAVPlanningCMD::PLANNING_GLOBAL:
-        return sunray_msgs::UAVPlanningState::SUNRAY_GLOBAL;
-    default:
-        return sunray_msgs::UAVPlanningState::UNDEFINE;
-    }
 }
 
 bool is_special_planning_cmd(const uint8_t control_cmd) {
@@ -195,14 +81,6 @@ uint8_t normalize_planning_control_cmd(const sunray_msgs::UAVPlanningCMD& planni
         return sunray_msgs::UAVPlanningCMD::PLANNING_LOCAL;
     }
     return sunray_msgs::UAVPlanningCMD::UNDEFINE;
-}
-
-uint32_t clamp_waypoint_index(const sunray_msgs::UAVPlanningCMD& planning_cmd,
-                              const uint32_t waypoint_index) {
-    if (planning_cmd.waypoints.empty()) {
-        return 0;
-    }
-    return std::min<uint32_t>(waypoint_index, planning_cmd.waypoints.size() - 1);
 }
 
 std::string parent_directory(const std::string& path) {
@@ -249,15 +127,6 @@ PlanningFsmState passthrough_control_cmd_to_fsm_state(const uint8_t control_cmd)
 
 PlanningFsmState active_task_to_fsm_state() {
     return PlanningFsmState::PLANNING;
-}
-
-bool has_planning_context(const bool has_last_planning_cmd,
-                          const sunray_msgs::UAVPlanningCMD& planning_cmd,
-                          const bool task_active,
-                          const bool task_arrived,
-                          const bool hover_hold) {
-    return has_last_planning_cmd && is_planning_goal_cmd(planning_cmd.control_cmd) &&
-           (task_active || task_arrived || hover_hold);
 }
 }  // namespace
 
@@ -314,7 +183,7 @@ void PlanningFSM::init() {
 }
 
 void PlanningFSM::load_param() {
-    uav_ns_ = load_uav_namespace_or_throw(nh_, private_nh_);
+    uav_ns_ = load_uav_namespace_or_throw(nh_);
     private_nh_.param("log_save", log_save_, false);
     init_logger();
 
@@ -426,15 +295,15 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
         hover_hold_ = (passthrough_control_cmd_ == sunray_msgs::UAVControlCMD::HOVER);
         fsm_state_ = passthrough_control_cmd_to_fsm_state(passthrough_control_cmd_);
         SUNRAY_INFO("[sunray_planning] received special planning command={}, forward once to uav_control",
-                    planning_control_cmd_to_string(planning_control_cmd));
+                    sunray_planning::planning_control_cmd_to_string(planning_control_cmd));
         return;
     }
 
     passthrough_control_cmd_ = sunray_msgs::UAVControlCMD::UNDEFINE;
 
-    if (!is_planning_goal_cmd(planning_control_cmd)) {
+    if (!sunray_planning::is_planning_goal_cmd(planning_control_cmd)) {
         SUNRAY_WARN("[sunray_planning] unsupported planning control_cmd={}, ignore",
-                    planning_control_cmd_to_string(planning_control_cmd));
+                    sunray_planning::planning_control_cmd_to_string(planning_control_cmd));
         task_active_ = false;
         fsm_state_ = PlanningFsmState::READY;
         return;
@@ -444,17 +313,17 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
     std::string reject_reason;
     if (!control_fsm_allows_planning_goal(now, reject_reason)) {
         SUNRAY_WARN("[sunray_planning] reject planning command={} because {}",
-                    planning_control_cmd_to_string(planning_control_cmd),
+                    sunray_planning::planning_control_cmd_to_string(planning_control_cmd),
                     reject_reason);
         task_active_ = false;
         return;
     }
 
-    const uint8_t planning_frame = planning_cmd_to_frame(planning_control_cmd);
+    const uint8_t planning_frame = sunray_planning::planning_cmd_to_frame(planning_control_cmd);
     if (planning_frame != sunray_msgs::UAVPlanningState::SUNRAY_LOCAL) {
         SUNRAY_WARN(
             "[sunray_planning] only PLANNING_LOCAL is supported in current version, received {}",
-            planning_control_cmd_to_string(planning_control_cmd));
+            sunray_planning::planning_control_cmd_to_string(planning_control_cmd));
         task_active_ = false;
         fsm_state_ = PlanningFsmState::READY;
         return;
@@ -462,7 +331,7 @@ void PlanningFSM::planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::Const
 
     if (msg->waypoints.empty()) {
         SUNRAY_WARN("[sunray_planning] received planning command={} with empty waypoints, ignore",
-                    planning_control_cmd_to_string(planning_control_cmd));
+                    sunray_planning::planning_control_cmd_to_string(planning_control_cmd));
         task_active_ = false;
         fsm_state_ = PlanningFsmState::READY;
         return;
@@ -520,11 +389,13 @@ void PlanningFSM::control_fsm_state_callback(
         msg->control_cmd == sunray_msgs::UAVControlFSMState::MOVE_TRAJECTORY;
     const bool keep_arrived_state =
         task_arrived_ && msg->sunray_fsm_state == sunray_msgs::UAVControlFSMState::FSM_HOVER;
+    const bool keep_hover_hold_state =
+        hover_hold_ && msg->sunray_fsm_state == sunray_msgs::UAVControlFSMState::FSM_HOVER;
     if (planner_generated_motion) {
         control_fsm_trajectory_ack_ = true;
         return;
     }
-    if (keep_arrived_state) {
+    if (keep_arrived_state || keep_hover_hold_state) {
         return;
     }
 
@@ -541,7 +412,7 @@ void PlanningFSM::control_fsm_state_callback(
         passthrough_control_cmd_ != sunray_msgs::UAVControlCMD::UNDEFINE) {
         SUNRAY_WARN(
             "[sunray_planning] control FSM override detected: state={} control_cmd={}, clear local planning context",
-            control_fsm_state_to_string(msg->sunray_fsm_state),
+            sunray_planning::control_fsm_state_to_string(msg->sunray_fsm_state),
             std::to_string(msg->control_cmd));
     }
 
@@ -644,9 +515,10 @@ void PlanningFSM::pub_planning_state() {
     planning_state_msg.task_id = task_id_;
 
     const PlannerSnapshot snapshot = planner_ ? planner_->get_planner_state() : PlannerSnapshot{};
-    const PlannerType planner_type = planner_ ? snapshot.planner_type : planner_type_from_string(selected_planner_type_);
+    const PlannerType planner_type =
+        planner_ ? snapshot.planner_type : planner_type_from_string(selected_planner_type_);
     const PlanningFsmState effective_state = effective_fsm_state(now);
-    const bool planning_context = has_planning_context(
+    const bool planning_context = sunray_planning::has_planning_context(
         has_last_planning_cmd_, last_planning_cmd_, task_active_, task_arrived_, hover_hold_);
 
     planning_state_msg.planner_type = static_cast<uint8_t>(planner_type);
@@ -657,11 +529,13 @@ void PlanningFSM::pub_planning_state() {
     planning_state_msg.planning_fsm_state_string = planning_fsm_state_to_string(effective_state);
 
     if (planning_context) {
-        planning_state_msg.planning_frame = planning_cmd_to_frame(last_planning_cmd_.control_cmd);
+        planning_state_msg.planning_frame =
+            sunray_planning::planning_cmd_to_frame(last_planning_cmd_.control_cmd);
         planning_state_msg.planning_frame_string =
-            planning_frame_to_string(planning_state_msg.planning_frame);
+            sunray_planning::planning_frame_to_string(planning_state_msg.planning_frame);
         planning_state_msg.cmd_source = last_planning_cmd_.cmd_source;
-        planning_state_msg.cmd_source_string = cmd_source_to_string(last_planning_cmd_.cmd_source);
+        planning_state_msg.cmd_source_string =
+            sunray_planning::cmd_source_to_string(last_planning_cmd_.cmd_source);
     } else {
         planning_state_msg.planning_frame = sunray_msgs::UAVPlanningState::UNDEFINE;
         planning_state_msg.planning_frame_string = "UNDEFINE";
@@ -671,15 +545,16 @@ void PlanningFSM::pub_planning_state() {
 
     if (planning_context) {
         planning_state_msg.goal_type = sunray_msgs::UAVPlanningState::GOAL_SINGLE;
-        planning_state_msg.goal_type_string = goal_type_to_string(planning_state_msg.goal_type);
+        planning_state_msg.goal_type_string =
+            sunray_planning::goal_type_to_string(planning_state_msg.goal_type);
         planning_state_msg.waypoint_count = last_planning_cmd_.waypoints.size();
-        planning_state_msg.current_waypoint_index =
-            clamp_waypoint_index(last_planning_cmd_, snapshot.current_waypoint_index);
+        planning_state_msg.current_waypoint_index = sunray_planning::clamp_waypoint_index(
+            last_planning_cmd_, snapshot.current_waypoint_index);
 
         if (last_planning_cmd_.waypoints.size() > 1) {
             planning_state_msg.goal_type = sunray_msgs::UAVPlanningState::GOAL_MULTI;
             planning_state_msg.goal_type_string =
-                goal_type_to_string(planning_state_msg.goal_type);
+                sunray_planning::goal_type_to_string(planning_state_msg.goal_type);
         }
 
         if (!last_planning_cmd_.waypoints.empty()) {
@@ -735,8 +610,8 @@ sunray_msgs::UAVControlCMD PlanningFSM::build_special_control_cmd(
     control_cmd_msg.yaw_mode = sunray_msgs::UAVControlCMD::KEEP_YAW;
 
     if (has_last_planning_cmd_ && !last_planning_cmd_.waypoints.empty()) {
-        const uint32_t waypoint_index =
-            clamp_waypoint_index(last_planning_cmd_, snapshot.current_waypoint_index);
+        const uint32_t waypoint_index = sunray_planning::clamp_waypoint_index(
+            last_planning_cmd_, snapshot.current_waypoint_index);
         control_cmd_msg.desired_yaw = last_planning_cmd_.waypoints[waypoint_index].yaw;
     }
 
@@ -809,7 +684,7 @@ PlanningFsmState PlanningFSM::effective_fsm_state(const ros::Time& now) const {
     case sunray_msgs::UAVControlFSMState::FSM_MOVE:
         if (task_active_ &&
             has_last_planning_cmd_ &&
-            is_planning_goal_cmd(last_planning_cmd_.control_cmd) &&
+            sunray_planning::is_planning_goal_cmd(last_planning_cmd_.control_cmd) &&
             last_control_fsm_state_.control_cmd ==
                 sunray_msgs::UAVControlFSMState::MOVE_TRAJECTORY) {
             return active_task_to_fsm_state();
@@ -820,36 +695,4 @@ PlanningFsmState PlanningFSM::effective_fsm_state(const ros::Time& now) const {
     default:
         return fsm_state_;
     }
-}
-
-void PlanningFSM::printf_terminal() {
-    if (!planner_) {
-        return;
-    }
-
-    const ros::Time now = ros::Time::now();
-    if (!last_terminal_log_stamp_.isZero() && (now - last_terminal_log_stamp_).toSec() < 1.0) {
-        return;
-    }
-    last_terminal_log_stamp_ = now;
-
-    const PlannerSnapshot snapshot = planner_->get_planner_state();
-    const PlanningFsmState effective_state = effective_fsm_state(now);
-
-    SUNRAY_INFO(
-        "[sunray_planning] planner={} fsm_local={} fsm_effective={} planner_state={} control_fsm={} task_cmd={} goal_active={} valid_output={} pending_special_cmd={}",
-        planner_type_to_string(snapshot.planner_type),
-        planning_fsm_state_to_string(fsm_state_),
-        planning_fsm_state_to_string(effective_state),
-        snapshot.planner_state_string,
-        has_fresh_control_fsm_state(now)
-            ? control_fsm_state_to_string(last_control_fsm_state_.sunray_fsm_state)
-            : "STALE",
-        has_last_planning_cmd_ ? planning_control_cmd_to_string(last_planning_cmd_.control_cmd)
-                               : "UNDEFINE",
-        snapshot.goal_active ? 1 : 0,
-        snapshot.has_valid_output ? 1 : 0,
-        passthrough_control_cmd_ == sunray_msgs::UAVControlCMD::UNDEFINE
-            ? "UNDEFINE"
-            : std::to_string(passthrough_control_cmd_));
 }
