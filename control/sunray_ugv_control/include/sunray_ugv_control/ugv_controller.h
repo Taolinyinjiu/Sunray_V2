@@ -1,112 +1,63 @@
-#pragma once
+#ifndef UGV_CONTROLLER_H
+#define UGV_CONTROLLER_H
 
-#include "sunray_ugv_control/ugv_control_utils.h"
-#include <geometry_msgs/Point.h>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/Vector3.h>
-#include <mutex>
 #include <ros/ros.h>
-#include <string>
+#include <geometry_msgs/Twist.h>
 #include <sunray_msgs/UGVControlCMD.h>
 #include <sunray_msgs/UGVControllerState.h>
+#include <Eigen/Eigen>
 
 namespace sunray_ugv_control {
 
-struct PIDGains {
-    double kp{0.0};
-    double ki{0.0};
-    double kd{0.0};
-};
-
-// 从 yaml 读取并汇总后的控制器运行参数。
-struct UGVControllerConfig {
-    int ugv_type{sunray_msgs::UGVControllerState::MECANUM};
-    double state_pub_frequency{100.0};
-
-    PIDGains point_x;
-    PIDGains point_y;
-    PIDGains point_yaw;
-    PIDGains vel_x;
-    PIDGains vel_y;
-    PIDGains vel_yaw;
-
-    double lateral_to_yaw_gain{1.0};
-    double max_linear_x{1.0};
-    double max_linear_y{1.0};
-    double max_angular_z{1.0};
-    double goal_pos_tolerance{0.15};
-    double goal_yaw_tolerance{0.20};
-};
-
-// 控制器所需的最小平面运动状态。
-struct UGVKinematicState {
-    geometry_msgs::Point position;
-    geometry_msgs::Vector3 velocity;
-    double yaw{0.0};
-};
-
 class UGVController {
-  public:
-    UGVController(ros::NodeHandle& nh,
-                  const UGVControllerConfig& config,
-                  const std::string& state_topic);
+public:
+  struct State {
+    Eigen::Vector3d pos;
+    Eigen::Vector3d vel;
+    double yaw;
+  };
 
-    void set_current_state(const UGVKinematicState& state);
+  struct ControllerParams {
+    double kp_linear;
+    double kp_angular;
+    double max_linear_vel;
+    double max_angular_vel;
+  };
 
-    geometry_msgs::Twist hold();
-    geometry_msgs::Twist move_point(const sunray_msgs::UGVControlCMD& cmd);
-    geometry_msgs::Twist move_velocity(const sunray_msgs::UGVControlCMD& cmd);
-    geometry_msgs::Twist move_velocity_body(const sunray_msgs::UGVControlCMD& cmd);
+  virtual ~UGVController() {}
 
-    bool reached_point(const sunray_msgs::UGVControlCMD& cmd) const;
-    sunray_msgs::UGVControllerState get_status_snapshot() const;
+  virtual void set_current_state(const Eigen::Vector3d& pos, const Eigen::Vector3d& vel, double yaw) = 0;
+  virtual geometry_msgs::Twist move_point(const sunray_msgs::UGVControlCMD& cmd) = 0;
+  virtual geometry_msgs::Twist move_velocity(const sunray_msgs::UGVControlCMD& cmd) = 0;
+  virtual bool supports_world_velocity() const = 0;
+  virtual bool supports_lateral_velocity() const = 0;
+  virtual void pub_ugv_controller_status() = 0;
+};
 
-  private:
-    class PIDAxis {
-      public:
-        explicit PIDAxis(const PIDGains& gains = PIDGains{});
+class UGVControllerBase : public UGVController {
+public:
+  explicit UGVControllerBase(ros::NodeHandle& nh);
+  ~UGVControllerBase() override;
 
-        void reset();
-        double update(double error, double dt);
+  void set_current_state(const Eigen::Vector3d& pos, const Eigen::Vector3d& vel, double yaw) override;
+  void pub_ugv_controller_status() override;
 
-      private:
-        PIDGains gains_;
-        double integral_{0.0};
-        double last_error_{0.0};
-        bool initialized_{false};
-    };
+protected:
+  ros::NodeHandle nh_;
+  ros::Publisher pub_controller_state_;
+  State current_state_;
+  ControllerParams params_;
+  ros::Timer status_timer_;
 
-    void set_mode(uint8_t control_mode);
-    double compute_dt();
-    geometry_msgs::Twist apply_platform_limits(const geometry_msgs::Twist& raw_cmd,
-                                               bool direct_body_command) const;
-    sunray_msgs::UGVControllerState build_status_message(const ros::Time& stamp) const;
-    void status_timer_callback(const ros::TimerEvent&);
+  static double wrap_angle(double angle);
+  static double clamp(double value, double lower, double upper);
+  static Eigen::Vector2d world_to_body(const Eigen::Vector2d& world_vec, double yaw);
 
-    ros::NodeHandle nh_;
-    ros::Publisher state_pub_;
-    ros::Timer state_timer_;
-
-    UGVControllerConfig config_;
-    mutable std::mutex mutex_;
-
-    UGVKinematicState current_state_;
-    // 缓存最近一次期望状态，保证 100Hz 状态话题能反映当前正在跟踪的目标。
-    geometry_msgs::Point desired_pos_;
-    geometry_msgs::Vector3 desired_vel_;
-    geometry_msgs::Vector3 desired_linear_;
-    geometry_msgs::Vector3 desired_angular_;
-    double desired_yaw_{0.0};
-    geometry_msgs::Twist last_cmd_;
-    uint8_t control_mode_{sunray_msgs::UGVControllerState::CONTROL_HOLD};
-    ros::Time last_update_stamp_;
-
-    PIDAxis point_x_pid_;
-    PIDAxis point_y_pid_;
-    PIDAxis point_yaw_pid_;
-    PIDAxis vel_x_pid_;
-    PIDAxis vel_y_pid_;
-    PIDAxis vel_yaw_pid_;
+private:
+  void init_params();
+  void status_timer_callback(const ros::TimerEvent& event);
 };
 
 }  // namespace sunray_ugv_control
+
+#endif  // UGV_CONTROLLER_H
