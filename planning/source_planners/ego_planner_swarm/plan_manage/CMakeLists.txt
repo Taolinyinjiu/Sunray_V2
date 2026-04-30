@@ -28,7 +28,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES ego_planner
- CATKIN_DEPENDS plan_env path_searching bspline_opt traj_utils sunray_common sunray_msgs
+ CATKIN_DEPENDS plan_env path_searching bspline_opt traj_utils sunray_common sunray_msgs sunray_planner_msgs
 #  DEPENDS system_lib
 )
 

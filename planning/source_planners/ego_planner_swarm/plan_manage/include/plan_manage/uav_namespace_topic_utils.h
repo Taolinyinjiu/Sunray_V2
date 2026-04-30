@@ -9,6 +9,14 @@
 
 namespace ego_planner {
 
+struct Planner_Config_t_ {
+  std::string odom_topic;
+  std::string depth_topic;
+  std::string pose_topic;
+  std::string cloud_topic;
+  std::string extrinsic_topic;
+};
+
 inline std::string loadRequiredGlobalStringParamOrThrow(ros::NodeHandle& nh,
                                                         const std::string& param_name) {
   std::string value;
@@ -61,6 +69,22 @@ inline std::string loadExpandedTopicParamOrThrow(ros::NodeHandle& nh,
     throw std::runtime_error(param_name + " cannot be empty");
   }
   return expandUavTopic(raw_topic, uav_ns);
+}
+
+inline Planner_Config_t_ loadPlannerConfigOrThrow(ros::NodeHandle& nh,
+                                                  const std::string& uav_ns) {
+  Planner_Config_t_ planner_config;
+  planner_config.odom_topic =
+      loadExpandedTopicParamOrThrow(nh, "planner_config/odom_topic", uav_ns);
+  planner_config.depth_topic =
+      loadExpandedTopicParamOrThrow(nh, "planner_config/depth_topic", uav_ns);
+  planner_config.pose_topic =
+      loadExpandedTopicParamOrThrow(nh, "planner_config/pose_topic", uav_ns);
+  planner_config.cloud_topic =
+      loadExpandedTopicParamOrThrow(nh, "planner_config/cloud_topic", uav_ns);
+  planner_config.extrinsic_topic =
+      loadExpandedTopicParamOrThrow(nh, "planner_config/extrinsic_topic", uav_ns);
+  return planner_config;
 }
 
 inline std::string makePlannerTopic(std::string suffix, const std::string& uav_ns) {

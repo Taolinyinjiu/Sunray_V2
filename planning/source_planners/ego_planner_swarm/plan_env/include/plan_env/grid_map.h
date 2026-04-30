@@ -169,7 +169,13 @@ public:
   inline bool isKnownFree(const Eigen::Vector3i& id);
   inline bool isKnownOccupied(const Eigen::Vector3i& id);
 
-  void initMap(ros::NodeHandle& nh);
+  void initMap(ros::NodeHandle& nh,
+               const std::string& odom_topic,
+               const std::string& depth_topic,
+               const std::string& pose_topic,
+               const std::string& cloud_topic,
+               const std::string& extrinsic_topic,
+               const std::string& planner_topic_prefix);
 
   void publishMap();
   void publishMapInflate(bool all_info = false);

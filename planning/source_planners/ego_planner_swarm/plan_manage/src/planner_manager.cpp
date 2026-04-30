@@ -12,7 +12,10 @@ namespace ego_planner
 
   EGOPlannerManager::~EGOPlannerManager() {}
 
-  void EGOPlannerManager::initPlanModules(ros::NodeHandle &nh, PlanningVisualization::Ptr vis)
+  void EGOPlannerManager::initPlanModules(ros::NodeHandle &nh,
+                                          const Planner_Config_t_ &planner_config,
+                                          const std::string &uav_ns,
+                                          PlanningVisualization::Ptr vis)
   {
     /* read algorithm parameters */
 
@@ -43,7 +46,13 @@ namespace ego_planner
     local_data_.traj_id_ = 0;
     // 地图类
     grid_map_.reset(new GridMap);
-    grid_map_->initMap(nh);
+    grid_map_->initMap(nh,
+                       planner_config.odom_topic,
+                       planner_config.depth_topic,
+                       planner_config.pose_topic,
+                       planner_config.cloud_topic,
+                       planner_config.extrinsic_topic,
+                       makePlannerTopic("", uav_ns) + "/");
 
     // bspline优化器
     bspline_optimizer_.reset(new BsplineOptimizer);

@@ -19,6 +19,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <traj_utils/DataDisp.h>
 #include <plan_manage/planner_manager.h>
+#include <plan_manage/uav_namespace_topic_utils.h>
 #include <traj_utils/planning_visualization.h>
 #include "printf_utils.h"
 
@@ -57,6 +58,8 @@ namespace ego_planner
     traj_utils::MultiBsplines multi_bspline_msgs_buf_;
 
     /* parameters */
+    std::string uav_ns_;
+    Planner_Config_t_ planner_config_;
     int target_type_; // 1 external goal topic, 2 hard code
     double no_replan_thresh_, replan_thresh_;
     double waypoints_[50][3];

@@ -6,7 +6,7 @@
 //#include <bspline_opt/uniform_bspline.h>
 #include <iostream>
 //#include <bspline_opt/polynomial_traj.h>
-#include <ros/ros.h>
+#include <string>
 #include <vector>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -32,6 +32,7 @@ namespace ego_planner
     PlanningVisualization(/* args */) {}
     ~PlanningVisualization() {}
     PlanningVisualization(ros::NodeHandle &nh);
+    PlanningVisualization(ros::NodeHandle &nh, const std::string &uav_ns);
 
     typedef std::shared_ptr<PlanningVisualization> Ptr;
 

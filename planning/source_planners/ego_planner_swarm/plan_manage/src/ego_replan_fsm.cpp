@@ -111,13 +111,15 @@ namespace ego_planner
 
   void EGOReplanFSM::init(ros::NodeHandle &nh)
   {
-    const std::string uav_ns = loadUavNamespaceOrThrow(nh);
-    const std::string planner_target_topic = makePlannerTopic("target_point", uav_ns);
-    const std::string planner_state_topic = makePlannerTopic("state", uav_ns);
-    const std::string planner_trajectory_topic = makePlannerTopic("trajectory", uav_ns);
-    const std::string planner_data_display_topic = makePlannerTopic("data_display", uav_ns);
-    const std::string planner_broadcast_send_topic = makePlannerTopic("broadcast_bspline_from_planner", uav_ns);
-    const std::string planner_broadcast_recv_topic = makePlannerTopic("broadcast_bspline_to_planner", uav_ns);
+    node_ = ros::NodeHandle();
+    uav_ns_ = loadUavNamespaceOrThrow(node_, nh);
+    planner_config_ = loadPlannerConfigOrThrow(nh, uav_ns_);
+    const std::string planner_target_topic = makePlannerTopic("target_point", uav_ns_);
+    const std::string planner_state_topic = makePlannerTopic("state", uav_ns_);
+    const std::string planner_trajectory_topic = makePlannerTopic("trajectory", uav_ns_);
+    const std::string planner_data_display_topic = makePlannerTopic("data_display", uav_ns_);
+    const std::string planner_broadcast_send_topic = makePlannerTopic("broadcast_bspline_from_planner", uav_ns_);
+    const std::string planner_broadcast_recv_topic = makePlannerTopic("broadcast_bspline_to_planner", uav_ns_);
 
     current_wp_ = 0;
     waypoint_num_ = 0;
@@ -177,10 +179,10 @@ namespace ego_planner
 
     /* initialize main modules */
     // RVIZ显示相关类
-    visualization_.reset(new PlanningVisualization(nh));
+    visualization_.reset(new PlanningVisualization(nh, uav_ns_));
     // 规划类
     planner_manager_.reset(new EGOPlannerManager);
-    planner_manager_->initPlanModules(nh, visualization_);
+    planner_manager_->initPlanModules(nh, planner_config_, uav_ns_, visualization_);
     planner_manager_->deliverTrajToOptimizer(); // store trajectories
     planner_manager_->setDroneIdtoOpt();
 
@@ -194,7 +196,7 @@ namespace ego_planner
     // 安全检查定时器
     safety_timer_ = nh.createTimer(ros::Duration(0.05), &EGOReplanFSM::checkCollisionCallback, this);
     // 订阅里程计
-    odom_sub_ = nh.subscribe("odom_world", 1, &EGOReplanFSM::odometryCallback, this);
+    odom_sub_ = nh.subscribe(planner_config_.odom_topic, 1, &EGOReplanFSM::odometryCallback, this);
 
     // 订阅其他无人机位置
     // ego默认从0开始对无人机进行编号
