@@ -9,6 +9,9 @@ uint8 SUNRAY_STATION=1  	# SUNRAY地面站
 uint8 RC_CONTROLLER=2    	# RC遥控器控制
 uint8 TERMINAL=3  		    # 终端TUI/命令行控制
 uint8 CONTROL_CMD=4    		# Sunray系列代码控制
+uint8 SWARM_CONTROL=5       # 集群控制模块
+uint8 PLANNING=6            # 规划模块
+uint8 EXAMPLE_DEMO=6        # 控制案例模块
 # 命令来源
 uint8 cmd_source
 

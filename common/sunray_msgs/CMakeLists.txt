@@ -31,6 +31,7 @@ add_message_files(
   UGVSwarmCMD.msg
   UGVSwarmState.msg
   Vector2.msg
+  Formation.msg
 )
 
 add_message_files(

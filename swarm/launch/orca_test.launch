@@ -1,0 +1,22 @@
+<launch>
+  <!--
+    ORCA 阵型压力测试：
+    1. 读取 swarm_control_uav_sim.yaml，保证 ORCA/场地/到达阈值参数与仿真节点一致；
+    2. 单次运行默认生成不少于 100 组阵型切换测试；
+    3. 本节点不订阅、不发布，仅在终端输出测试报告。
+  -->
+  <arg name="param_file" default="$(find sunray_swarm_control)/launch/swarm_control_uav_sim.yaml" />
+  <arg name="transition_case_count" default="100" />
+  <arg name="print_failed_detail" default="1" />
+  <arg name="node_output" default="screen" />
+
+  <node pkg="sunray_swarm_control"
+        type="orca_test"
+        name="orca_test"
+        output="$(arg node_output)"
+        required="true">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="orca_test/transition_case_count" value="$(arg transition_case_count)" />
+    <param name="orca_test/print_failed_detail" value="$(arg print_failed_detail)" />
+  </node>
+</launch>

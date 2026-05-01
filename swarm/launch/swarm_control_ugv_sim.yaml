@@ -1,0 +1,37 @@
+# 仿真模式下 swarm_control_ugv_node 的公共参数。
+# 说明：
+# 1. 本文件中的参数会被每个无人车集群控制节点分别加载；
+# 2. ugv_id 由 launch 文件按节点单独覆盖；
+
+ugv_name: "ugv"
+
+control_loop_hz: 20.0        # Hz，集群控制状态机运行频率
+peer_odom_timeout: 0.1       # 秒，邻居 odom 超时阈值
+
+goal_xy_tolerance: 0.10      # 米，XY 平面到达阈值
+goal_yaw_tolerance: 0.10     # rad，偏航角到达阈值
+
+field:
+  x_min: -20.0               # 米，仿真场地 X 最小值
+  x_max: 20.0                # 米，仿真场地 X 最大值
+  y_min: -20.0               # 米，仿真场地 Y 最小值
+  y_max: 20.0                # 米，仿真场地 Y 最大值
+  z_min: -0.5                # 米，仿真场地 Z 最小值
+  z_max: 0.5                 # 米，仿真场地 Z 最大值
+
+orca:
+  neighbor_dist: 2.5         # 米，ORCA 搜索邻居半径
+  time_horizon: 2.0          # 秒，ORCA 预测避碰时间窗
+  radius: 0.35               # 米，无人车避碰半径
+  max_speed: 0.8             # 米/秒，ORCA 输出最大平面速度
+  max_neighbors: -1          # -1代表考虑所有邻居
+
+# 圆形静态障碍物：
+# 1. swarm_control_ugv_node 读取后写入 ORCA，用于速度避障；
+# 2. formation 读取后用于拒绝落在障碍物安全区内的目标点；
+# 3. rviz_visualization_ugv_node 读取后显示为 RViz marker。
+static_obstacles:
+  enabled: true
+  x: [1.0, -1.0, 1.0, -1.0]      # 米，圆心 X
+  y: [1.0, -1.0, -1.0, 1.0]      # 米，圆心 Y
+  radius: [0.35, 0.35, 0.35, 0.35] # 米，圆半径

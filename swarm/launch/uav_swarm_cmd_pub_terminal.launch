@@ -1,0 +1,38 @@
+<launch>
+  <!--
+    UAV 集群指令终端工具。
+    说明：
+      1. 本节点依赖 stdin 交互；
+      2. 默认参数直接写在本 launch 文件中，不再额外读取 yaml。
+  -->
+
+  <arg name="terminal_prefix" default="gnome-terminal --" />
+  <arg name="node_output" default="screen" />
+
+  <node pkg="sunray_swarm_control"
+        type="uav_swarm_cmd_pub_terminal"
+        name="uav_swarm_cmd_pub_terminal"
+        output="$(arg node_output)">
+    <param name="swarm_cmd_topic" value="/sunray/swarm/uav_swarm_cmd" />
+
+    <param name="default_agent_id" value="99" />
+    <param name="default_formation_type" value="1" />
+    <param name="default_leader_x" value="0.0" />
+    <param name="default_leader_y" value="0.0" />
+    <param name="default_leader_z" value="1.5" />
+    <param name="default_leader_yaw" value="0.0" />
+    <param name="default_dynamic_time" value="10.0" />
+
+    <param name="default_static_line_spacing" value="1.5" />
+    <param name="default_static_line_angle" value="0.0" />
+    <param name="default_static_polygon_spacing" value="2.0" />
+
+    <param name="default_dynamic_ring_radius" value="2.0" />
+    <param name="default_dynamic_ring_move_speed" value="0.5" />
+    <param name="default_dynamic_polygon_spacing" value="2.0" />
+    <param name="default_dynamic_polygon_move_speed" value="0.5" />
+    <param name="default_dynamic_lemniscate_x_radius" value="3.0" />
+    <param name="default_dynamic_lemniscate_y_radius" value="2.0" />
+    <param name="default_dynamic_lemniscate_move_speed" value="0.5" />
+  </node>
+</launch>

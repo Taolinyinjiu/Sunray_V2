@@ -1,0 +1,109 @@
+Panels:
+  - Class: rviz/Displays
+    Help Height: 71
+    Name: Displays
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.8558823466300964
+    Tree Height: 677
+  - Class: rviz/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+  - Class: rviz/Time
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Preferences:
+  PromptSaveOnExit: false
+Toolbars:
+  toolButtonStyle: 2
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz/Grid
+      Color: 160; 160; 160
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 30
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /sunray/swarm/ugv_rviz_markers
+      Name: UGV Swarm Markers
+      Namespaces:
+        static_obstacles: true
+        ugv_1: true
+        ugv_2: true
+        ugv_3: true
+        ugv_4: true
+        ugv_5: true
+        ugv_6: true
+        world_origin: true
+      Queue Size: 100
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 18; 18; 18
+    Default Light: true
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+      Hide Inactive Objects: true
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 15.908824920654297
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Field of View: 0.7853981852531433
+      Focal Point:
+        X: 2.897374391555786
+        Y: -0.7701141834259033
+        Z: 2.3542866706848145
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 1.1597968339920044
+      Target Frame: <Fixed Frame>
+      Yaw: 3.0115911960601807
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd00000001000000000000015600000329fc0200000003fb000000100044006900730070006c006100790073010000003e00000329000000cb00fffffffb0000000a00560069006500770073000000020400000123000000a500fffffffb0000000800540069006d0065000000030b0000005c0000003900ffffff0000032a0000032900000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Time:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 1158
+  X: 2108
+  Y: 380

@@ -1,0 +1,164 @@
+<launch>
+  <!--
+    仿真模式下批量启动多个 swarm_control_uav_node。
+    使用方式示例：
+      roslaunch sunray_swarm_control swarm_control_uav_sim.launch
+      roslaunch sunray_swarm_control swarm_control_uav_sim.launch swarm_num:=6
+  -->
+
+  <arg name="swarm_num" default="3" />
+  <arg name="param_file" default="$(find sunray_swarm_control)/launch/swarm_control_uav_sim.yaml" />
+  <arg name="node_output" default="screen" />
+  <arg name="enable_rviz_visualization" default="true" />
+  <arg name="rviz_frame_id" default="world" />
+  <arg name="rviz_marker_topic" default="/sunray/swarm/uav_rviz_markers" />
+  <arg name="rviz_mesh_resource" default="package://sunray_swarm_control/utils/meshes/uav.dae" />
+  <arg name="enable_rviz" default="true" />
+  <arg name="rviz_config" default="$(find sunray_swarm_control)/rviz/swarm_control_uav_sim.rviz" />
+  <arg name="enable_monitor" default="true" />
+  <arg name="monitor_clear_screen" default="true" />
+
+  <!--
+    当前显式展开到 10 架无人机：
+    1. 便于直接看 launch 文件结构；
+    2. 与 formation 当前常用 1-10 架规模保持一致；
+    3. 实际启动数量由 swarm_num 控制。
+  -->
+
+  <node if="$(eval int(arg('swarm_num')) >= 1)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav1_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="1" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 2)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav2_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="2" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 3)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav3_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="3" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 4)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav4_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="4" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 5)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav5_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="5" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 6)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav6_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="6" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 7)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav7_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="7" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 8)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav8_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="8" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 9)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav9_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="9" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(eval int(arg('swarm_num')) >= 10)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_node"
+        name="uav10_swarm_control"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="uav_id" type="int" value="10" />
+    <param name="swarm_num" type="int" value="$(arg swarm_num)" />
+  </node>
+
+  <node if="$(arg enable_rviz_visualization)"
+        pkg="sunray_swarm_control"
+        type="rviz_visualization_uav_node"
+        name="rviz_visualization_uav"
+        output="$(arg node_output)">
+    <rosparam command="load" file="$(arg param_file)" />
+    <param name="swarm_state_topic" value="/sunray/swarm/uav_swarm_state" />
+    <param name="marker_topic" value="$(arg rviz_marker_topic)" />
+    <param name="frame_id" value="$(arg rviz_frame_id)" />
+    <param name="mesh_resource" value="$(arg rviz_mesh_resource)" />
+    <param name="publish_hz" value="10.0" />
+    <param name="stale_timeout" value="1.0" />
+    <param name="trail_size" value="50" />
+    <param name="mesh_scale" value="1.0" />
+    <param name="velocity_scale" value="1.0" />
+    <param name="target_arrow_length" value="0.8" />
+    <param name="text_height" value="0.35" />
+  </node>
+
+  <node if="$(arg enable_monitor)"
+        pkg="sunray_swarm_control"
+        type="swarm_control_uav_monitor_node"
+        name="swarm_control_uav_monitor"
+        output="screen">
+    <param name="swarm_state_topic" value="/sunray/swarm/uav_swarm_state" />
+    <param name="display_hz" value="1.0" />
+    <param name="stale_timeout" value="1.0" />
+    <param name="clear_screen" value="$(arg monitor_clear_screen)" />
+  </node>
+
+  <node if="$(arg enable_rviz)"
+        pkg="rviz"
+        type="rviz"
+        name="swarm_control_uav_rviz"
+        args="-d $(arg rviz_config)"
+        output="screen" />
+</launch>

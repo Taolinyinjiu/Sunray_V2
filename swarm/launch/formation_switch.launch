@@ -1,6 +1,0 @@
-<launch>
-  <!-- 中文说明：UAV 集群键盘控制节点启动文件 -->
-  <!-- 用途：人工发布 /sunray/swarm/uav_swarm_cmd 指令（切阵型/起降/悬停/返航） -->
-
-  <node pkg="sunray_swarm_control" type="uav_formation_switch" name="formation_switch_node" output="screen" />
-</launch>

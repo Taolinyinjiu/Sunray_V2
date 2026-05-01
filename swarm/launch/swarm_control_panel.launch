@@ -1,0 +1,20 @@
+<launch>
+    <!-- Sunray 集群控制 Qt 面板初版：同时支持 UAV / UGV 指令发布和状态查看 -->
+
+    <arg name="uav_swarm_cmd_topic" default="/sunray/swarm/uav_swarm_cmd" />
+    <arg name="ugv_swarm_cmd_topic" default="/sunray/swarm/ugv_swarm_cmd" />
+    <arg name="uav_swarm_state_topic" default="/sunray/swarm/uav_swarm_state" />
+    <arg name="ugv_swarm_state_topic" default="/sunray/swarm/ugv_swarm_state" />
+    <arg name="state_timeout" default="1.0" />
+
+    <node pkg="sunray_swarm_control"
+          type="swarm_control_panel_node"
+          name="swarm_control_panel_node"
+          output="screen">
+        <param name="uav_swarm_cmd_topic" value="$(arg uav_swarm_cmd_topic)" />
+        <param name="ugv_swarm_cmd_topic" value="$(arg ugv_swarm_cmd_topic)" />
+        <param name="uav_swarm_state_topic" value="$(arg uav_swarm_state_topic)" />
+        <param name="ugv_swarm_state_topic" value="$(arg ugv_swarm_state_topic)" />
+        <param name="state_timeout" value="$(arg state_timeout)" />
+    </node>
+</launch>
