@@ -547,7 +547,7 @@ void Swarm_Control_UGV::updateOrcaCommand()
 
     ugv_control_cmd_ = sunray_msgs::UGVControlCMD{};
     ugv_control_cmd_.header.stamp = ros::Time::now();
-    ugv_control_cmd_.cmd_source = sunray_msgs::UGVControlCMD::CMD_SOURCE_SWARM_CONTROL;
+    ugv_control_cmd_.cmd_source = sunray_msgs::UGVControlCMD::SWARM_CONTROL;
     ugv_control_cmd_.control_cmd = sunray_msgs::UGVControlCMD::MOVE_VELOCITY;
     ugv_control_cmd_.desired_vel.x = vx;
     ugv_control_cmd_.desired_vel.y = vy;
@@ -583,7 +583,7 @@ void Swarm_Control_UGV::publishHoldCommand()
 {
     ugv_control_cmd_ = sunray_msgs::UGVControlCMD{};
     ugv_control_cmd_.header.stamp = ros::Time::now();
-    ugv_control_cmd_.cmd_source = sunray_msgs::UGVControlCMD::CMD_SOURCE_SWARM_CONTROL;
+    ugv_control_cmd_.cmd_source = sunray_msgs::UGVControlCMD::SWARM_CONTROL;
     ugv_control_cmd_.control_cmd = sunray_msgs::UGVControlCMD::HOLD;
     control_cmd_pub_.publish(ugv_control_cmd_);
 }

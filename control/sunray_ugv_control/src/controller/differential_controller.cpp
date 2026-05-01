@@ -1,4 +1,4 @@
-#include "sunray_ugv_control/differential_controller.h"
+#include "differential_controller.h"
 
 #include <cmath>
 

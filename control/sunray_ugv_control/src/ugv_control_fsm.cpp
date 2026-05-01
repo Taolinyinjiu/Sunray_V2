@@ -1,9 +1,9 @@
-#include "sunray_ugv_control/ugv_control_fsm.h"
+#include "ugv_control_fsm.h"
 
-#include "sunray_ugv_control/differential_controller.h"
-#include "sunray_ugv_control/mecanum_controller.h"
+#include "differential_controller.h"
+#include "mecanum_controller.h"
 
-#include <iomanip>
+#include <cmath>
 
 namespace sunray_ugv_control {
 
@@ -15,9 +15,6 @@ double wrapAngle(const double angle) {
   return wrapped;
 }
 
-double radToDeg(const double angle) {
-  return angle * 180.0 / M_PI;
-}
 }  // namespace
 
 UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh) {
@@ -27,10 +24,20 @@ UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh) {
   current_vel_.setZero();
   current_yaw_ = 0.0;
   have_odom_ = false;
+  current_odom_ = nav_msgs::Odometry();
+  hold_point_.setZero();
+  hold_yaw_ = 0.0;
+  hold_target_valid_ = false;
 
-  // 读取ugv_id参数
-  nh_.param<std::string>("ugv_id", ugv_id_, "ugv_1");
-  nh_.param<std::string>("localization_ns", localization_ns_, "uav1");
+  // 机器人身份参数：统一使用 agent_name + agent_id 生成话题前缀，例如 /ugv1。
+  nh_.param<std::string>("agent_name", agent_name_, "ugv");
+  nh_.param<int>("agent_id", agent_id_, 1);
+  if (agent_id_ < 1) {
+    ROS_WARN("agent_id=%d is invalid, fallback to 1.", agent_id_);
+    agent_id_ = 1;
+  }
+  agent_prefix_ = "/" + agent_name_ + std::to_string(agent_id_);
+
   nh_.param<double>("wait_velcmd_time", WAIT_VELCMD_TIME_, 5.0);
   nh_.param<double>("point_pos_tolerance", point_pos_tolerance_, 0.05);
   nh_.param<double>("point_yaw_tolerance", point_yaw_tolerance_, 0.10);
@@ -61,22 +68,18 @@ UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh) {
   return_yaw_ = 0.0;
 
   // 初始化订阅器
-  sub_odom_ = nh_.subscribe("/" + localization_ns_ + "/sunray/localization/local_odom", 10, &UGVControlFSM::odom_callback, this);
-  sub_odom_status_ = nh_.subscribe("/" + localization_ns_ + "/sunray/localization/odom_status", 10, &UGVControlFSM::odom_status_callback, this);
-  sub_control_cmd_ = nh_.subscribe("/" + ugv_id_ + "/sunray/ugv_control/control_cmd", 10, &UGVControlFSM::control_cmd_callback, this);
+  sub_odom_ = nh_.subscribe(agent_prefix_ + "/sunray/localization/local_odom", 10, &UGVControlFSM::odom_callback, this);
+  sub_odom_status_ = nh_.subscribe(agent_prefix_ + "/sunray/localization/odom_status", 10, &UGVControlFSM::odom_status_callback, this);
+  sub_control_cmd_ = nh_.subscribe(agent_prefix_ + "/sunray/ugv_control/control_cmd", 10, &UGVControlFSM::control_cmd_callback, this);
 
   // 初始化发布器
-  pub_cmd_vel_ = nh_.advertise<geometry_msgs::Twist>("/" + ugv_id_ + "/sunray/cmd_vel", 10);
-  pub_fsm_state_ = nh_.advertise<sunray_msgs::UGVControlFSMState>("/" + ugv_id_ + "/sunray/ugv_control_fsm_state", 10);
-  pub_debug_ = nh_.advertise<sunray_msgs::UGVControlCMD>("/" + ugv_id_ + "/sunray/ugv_control_debug", 10);
+  pub_cmd_vel_ = nh_.advertise<geometry_msgs::Twist>(agent_prefix_ + "/sunray/ugv_control/cmd_vel", 10);
+  pub_fsm_state_ = nh_.advertise<sunray_msgs::UGVControlFSMState>(agent_prefix_ + "/sunray/ugv_control/ugv_control_fsm_state", 10);
+  pub_debug_ = nh_.advertise<sunray_msgs::UGVControlCMD>(agent_prefix_ + "/sunray/ugv_control_debug", 10);
 
   // 启动定时器
   control_timer_ = nh_.createTimer(ros::Duration(0.01), &UGVControlFSM::control_timer_callback, this);
   geo_fence_timer_ = nh_.createTimer(ros::Duration(0.1), &UGVControlFSM::geo_fence_timer_callback, this);
-
-  // 初始化状态信息打印定时器
-  double status_print_frequency = 1.0;  // 1Hz
-  status_print_timer_ = nh_.createTimer(ros::Duration(1.0 / status_print_frequency), &UGVControlFSM::print_status_info, this);
 }
 
 UGVControlFSM::~UGVControlFSM() {
@@ -100,6 +103,7 @@ void UGVControlFSM::odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
   current_vel_ = vel;
   current_yaw_ = yaw;
   have_odom_ = true;
+  current_odom_ = *msg;
   controller_->set_current_state(pos, vel, yaw);
 }
 
@@ -115,6 +119,7 @@ void UGVControlFSM::control_cmd_callback(const sunray_msgs::UGVControlCMD::Const
   // 根据控制指令切换状态
   switch (msg->control_cmd) {
     case sunray_msgs::UGVControlCMD::HOLD:
+      capture_hold_target_from_current_state();
       current_state_ = HOLD;
       break;
     case sunray_msgs::UGVControlCMD::RETURN:
@@ -228,10 +233,8 @@ void UGVControlFSM::process_move() {
       pub_cmd_vel_.publish(twist);
       break;
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
-      // Differential drive only supports body vx + yaw_rate.
-      twist.linear.x = ugv_control_cmd_.desired_linear.x;
-      twist.linear.y = ugv_control_cmd_.desired_linear.y;
-      twist.angular.z = ugv_control_cmd_.desired_angular.z;
+      // MOVE_VELOCITY_BODY 直接复用 geometry_msgs/Twist，与底盘 cmd_vel 语义一致。
+      twist = ugv_control_cmd_.cmd_vel;
       if (!controller_->supports_lateral_velocity()) {
         if (std::fabs(twist.linear.y) > 1.0e-6) {
           ROS_WARN_THROTTLE(1.0,
@@ -262,7 +265,29 @@ bool UGVControlFSM::is_point_reached(const sunray_msgs::UGVControlCMD& cmd) cons
   return pos_error <= point_pos_tolerance_ && yaw_error <= point_yaw_tolerance_;
 }
 
+void UGVControlFSM::capture_hold_target_from_current_state() {
+  if (!have_odom_) {
+    return;
+  }
+  set_hold_target(current_pos_, current_yaw_);
+}
+
+void UGVControlFSM::set_hold_target(const Eigen::Vector3d& pos, const double yaw) {
+  hold_point_ = pos;
+  hold_yaw_ = yaw;
+  hold_target_valid_ = true;
+}
+
 void UGVControlFSM::switch_to_hold() {
+  // 对于点位控制，到点后保持原目标点更直观；其他场景退回当前点。
+  if (ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_POINT) {
+    set_hold_target(Eigen::Vector3d(ugv_control_cmd_.desired_pos.x,
+                                    ugv_control_cmd_.desired_pos.y,
+                                    ugv_control_cmd_.desired_pos.z),
+                    ugv_control_cmd_.desired_yaw);
+  } else {
+    capture_hold_target_from_current_state();
+  }
   current_state_ = HOLD;
   ugv_control_cmd_.control_cmd = sunray_msgs::UGVControlCMD::HOLD;
   last_cmd_vel = geometry_msgs::Twist();
@@ -273,18 +298,11 @@ void UGVControlFSM::publish_fsm_state() {
   sunray_msgs::UGVControlFSMState state_msg;
   state_msg.header.stamp = ros::Time::now();
 
-  state_msg.geo_fence_x_min = fence_min_.x();
-  state_msg.geo_fence_x_max = fence_max_.x();
-  state_msg.geo_fence_y_min = fence_min_.y();
-  state_msg.geo_fence_y_max = fence_max_.y();
-  state_msg.geo_fence_z_min = fence_min_.z();
-  state_msg.geo_fence_z_max = fence_max_.z();
+  state_msg.agent_name = agent_name_;
+  state_msg.agent_id = static_cast<uint8_t>(agent_id_);
+  state_msg.drive_type = (drive_type_ == 1) ? sunray_msgs::UGVControlFSMState::DRIVE_MECANUM
+                                            : sunray_msgs::UGVControlFSMState::DRIVE_DIFFERENTIAL;
 
-  state_msg.home_point.x = return_point_.x();
-  state_msg.home_point.y = return_point_.y();
-  state_msg.home_point.z = return_point_.z();
-
-  // 设置当前状态
   switch (current_state_) {
     case INIT:
       state_msg.fsm_state = sunray_msgs::UGVControlFSMState::FSM_INIT;
@@ -303,23 +321,29 @@ void UGVControlFSM::publish_fsm_state() {
       break;
   }
 
-  // 设置上一条收到的指令
-  state_msg.active_control_cmd = ugv_control_cmd_;
+  state_msg.active_ugv_control_cmd = ugv_control_cmd_;
+  state_msg.self_odom = current_odom_;
 
-  // 设置下发到底层的控制指令
+  state_msg.target_valid = false;
+  if (current_state_ == MOVE && ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_POINT) {
+    state_msg.target_valid = true;
+    state_msg.target_pos = ugv_control_cmd_.desired_pos;
+    state_msg.target_yaw = ugv_control_cmd_.desired_yaw;
+  } else if (current_state_ == HOLD && hold_target_valid_) {
+    state_msg.target_valid = true;
+    state_msg.target_pos.x = hold_point_.x();
+    state_msg.target_pos.y = hold_point_.y();
+    state_msg.target_pos.z = hold_point_.z();
+    state_msg.target_yaw = hold_yaw_;
+  } else if (current_state_ == RETURN) {
+    state_msg.target_valid = true;
+    state_msg.target_pos.x = return_point_.x();
+    state_msg.target_pos.y = return_point_.y();
+    state_msg.target_pos.z = return_point_.z();
+    state_msg.target_yaw = return_yaw_;
+  }
+
   state_msg.controller_cmd_vel = last_cmd_vel;
-
-  state_msg.desired_pos = ugv_control_cmd_.desired_pos;
-  state_msg.desired_vel = ugv_control_cmd_.desired_vel;
-  state_msg.desired_yaw = ugv_control_cmd_.desired_yaw;
-
-  state_msg.current_pos.x = current_pos_.x();
-  state_msg.current_pos.y = current_pos_.y();
-  state_msg.current_pos.z = current_pos_.z();
-  state_msg.current_vel.x = current_vel_.x();
-  state_msg.current_vel.y = current_vel_.y();
-  state_msg.current_vel.z = current_vel_.z();
-  state_msg.current_yaw = current_yaw_;
 
   state_msg.odom_valid = have_odom_;
   state_msg.control_cmd_valid = ugv_control_cmd_.control_cmd != sunray_msgs::UGVControlCMD::UNDEFINE;
@@ -329,139 +353,19 @@ void UGVControlFSM::publish_fsm_state() {
        current_pos_.y() >= fence_min_.y() && current_pos_.y() <= fence_max_.y() &&
        current_pos_.z() >= fence_min_.z() && current_pos_.z() <= fence_max_.z());
 
+  state_msg.geo_fence_min.x = fence_min_.x();
+  state_msg.geo_fence_min.y = fence_min_.y();
+  state_msg.geo_fence_min.z = fence_min_.z();
+  state_msg.geo_fence_max.x = fence_max_.x();
+  state_msg.geo_fence_max.y = fence_max_.y();
+  state_msg.geo_fence_max.z = fence_max_.z();
+
   pub_fsm_state_.publish(state_msg);
 }
 
 void UGVControlFSM::publish_debug() {
   // 发布调试信息
   pub_debug_.publish(ugv_control_cmd_);
-}
-
-void UGVControlFSM::print_status_info(const ros::TimerEvent& event) {
-  (void)event;
-
-  // 清除屏幕
-  std::cout << "\033[2J\033[H";
-  std::cout << std::fixed << std::setprecision(2);
-
-  // 打印标题
-  std::cout << "\033[1;36m==========================================\033[0m" << std::endl;
-  std::cout << "\033[1;36m           UGV Control FSM Status Info       \033[0m" << std::endl;
-  std::cout << "\033[1;36m==========================================\033[0m" << std::endl;
-
-  // 打印时间
-  ros::Time current_time = ros::Time::now();
-  std::cout << "\033[1;32m[Time]\033[0m: " << current_time.toSec() << std::endl;
-
-  // 打印UGV ID
-  std::cout << "\033[1;32m[UGV ID]\033[0m: " << ugv_id_ << std::endl;
-  std::cout << "\033[1;32m[Localization NS]\033[0m: " << localization_ns_ << std::endl;
-
-  // 打印底盘信息
-  std::cout << "\033[1;32m[Drive Base]\033[0m: " << std::endl;
-  std::cout << "  Drive Type: " << drive_type_ << " (" << drive_type_name_ << ")" << std::endl;
-  std::cout << "  Supports World Velocity: " << (controller_->supports_world_velocity() ? "YES" : "NO") << std::endl;
-  std::cout << "  Supports Lateral Velocity: " << (controller_->supports_lateral_velocity() ? "YES" : "NO") << std::endl;
-
-  // 打印FSM状态
-  std::cout << "\033[1;32m[FSM State]\033[0m: ";
-  switch (current_state_) {
-    case INIT:
-      std::cout << "\033[1;34mINIT\033[0m" << std::endl;
-      break;
-    case HOLD:
-      std::cout << "\033[1;33mHOLD\033[0m" << std::endl;
-      break;
-    case RETURN:
-      std::cout << "\033[1;31mRETURN\033[0m" << std::endl;
-      break;
-    case MOVE:
-      std::cout << "\033[1;32mMOVE\033[0m" << std::endl;
-      break;
-    default:
-      std::cout << "\033[1;33mUNKNOWN\033[0m" << std::endl;
-      break;
-  }
-
-  // 打印当前状态估计
-  std::cout << "\033[1;32m[Odom State]\033[0m: " << std::endl;
-  std::cout << "  Odom Ready: " << (have_odom_ ? "YES" : "NO") << std::endl;
-  std::cout << "  Current Pos: (" << current_pos_.x() << ", " << current_pos_.y() << ", " << current_pos_.z() << ") m" << std::endl;
-  std::cout << "  Current Yaw: " << current_yaw_ << " rad (" << radToDeg(current_yaw_) << " deg)" << std::endl;
-  std::cout << "  Last Cmd Vel: vx=" << last_cmd_vel.linear.x
-            << " m/s, vy=" << last_cmd_vel.linear.y
-            << " m/s, wz=" << last_cmd_vel.angular.z << " rad/s" << std::endl;
-
-  // 打印控制指令信息
-  std::cout << "\033[1;32m[Control Cmd]\033[0m: " << std::endl;
-  std::cout << "  Cmd Source: " << ugv_control_cmd_.cmd_source << std::endl;
-  std::cout << "  Control Cmd: ";
-  switch (ugv_control_cmd_.control_cmd) {
-    case sunray_msgs::UGVControlCMD::HOLD:
-      std::cout << "HOLD" << std::endl;
-      break;
-    case sunray_msgs::UGVControlCMD::RETURN:
-      std::cout << "RETURN" << std::endl;
-      break;
-    case sunray_msgs::UGVControlCMD::MOVE_POINT:
-      std::cout << "MOVE_POINT" << std::endl;
-      std::cout << "  Desired Pos: (" << ugv_control_cmd_.desired_pos.x << ", " << ugv_control_cmd_.desired_pos.y << ", " << ugv_control_cmd_.desired_pos.z << ")" << std::endl;
-      std::cout << "  Desired Yaw: " << ugv_control_cmd_.desired_yaw << " rad (" << radToDeg(ugv_control_cmd_.desired_yaw) << " deg)" << std::endl;
-      if (have_odom_) {
-        const double dx = ugv_control_cmd_.desired_pos.x - current_pos_.x();
-        const double dy = ugv_control_cmd_.desired_pos.y - current_pos_.y();
-        const double dist = std::sqrt(dx * dx + dy * dy);
-        const double yaw_error = wrapAngle(ugv_control_cmd_.desired_yaw - current_yaw_);
-        const bool pos_reached = dist <= point_pos_tolerance_;
-        const bool yaw_reached = std::fabs(yaw_error) <= point_yaw_tolerance_;
-        std::cout << "  Distance To Target: " << dist << " m" << std::endl;
-        std::cout << "  Point Error: dx=" << dx << " m, dy=" << dy
-                  << " m, dyaw=" << yaw_error << " rad ("
-                  << radToDeg(yaw_error) << " deg)" << std::endl;
-        std::cout << "  Reached Check: pos=" << (pos_reached ? "YES" : "NO")
-                  << " (tol=" << point_pos_tolerance_ << " m), yaw="
-                  << (yaw_reached ? "YES" : "NO") << " (tol="
-                  << point_yaw_tolerance_ << " rad)" << std::endl;
-      }
-      break;
-    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
-      std::cout << "MOVE_VELOCITY" << std::endl;
-      std::cout << "  Desired Vel: (" << ugv_control_cmd_.desired_vel.x << ", " << ugv_control_cmd_.desired_vel.y << ", " << ugv_control_cmd_.desired_vel.z << ")" << std::endl;
-      std::cout << "  Desired Yaw: " << ugv_control_cmd_.desired_yaw << " rad (" << radToDeg(ugv_control_cmd_.desired_yaw) << " deg)" << std::endl;
-      break;
-    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
-      std::cout << "MOVE_VELOCITY_BODY" << std::endl;
-      std::cout << "  Desired Linear: (" << ugv_control_cmd_.desired_linear.x << ", " << ugv_control_cmd_.desired_linear.y << ", " << ugv_control_cmd_.desired_linear.z << ")" << std::endl;
-      std::cout << "  Desired Angular: (" << ugv_control_cmd_.desired_angular.x << ", " << ugv_control_cmd_.desired_angular.y << ", " << ugv_control_cmd_.desired_angular.z << ")" << std::endl;
-      break;
-    case sunray_msgs::UGVControlCMD::MOVE_WGS84:
-      std::cout << "MOVE_WGS84" << std::endl;
-      std::cout << "  Lat: " << ugv_control_cmd_.desired_wgs84_pos.latitude
-                << ", Lon: " << ugv_control_cmd_.desired_wgs84_pos.longitude
-                << ", Alt: " << ugv_control_cmd_.desired_wgs84_pos.altitude << std::endl;
-      break;
-    default:
-      std::cout << "UNKNOWN" << std::endl;
-      break;
-  }
-
-  // 打印返航点信息
-  std::cout << "\033[1;32m[Return Point]\033[0m: (" << return_point_.x() << ", " << return_point_.y() << ", " << return_point_.z() << ")" << std::endl;
-  std::cout << "  Return Yaw: " << return_yaw_ << std::endl;
-
-  // 打印地理围栏信息
-  std::cout << "\033[1;32m[Geo Fence]\033[0m: " << std::endl;
-  std::cout << "  Min: (" << fence_min_.x() << ", " << fence_min_.y() << ", " << fence_min_.z() << ")" << std::endl;
-  std::cout << "  Max: (" << fence_max_.x() << ", " << fence_max_.y() << ", " << fence_max_.z() << ")" << std::endl;
-
-  // 打印时间参数
-  std::cout << "\033[1;32m[Time Params]\033[0m: " << std::endl;
-  std::cout << "  Wait Vel Cmd Time: " << WAIT_VELCMD_TIME_ << "s" << std::endl;
-
-  // 打印分隔线
-  std::cout << "\033[1;36m==========================================\033[0m" << std::endl;
-  std::cout << "\033[1;36mPress Ctrl+C to exit\033[0m" << std::endl;
-  std::cout << std::defaultfloat;
 }
 
 } // namespace sunray_ugv_control

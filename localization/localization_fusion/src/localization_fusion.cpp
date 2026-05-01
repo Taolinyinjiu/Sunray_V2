@@ -76,7 +76,10 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
         throw std::runtime_error("missing param" + node_name + "/use_receive_time");
     }
     private_nh_.param("log_save", log_save_, false);
+    private_nh_.param("global_frame_id", global_frame_id_, std::string("sunray_global"));
     private_nh_.param("world_frame_id", world_frame_id_, std::string("world"));
+    private_nh_.param("local_frame_id", local_frame_id_, std::string("sunray_local"));
+    private_nh_.param("base_frame_id", base_frame_id_, std::string("base_link"));
     // 优先读取节点私有参数中的 uav_name/uav_id，单机场景再回退到全局参数
     uav_ns_ = localization_fusion::load_uav_namespace_or_throw(nh_);
     init_logger();

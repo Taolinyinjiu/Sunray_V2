@@ -1,0 +1,41 @@
+<launch>
+  <arg name="source_id" default="3" />
+  <arg name="config_yamlfile_path"
+       default="$(find localization_fusion)/config/localization_sources_ugv.yaml" />
+  <arg name="health_rate_hz" default="10.0" />
+  <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
+  <arg name="ugv_name" default="ugv" />
+  <arg name="ugv_id" default="1" />
+  <arg name="ugv_num" default="6" />
+  <arg name="vrpn_server" default="192.168.20.15" />
+  <arg name="world_frame_id" default="world" />
+
+  <include file="$(find localization_fusion)/launch/localiztion_ugv.launch">
+    <arg name="source_id" value="$(arg source_id)" />
+    <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <arg name="health_rate_hz" value="$(arg health_rate_hz)" />
+    <arg name="use_receive_time" value="$(arg use_receive_time)" />
+    <arg name="ugv_name" value="$(arg ugv_name)" />
+    <arg name="ugv_id" value="$(arg ugv_id)" />
+    <arg name="node_name" value="$(eval 'localization_fusion_ugv_' + str(int(arg('ugv_id'))))" />
+    <arg name="set_global_params" value="false" />
+    <arg name="vrpn_server" value="$(arg vrpn_server)" />
+    <arg name="global_frame_id" value="$(arg ugv_name)$(arg ugv_id)/sunray_global" />
+    <arg name="world_frame_id" value="$(arg world_frame_id)" />
+    <arg name="local_frame_id" value="$(arg ugv_name)$(arg ugv_id)/sunray_local" />
+    <arg name="base_frame_id" value="$(arg ugv_name)$(arg ugv_id)/base_link" />
+  </include>
+
+  <include file="$(find localization_fusion)/launch/localiztion_ugv_swarm.launch"
+           if="$(eval int(arg('ugv_num')) > int(arg('ugv_id')))">
+    <arg name="source_id" value="$(arg source_id)" />
+    <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <arg name="health_rate_hz" value="$(arg health_rate_hz)" />
+    <arg name="use_receive_time" value="$(arg use_receive_time)" />
+    <arg name="ugv_name" value="$(arg ugv_name)" />
+    <arg name="ugv_id" value="$(eval int(arg('ugv_id')) + 1)" />
+    <arg name="ugv_num" value="$(arg ugv_num)" />
+    <arg name="vrpn_server" value="$(arg vrpn_server)" />
+    <arg name="world_frame_id" value="$(arg world_frame_id)" />
+  </include>
+</launch>

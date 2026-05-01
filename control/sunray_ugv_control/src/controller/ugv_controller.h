@@ -4,7 +4,6 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/UGVControllerState.h>
 #include <Eigen/Eigen>
 
 namespace sunray_ugv_control {
@@ -31,7 +30,6 @@ public:
   virtual geometry_msgs::Twist move_velocity(const sunray_msgs::UGVControlCMD& cmd) = 0;
   virtual bool supports_world_velocity() const = 0;
   virtual bool supports_lateral_velocity() const = 0;
-  virtual void pub_ugv_controller_status() = 0;
 };
 
 class UGVControllerBase : public UGVController {
@@ -40,14 +38,11 @@ public:
   ~UGVControllerBase() override;
 
   void set_current_state(const Eigen::Vector3d& pos, const Eigen::Vector3d& vel, double yaw) override;
-  void pub_ugv_controller_status() override;
 
 protected:
   ros::NodeHandle nh_;
-  ros::Publisher pub_controller_state_;
   State current_state_;
   ControllerParams params_;
-  ros::Timer status_timer_;
 
   static double wrap_angle(double angle);
   static double clamp(double value, double lower, double upper);
@@ -55,7 +50,6 @@ protected:
 
 private:
   void init_params();
-  void status_timer_callback(const ros::TimerEvent& event);
 };
 
 }  // namespace sunray_ugv_control

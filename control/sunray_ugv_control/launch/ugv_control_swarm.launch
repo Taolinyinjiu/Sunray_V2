@@ -1,0 +1,165 @@
+<launch>
+  <arg name="agent_name" default="ugv" />
+  <arg name="swarm_num" default="3" />
+
+  <arg name="enable_monitor" default="true" />
+  <arg name="enable_rviz_visualization" default="false" />
+  <arg name="enable_rviz" default="false" />
+  <arg name="monitor_print_hz" default="2.0" />
+  <arg name="monitor_stale_timeout" default="1.0" />
+  <arg name="rviz_frame_id" default="world" />
+  <arg name="rviz_config" default="$(find sunray_ugv_control)/rviz/ugv_control.rviz" />
+
+  <!-- 集群统一监控面板：只启动一次，订阅 /ugv1 ... /ugvN -->
+  <node if="$(arg enable_monitor)"
+        pkg="sunray_ugv_control"
+        type="ugv_control_monitor_node"
+        name="$(arg agent_name)_swarm_ugv_control_monitor"
+        output="screen">
+    <param name="agent_name" type="str" value="$(arg agent_name)" />
+    <param name="agent_num" type="int" value="$(arg swarm_num)" />
+    <param name="print_hz" value="$(arg monitor_print_hz)" />
+    <param name="stale_timeout" value="$(arg monitor_stale_timeout)" />
+  </node>
+
+  <!-- 最多支持 10 台；当前你的集群实验范围也是 3-10 台 -->
+  <include if="$(eval int(arg('swarm_num')) >= 1)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="1" />
+    <arg name="node_name" value="ugv_control_node_1" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 2)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="2" />
+    <arg name="node_name" value="ugv_control_node_2" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 3)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="3" />
+    <arg name="node_name" value="ugv_control_node_3" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 4)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="4" />
+    <arg name="node_name" value="ugv_control_node_4" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 5)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="5" />
+    <arg name="node_name" value="ugv_control_node_5" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 6)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="6" />
+    <arg name="node_name" value="ugv_control_node_6" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 7)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="7" />
+    <arg name="node_name" value="ugv_control_node_7" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 8)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="8" />
+    <arg name="node_name" value="ugv_control_node_8" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 9)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="9" />
+    <arg name="node_name" value="ugv_control_node_9" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+
+  <include if="$(eval int(arg('swarm_num')) >= 10)"
+           file="$(find sunray_ugv_control)/launch/ugv_control.launch">
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="10" />
+    <arg name="node_name" value="ugv_control_node_10" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
+    <arg name="enable_rviz" value="$(arg enable_rviz)" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <arg name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <arg name="rviz_config" value="$(arg rviz_config)" />
+  </include>
+</launch>

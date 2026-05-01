@@ -17,7 +17,7 @@ field:
   y_min: -20.0               # 米，仿真场地 Y 最小值
   y_max: 20.0                # 米，仿真场地 Y 最大值
   z_min: -0.5                # 米，仿真场地 Z 最小值
-  z_max: 0.5                 # 米，仿真场地 Z 最大值
+  z_max: 3.0                 # 米，仿真场地 Z 最大值
 
 orca:
   neighbor_dist: 2.5         # 米，ORCA 搜索邻居半径
@@ -31,7 +31,7 @@ orca:
 # 2. formation 读取后用于拒绝落在障碍物安全区内的目标点；
 # 3. rviz_visualization_ugv_node 读取后显示为 RViz marker。
 static_obstacles:
-  enabled: true
+  enabled: false
   x: [1.0, -1.0, 1.0, -1.0]      # 米，圆心 X
   y: [1.0, -1.0, -1.0, 1.0]      # 米，圆心 Y
   radius: [0.35, 0.35, 0.35, 0.35] # 米，圆半径

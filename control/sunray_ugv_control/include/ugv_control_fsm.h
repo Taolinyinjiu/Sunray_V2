@@ -9,8 +9,8 @@
 #include <sunray_msgs/UGVControlFSMState.h>
 #include <memory>
 #include <Eigen/Eigen>
-#include "sunray_ugv_control/ugv_controller.h"
-#include "sunray_ugv_control/ugv_control_utils.h"
+#include <string>
+#include "ugv_controller.h"
 
 namespace sunray_ugv_control {
 
@@ -30,8 +30,9 @@ private:
 
   // ROS节点
   ros::NodeHandle nh_;
-  std::string ugv_id_; // 无人车id
-  std::string localization_ns_;
+  std::string agent_name_;    // 机器人类型名，例如 ugv
+  int agent_id_;              // 机器人编号，从1开始
+  std::string agent_prefix_;  // 统一话题前缀，例如 /ugv1
   int drive_type_;
   std::string drive_type_name_;
   ros::Subscriber sub_odom_;
@@ -50,12 +51,18 @@ private:
   Eigen::Vector3d current_vel_;
   double current_yaw_;
   bool have_odom_;
+  nav_msgs::Odometry current_odom_;
 
   // 控制指令
   sunray_msgs::UGVControlCMD ugv_control_cmd_;
 
   // 最后发布的控制指令
   geometry_msgs::Twist last_cmd_vel;
+
+  // HOLD 状态下对外公布的停车参考点
+  Eigen::Vector3d hold_point_;
+  double hold_yaw_;
+  bool hold_target_valid_;
 
   // 返航点
   Eigen::Vector3d return_point_;
@@ -73,7 +80,6 @@ private:
   // 定时器
   ros::Timer control_timer_;
   ros::Timer geo_fence_timer_;
-  ros::Timer status_print_timer_;
 
   // 回调函数
   void odom_callback(const nav_msgs::Odometry::ConstPtr& msg);
@@ -90,10 +96,11 @@ private:
 
   // 辅助函数
   bool is_point_reached(const sunray_msgs::UGVControlCMD& cmd) const;
+  void capture_hold_target_from_current_state();
+  void set_hold_target(const Eigen::Vector3d& pos, double yaw);
   void switch_to_hold();
   void publish_fsm_state();
   void publish_debug();
-  void print_status_info(const ros::TimerEvent& event);
 };
 
 } // namespace sunray_ugv_control

@@ -7,11 +7,15 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  nav_msgs
+  visualization_msgs
+  rviz
   sunray_msgs
 )
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
 
 catkin_package(
-  CATKIN_DEPENDS roscpp rospy std_msgs sunray_msgs
+  CATKIN_DEPENDS roscpp rospy std_msgs nav_msgs visualization_msgs rviz sunray_msgs
 )
 
 include_directories(
@@ -38,6 +42,17 @@ target_link_libraries(ugv_terminal_control_node
 
 add_dependencies(ugv_terminal_control_node ${catkin_EXPORTED_TARGETS})
 
+add_executable(uav_control_panel_node
+  src/uav_control_panel_node.cpp
+)
+
+target_link_libraries(uav_control_panel_node
+  ${catkin_LIBRARIES}
+  Qt5::Widgets
+)
+
+add_dependencies(uav_control_panel_node ${catkin_EXPORTED_TARGETS})
+
 add_executable(triangle_velocity_test
   src/velocity_test/triangle_velocity_test.cpp
 )
@@ -47,3 +62,8 @@ target_link_libraries(triangle_velocity_test
 )
 
 add_dependencies(triangle_velocity_test ${catkin_EXPORTED_TARGETS})
+
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  FILES_MATCHING PATTERN "*.launch"
+)

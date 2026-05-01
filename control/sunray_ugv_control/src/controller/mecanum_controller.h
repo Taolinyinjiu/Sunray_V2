@@ -1,7 +1,7 @@
 #ifndef MECANUM_CONTROLLER_H
 #define MECANUM_CONTROLLER_H
 
-#include "sunray_ugv_control/ugv_controller.h"
+#include "ugv_controller.h"
 
 namespace sunray_ugv_control {
 

@@ -28,8 +28,10 @@ const char* driveTypeName(const DriveType drive_type) {
 }
 }
 
-static void printMenu(const DriveType drive_type) {
+static void printMenu(const DriveType drive_type, const std::string& agent_prefix, const std::string& topic) {
     std::cout << "\n===== UGV Terminal Control =====" << std::endl;
+    std::cout << "Agent prefix: " << agent_prefix << std::endl;
+    std::cout << "Publish topic: " << topic << std::endl;
     std::cout << "Drive type: " << driveTypeName(drive_type) << std::endl;
     std::cout << "Units: position[m], velocity[m/s], duration[s], yaw input[deg] -> publish[rad], angular_z input[deg/s] -> publish[rad/s]" << std::endl;
     std::cout << "1 - HOLD (停止)" << std::endl;
@@ -125,7 +127,7 @@ static void publishTimedVelocityCommand(ros::Publisher& control_pub, const sunra
 
     sunray_msgs::UGVControlCMD hold_cmd;
     hold_cmd.header.stamp = ros::Time::now();
-    hold_cmd.cmd_source = 3; // 终端控制
+    hold_cmd.cmd_source = sunray_msgs::UGVControlCMD::TERMINAL;
     hold_cmd.control_cmd = sunray_msgs::UGVControlCMD::HOLD;
     for (int i = 0; i < 5 && ros::ok(); ++i) {
         hold_cmd.header.stamp = ros::Time::now();
@@ -139,14 +141,32 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "ugv_terminal_control_node");
     ros::NodeHandle nh("~");
 
-    std::string ugv_id = "ugv_1";
-    nh.param("ugv_id", ugv_id, std::string("ugv_1"));
-    std::string topic = "/" + ugv_id + "/sunray/ugv_control/control_cmd";
+    std::string agent_name = "ugv";
+    int agent_id = 1;
+    nh.param("agent_name", agent_name, std::string("ugv"));
+    nh.param("agent_id", agent_id, 1);
+    if (agent_id < 1) {
+        ROS_WARN("agent_id=%d is invalid, fallback to 1.", agent_id);
+        agent_id = 1;
+    }
+
+    const std::string agent_prefix = "/" + agent_name + std::to_string(agent_id);
+    const std::string topic = agent_prefix + "/sunray/ugv_control/control_cmd";
 
     ros::Publisher control_pub = nh.advertise<sunray_msgs::UGVControlCMD>(topic, 1);
     ros::Duration(0.5).sleep();
 
-    ROS_INFO("ugv_terminal_control_node started, publishing to %s", topic.c_str());
+    std::cout << "\n===== UGV Terminal Control Started =====" << std::endl;
+    std::cout << "Agent name    : " << agent_name << std::endl;
+    std::cout << "Agent ID      : " << agent_id << std::endl;
+    std::cout << "Agent prefix  : " << agent_prefix << std::endl;
+    std::cout << "Publish topic : " << topic << std::endl;
+    std::cout << "========================================" << std::endl;
+
+    ROS_INFO("ugv_terminal_control_node started, agent=%s%d, publishing to %s",
+             agent_name.c_str(),
+             agent_id,
+             topic.c_str());
 
     DriveType drive_type = DriveType::DIFFERENTIAL;
     while (ros::ok() && !selectDriveType(drive_type)) {
@@ -157,7 +177,7 @@ int main(int argc, char** argv) {
     ROS_INFO("Selected drive type: %s", driveTypeName(drive_type));
 
     while (ros::ok()) {
-        printMenu(drive_type);
+        printMenu(drive_type, agent_prefix, topic);
         int input = -1;
         if (!(std::cin >> input)) {
             std::cin.clear();
@@ -173,7 +193,7 @@ int main(int argc, char** argv) {
 
         sunray_msgs::UGVControlCMD cmd;
         cmd.header.stamp = ros::Time::now();
-        cmd.cmd_source = 3; // 终端控制
+        cmd.cmd_source = sunray_msgs::UGVControlCMD::TERMINAL;
         bool timed_velocity_cmd = false;
         double velocity_duration_s = 0.0;
 
@@ -235,12 +255,12 @@ int main(int argc, char** argv) {
                 }
             }
             cmd.control_cmd = sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY;
-            cmd.desired_linear.x = vx;
-            cmd.desired_linear.y = (drive_type == DriveType::DIFFERENTIAL) ? 0.0 : vy;
-            cmd.desired_linear.z = 0.0;
-            cmd.desired_angular.x = 0.0;
-            cmd.desired_angular.y = 0.0;
-            cmd.desired_angular.z = degToRad(wz);
+            cmd.cmd_vel.linear.x = vx;
+            cmd.cmd_vel.linear.y = (drive_type == DriveType::DIFFERENTIAL) ? 0.0 : vy;
+            cmd.cmd_vel.linear.z = 0.0;
+            cmd.cmd_vel.angular.x = 0.0;
+            cmd.cmd_vel.angular.y = 0.0;
+            cmd.cmd_vel.angular.z = degToRad(wz);
             timed_velocity_cmd = true;
             velocity_duration_s = duration;
             if (drive_type == DriveType::DIFFERENTIAL) {
@@ -248,7 +268,7 @@ int main(int argc, char** argv) {
                          title.c_str(),
                          vx,
                          wz,
-                         cmd.desired_angular.z,
+                         cmd.cmd_vel.angular.z,
                          duration);
             } else {
                 ROS_INFO("Publish %s [vx=%.2fm/s, vy=%.2fm/s, wz=%.2fdeg/s -> %.3frad/s] for %.2fs",
@@ -256,7 +276,7 @@ int main(int argc, char** argv) {
                          vx,
                          vy,
                          wz,
-                         cmd.desired_angular.z,
+                         cmd.cmd_vel.angular.z,
                          duration);
             }
         } else {
@@ -265,9 +285,11 @@ int main(int argc, char** argv) {
         }
 
         if (timed_velocity_cmd) {
+            ROS_INFO("Publish timed command to %s", topic.c_str());
             publishTimedVelocityCommand(control_pub, cmd, velocity_duration_s);
             ROS_INFO("Velocity command finished, switched to HOLD");
         } else {
+            ROS_INFO("Publish command to %s", topic.c_str());
             control_pub.publish(cmd);
             ros::spinOnce();
             ros::Duration(0.1).sleep();

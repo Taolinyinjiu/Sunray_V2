@@ -588,13 +588,17 @@ bool formation::canFitDynamicPath(const double max_abs_offset_x, const double ma
 {
     // 动态轨迹会持续运行一段时间，因此不能只检查当前相位点；
     // 这里要求整条轨迹在 XY 平面上都能放进场地，且至少离边界 2*orca_radius_。
+    // 对 Z 方向不再额外扣减 2*orca_radius_：
+    // 1. 对 UGV 而言，Z 仅表示地面附近高度，不参与平面避碰；
+    // 2. 若继续沿用 XY 的安全边界逻辑，会导致 z 范围较薄时动态阵型永远无法成立；
+    // 3. 因此这里只要求 leader_z 位于场地 Z 范围内即可。
     const double safe_margin = 2.0 * orca_radius_;
     return current_formation_cmd_.leader_pos.x - max_abs_offset_x >= field_x_min_ + safe_margin &&
            current_formation_cmd_.leader_pos.x + max_abs_offset_x <= field_x_max_ - safe_margin &&
            current_formation_cmd_.leader_pos.y - max_abs_offset_y >= field_y_min_ + safe_margin &&
            current_formation_cmd_.leader_pos.y + max_abs_offset_y <= field_y_max_ - safe_margin &&
-           current_formation_cmd_.leader_pos.z >= field_z_min_ + safe_margin &&
-           current_formation_cmd_.leader_pos.z <= field_z_max_ - safe_margin;
+           current_formation_cmd_.leader_pos.z >= field_z_min_ &&
+           current_formation_cmd_.leader_pos.z <= field_z_max_;
 }
 
 bool formation::isPointSafeFromObstacles(const double x, const double y) const

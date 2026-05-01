@@ -13,6 +13,10 @@
   <arg name="node_name" default="localization_fusion_ugv" />
   <arg name="set_global_params" default="true" />
   <arg name="vrpn_server" default="192.168.20.15" />
+  <arg name="global_frame_id" default="$(arg ugv_name)$(arg ugv_id)/sunray_global" />
+  <arg name="world_frame_id" default="world" />
+  <arg name="local_frame_id" default="$(arg ugv_name)$(arg ugv_id)/sunray_local" />
+  <arg name="base_frame_id" default="$(arg ugv_name)$(arg ugv_id)/base_link" />
 
   <param if="$(arg set_global_params)" name="/ugv_name" value="$(arg ugv_name)" />
   <param if="$(arg set_global_params)" name="/ugv_id" value="$(arg ugv_id)" />
@@ -34,5 +38,9 @@
     <param name="use_receive_time" value="$(arg use_receive_time)" />
     <param name="ugv_name" value="$(arg ugv_name)" />
     <param name="ugv_id" value="$(arg ugv_id)" />
+    <param name="global_frame_id" value="$(arg global_frame_id)" />
+    <param name="world_frame_id" value="$(arg world_frame_id)" />
+    <param name="local_frame_id" value="$(arg local_frame_id)" />
+    <param name="base_frame_id" value="$(arg base_frame_id)" />
   </node>
 </launch>

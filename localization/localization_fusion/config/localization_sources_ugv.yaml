@@ -10,3 +10,13 @@ sources_list:
         localization_mode: global
         odometry_topic: "${uav_ns}/odom"
         relocalization_topic: ""
+        
+    PENGYU_SIM:
+        # 定位源序号
+        source_id: 5
+        # 输入类型：只输入local系下的里程计
+        localization_mode: local
+        # 订阅的里程计话题
+        odometry_topic: "${uav_ns}/pengyu_sim/odom"
+        # 订阅的重定位话题
+        relocalization_topic: ""

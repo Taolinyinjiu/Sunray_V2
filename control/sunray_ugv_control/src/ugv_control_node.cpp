@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include "sunray_ugv_control/ugv_control_fsm.h"
+#include "ugv_control_fsm.h"
 
 int main(int argc, char** argv) {
   // 初始化ROS节点

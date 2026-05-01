@@ -1,0 +1,15 @@
+<launch>
+  <arg name="uav_id" default="1" />
+  <arg name="node_name" default="uav_control_panel_node" />
+  <arg name="rviz_frame_id" default="world" />
+  <arg name="marker_topic" default="/uav$(arg uav_id)/sunray/uav_control_panel/markers" />
+
+  <node pkg="control_tools"
+        type="uav_control_panel_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="uav_id" type="int" value="$(arg uav_id)" />
+    <param name="rviz_frame_id" value="$(arg rviz_frame_id)" />
+    <param name="marker_topic" value="$(arg marker_topic)" />
+  </node>
+</launch>

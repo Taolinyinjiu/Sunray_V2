@@ -1,0 +1,16 @@
+<launch>
+  <arg name="agent_name" default="ugv" />
+  <arg name="agent_id" default="1" />
+  <arg name="cmd_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/control_cmd" />
+  <arg name="state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/ugv_control_fsm_state" />
+
+  <node pkg="sunray_ugv_control"
+        type="ugv_control_panel_node"
+        name="ugv_control_panel_node"
+        output="screen">
+    <param name="agent_name" type="str" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="$(arg agent_id)" />
+    <param name="cmd_topic" value="$(arg cmd_topic)" />
+    <param name="state_topic" value="$(arg state_topic)" />
+  </node>
+</launch>

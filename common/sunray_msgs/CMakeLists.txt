@@ -30,7 +30,6 @@ add_message_files(
   UAVSwarmState.msg
   UGVControlCMD.msg
   UGVControlFSMState.msg
-  UGVControllerState.msg
   UGVSwarmCMD.msg
   UGVSwarmState.msg
   Vector2.msg

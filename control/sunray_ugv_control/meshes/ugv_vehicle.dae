@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <contributor>
+      <authoring_tool>OpenAI Codex</authoring_tool>
+    </contributor>
+    <unit name="meter" meter="1"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+
+  <library_effects>
+    <effect id="body_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <diffuse><color>0.14 0.55 0.47 1</color></diffuse>
+            <specular><color>0.15 0.15 0.15 1</color></specular>
+            <shininess><float>24</float></shininess>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+    <effect id="wheel_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <diffuse><color>0.09 0.09 0.09 1</color></diffuse>
+            <specular><color>0.04 0.04 0.04 1</color></specular>
+            <shininess><float>6</float></shininess>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+    <effect id="window_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <diffuse><color>0.22 0.29 0.34 1</color></diffuse>
+            <specular><color>0.25 0.25 0.25 1</color></specular>
+            <shininess><float>32</float></shininess>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+
+  <library_materials>
+    <material id="body_material" name="body_material">
+      <instance_effect url="#body_effect"/>
+    </material>
+    <material id="wheel_material" name="wheel_material">
+      <instance_effect url="#wheel_effect"/>
+    </material>
+    <material id="window_material" name="window_material">
+      <instance_effect url="#window_effect"/>
+    </material>
+  </library_materials>
+
+  <library_geometries>
+    <geometry id="ugv_vehicle_geometry" name="ugv_vehicle_geometry">
+      <mesh>
+        <source id="ugv_vehicle_positions">
+          <float_array id="ugv_vehicle_positions_array" count="180">
+            -0.14 -0.10 0.02   0.14 -0.10 0.02   0.14 0.10 0.02   -0.14 0.10 0.02
+            -0.14 -0.10 0.12   0.14 -0.10 0.12   0.14 0.10 0.12   -0.14 0.10 0.12
+            -0.07 -0.08 0.12   0.07 -0.08 0.12   0.07 0.08 0.12   -0.07 0.08 0.12
+            -0.07 -0.08 0.17   0.07 -0.08 0.17   0.07 0.08 0.17   -0.07 0.08 0.17
+
+            -0.09 -0.11 0.00   -0.05 -0.11 0.00   -0.05 -0.07 0.00   -0.09 -0.07 0.00
+            -0.09 -0.11 0.05   -0.05 -0.11 0.05   -0.05 -0.07 0.05   -0.09 -0.07 0.05
+
+            0.05 -0.11 0.00   0.09 -0.11 0.00   0.09 -0.07 0.00   0.05 -0.07 0.00
+            0.05 -0.11 0.05   0.09 -0.11 0.05   0.09 -0.07 0.05   0.05 -0.07 0.05
+
+            -0.09 0.07 0.00   -0.05 0.07 0.00   -0.05 0.11 0.00   -0.09 0.11 0.00
+            -0.09 0.07 0.05   -0.05 0.07 0.05   -0.05 0.11 0.05   -0.09 0.11 0.05
+
+            0.05 0.07 0.00   0.09 0.07 0.00   0.09 0.11 0.00   0.05 0.11 0.00
+            0.05 0.07 0.05   0.09 0.07 0.05   0.09 0.11 0.05   0.05 0.11 0.05
+
+            -0.02 -0.10 0.12   0.12 -0.10 0.12   0.12 -0.10 0.16   -0.02 -0.10 0.16
+            -0.02 0.10 0.12   0.12 0.10 0.12   0.12 0.10 0.16   -0.02 0.10 0.16
+            0.12 -0.10 0.12   0.12 0.10 0.12   0.12 0.10 0.16   0.12 -0.10 0.16
+          </float_array>
+          <technique_common>
+            <accessor source="#ugv_vehicle_positions_array" count="60" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ugv_vehicle_vertices">
+          <input semantic="POSITION" source="#ugv_vehicle_positions"/>
+        </vertices>
+
+        <triangles material="body_material" count="24">
+          <input semantic="VERTEX" source="#ugv_vehicle_vertices" offset="0"/>
+          <p>
+            0 1 2 0 2 3 4 6 5 4 7 6 0 4 5 0 5 1 1 5 6 1 6 2 2 6 7 2 7 3 3 7 4 3 4 0
+            8 9 10 8 10 11 12 14 13 12 15 14 8 12 13 8 13 9 9 13 14 9 14 10 10 14 15 10 15 11 11 15 12 11 12 8
+          </p>
+        </triangles>
+
+        <triangles material="wheel_material" count="48">
+          <input semantic="VERTEX" source="#ugv_vehicle_vertices" offset="0"/>
+          <p>
+            16 17 18 16 18 19 20 22 21 20 23 22 16 20 21 16 21 17 17 21 22 17 22 18 18 22 23 18 23 19 19 23 20 19 20 16
+            24 25 26 24 26 27 28 30 29 28 31 30 24 28 29 24 29 25 25 29 30 25 30 26 26 30 31 26 31 27 27 31 28 27 28 24
+            32 33 34 32 34 35 36 38 37 36 39 38 32 36 37 32 37 33 33 37 38 33 38 34 34 38 39 34 39 35 35 39 36 35 36 32
+            40 41 42 40 42 43 44 46 45 44 47 46 40 44 45 40 45 41 41 45 46 41 46 42 42 46 47 42 47 43 43 47 44 43 44 40
+          </p>
+        </triangles>
+
+        <triangles material="window_material" count="6">
+          <input semantic="VERTEX" source="#ugv_vehicle_vertices" offset="0"/>
+          <p>
+            48 49 50 48 50 51 52 54 53 52 55 54 56 57 58 56 58 59
+          </p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="ugv_vehicle" name="ugv_vehicle">
+        <instance_geometry url="#ugv_vehicle_geometry">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="body_material" target="#body_material"/>
+              <instance_material symbol="wheel_material" target="#wheel_material"/>
+              <instance_material symbol="window_material" target="#window_material"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+
+  <scene>
+    <instance_visual_scene url="#Scene"/>
+  </scene>
+</COLLADA>

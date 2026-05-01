@@ -1,10 +1,12 @@
 # UGV控制配置文件
 
-# 无人车ID
-ugv_id: "ugv_1"
+# 机器人身份参数
+# 话题前缀统一由 agent_name + agent_id 生成，例如 /ugv1
+agent_name: "ugv"
+agent_id: 1
 
 # 底盘类型：1=麦克纳姆轮，2=差速轮
-drive_type: 2
+drive_type: 1
 
 # 控制器参数
 kp_linear: 0.5
