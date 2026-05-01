@@ -71,6 +71,7 @@ class PlanningFSM {
     bool task_active_{false};
     bool task_arrived_{false};
     bool hover_hold_{false};
+    bool control_fsm_trajectory_ack_{false};
     uint8_t passthrough_control_cmd_{sunray_msgs::UAVControlCMD::UNDEFINE};
     uint32_t task_id_{0};
     bool has_control_fsm_state_{false};
@@ -82,5 +83,6 @@ class PlanningFSM {
 
     ros::Time last_terminal_log_stamp_;
     ros::Time last_control_fsm_state_stamp_;
+    ros::Time last_goal_accept_stamp_;
     std::string log_file_path_;
 };

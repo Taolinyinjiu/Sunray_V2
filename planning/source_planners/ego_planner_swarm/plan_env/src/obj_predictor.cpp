@@ -274,16 +274,5 @@ Eigen::Vector3d ObjPredictor::evaluatePoly(int obj_id, double time)
   return Eigen::Vector3d(MAX, MAX, MAX);
 }
 
-Eigen::Vector3d ObjPredictor::evaluateConstVel(int obj_id, double time)
-{
-  if ( obj_id < obj_num_ )
-  {
-    return predict_trajs_->at(obj_id).evaluateConstVel(time);
-  }
-
-  double MAX = std::numeric_limits<double>::max();
-  return Eigen::Vector3d(MAX, MAX, MAX);
-}
-
 // ObjPredictor::
 }  // namespace fast_planner

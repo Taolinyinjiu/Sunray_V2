@@ -1,4 +1,5 @@
 #include <plan_manage/ego_replan_fsm.h>
+#include <plan_manage/uav_namespace_topic_utils.h>
 namespace ego_planner
 {
   uint8_t EGOReplanFSM::toSunrayPlannerState(FSM_EXEC_STATE state) const
@@ -17,7 +18,8 @@ namespace ego_planner
     case EXEC_TRAJ:
       return sunray_msgs::UAVPlanningState::PLANNER_STATE_EXEC;
     case EMERGENCY_STOP:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP;
+      return emergency_recoverable_ ? sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN
+                                    : sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP;
     default:
       return sunray_msgs::UAVPlanningState::PLANNER_STATE_UNDEFINE;
     }
@@ -38,7 +40,7 @@ namespace ego_planner
     case EXEC_TRAJ:
       return "EXEC";
     case EMERGENCY_STOP:
-      return "EMERGENCY_STOP";
+      return emergency_recoverable_ ? "REPLAN" : "EMERGENCY_STOP";
     case SEQUENTIAL_START:
       return "GENERATE";
     default:
@@ -49,10 +51,48 @@ namespace ego_planner
   void EGOReplanFSM::fillPlanningStateCommonFields(sunray_msgs::UAVPlanningState &msg) const
   {
     msg.header.stamp = ros::Time::now();
+    msg.task_id = 0;
     msg.planner_type = sunray_msgs::UAVPlanningState::PLANNER_EGO;
     msg.planner_type_string = "EGO";
-    msg.planning_fsm_state = sunray_msgs::UAVPlanningState::INIT;
-    msg.planning_fsm_state_string = "INIT";
+
+    switch (exec_state_)
+    {
+    case INIT:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::INIT;
+      msg.planning_fsm_state_string = "INIT";
+      break;
+    case WAIT_TARGET:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::READY;
+      msg.planning_fsm_state_string = "READY";
+      break;
+    case GEN_NEW_TRAJ:
+    case REPLAN_TRAJ:
+    case SEQUENTIAL_START:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::PLANNING;
+      msg.planning_fsm_state_string = "PLANNING";
+      break;
+    case EXEC_TRAJ:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::MOVE;
+      msg.planning_fsm_state_string = "MOVE";
+      break;
+    case EMERGENCY_STOP:
+      if (enable_fail_safe_)
+      {
+        msg.planning_fsm_state = sunray_msgs::UAVPlanningState::PLANNING;
+        msg.planning_fsm_state_string = "PLANNING";
+      }
+      else
+      {
+        msg.planning_fsm_state = sunray_msgs::UAVPlanningState::EMERGENCY_KILL;
+        msg.planning_fsm_state_string = "EMERGENCY_KILL";
+      }
+      break;
+    default:
+      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::UNDEFINE;
+      msg.planning_fsm_state_string = "UNDEFINE";
+      break;
+    }
+
     msg.planning_frame = sunray_msgs::UAVPlanningState::SUNRAY_LOCAL;
     msg.planning_frame_string = "SUNRAY_LOCAL";
     msg.cmd_source = sunray_msgs::UAVPlanningState::CONTROL_CMD;
@@ -105,11 +145,38 @@ namespace ego_planner
     fillPlanningStateCommonFields(planning_state_msg);
     planning_state_msg.planner_state = planner_state;
     planning_state_msg.planner_state_string = planner_state_string;
+
+    if (planner_state == sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS)
+    {
+      planning_state_msg.planning_fsm_state = sunray_msgs::UAVPlanningState::ARRIVED;
+      planning_state_msg.planning_fsm_state_string = "ARRIVED";
+    }
+    else if (planner_state == sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP)
+    {
+      planning_state_msg.planning_fsm_state = sunray_msgs::UAVPlanningState::EMERGENCY_KILL;
+      planning_state_msg.planning_fsm_state_string = "EMERGENCY_KILL";
+    }
+
     planning_state_pub_.publish(planning_state_msg);
   }
 
   void EGOReplanFSM::init(ros::NodeHandle &nh)
   {
+    node_ = ros::NodeHandle();
+    uav_ns_ = loadUavNamespaceOrThrow(node_, nh);
+    planner_config_ = loadPlannerConfigOrThrow(nh, uav_ns_);
+    const int uav_id = loadRequiredGlobalIntParamOrThrow(node_, "/uav_id");
+    const std::string planner_target_topic = makePlannerTopic("target_point", uav_ns_);
+    const std::string planner_state_topic = makePlannerTopic("state", uav_ns_);
+    const std::string planner_trajectory_topic = makePlannerTopic("trajectory", uav_ns_);
+    const std::string planner_data_display_topic = makePlannerTopic("data_display", uav_ns_);
+    const std::string planner_broadcast_send_topic = makePlannerTopic("broadcast_bspline_from_planner", uav_ns_);
+    const std::string planner_broadcast_recv_topic = makePlannerTopic("broadcast_bspline_to_planner", uav_ns_);
+    const std::string planner_swarm_trajs_topic = makePlannerTopic("swarm_trajs", uav_ns_);
+    const std::string planner_trigger_topic = makePlannerTopic("traj_start_trigger", uav_ns_);
+    const std::string prev_uav_ns = sunray_common::normalize_uav_ns(
+        loadRequiredGlobalStringParamOrThrow(node_, "/uav_name") + std::to_string(uav_id - 1));
+
     current_wp_ = 0;
     waypoint_num_ = 0;
     wp_id_ = -1;
@@ -120,6 +187,7 @@ namespace ego_planner
     have_recv_pre_agent_ = false;
     have_trigger_ = false;
     flag_escape_emergency_ = false;
+    emergency_recoverable_ = true;
     odom_pos_.setZero();
     odom_vel_.setZero();
     odom_acc_.setZero();
@@ -168,10 +236,10 @@ namespace ego_planner
 
     /* initialize main modules */
     // RVIZ显示相关类
-    visualization_.reset(new PlanningVisualization(nh));
+    visualization_.reset(new PlanningVisualization(nh, uav_ns_));
     // 规划类
     planner_manager_.reset(new EGOPlannerManager);
-    planner_manager_->initPlanModules(nh, visualization_);
+    planner_manager_->initPlanModules(nh, planner_config_, uav_ns_, visualization_);
     planner_manager_->deliverTrajToOptimizer(); // store trajectories
     planner_manager_->setDroneIdtoOpt();
 
@@ -185,38 +253,35 @@ namespace ego_planner
     // 安全检查定时器
     safety_timer_ = nh.createTimer(ros::Duration(0.05), &EGOReplanFSM::checkCollisionCallback, this);
     // 订阅里程计
-    odom_sub_ = nh.subscribe("odom_world", 1, &EGOReplanFSM::odometryCallback, this);
+    odom_sub_ = nh.subscribe(planner_config_.odom_topic, 1, &EGOReplanFSM::odometryCallback, this);
 
     // 订阅其他无人机位置
     // ego默认从0开始对无人机进行编号
     if (planner_manager_->pp_.drone_id >= 1)
     {
-      string sub_topic_name = string("/drone_") + std::to_string(planner_manager_->pp_.drone_id - 1) + string("_planning/swarm_trajs");
+      const std::string sub_topic_name = makePlannerTopic("swarm_trajs", prev_uav_ns);
       swarm_trajs_sub_ = nh.subscribe(sub_topic_name.c_str(), 10, &EGOReplanFSM::swarmTrajsCallback, this, ros::TransportHints().tcpNoDelay());
     }
-    string pub_topic_name = string("/drone_") + std::to_string(planner_manager_->pp_.drone_id) + string("_planning/swarm_trajs");
-    swarm_trajs_pub_ = nh.advertise<traj_utils::MultiBsplines>(pub_topic_name.c_str(), 10);
+    swarm_trajs_pub_ = nh.advertise<traj_utils::MultiBsplines>(planner_swarm_trajs_topic.c_str(), 10);
 
     // 广播本机规划结果
-    broadcast_bspline_pub_ = nh.advertise<traj_utils::Bspline>("planning/broadcast_bspline_from_planner", 10);
+    broadcast_bspline_pub_ = nh.advertise<traj_utils::Bspline>(planner_broadcast_send_topic, 10);
     // 订阅其他无人机的规划结果
-    broadcast_bspline_sub_ = nh.subscribe("planning/broadcast_bspline_to_planner", 100, &EGOReplanFSM::BroadcastBsplineCallback, this, ros::TransportHints().tcpNoDelay());
+    broadcast_bspline_sub_ = nh.subscribe(planner_broadcast_recv_topic, 100, &EGOReplanFSM::BroadcastBsplineCallback, this, ros::TransportHints().tcpNoDelay());
 
-    bspline_pub_ = nh.advertise<traj_utils::Bspline>("planning/bspline", 10);
-    data_disp_pub_ = nh.advertise<traj_utils::DataDisp>("planning/data_display", 100);
-    planning_state_pub_ = nh.advertise<sunray_msgs::UAVPlanningState>("planning/state", 10);
+    bspline_pub_ = nh.advertise<traj_utils::Bspline>(planner_trajectory_topic, 10);
+    data_disp_pub_ = nh.advertise<traj_utils::DataDisp>(planner_data_display_topic, 100);
+    planning_state_pub_ = nh.advertise<sunray_msgs::UAVPlanningState>(planner_state_topic, 10);
 
     // 目标点输入模式
     if (target_type_ == TARGET_TYPE::EXTERNAL_TARGET)
     {
-      // 统一通过planner_interface持有的目标接口输入。
-      // launch负责将~move_base_simple/goal重映射到具体planner goal topic。
-      waypoint_sub_ = nh.subscribe("move_base_simple/goal", 1, &EGOReplanFSM::waypointCallback, this);
+      waypoint_sub_ = nh.subscribe(planner_target_topic, 1, &EGOReplanFSM::waypointCallback, this);
     }
     else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
     {
-      // PRESET_TARGET：预设目标点，并通过"/traj_start_trigger"话题触发
-      trigger_sub_ = nh.subscribe("/traj_start_trigger", 1, &EGOReplanFSM::triggerCallback, this);
+      // PRESET_TARGET：预设目标点，并通过 planner 私有 trigger 话题触发
+      trigger_sub_ = nh.subscribe(planner_trigger_topic, 1, &EGOReplanFSM::triggerCallback, this);
 
       ros::Duration(5.0).sleep();
 
@@ -829,6 +894,7 @@ namespace ego_planner
       cout << RED << node_name << "Depth Lost! EMERGENCY_STOP" << TAIL << endl;
 
       enable_fail_safe_ = false;
+      emergency_recoverable_ = false;
       changeFSMExecState(EMERGENCY_STOP, "SAFETY");
     }
 
@@ -880,6 +946,7 @@ namespace ego_planner
           {
             cout << RED << node_name << "Suddenly discovered obstacles. emergency stop! time = " <<  t - t_cur << TAIL << endl;
 
+            emergency_recoverable_ = true;
             changeFSMExecState(EMERGENCY_STOP, "SAFETY");
           }
           else

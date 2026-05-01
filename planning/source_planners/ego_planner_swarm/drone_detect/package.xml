@@ -7,14 +7,19 @@
   <license>BSD</license>
   <author email="zjujiangchaozhu@gmail.com">Jiangchao Zhu</author>
 
-  <!-- buildtool_depend: dependencies of the build process -->
   <buildtool_depend>catkin</buildtool_depend>
-  <!-- build_depend: dependencies only used in source files -->
   <build_depend>boost</build_depend>
-  <!-- depend: build, export, and execution dependency -->
+  <build_depend>roslint</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>message_filters</build_depend>
+  <build_depend>sunray_common</build_depend>
+
   <depend>eigen</depend>
   <depend>roscpp</depend>
   <depend>sensor_msgs</depend>
 
-  <build_depend>roslint</build_depend>
+  <build_export_depend>sunray_common</build_export_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>sunray_common</exec_depend>
 </package>

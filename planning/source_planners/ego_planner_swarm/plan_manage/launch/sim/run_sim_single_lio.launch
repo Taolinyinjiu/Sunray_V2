@@ -1,0 +1,10 @@
+<!-- EGO-Planner 仿真版本 - 使用 LIO 里程计 -->
+<launch>
+  <arg name="odom_topic" default="/sunray/odometry"/>
+  <arg name="cloud_topic" default="/sunray/pointCloud"/>
+
+  <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+  </include>
+</launch>

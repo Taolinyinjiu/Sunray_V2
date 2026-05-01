@@ -41,6 +41,10 @@
     <include file="$(find localization_fusion)/launch/localization_gazebo_aruco.launch" />
   </group>
 
+  <group if="$(eval int(arg('source_id')) == 6)">
+    <include file="$(find localization_fusion)/launch/localization_fastlio_ekf.launch" />
+  </group>
+
   <!-- 启动融合节点 -->
   <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg node_name)" output="screen">
     <!-- 将参数设置为节点私有参数 -->

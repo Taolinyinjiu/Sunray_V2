@@ -1,5 +1,6 @@
 #include "bspline_opt/bspline_optimizer.h"
 #include "bspline_opt/gradient_descent_optimizer.h"
+#include <plan_manage/uav_namespace_topic_utils.h>
 // using namespace std;
 
 namespace ego_planner
@@ -18,8 +19,8 @@ namespace ego_planner
     nh.param("optimization/max_acc", max_acc_, -1.0);
 
     nh.param("optimization/order", order_, 3);
-    int id;
-    nh.param("manager/drone_id", id, -1);
+    const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
+    const int id = uav_id - 1;
 
     node_name = "[BsplineOptimizer_uav" + std::to_string(id)+"] -- ";
 

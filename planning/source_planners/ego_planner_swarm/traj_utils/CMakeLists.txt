@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geometry_msgs
   message_generation
+  sunray_common
   #cv_bridge
 )
 
@@ -35,8 +36,8 @@ generate_messages(
 
 catkin_package(
  INCLUDE_DIRS include
- LIBRARIES traj_utils 
- CATKIN_DEPENDS message_runtime
+ LIBRARIES traj_utils
+ CATKIN_DEPENDS message_runtime sunray_common
 #  DEPENDS system_lib
 )
 

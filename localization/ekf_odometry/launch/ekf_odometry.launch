@@ -1,12 +1,11 @@
 <?xml version="1.0"?>
 <launch>
+    <arg name="log_type" default="screen" />
+
     <!-- IMU EKF Odometry Node -->
-    <node pkg="ekf_odometry" type="ekf_odometry_node" name="ekf_odometry_node" output="screen">
-        
+    <node pkg="ekf_odometry" type="ekf_odometry_node" name="ekf_odometry_node" output="$(arg log_type)">
         <!-- Topic names -->
         <param name="imu_topic" type="string" value="/livox/imu" />
         <param name="odom_topic" type="string" value="/sunray/odometry" />
-    
     </node>
-    
 </launch>

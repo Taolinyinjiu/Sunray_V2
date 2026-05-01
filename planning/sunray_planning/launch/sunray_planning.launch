@@ -1,5 +1,5 @@
 <launch>
-  <arg name="planner_type" default="ego" />
+  <arg name="planner_type" default="diff" />
   <arg name="uav_name" default="uav" />
   <arg name="uav_id" default="1" />
   <arg name="node_name" default="sunray_planning_node" />

@@ -241,10 +241,18 @@ bool PX4_OriginController::move_point_impl(controller_data_types::TargetPoint_t 
 
     control_common::Mavros_SetpointLocal send_setpoint;
     send_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
+    send_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
+                         control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
     const curve::QuinticCurveState curve_result = move_point_curve_.get_result();
     // Keep point mode close to historical "position hold" semantics:
     // smooth only the position reference, and avoid quintic velocity/acceleration
-    // feedforward that can make move_point much more aggressive.
+    // feedforward that can make move_point much more aggressive. Mask them out as
+    // well so PX4 consumes this as a position+yaw reference instead of a mixed setpoint.
     send_setpoint.position = curve_result.valid ? curve_result.position : point.position;
     send_setpoint.velocity = Eigen::Vector3d::Zero();
     send_setpoint.accel_or_force = Eigen::Vector3d::Zero();
@@ -403,7 +411,10 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             mavros_helper_.pub_local_setpoint(setpoint_cmd);
             cache_local_setpoint(setpoint_cmd);
 
-            const double pos_err = (uav_odometry_.position - quint_curve_.get_end_position()).norm();
+            const Eigen::Vector3d takeoff_goal = quint_curve_.get_end_position();
+            // PX4 原生位置环在起飞末段可能保留较大的水平稳态误差。
+            // TAKEOFF 只需要确认“达到目标高度并稳定下来”，否则会因为 xy 误差卡在 TAKEOFF。
+            const double pos_err = std::abs(uav_odometry_.position.z() - takeoff_goal.z());
             const double vel_err = uav_odometry_.velocity.norm();
             if (!arrival_helper::update_and_check(
                     takeoff_arrival_state_, takeoff_arrival_config_, pos_err, vel_err, now)) {
@@ -411,7 +422,8 @@ bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_ta
             }
 
             takeoff_complete_.store(true, std::memory_order_relaxed);
-            hover_point_ = quint_curve_.get_end_position();
+            // 切到 HOVER 后锁定当前实位置，避免用理想起飞终点继续施加横向回拉。
+            hover_point_ = uav_odometry_.position;
             hover_yaw_ = takeoff_yaw_;
             start_checkout_offboard_time_ = ros::Time(0);
             last_checkout_offboard_time_ = ros::Time(0);

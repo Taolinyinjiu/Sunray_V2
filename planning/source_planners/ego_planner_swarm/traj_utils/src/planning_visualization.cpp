@@ -1,7 +1,22 @@
 #include <traj_utils/planning_visualization.h>
 
+#include <string_uav_namespace_utils.hpp>
+
 using std::cout;
 using std::endl;
+namespace {
+std::string makePlannerTopic(const std::string &suffix, const std::string &uav_ns) {
+  const std::string normalized_uav_ns = sunray_common::normalize_uav_ns(uav_ns);
+  if (normalized_uav_ns.empty()) {
+    return normalized_uav_ns;
+  }
+  if (suffix.empty()) {
+    return normalized_uav_ns + "/sunray/planning/ego_planner";
+  }
+  return normalized_uav_ns + "/sunray/planning/ego_planner/" + suffix;
+}
+}  // namespace
+
 namespace ego_planner
 {
   PlanningVisualization::PlanningVisualization(ros::NodeHandle &nh)
@@ -13,6 +28,17 @@ namespace ego_planner
     init_list_pub = nh.advertise<visualization_msgs::Marker>("init_list", 2);
     optimal_list_pub = nh.advertise<visualization_msgs::Marker>("optimal_list", 2);
     a_star_list_pub = nh.advertise<visualization_msgs::Marker>("a_star_list", 20);
+  }
+
+  PlanningVisualization::PlanningVisualization(ros::NodeHandle &nh, const std::string &uav_ns)
+  {
+    node = nh;
+
+    goal_point_pub = nh.advertise<visualization_msgs::Marker>(makePlannerTopic("goal_point", uav_ns), 2);
+    global_list_pub = nh.advertise<visualization_msgs::Marker>(makePlannerTopic("global_list", uav_ns), 2);
+    init_list_pub = nh.advertise<visualization_msgs::Marker>(makePlannerTopic("init_list", uav_ns), 2);
+    optimal_list_pub = nh.advertise<visualization_msgs::Marker>(makePlannerTopic("optimal_list", uav_ns), 2);
+    a_star_list_pub = nh.advertise<visualization_msgs::Marker>(makePlannerTopic("a_star_list", uav_ns), 20);
   }
 
   // // real ids used: {id, id+1000}

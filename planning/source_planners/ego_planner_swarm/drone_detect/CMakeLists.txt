@@ -16,6 +16,7 @@ find_package(catkin REQUIRED
     roslint
     cv_bridge
     message_filters
+    sunray_common
 )
 
 ## Find system libraries
@@ -41,6 +42,7 @@ catkin_package(
   CATKIN_DEPENDS
     roscpp
     sensor_msgs
+    sunray_common
   DEPENDS OpenCV Eigen Boost
   ## find_package(Eigen3) provides a non standard EIGEN3_INCLUDE_DIR instead of Eigen3_INCLUDE_DIRS.
   ## Therefore, the DEPEND does not work as expected and we need to add the directory to the INCLUDE_DIRS

@@ -70,3 +70,7 @@ docs/
 localization/vins-fusion/config/
 localization/vins-fusion-gpu/config/
 localization/vins-fusion-gpu/config/sunray_150/sunray_nx_150.yaml
+patch_jetson_benchmarks_load_store_engine.sh
+write_download_models_test.sh
+download_models_test.py
+tools/build_scripts/bin/sunray_tui

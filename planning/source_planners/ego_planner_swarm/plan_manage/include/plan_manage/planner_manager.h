@@ -11,6 +11,7 @@
 #include <traj_utils/plan_container.hpp>
 #include <ros/ros.h>
 #include <traj_utils/planning_visualization.h>
+#include <plan_manage/uav_namespace_topic_utils.h>
 #include "printf_utils.h"
 
 namespace ego_planner
@@ -37,7 +38,10 @@ namespace ego_planner
     bool planGlobalTrajWaypoints(const Eigen::Vector3d &start_pos, const Eigen::Vector3d &start_vel, const Eigen::Vector3d &start_acc,
                                  const std::vector<Eigen::Vector3d> &waypoints, const Eigen::Vector3d &end_vel, const Eigen::Vector3d &end_acc);
 
-    void initPlanModules(ros::NodeHandle &nh, PlanningVisualization::Ptr vis = NULL);
+    void initPlanModules(ros::NodeHandle &nh,
+                         const Planner_Config_t_ &planner_config,
+                         const std::string &uav_ns,
+                         PlanningVisualization::Ptr vis = NULL);
 
     void deliverTrajToOptimizer(void) { bspline_optimizer_->setSwarmTrajs(&swarm_trajs_buf_); };
 

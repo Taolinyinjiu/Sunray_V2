@@ -22,6 +22,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <cv_bridge/cv_bridge.h>
+#include <string_uav_namespace_utils.hpp>
 
 namespace detect {
 
@@ -97,6 +98,10 @@ class DroneDetector
   // other drones subscriber
   ros::Subscriber drone0_odom_sub_, drone1_odom_sub_, drone2_odom_sub_, droneX_odom_sub_;
   std::string drone1_odom_topic_, drone2_odom_topic_;
+  std::string my_odom_topic_;
+  std::string depth_topic_;
+  std::string others_odom_topic_;
+  std::string debug_info_topic_;
 
   ros::Subscriber my_odom_sub_, depth_img_sub_;
   bool has_odom_;

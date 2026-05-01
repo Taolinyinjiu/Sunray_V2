@@ -8,7 +8,6 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   roscpp
   roslib
-  std_msgs
   sunray_common
   sunray_msgs
 )
@@ -21,7 +20,6 @@ catkin_package(
     geometry_msgs
     roscpp
     roslib
-    std_msgs
     sunray_common
     sunray_msgs
 )
@@ -34,10 +32,10 @@ include_directories(
 )
 
 add_library(sunray_planning
-  src/planning_fsm.cpp
+  src/sunray_planning_fsm.cpp
+  src/sunray_planning_logs.cpp
   src/planner_interface/diff_planner.cpp
   src/planner_interface/ego_planner.cpp
-  src/planner_interface/planner_interface.cpp
 )
 
 target_link_libraries(sunray_planning
@@ -50,13 +48,5 @@ add_executable(sunray_planning_node
 
 target_link_libraries(sunray_planning_node
   sunray_planning
-  ${catkin_LIBRARIES}
-)
-
-add_executable(pose_goal_to_planning_cmd_node
-  src/pose_goal_to_planning_cmd_node.cpp
-)
-
-target_link_libraries(pose_goal_to_planning_cmd_node
   ${catkin_LIBRARIES}
 )

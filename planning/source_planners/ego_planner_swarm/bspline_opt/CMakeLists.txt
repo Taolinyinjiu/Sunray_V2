@@ -23,7 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES bspline_opt
- CATKIN_DEPENDS plan_env 
+ CATKIN_DEPENDS plan_env traj_utils path_searching
 #  DEPENDS system_lib
 )
 
@@ -36,11 +36,14 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/../plan_manage/include
 )
 
-add_library( bspline_opt 
-    src/uniform_bspline.cpp 
-    src/bspline_optimizer.cpp 
+add_library( bspline_opt
+    src/uniform_bspline.cpp
+    src/bspline_optimizer.cpp
     src/gradient_descent_optimizer.cpp
     )
 target_link_libraries( bspline_opt
-    ${catkin_LIBRARIES} 
-    )  
+    ${catkin_LIBRARIES}
+    -Wl,--no-as-needed
+    plan_env
+    -Wl,--as-needed
+    )

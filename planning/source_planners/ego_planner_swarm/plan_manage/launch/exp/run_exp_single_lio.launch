@@ -1,0 +1,12 @@
+<!-- EGO-Planner 实验版本 - 使用 LIO 里程计 -->
+<launch>
+  <!-- 里程计话题名 -->
+  <arg name="odom_topic" default="${uav_ns}/sunray/localization/local_odom" />
+  <!-- 全局点云 -->
+  <arg name="cloud_topic" default="${uav_ns}/sunray/localization/global_points" />
+
+  <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+  </include>
+</launch>

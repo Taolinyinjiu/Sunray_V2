@@ -7,9 +7,9 @@ basic_param:
     # 重力加速度
     gravity: 9.8
     # 归一化悬停推力 (从px4的日志中直接读取)
-    hover_thrust_percent: 0.375 
+    hover_thrust_percent: 0.375
     # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller(不支持速度接口)
-    controller_types: 1
+    controller_types: 2
     # 控制器更新频率(Hz)
     controller_update_frequency: 100
     # 状态机低频监督循环频率(Hz)
