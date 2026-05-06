@@ -88,9 +88,8 @@ swarm/
 │   ├── swarm_control_ugv_monitor_node.cpp
 │   ├── rviz_visualization_uav_node.cpp
 │   ├── rviz_visualization_ugv_node.cpp
+│   ├── swarm_control_panel_node.cpp # Qt 集群控制面板
 │   └── meshes/
-├── gui/
-│   └── swarm_control_panel_node.cpp # Qt 集群控制面板
 ├── launch/                          # 仿真启动、工具启动、测试启动
 ├── rviz/                            # RViz 配置
 ├── example/
@@ -234,7 +233,7 @@ Parameters：
 
 功能：
 
-集中订阅所有 UAV 的 `UAVSwarmState`，在一个终端中刷新显示 UAV 集群控制状态，避免多节点同时打印导致终端刷屏。
+集中订阅所有 UAV 的 `UAVSwarmState`，在一个终端中刷新显示 UAV 集群控制状态，避免多节点同时打印导致终端刷屏。面板按“基本状态、集群位姿、集群输入、控制输出”分段显示，并在话题名后标注“订阅/发布”方向。
 
 Subscribed Topics：
 
@@ -256,7 +255,7 @@ Parameters：
 
 功能：
 
-集中订阅所有 UGV 的 `UGVSwarmState`，在一个终端中刷新显示 UGV 集群控制状态。该节点会按照当前车辆 ID 排除自身，显示邻居 odom 话题范围，例如 `/ugv[1-2,4-6]/sunray/localization/local_odom`。
+集中订阅所有 UGV 的 `UGVSwarmState`，在一个终端中刷新显示 UGV 集群控制状态。面板按“基本状态、集群位姿、集群输入、控制输出”分段显示，并在话题名后标注“订阅/发布”方向。该节点会按照当前车辆 ID 排除自身，显示邻居 odom 话题范围，例如 `/ugv[1-2,4-6]/sunray/localization/local_odom`。
 
 Subscribed Topics：
 
@@ -562,49 +561,237 @@ UGV 集群控制指令，通常由 terminal、Qt 面板或其他上层模块发�
 
 描述阵型目标点生成所需的所有参数。该消息由集群指令携带，传入 `formation` 类后生成每个 agent 的目标 `x/y/z/yaw`。
 
-阵型类型：
+消息源码结构：
 
-| 枚举 | 含义 |
+```text
+std_msgs/Header header
+
+uint8 STATIC_KEEP_FORMATION=0
+uint8 STATIC_FORMATION_LINE=1
+uint8 STATIC_FORMATION_POLYGON=2
+uint8 STATIC_FORMATION_RANDOM=3
+uint8 STATIC_FORMATION_CUSTOM=9
+
+uint8 DYNAMIC_FORMATION_RING=11
+uint8 DYNAMIC_FORMATION_POLYGON=12
+uint8 DYNAMIC_FORMATION_LEMNISCATE=13
+
+uint8 formation_type
+geometry_msgs/Point leader_pos
+float32 leader_yaw
+float32 dynamic_time
+
+float32 static_line_spacing
+float32 static_line_angle
+float32 static_polygon_spacing
+geometry_msgs/Point[] custom_offsets_pos
+float32[] custom_offsets_yaw
+
+float32 dynamic_ring_radius
+float32 dynamic_ring_move_speed
+float32 dynamic_polygon_spacing
+float32 dynamic_polygon_move_speed
+float32 dynamic_lemniscate_x_radius
+float32 dynamic_lemniscate_y_radius
+float32 dynamic_lemniscate_move_speed
+```
+
+公共约定：
+
+| 名称 | 含义 |
 | --- | --- |
-| `STATIC_KEEP_FORMATION=0` | 抓拍当前全集群相对位置关系，并整体平移到虚拟 leader 附近 |
-| `STATIC_FORMATION_LINE=1` | 静态直线阵型，方向由 `static_line_angle` 指定 |
-| `STATIC_FORMATION_POLYGON=2` | 静态正 N 边形阵型，N 等于当前集群数量 |
-| `STATIC_FORMATION_RANDOM=3` | 静态随机阵型，目标点满足场地和安全距离约束 |
-| `STATIC_FORMATION_CUSTOM=9` | 自定义静态阵型，每个 agent 使用外部指定 offset |
-| `DYNAMIC_FORMATION_RING=11` | 动态圆环，所有智能体绕圆心运动 |
-| `DYNAMIC_FORMATION_POLYGON=12` | 动态多边形，所有智能体沿正 N 边形边线运动 |
-| `DYNAMIC_FORMATION_LEMNISCATE=13` | 动态 8 字形 Lemniscate 轨迹 |
+| `leader_pos` | 虚拟 leader 的世界系位置，也是阵型参考点 |
+| `leader_yaw` | 虚拟 leader 的 yaw；静态阵型中作为目标 yaw 参考，部分动态阵型中作为初始相位 |
+| `orca_radius_` | `orca/radius`，智能体等效避碰半径 |
+| `minSafeDistance()` | 最小安全距离，当前为 `3 * orca_radius_` |
+| `maxSafeDistance()` | 最大安全距离，当前为 `10 * orca_radius_` |
+| `isSpacingInSafeRange()` | 判断间距是否位于 `[minSafeDistance(), maxSafeDistance()]` |
+| `orca_max_speed_` | `orca/max_speed`，ORCA 输出最大平面速度 |
+| 场地限制 | 最终目标点必须位于 `field/x_min~x_max`、`field/y_min~y_max`、`field/z_min~z_max` 内 |
+| 障碍物限制 | 若启用圆形静态障碍物，目标点不能进入 `obstacle_radius + orca_radius_` 范围 |
 
-公共字段：
+#### 6.3.1 `STATIC_KEEP_FORMATION`
 
-| 字段 | 类型 | 单位 | 说明 |
-| --- | --- | --- | --- |
-| `formation_type` | `uint8` | - | 阵型类型 |
-| `leader_pos` | `geometry_msgs/Point` | m | 虚拟 leader 位置，也是阵型参考点 |
-| `leader_yaw` | `float32` | rad | 虚拟 leader yaw |
-| `dynamic_time` | `float32` | s | 动态阵型持续时间 |
+示意图：
 
-静态阵型字段：
+```text
+抓拍时刻：          执行阵型后：
 
-| 字段 | 类型 | 单位 | 说明 |
-| --- | --- | --- | --- |
-| `static_line_spacing` | `float32` | m | 静态直线阵型相邻智能体间距 |
-| `static_line_angle` | `float32` | deg | 静态直线与世界系 X 轴夹角 |
-| `static_polygon_spacing` | `float32` | m | 静态正 N 边形边长 |
-| `custom_offsets_pos` | `geometry_msgs/Point[]` | m | 自定义 offset，`custom_offsets_pos[i]` 对应 `agent_id=i+1` |
-| `custom_offsets_yaw` | `float32[]` | rad | 自定义 yaw offset，`custom_offsets_yaw[i]` 对应 `agent_id=i+1` |
+  A2      A3          A2'     A3'
+      C                   L
+ A1      A4          A1'     A4'
 
-动态阵型字段：
+C = 抓拍得到的几何中心
+L = 新的虚拟 leader_pos
+```
 
-| 字段 | 类型 | 单位 | 说明 |
-| --- | --- | --- | --- |
-| `dynamic_ring_radius` | `float32` | m | 动态圆环半径 |
-| `dynamic_ring_move_speed` | `float32` | m/s | 动态圆环切向速度，正值逆时针，负值顺时针 |
-| `dynamic_polygon_spacing` | `float32` | m | 动态正 N 边形边长 |
-| `dynamic_polygon_move_speed` | `float32` | m/s | 沿多边形边线运动速度 |
-| `dynamic_lemniscate_x_radius` | `float32` | m | 8 字轨迹 X 方向尺度 |
-| `dynamic_lemniscate_y_radius` | `float32` | m | 8 字轨迹 Y 方向尺度 |
-| `dynamic_lemniscate_move_speed` | `float32` | m/s | 8 字轨迹相位推进速度 |
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `STATIC_KEEP_FORMATION=0` |
+| 相关参数 | `leader_pos`、`leader_yaw` |
+| 几何含义 | 抓拍当前全集群相对位置关系，然后把这组 offset 整体平移到新的虚拟 leader 附近 |
+| 安全限制 | 不检查智能体之间的距离，只检查最终目标点是否在场地内、是否避开圆形静态障碍物 |
+| 速度限制 | 无独立速度参数，移动过程由 ORCA 的 `orca_max_speed_` 限制 |
+
+#### 6.3.2 `STATIC_FORMATION_LINE`
+
+示意图：
+
+```text
+angle = 0 deg:
+
+A1 ---- A2 ---- L ---- A3 ---- A4
+        <--- spacing --->
+
+angle = 90 deg 时，整条直线沿世界系 Y 轴展开。
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `STATIC_FORMATION_LINE=1` |
+| 相关参数 | `static_line_spacing`、`static_line_angle`、`leader_pos`、`leader_yaw` |
+| 几何含义 | 所有智能体沿一条直线等间距分布，虚拟 leader 位于队列几何中心 |
+| 角度定义 | `static_line_angle` 单位为 deg，表示直线方向与世界系 X 轴夹角 |
+| 安全限制 | `1 <= swarm_num <= 10`，`isSpacingInSafeRange(static_line_spacing)` 必须为 true |
+| 速度限制 | 无独立速度参数，移动过程由 ORCA 的 `orca_max_speed_` 限制 |
+
+#### 6.3.3 `STATIC_FORMATION_POLYGON`
+
+示意图：
+
+```text
+N = 6:
+
+      A1
+   A6    A2
+      L
+   A5    A3
+      A4
+
+相邻顶点距离 = static_polygon_spacing
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `STATIC_FORMATION_POLYGON=2` |
+| 相关参数 | `static_polygon_spacing`、`leader_pos`、`leader_yaw` |
+| 几何含义 | `swarm_num=N` 时，所有智能体位于正 N 边形顶点，虚拟 leader 位于几何中心 |
+| 安全限制 | `3 <= swarm_num <= 10`，`isSpacingInSafeRange(static_polygon_spacing)` 必须为 true |
+| 速度限制 | 无独立速度参数，移动过程由 ORCA 的 `orca_max_speed_` 限制 |
+
+#### 6.3.4 `STATIC_FORMATION_RANDOM`
+
+示意图：
+
+```text
+场地安全范围内随机生成：
+
++-----------------------+
+|   A2          A5      |
+|        A1             |
+|             L         |
+| A4              A3    |
++-----------------------+
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `STATIC_FORMATION_RANDOM=3` |
+| 相关参数 | `leader_pos`、`leader_yaw`、消息时间戳 |
+| 几何含义 | 在场地安全范围内随机生成每个 agent 的最终目标点，再转换成相对虚拟 leader 的 offset |
+| 安全限制 | `1 <= swarm_num <= 10`，任意两个随机目标点的三维距离必须通过 `isSpacingInSafeRange()` |
+| 场地限制 | 随机采样范围会从场地边界向内收缩 `2 * orca_radius_`，并限制在虚拟 leader 附近，避免随机阵型过度分散 |
+| 速度限制 | 无独立速度参数，移动过程由 ORCA 的 `orca_max_speed_` 限制 |
+
+#### 6.3.5 `STATIC_FORMATION_CUSTOM`
+
+示意图：
+
+```text
+用户直接指定 offset:
+
+leader_pos + custom_offsets_pos[0] -> A1
+leader_pos + custom_offsets_pos[1] -> A2
+leader_pos + custom_offsets_pos[2] -> A3
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `STATIC_FORMATION_CUSTOM=9` |
+| 相关参数 | `custom_offsets_pos`、`custom_offsets_yaw`、`leader_pos`、`leader_yaw` |
+| 几何含义 | 外部直接指定每个智能体相对虚拟 leader 的位置和 yaw 偏移 |
+| 数组规则 | `custom_offsets_pos[i]` 和 `custom_offsets_yaw[i]` 对应 `agent_id=i+1` |
+| 安全限制 | 两个数组长度必须都等于 `swarm_num`；任意两个自定义目标点的三维距离必须通过 `isSpacingInSafeRange()`；最终目标点还必须在场地内、避开圆形静态障碍物 |
+| 速度限制 | 无独立速度参数，移动过程由 ORCA 的 `orca_max_speed_` 限制 |
+
+#### 6.3.6 `DYNAMIC_FORMATION_RING`
+
+示意图：
+
+```text
+        A1 ->
+    A4       A2
+         L
+    A3       A5
+
+所有智能体在圆周上均匀分布，并沿切向运动。
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `DYNAMIC_FORMATION_RING=11` |
+| 相关参数 | `dynamic_ring_radius`、`dynamic_ring_move_speed`、`dynamic_time`、`leader_pos`、`leader_yaw` |
+| 几何含义 | 虚拟 leader 为圆心，智能体均匀分布在圆周上，并按切向速度绕圆运动 |
+| 半径限制 | `swarm_num >= 2`，`dynamic_ring_radius > 0`，相邻弦长 `2 * dynamic_ring_radius * sin(pi / swarm_num)` 必须通过 `isSpacingInSafeRange()` |
+| 场地限制 | 整个圆轨迹必须能放进场地 XY 安全范围，边界安全余量为 `2 * orca_radius_` |
+| 速度限制 | `0.05m/s <= abs(dynamic_ring_move_speed) <= orca_max_speed_`，`dynamic_time > 0` |
+
+#### 6.3.7 `DYNAMIC_FORMATION_POLYGON`
+
+示意图：
+
+```text
+N = 4:
+
+A1 ----> A2
+^        |
+|   L    v
+A4 <---- A3
+
+所有智能体沿正 N 边形边线循环运动。
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `DYNAMIC_FORMATION_POLYGON=12` |
+| 相关参数 | `dynamic_polygon_spacing`、`dynamic_polygon_move_speed`、`dynamic_time`、`leader_pos`、`leader_yaw` |
+| 几何含义 | 所有智能体沿正 N 边形周长运动，不同智能体在周长参数上错开一个边长 |
+| 间距限制 | `3 <= swarm_num <= 10`，`isSpacingInSafeRange(dynamic_polygon_spacing)` 必须为 true |
+| 场地限制 | 正 N 边形外接圆必须能放进场地 XY 安全范围，边界安全余量为 `2 * orca_radius_` |
+| 速度限制 | `0.05m/s <= abs(dynamic_polygon_move_speed) <= orca_max_speed_`，`dynamic_time > 0` |
+
+#### 6.3.8 `DYNAMIC_FORMATION_LEMNISCATE`
+
+示意图：
+
+```text
+        ↗ A1 ↘
+     ↗         ↘
+   A4     L     A2
+     ↘         ↗
+        ↘ A3 ↗
+
+所有智能体沿同一条 8 字轨迹运动，初始相位分布在同一侧半瓣内部，避免偶数机在中心自交点重叠。
+```
+
+| 项 | 说明 |
+| --- | --- |
+| 枚举 | `DYNAMIC_FORMATION_LEMNISCATE=13` |
+| 相关参数 | `dynamic_lemniscate_x_radius`、`dynamic_lemniscate_y_radius`、`dynamic_lemniscate_move_speed`、`dynamic_time`、`leader_pos`、`leader_yaw` |
+| 几何含义 | 虚拟 leader 为 8 字轨迹中心，所有智能体沿同一条 Lemniscate 轨迹运动；初始相位使用单侧半瓣队列，任意两机初始相位差小于 `pi` |
+| 尺寸限制 | `1 <= swarm_num <= 10`，`dynamic_lemniscate_x_radius` 和 `dynamic_lemniscate_y_radius` 都必须通过 `isSpacingInSafeRange()` |
+| 场地限制 | 8 字轨迹必须能放进场地 XY 安全范围，边界安全余量为 `2 * orca_radius_` |
+| 速度限制 | `0.05m/s <= abs(dynamic_lemniscate_move_speed) <= orca_max_speed_`，`dynamic_time > 0` |
 
 ### 6.4 `sunray_msgs/UAVSwarmState`
 
@@ -1070,7 +1257,7 @@ roslaunch sunray_swarm_control orca_test.launch transition_case_count:=200
 | `swarm/formation/formation.cpp` | 实现目标点计算，并在 `GetFormationGoal()` 中接入 |
 | `swarm/utils/uav_swarm_cmd_pub_terminal.cpp` | 增加终端参数输入和显示 |
 | `swarm/utils/ugv_swarm_cmd_pub_terminal.cpp` | 增加终端参数输入和显示 |
-| `swarm/gui/swarm_control_panel_node.cpp` | 增加 Qt 面板参数编辑 |
+| `swarm/utils/swarm_control_panel_node.cpp` | 增加 Qt 面板参数编辑 |
 | `swarm/utils/*monitor*.cpp` | 增加阵型名称显示 |
 | `swarm/utils/rviz_visualization_*_node.cpp` | 增加阵型名称显示 |
 

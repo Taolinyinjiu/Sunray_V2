@@ -214,7 +214,7 @@ target_link_libraries(swarm_control_ugv_monitor_node ${catkin_LIBRARIES})
 # - 订阅 UAVSwarmState / UGVSwarmState 并在表格中显示关键状态。
 # ------------------------------------------------------------------------------
 add_executable(swarm_control_panel_node
-  ${PROJECT_SOURCE_DIR}/gui/swarm_control_panel_node.cpp
+  ${PROJECT_SOURCE_DIR}/utils/swarm_control_panel_node.cpp
 )
 add_dependencies(swarm_control_panel_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(swarm_control_panel_node

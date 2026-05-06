@@ -303,7 +303,7 @@ bool formation::computeStaticRandomOffset(const int agent_index,
     // 静态随机阵型：
     // 1. 随机生成的是世界坐标系下的最终目标点；
     // 2. 所有目标点必须位于场地边界向内收缩 2*orca_radius_ 后的安全范围内；
-    // 3. 任意两个目标点之间的三维距离必须大于 2*orca_radius_ + 0.1；
+    // 3. 任意两个目标点之间的三维距离必须位于 [3*orca_radius_, 10*orca_radius_]；
     // 4. 生成后转成相对虚拟 leader 的 offset，供统一的 GetFormationGoal 出口使用。
     if (agent_num_ < 1 || agent_num_ > 10)
     {
@@ -333,23 +333,36 @@ bool formation::computeStaticRandomOffset(const int agent_index,
 bool formation::generateStaticRandomOffsets(const uint32_t seed)
 {
     const double safe_margin = 2.0 * orca_radius_;
-    const double min_distance = 2.0 * orca_radius_ + 0.1;
     const double safe_x_min = field_x_min_ + safe_margin;
     const double safe_x_max = field_x_max_ - safe_margin;
     const double safe_y_min = field_y_min_ + safe_margin;
     const double safe_y_max = field_y_max_ - safe_margin;
     const double safe_z_min = field_z_min_ + safe_margin;
     const double safe_z_max = field_z_max_ - safe_margin;
+    const double max_spacing = maxSafeDistance();
 
-    if (safe_x_min >= safe_x_max || safe_y_min >= safe_y_max || safe_z_min >= safe_z_max)
+    if (safe_x_min >= safe_x_max || safe_y_min >= safe_y_max || safe_z_min >= safe_z_max || max_spacing <= 0.0)
     {
         return false;
     }
 
     std::mt19937 rng(seed);
-    std::uniform_real_distribution<double> dist_x(safe_x_min, safe_x_max);
-    std::uniform_real_distribution<double> dist_y(safe_y_min, safe_y_max);
-    std::uniform_real_distribution<double> dist_z(safe_z_min, safe_z_max);
+    const double sample_half_range = 0.5 * max_spacing;
+    const double sample_x_min = std::max(safe_x_min, current_formation_cmd_.leader_pos.x - sample_half_range);
+    const double sample_x_max = std::min(safe_x_max, current_formation_cmd_.leader_pos.x + sample_half_range);
+    const double sample_y_min = std::max(safe_y_min, current_formation_cmd_.leader_pos.y - sample_half_range);
+    const double sample_y_max = std::min(safe_y_max, current_formation_cmd_.leader_pos.y + sample_half_range);
+    const double sample_z_min = std::max(safe_z_min, current_formation_cmd_.leader_pos.z - sample_half_range);
+    const double sample_z_max = std::min(safe_z_max, current_formation_cmd_.leader_pos.z + sample_half_range);
+
+    if (sample_x_min >= sample_x_max || sample_y_min >= sample_y_max || sample_z_min >= sample_z_max)
+    {
+        return false;
+    }
+
+    std::uniform_real_distribution<double> dist_x(sample_x_min, sample_x_max);
+    std::uniform_real_distribution<double> dist_y(sample_y_min, sample_y_max);
+    std::uniform_real_distribution<double> dist_z(sample_z_min, sample_z_max);
 
     std::vector<double> target_x;
     std::vector<double> target_y;
@@ -373,20 +386,21 @@ bool formation::generateStaticRandomOffsets(const uint32_t seed)
                 continue;
             }
 
-            bool too_close = false;
+            bool invalid_spacing = false;
             for (size_t j = 0; j < target_x.size(); ++j)
             {
                 const double dx = candidate_x - target_x[j];
                 const double dy = candidate_y - target_y[j];
                 const double dz = candidate_z - target_z[j];
-                if (std::sqrt(dx * dx + dy * dy + dz * dz) <= min_distance)
+                const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (!isSpacingInSafeRange(distance))
                 {
-                    too_close = true;
+                    invalid_spacing = true;
                     break;
                 }
             }
 
-            if (too_close)
+            if (invalid_spacing)
             {
                 continue;
             }
@@ -474,9 +488,8 @@ bool formation::computeStaticLineOffset(const int agent_index,
         return false;
     }
 
-    // spacing 限制范围：下限为 ORCA 避碰半径*2+0.1，上限暂定 3.0 m
-    const double min_spacing = 2.0 * orca_radius_ + 0.1;
-    if (spacing < min_spacing || spacing > 3.0)
+    // spacing 限制范围：下限为 3 倍 ORCA 避碰半径，上限为 10 倍 ORCA 避碰半径
+    if (!isSpacingInSafeRange(spacing))
     {
         return false;
     }
@@ -509,6 +522,11 @@ bool formation::computeStaticPolygonOffset(const int agent_index,
         return false;
     }
 
+    if (!isSpacingInSafeRange(spacing))
+    {
+        return false;
+    }
+
     if (!computeRegularPolygonVertex(agent_index, agent_num_, spacing, offset_x, offset_y))
     {
         return false;
@@ -530,9 +548,7 @@ bool formation::computeRegularPolygonVertex(const int vertex_index,
         return false;
     }
 
-    // spacing 限制范围：下限为 ORCA 避碰半径*2+0.1，上限暂定 3.0 m
-    const double min_spacing = 2.0 * orca_radius_ + 0.1;
-    if (spacing < min_spacing || spacing > 3.0)
+    if (spacing <= 0.0)
     {
         return false;
     }
@@ -563,6 +579,25 @@ bool formation::computeStaticCustomOffset(const int agent_index,
         return false;
     }
 
+    std::vector<double> target_x;
+    std::vector<double> target_y;
+    std::vector<double> target_z;
+    target_x.reserve(static_cast<size_t>(agent_num_));
+    target_y.reserve(static_cast<size_t>(agent_num_));
+    target_z.reserve(static_cast<size_t>(agent_num_));
+    for (int i = 0; i < agent_num_; ++i)
+    {
+        const geometry_msgs::Point &offset = current_formation_cmd_.custom_offsets_pos[static_cast<size_t>(i)];
+        target_x.push_back(current_formation_cmd_.leader_pos.x + offset.x);
+        target_y.push_back(current_formation_cmd_.leader_pos.y + offset.y);
+        target_z.push_back(current_formation_cmd_.leader_pos.z + offset.z);
+    }
+
+    if (!areTargetDistancesInSafeRange(target_x, target_y, target_z))
+    {
+        return false;
+    }
+
     // 解算 offset
     const size_t idx = static_cast<size_t>(agent_index);
     const geometry_msgs::Point &offset = current_formation_cmd_.custom_offsets_pos[idx];
@@ -575,7 +610,47 @@ bool formation::computeStaticCustomOffset(const int agent_index,
 
 double formation::minSafeDistance() const
 {
-    return 2.0 * orca_radius_ + 0.1;
+    return 3.0 * orca_radius_;
+}
+
+double formation::maxSafeDistance() const
+{
+    return 10.0 * orca_radius_;
+}
+
+bool formation::isSpacingInSafeRange(const double spacing) const
+{
+    return spacing >= minSafeDistance() && spacing <= maxSafeDistance();
+}
+
+bool formation::areTargetDistancesInSafeRange(const std::vector<double> &target_x,
+                                              const std::vector<double> &target_y,
+                                              const std::vector<double> &target_z) const
+{
+    if (target_x.size() != static_cast<size_t>(agent_num_) || target_y.size() != static_cast<size_t>(agent_num_) ||
+        target_z.size() != static_cast<size_t>(agent_num_))
+    {
+        return false;
+    }
+
+    for (int i = 0; i < agent_num_; ++i)
+    {
+        for (int j = i + 1; j < agent_num_; ++j)
+        {
+            const size_t idx_i = static_cast<size_t>(i);
+            const size_t idx_j = static_cast<size_t>(j);
+            const double dx = target_x[idx_i] - target_x[idx_j];
+            const double dy = target_y[idx_i] - target_y[idx_j];
+            const double dz = target_z[idx_i] - target_z[idx_j];
+            const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (!isSpacingInSafeRange(distance))
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 bool formation::isDynamicMoveSpeedValid(const double move_speed) const
@@ -642,11 +717,11 @@ bool formation::computeDynamicRingOffset(const int agent_index,
 
     // 圆环半径：
     // 1. 必须大于 0；
-    // 2. 相邻智能体弦长必须满足 ORCA 基础安全距离；
+    // 2. 相邻智能体弦长必须位于 [minSafeDistance(), maxSafeDistance()]；
     // 3. 整个圆环必须能放进当前场地安全范围。
     const double adjacent_chord =
         2.0 * radius * std::sin(kPi / static_cast<double>(agent_num_));
-    if (radius <= 0.0 || adjacent_chord < minSafeDistance() || !canFitDynamicPath(radius, radius))
+    if (radius <= 0.0 || !isSpacingInSafeRange(adjacent_chord) || !canFitDynamicPath(radius, radius))
     {
         return false;
     }
@@ -692,7 +767,7 @@ bool formation::computeDynamicPolygonOffset(const int agent_index,
     }
 
     const double polygon_radius = spacing / (2.0 * std::sin(kPi / static_cast<double>(agent_num_)));
-    if (spacing < minSafeDistance() || spacing > 3.0 || !canFitDynamicPath(polygon_radius, polygon_radius))
+    if (!isSpacingInSafeRange(spacing) || !canFitDynamicPath(polygon_radius, polygon_radius))
     {
         return false;
     }
@@ -753,7 +828,7 @@ bool formation::computeDynamicLemniscateOffset(const int agent_index,
     // 动态 Lemniscate / 8 字轨迹：
     // 1. leader_pos 为 8 字轨迹中心；
     // 2. leader_yaw 用作初始相位偏置，不旋转轨迹几何；
-    // 3. 不同智能体通过相位错开，沿同一条 8 字轨迹运动；
+    // 3. 初始相位只分布在同一侧半瓣内部，避免偶数机出现 phase 相差 pi 的重叠点；
     // 4. yaw 始终指向当前轨迹切线方向。
     if (agent_num_ < 1 || agent_num_ > 10 || agent_index < 0 || agent_index >= agent_num_)
     {
@@ -761,7 +836,7 @@ bool formation::computeDynamicLemniscateOffset(const int agent_index,
     }
 
     const double y_extent = 0.5 * y_radius;
-    if (x_radius < minSafeDistance() || y_radius < minSafeDistance() ||
+    if (!isSpacingInSafeRange(x_radius) || !isSpacingInSafeRange(y_radius) ||
         !isDynamicMoveSpeedValid(move_speed) || !canFitDynamicPath(x_radius, y_extent))
     {
         return false;
@@ -769,7 +844,10 @@ bool formation::computeDynamicLemniscateOffset(const int agent_index,
 
     const double equivalent_radius = std::max(0.5 * (x_radius + y_radius), 1e-6);
     const double omega = move_speed / equivalent_radius;
-    const double base_phase = 2.0 * kPi * static_cast<double>(agent_index) / static_cast<double>(agent_num_);
+    const double phase_margin = 0.10 * kPi;
+    const double phase_span = kPi - 2.0 * phase_margin;
+    const double base_phase = phase_margin + phase_span * (static_cast<double>(agent_index) + 0.5) /
+                                                 static_cast<double>(agent_num_);
     const double phase = static_cast<double>(current_formation_cmd_.leader_yaw) + base_phase + omega * current_formation_time_;
     const double sin_phase = std::sin(phase);
     const double cos_phase = std::cos(phase);

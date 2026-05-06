@@ -116,6 +116,11 @@ class formation
     bool generateStaticRandomOffsets(uint32_t seed);
     uint32_t makeStaticRandomSeed(const sunray_msgs::Formation &formation_cmd) const;
     double minSafeDistance() const;
+    double maxSafeDistance() const;
+    bool isSpacingInSafeRange(double spacing) const;
+    bool areTargetDistancesInSafeRange(const std::vector<double> &target_x,
+                                       const std::vector<double> &target_y,
+                                       const std::vector<double> &target_z) const;
     bool isDynamicMoveSpeedValid(double move_speed) const;
     bool canFitDynamicPath(double max_abs_offset_x, double max_abs_offset_y) const;
     bool isPointSafeFromObstacles(double x, double y) const;
@@ -148,7 +153,7 @@ class formation
     };
 
     int agent_num_{0}; // 当前阵型类维护的集群总人数
-    double orca_radius_{0.0}; // ORCA 避碰半径，阵型几何参数至少需要满足 2 倍半径的安全间距
+    double orca_radius_{0.0}; // ORCA 避碰半径，阵型几何间距需满足 [minSafeDistance(), maxSafeDistance()]
     double orca_max_speed_{1.0}; // ORCA 最大平面速度，动态阵型速度上限不能超过该值
     double field_x_min_{-100.0}; // 场地 X 最小值，单位：米
     double field_x_max_{100.0};  // 场地 X 最大值，单位：米

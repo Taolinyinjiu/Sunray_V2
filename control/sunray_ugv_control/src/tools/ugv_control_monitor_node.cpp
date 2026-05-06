@@ -255,7 +255,7 @@ std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
        << " ===================" << kAnsiReset << "\n";
 
     ss << kAnsiLabel << " 基本状态 " << kAnsiReset
-       << "状态话题 -> " << fsmStateTopicText(state) << "\n";
+       << "状态话题（发布） -> " << fsmStateTopicText(state) << "\n";
 
     ss << "          "
        << "Name = " << state.agent_name
@@ -264,7 +264,7 @@ std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
        << "  FSM = " << coloredFsmName(state.fsm_state) << "\n";
 
     ss << kAnsiLabel << " 本机位姿 " << kAnsiReset
-       << "位姿话题 -> " << odomTopicText(state) << "\n";
+       << "位姿话题（订阅） -> " << odomTopicText(state) << "\n";
 
     ss << "          "
        << "ODOM状态 = " << okText(state.odom_valid)
@@ -277,7 +277,7 @@ std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
        << "  yaw = " << std::setw(5) << yaw * kRadToDeg << " deg\n";
 
     ss << kAnsiLabel << " 控制输入 " << kAnsiReset
-       << "指令话题 -> " << cmdTopicText(state) << "\n";
+       << "指令话题（订阅） -> " << cmdTopicText(state) << "\n";
 
     ss << "          "
        << "指令状态 = " << okText(state.control_cmd_valid)
@@ -291,7 +291,7 @@ std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
        << "控制目标 -> " << currentTargetText(state) << "\n";
 
     ss << kAnsiLabel << " 控制输出 " << kAnsiReset
-       << "速度话题 -> " << cmdVelTopicText(state) << "\n";
+       << "速度话题（发布） -> " << cmdVelTopicText(state) << "\n";
 
     ss << "           "
        << "vx = " << std::setw(6) << state.controller_cmd_vel.linear.x << " m/s"

@@ -299,14 +299,14 @@ std::string formatUgvStatus(const sunray_msgs::UGVSwarmState &state, const std::
     ss << kColorCyan << "================ UGV 集群控制状态面板 | " << agent_name << static_cast<int>(state.agent_id)
        << " ================" << kColorReset << '\n';
 
-    ss << " 基本状态  状态话题 -> " << swarmStateTopicText() << '\n';
+    ss << " 基本状态  状态话题（发布） -> " << swarmStateTopicText() << '\n';
     ss << "           Name = " << agent_name
        << "  ID = " << static_cast<int>(state.agent_id)
        << "  集群数量 = " << state.swarm_num
        << "  集群FSM = " << colorText(swarmStateName(state.fsm_state), kColorYellow) << '\n';
 
-    ss << " 集群位姿  本机位姿话题 -> " << localOdomTopicText(agent_name, state) << '\n';
-    ss << "           邻居位姿话题 -> " << peerOdomTopicText(agent_name, state) << '\n';
+    ss << " 集群位姿  本机位姿话题（订阅） -> " << localOdomTopicText(agent_name, state) << '\n';
+    ss << "           邻居位姿话题（订阅） -> " << peerOdomTopicText(agent_name, state) << '\n';
     ss << "           本机ODOM状态 = " << formatBool(state.self_odom_ready)
        << "  邻居ODOM状态 = "
        << (state.peers_odom_ready ? colorText("正常", kColorGreen)
@@ -330,7 +330,7 @@ std::string formatUgvStatus(const sunray_msgs::UGVSwarmState &state, const std::
         ss << "           无有效本机位姿\n";
     }
 
-    ss << " 集群输入  集群指令话题 -> " << swarmCmdTopicText() << '\n';
+    ss << " 集群输入  集群指令话题（订阅） -> " << swarmCmdTopicText() << '\n';
     ss << "           外部命令 = " << colorText(swarmCmdName(state.swarm_cmd.swarm_cmd), kColorYellow)
        << "  目标ID = " << formatSwarmCmdTargetId(state.swarm_cmd.agent_id) << '\n';
 
@@ -341,7 +341,7 @@ std::string formatUgvStatus(const sunray_msgs::UGVSwarmState &state, const std::
 
     ss << "           控制目标 -> " << formatTarget(state) << '\n';
 
-    ss << " 控制输出  控制指令话题 -> " << controlCmdTopicText(agent_name, state) << '\n';
+    ss << " 控制输出  控制指令话题（发布） -> " << controlCmdTopicText(agent_name, state) << '\n';
     ss << "           " << formatUgvCommand(state.ugv_cmd) << '\n';
     return ss.str();
 }

@@ -35,9 +35,16 @@ std::string colorText(const std::string &text, const char *color)
     return std::string(color) + text + kColorReset;
 }
 
-std::string panelTitle(const std::string &agent_name, const int agent_id)
+std::string formatBool(const bool value)
 {
-    return std::string("无人机集群控制状态面板 /") + agent_name + std::to_string(agent_id);
+    return value ? colorText("正常", kColorGreen) : colorText("异常", kColorRed);
+}
+
+std::string formatDouble(const double value, const int precision = 2)
+{
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(precision) << value;
+    return ss.str();
 }
 
 std::string formatTargetAgentId(const uint8_t agent_id)
@@ -52,28 +59,6 @@ double yawFromOdom(const nav_msgs::Odometry &odom)
     const double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
     const double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
     return std::atan2(siny_cosp, cosy_cosp);
-}
-
-std::string formatPeerOdomState(const sunray_msgs::UAVSwarmState &swarm_state)
-{
-    const uint32_t expected_peer_num = swarm_state.swarm_num > 0 ? swarm_state.swarm_num - 1U : 0U;
-    std::ostringstream ss;
-    ss << "邻居ODOM(" << swarm_state.ready_peer_num << "/" << expected_peer_num << ")";
-    return swarm_state.peers_odom_ready ? ss.str() : colorText(ss.str(), kColorRed);
-}
-
-std::string formatSelfOdomState(const bool ready)
-{
-    return ready ? std::string("本机ODOM(正常)") : colorText("本机ODOM(异常)", kColorRed);
-}
-
-std::string pointText(const std::string &name, const geometry_msgs::Point &pos, const float yaw)
-{
-    std::ostringstream ss;
-    ss << std::fixed << std::setprecision(2);
-    ss << name << "=(" << pos.x << ", " << pos.y << ", " << pos.z << ", "
-       << static_cast<double>(yaw) * kRadToDeg << " deg)";
-    return ss.str();
 }
 
 const char *swarmStateToString(const uint8_t state)
@@ -176,12 +161,73 @@ const char *uavControlCmdToString(const uint8_t cmd)
     }
 }
 
-std::string formationParamSummary(const sunray_msgs::Formation &formation_cmd)
+std::string agentPrefix(const std::string &agent_name, const sunray_msgs::UAVSwarmState &state)
+{
+    return "/" + agent_name + std::to_string(static_cast<int>(state.agent_id));
+}
+
+std::string swarmStateTopicText(const std::string &swarm_state_topic)
+{
+    return colorText(swarm_state_topic, kColorWhite);
+}
+
+std::string localOdomTopicText(const std::string &agent_name, const sunray_msgs::UAVSwarmState &state)
+{
+    return colorText(agentPrefix(agent_name, state) + "/sunray/localization/local_odom", kColorWhite);
+}
+
+std::string peerOdomTopicText(const std::string &agent_name, const sunray_msgs::UAVSwarmState &state)
+{
+    const int self_id = static_cast<int>(state.agent_id);
+    const int swarm_num = static_cast<int>(state.swarm_num);
+    if (swarm_num <= 1)
+    {
+        return colorText("无邻居", kColorYellow);
+    }
+
+    std::ostringstream range_ss;
+    bool has_range = false;
+    auto appendRange = [&](const int begin, const int end) {
+        if (begin > end)
+        {
+            return;
+        }
+
+        if (has_range)
+        {
+            range_ss << ",";
+        }
+
+        range_ss << begin;
+        if (begin != end)
+        {
+            range_ss << "-" << end;
+        }
+        has_range = true;
+    };
+
+    appendRange(1, self_id - 1);
+    appendRange(self_id + 1, swarm_num);
+
+    return colorText("/" + agent_name + "[" + range_ss.str() + "]/sunray/localization/local_odom", kColorWhite);
+}
+
+std::string swarmCmdTopicText()
+{
+    return colorText("/sunray/swarm/uav_swarm_cmd", kColorWhite);
+}
+
+std::string controlCmdTopicText(const std::string &agent_name, const sunray_msgs::UAVSwarmState &state)
+{
+    return colorText(agentPrefix(agent_name, state) + "/sunray/uav_control_cmd", kColorWhite);
+}
+
+std::string formatFormationCommand(const sunray_msgs::Formation &formation_cmd)
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
 
-    ss << " 阵型参数 | 类型=" << colorText(formationTypeToString(formation_cmd.formation_type), kColorYellow)
+    ss << formationTypeToString(formation_cmd.formation_type)
        << "  leader=(" << formation_cmd.leader_pos.x << ", " << formation_cmd.leader_pos.y << ", "
        << formation_cmd.leader_pos.z << ")"
        << "  yaw=" << static_cast<double>(formation_cmd.leader_yaw) * kRadToDeg << " deg";
@@ -202,20 +248,20 @@ std::string formationParamSummary(const sunray_msgs::Formation &formation_cmd)
         ss << "  custom_num=" << formation_cmd.custom_offsets_pos.size();
         break;
     case sunray_msgs::Formation::DYNAMIC_FORMATION_RING:
-        ss << "  time=" << formation_cmd.dynamic_time << " s"
-           << "  radius=" << formation_cmd.dynamic_ring_radius
-           << "  speed=" << formation_cmd.dynamic_ring_move_speed;
+        ss << "  radius=" << formation_cmd.dynamic_ring_radius
+           << "  speed=" << formation_cmd.dynamic_ring_move_speed
+           << "  time=" << formation_cmd.dynamic_time << " s";
         break;
     case sunray_msgs::Formation::DYNAMIC_FORMATION_POLYGON:
-        ss << "  time=" << formation_cmd.dynamic_time << " s"
-           << "  spacing=" << formation_cmd.dynamic_polygon_spacing
-           << "  speed=" << formation_cmd.dynamic_polygon_move_speed;
+        ss << "  spacing=" << formation_cmd.dynamic_polygon_spacing
+           << "  speed=" << formation_cmd.dynamic_polygon_move_speed
+           << "  time=" << formation_cmd.dynamic_time << " s";
         break;
     case sunray_msgs::Formation::DYNAMIC_FORMATION_LEMNISCATE:
-        ss << "  time=" << formation_cmd.dynamic_time << " s"
-           << "  x_radius=" << formation_cmd.dynamic_lemniscate_x_radius
+        ss << "  x_radius=" << formation_cmd.dynamic_lemniscate_x_radius
            << "  y_radius=" << formation_cmd.dynamic_lemniscate_y_radius
-           << "  speed=" << formation_cmd.dynamic_lemniscate_move_speed;
+           << "  speed=" << formation_cmd.dynamic_lemniscate_move_speed
+           << "  time=" << formation_cmd.dynamic_time << " s";
         break;
     default:
         break;
@@ -224,87 +270,121 @@ std::string formationParamSummary(const sunray_msgs::Formation &formation_cmd)
     return ss.str();
 }
 
-std::string controlOutputSummary(const sunray_msgs::UAVControlCMD &uav_cmd)
+std::string formatTarget(const sunray_msgs::UAVSwarmState &state)
+{
+    if (!state.target_valid)
+    {
+        return colorText("无有效目标点", kColorYellow);
+    }
+
+    std::ostringstream ss;
+    ss << "valid=true  pos=(" << formatDouble(state.target_pos.x) << ", " << formatDouble(state.target_pos.y) << ", "
+       << formatDouble(state.target_pos.z) << ") yaw=" << formatDouble(state.target_yaw * kRadToDeg) << " deg";
+    return ss.str();
+}
+
+std::string formatUavCommand(const sunray_msgs::UAVControlCMD &cmd)
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
-    ss << " 发布指令 | 模式=" << colorText(uavControlCmdToString(uav_cmd.control_cmd), kColorYellow);
+    ss << "控制指令 = " << colorText(uavControlCmdToString(cmd.control_cmd), kColorYellow);
 
-    if (uav_cmd.control_cmd == sunray_msgs::UAVControlCMD::MOVE_VELOCITY)
+    switch (cmd.control_cmd)
     {
-        ss << "  vx=" << uav_cmd.desired_vel.x
-           << "  vy=" << uav_cmd.desired_vel.y
-           << "  vz=" << uav_cmd.desired_vel.z
-           << "  yaw=" << static_cast<double>(uav_cmd.desired_yaw) * kRadToDeg << " deg";
-    }
-    else if (uav_cmd.control_cmd == sunray_msgs::UAVControlCMD::MOVE_POINT)
-    {
-        ss << "  x=" << uav_cmd.desired_pos.x
-           << "  y=" << uav_cmd.desired_pos.y
-           << "  z=" << uav_cmd.desired_pos.z
-           << "  yaw=" << static_cast<double>(uav_cmd.desired_yaw) * kRadToDeg << " deg";
+    case sunray_msgs::UAVControlCMD::TAKEOFF:
+        ss << "  原始输入 -> TAKEOFF";
+        break;
+    case sunray_msgs::UAVControlCMD::LAND:
+        ss << "  原始输入 -> LAND";
+        break;
+    case sunray_msgs::UAVControlCMD::RETURN:
+        ss << "  原始输入 -> RETURN";
+        break;
+    case sunray_msgs::UAVControlCMD::KILL:
+        ss << "  原始输入 -> KILL";
+        break;
+    case sunray_msgs::UAVControlCMD::HOVER:
+        ss << "  原始输入 -> HOVER";
+        break;
+    case sunray_msgs::UAVControlCMD::MOVE_POINT:
+        ss << "  原始输入 -> desired_pos=(" << cmd.desired_pos.x << ", " << cmd.desired_pos.y << ", "
+           << cmd.desired_pos.z << ") m  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
+        break;
+    case sunray_msgs::UAVControlCMD::MOVE_VELOCITY:
+        ss << "  原始输入 -> desired_vel=(" << cmd.desired_vel.x << ", " << cmd.desired_vel.y << ", "
+           << cmd.desired_vel.z << ") m/s  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
+        break;
+    case sunray_msgs::UAVControlCMD::MOVE_POINT_BODY:
+        ss << "  原始输入 -> body_pos=(" << cmd.desired_body_xy_pos.x << ", " << cmd.desired_body_xy_pos.y
+           << ") m  fixed_height=" << cmd.fixed_height << " m  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
+        break;
+    case sunray_msgs::UAVControlCMD::MOVE_VELOCITY_BODY:
+        ss << "  原始输入 -> body_vel=(" << cmd.desired_body_xy_vel.x << ", " << cmd.desired_body_xy_vel.y
+           << ") m/s  fixed_height=" << cmd.fixed_height << " m  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
+        break;
+    case sunray_msgs::UAVControlCMD::MOVE_POINT_WGS84:
+        ss << "  原始输入 -> wgs84=(" << cmd.desired_wgs84_pos.latitude << ", "
+           << cmd.desired_wgs84_pos.longitude << ", " << cmd.desired_wgs84_pos.altitude << ")";
+        break;
+    default:
+        break;
     }
 
     return ss.str();
 }
 
 std::string formatSwarmControlUavStatus(const sunray_msgs::UAVSwarmState &swarm_state,
-                                        const std::string &agent_name)
+                                        const std::string &agent_name,
+                                        const std::string &swarm_state_topic)
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
-    ss << kColorCyan << panelTitle(agent_name, static_cast<int>(swarm_state.agent_id)) << kColorReset << '\n'
-       << " 基本状态 | 集群数量=" << swarm_state.swarm_num
-       << "  本机ID=" << static_cast<int>(swarm_state.agent_id)
-       << "  " << formatSelfOdomState(swarm_state.self_odom_ready)
-       << "  " << formatPeerOdomState(swarm_state) << '\n';
+    ss << kColorCyan << "================ UAV 集群控制状态面板 | " << agent_name
+       << static_cast<int>(swarm_state.agent_id) << " ================" << kColorReset << '\n';
+
+    ss << " 基本状态  状态话题（发布） -> " << swarmStateTopicText(swarm_state_topic) << '\n';
+    ss << "           Name = " << agent_name
+       << "  ID = " << static_cast<int>(swarm_state.agent_id)
+       << "  集群数量 = " << swarm_state.swarm_num
+       << "  集群FSM = " << colorText(swarmStateToString(swarm_state.fsm_state), kColorYellow) << '\n';
+
+    ss << " 集群位姿  本机位姿话题（订阅） -> " << localOdomTopicText(agent_name, swarm_state) << '\n';
+    ss << "           邻居位姿话题（订阅） -> " << peerOdomTopicText(agent_name, swarm_state) << '\n';
+    ss << "           本机ODOM状态 = " << formatBool(swarm_state.self_odom_ready)
+       << "  邻居ODOM状态 = "
+       << (swarm_state.peers_odom_ready
+               ? colorText("正常", kColorGreen)
+               : colorText("异常", kColorRed) + "(" + std::to_string(swarm_state.ready_peer_num) + "/" +
+                     std::to_string(static_cast<int>(std::max<uint32_t>(swarm_state.swarm_num, 1) - 1)) + ")")
+       << '\n';
 
     if (swarm_state.self_odom_ready)
     {
-        ss << " 自机位姿 | x=" << swarm_state.self_odom.pose.pose.position.x
-           << "  y=" << swarm_state.self_odom.pose.pose.position.y
-           << "  z=" << swarm_state.self_odom.pose.pose.position.z
-           << "  yaw=" << yawFromOdom(swarm_state.self_odom) * kRadToDeg << " deg" << '\n';
+        const geometry_msgs::Point &pos = swarm_state.self_odom.pose.pose.position;
+        ss << "           本机odom信息 -> x = " << formatDouble(pos.x)
+           << " m  y = " << formatDouble(pos.y)
+           << " m  z = " << formatDouble(pos.z)
+           << " m  yaw = " << formatDouble(yawFromOdom(swarm_state.self_odom) * kRadToDeg)
+           << " deg\n";
     }
     else
     {
-        ss << " 自机位姿 | " << colorText("无有效 odom", kColorYellow) << '\n';
+        ss << "           无有效本机位姿\n";
     }
 
-    ss << " 控制状态 | 集群FSM=" << colorText(swarmStateToString(swarm_state.fsm_state), kColorYellow);
-    if (swarm_state.target_valid && swarm_state.fsm_state == sunray_msgs::UAVSwarmState::ARRIVED)
-    {
-        ss << "  " << pointText("悬停点", swarm_state.target_pos, swarm_state.target_yaw);
-    }
-    else if (swarm_state.target_valid && swarm_state.fsm_state == sunray_msgs::UAVSwarmState::RETURN_HOME)
-    {
-        ss << "  " << pointText("返航点", swarm_state.target_pos, swarm_state.target_yaw);
-    }
-    ss << '\n';
-
-    ss << " 输入命令 | 目标ID=" << formatTargetAgentId(swarm_state.swarm_cmd.agent_id)
-       << "  命令=" << colorText(swarmCmdToString(swarm_state.swarm_cmd.swarm_cmd), kColorYellow) << '\n';
+    ss << " 集群输入  集群指令话题（订阅） -> " << swarmCmdTopicText() << '\n';
+    ss << "           外部命令 = " << colorText(swarmCmdToString(swarm_state.swarm_cmd.swarm_cmd), kColorYellow)
+       << "  目标ID = " << formatTargetAgentId(swarm_state.swarm_cmd.agent_id) << '\n';
 
     if (swarm_state.swarm_cmd.swarm_cmd == sunray_msgs::UAVSwarmCMD::SWARM_FORMATION)
     {
-        ss << formationParamSummary(swarm_state.swarm_cmd.formation_cmd) << '\n';
+        ss << "           阵型参数 -> " << formatFormationCommand(swarm_state.swarm_cmd.formation_cmd) << '\n';
     }
 
-    if (swarm_state.fsm_state == sunray_msgs::UAVSwarmState::SWARM_STATIC_FORMATION ||
-        swarm_state.fsm_state == sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE ||
-        swarm_state.fsm_state == sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION)
-    {
-        if (swarm_state.target_valid)
-        {
-            ss << " 目标点   | " << pointText("goal", swarm_state.target_pos, swarm_state.target_yaw) << '\n';
-        }
-        else
-        {
-            ss << " 目标点   | " << colorText("无有效目标点", kColorYellow) << '\n';
-        }
-    }
+    ss << "           控制目标 -> " << formatTarget(swarm_state) << '\n';
 
-    ss << controlOutputSummary(swarm_state.uav_cmd) << '\n';
+    ss << " 控制输出  控制指令话题（发布） -> " << controlCmdTopicText(agent_name, swarm_state) << '\n';
+    ss << "           " << formatUavCommand(swarm_state.uav_cmd) << '\n';
     return ss.str();
 }
 
@@ -356,9 +436,6 @@ class SwarmControlUavMonitorNode
             ss << "\033[2J\033[H";
         }
 
-        ss << kColorCyan << "无人机集群控制集中监控 | topic=" << swarm_state_topic_
-           << " | online=" << onlineCount() << "/" << states_.size() << kColorReset << "\n\n";
-
         if (states_.empty())
         {
             ss << kColorRed << "等待 UAVSwarmState..." << kColorReset << '\n';
@@ -373,30 +450,14 @@ class SwarmControlUavMonitorNode
             const double age = (now - cached_state.receive_time).toSec();
             if (age > stale_timeout_)
             {
-                ss << kColorRed << "无人机集群控制状态面板 /" << agent_name_ << item.first
-                   << "  状态超时 age=" << std::fixed << std::setprecision(2) << age << " s" << kColorReset
-                   << "\n\n";
+                ss << kColorRed << agent_name_ << item.first << " 状态超时" << kColorReset << '\n';
                 continue;
             }
 
-            ss << formatSwarmControlUavStatus(cached_state.state, agent_name_) << '\n';
+            ss << formatSwarmControlUavStatus(cached_state.state, agent_name_, swarm_state_topic_);
         }
 
         std::cout << ss.str() << std::flush;
-    }
-
-    size_t onlineCount() const
-    {
-        const ros::Time now = ros::Time::now();
-        size_t count = 0;
-        for (const auto &item : states_)
-        {
-            if ((now - item.second.receive_time).toSec() <= stale_timeout_)
-            {
-                ++count;
-            }
-        }
-        return count;
     }
 
     ros::NodeHandle nh_;
