@@ -512,7 +512,7 @@ void printCommandSummary(const sunray_msgs::UAVSwarmCMD &msg)
 void loadDefaults(ros::NodeHandle &nh, std::string &swarm_cmd_topic, TerminalSession &session)
 {
     nh.param<std::string>("swarm_cmd_topic", swarm_cmd_topic, "/sunray/swarm/uav_swarm_cmd");
-    nh.param("default_agent_id", session.agent_id, 99);
+    nh.param("default_target_agent_id", session.agent_id, 99);
 
     int default_formation_type = static_cast<int>(sunray_msgs::Formation::STATIC_FORMATION_LINE);
     nh.param("default_formation_type", default_formation_type, default_formation_type);
@@ -569,7 +569,7 @@ int main(int argc, char **argv)
 
     ros::Publisher swarm_pub = nh.advertise<sunray_msgs::UAVSwarmCMD>(swarm_cmd_topic, 10);
 
-    SUNRAY_INFO("uav_swarm_cmd_pub_terminal ready: topic={} default_agent_id={} send_mode=single",
+    SUNRAY_INFO("uav_swarm_cmd_pub_terminal ready: topic={} default_target_agent_id={} send_mode=single",
                 swarm_cmd_topic,
                 session.agent_id);
 

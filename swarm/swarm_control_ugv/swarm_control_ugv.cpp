@@ -18,11 +18,13 @@ Swarm_Control_UGV::Swarm_Control_UGV(ros::NodeHandle &nh)
     : nh_(nh)
 {
     // 1. 读取基础参数。
-    nh_.param("ugv_id", params_.ugv_id, 1);
+    nh_.param("agent_id", params_.agent_id, 1);
     nh_.param("swarm_num", params_.swarm_num, 1);
-    nh_.param("ugv_name", params_.ugv_name, std::string("ugv"));
+    nh_.param("agent_name", params_.agent_name, std::string("ugv"));
     nh_.param("control_loop_hz", params_.control_loop_hz, 50.0 /*Hz*/);
     nh_.param("peer_odom_timeout", params_.peer_odom_timeout, 0.1 /*秒*/);
+    nh_.param("dynamic_prepare_wait_time", params_.dynamic_prepare_wait_time, 2.0 /*秒*/);
+    params_.dynamic_prepare_wait_time = std::max(0.0, params_.dynamic_prepare_wait_time);
 
     // 2. 读取到达阈值参数。
     nh_.param("goal_xy_tolerance", params_.goal_xy_tolerance, 0.1 /*米*/);
@@ -97,7 +99,7 @@ Swarm_Control_UGV::Swarm_Control_UGV(ros::NodeHandle &nh)
         }
     }
 
-    const std::string self_ns = "/" + params_.ugv_name + std::to_string(params_.ugv_id);
+    const std::string self_ns = "/" + params_.agent_name + std::to_string(params_.agent_id);
     const std::string local_odom_topic = self_ns + "/sunray/localization/local_odom";
     const std::string ugv_fsm_state_topic = self_ns + "/sunray/ugv_control/ugv_control_fsm_state";
     const std::string control_cmd_topic = self_ns + "/sunray/ugv_control/control_cmd";
@@ -111,13 +113,13 @@ Swarm_Control_UGV::Swarm_Control_UGV(ros::NodeHandle &nh)
     peer_odom_subs_.reserve(std::max(0, params_.swarm_num - 1));
     for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
     {
-        if (agent_id == params_.ugv_id)
+        if (agent_id == params_.agent_id)
         {
             continue;
         }
 
         const std::string peer_topic =
-            "/" + params_.ugv_name + std::to_string(agent_id) + "/sunray/localization/local_odom";
+            "/" + params_.agent_name + std::to_string(agent_id) + "/sunray/localization/local_odom";
         peer_odom_subs_.push_back(
             nh_.subscribe<nav_msgs::Odometry>(peer_topic, 20,
                                               [this, agent_id](const nav_msgs::Odometry::ConstPtr &msg) {
@@ -135,7 +137,7 @@ Swarm_Control_UGV::Swarm_Control_UGV(ros::NodeHandle &nh)
     swarm_state_pub_timer_ = nh_.createTimer(ros::Duration(0.1), &Swarm_Control_UGV::swarmStatePubTimerCallback, this);
 
     SUNRAY_INFO("========== swarm_control_ugv init ==========");
-    SUNRAY_INFO("ugv_id={}", params_.ugv_id);
+    SUNRAY_INFO("agent_id={}", params_.agent_id);
     SUNRAY_INFO("swarm_num={}", params_.swarm_num);
     SUNRAY_INFO("local_odom_topic={}", local_odom_topic);
     SUNRAY_INFO("ugv_fsm_state_topic={}", ugv_fsm_state_topic);
@@ -144,13 +146,14 @@ Swarm_Control_UGV::Swarm_Control_UGV(ros::NodeHandle &nh)
     SUNRAY_INFO("control_cmd_topic={}", control_cmd_topic);
     SUNRAY_INFO("control_loop_hz={:.1f}", params_.control_loop_hz);
     SUNRAY_INFO("peer_odom_timeout={:.3f}", params_.peer_odom_timeout);
+    SUNRAY_INFO("dynamic_prepare_wait_time={:.3f}", params_.dynamic_prepare_wait_time);
     SUNRAY_INFO("orca_radius={:.2f}", params_.orca_radius);
     SUNRAY_INFO("orca_max_speed={:.2f}", params_.orca_max_speed);
     SUNRAY_INFO("static_obstacles_num={}", params_.static_obstacle_x.size());
     SUNRAY_INFO("============================================");
 
     ugv_swarm_state_.fsm_state = sunray_msgs::UGVSwarmState::INIT;
-    ugv_swarm_state_.agent_id = static_cast<uint8_t>(params_.ugv_id);
+    ugv_swarm_state_.agent_id = static_cast<uint8_t>(params_.agent_id);
     ugv_swarm_state_.swarm_num = static_cast<uint32_t>(params_.swarm_num);
 }
 
@@ -182,8 +185,7 @@ void Swarm_Control_UGV::swarm_control_main_loop(const ros::TimerEvent &)
             break;
         }
 
-        goal_point_.valid = formation_.GetFormationGoal(ugv_swarm_cmd_.formation_cmd, params_.ugv_id, 0.0,
-                                                        goal_point_.x, goal_point_.y, goal_point_.z, goal_point_.yaw);
+        goal_point_.valid = getFormationGoalForAgent(ugv_swarm_cmd_.formation_cmd, params_.agent_id, 0.0, goal_point_);
         if (goal_point_.valid)
         {
             updateOrcaCommand();
@@ -194,6 +196,39 @@ void Swarm_Control_UGV::swarm_control_main_loop(const ros::TimerEvent &)
         }
         break;
 
+    case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+    {
+        const ros::Time now = ros::Time::now();
+
+        if (!getFormationGoalForAgent(ugv_swarm_cmd_.formation_cmd, params_.agent_id, 0.0, goal_point_))
+        {
+            switchToArrived(HoldPointSource::CURRENT_ODOM);
+            break;
+        }
+
+        updateOrcaCommand();
+
+        if (areAllAgentsAtDynamicInitialGoal())
+        {
+            if (dynamic_prepare_ready_time_.isZero())
+            {
+                dynamic_prepare_ready_time_ = now;
+            }
+
+            if ((now - dynamic_prepare_ready_time_).toSec() >= params_.dynamic_prepare_wait_time)
+            {
+                dynamic_prepare_ready_time_ = ros::Time(0.0);
+                dynamic_formation_start_time_ = now;
+                ugv_swarm_state_.fsm_state = sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION;
+            }
+        }
+        else
+        {
+            dynamic_prepare_ready_time_ = ros::Time(0.0);
+        }
+        break;
+    }
+
     case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION:
     {
         const double elapsed_time = std::max(0.0, (ros::Time::now() - dynamic_formation_start_time_).toSec());
@@ -203,8 +238,8 @@ void Swarm_Control_UGV::swarm_control_main_loop(const ros::TimerEvent &)
             break;
         }
 
-        goal_point_.valid = formation_.GetFormationGoal(ugv_swarm_cmd_.formation_cmd, params_.ugv_id, elapsed_time,
-                                                        goal_point_.x, goal_point_.y, goal_point_.z, goal_point_.yaw);
+        goal_point_.valid =
+            getFormationGoalForAgent(ugv_swarm_cmd_.formation_cmd, params_.agent_id, elapsed_time, goal_point_);
         if (goal_point_.valid)
         {
             updateOrcaCommand();
@@ -224,12 +259,12 @@ void Swarm_Control_UGV::swarm_control_main_loop(const ros::TimerEvent &)
 
 void Swarm_Control_UGV::localOdomCallback(const nav_msgs::Odometry::ConstPtr &msg)
 {
-    if (!isValidAgentId(params_.ugv_id))
+    if (!isValidAgentId(params_.agent_id))
     {
         return;
     }
 
-    OdomCache &cache = odom_caches_[static_cast<size_t>(params_.ugv_id)];
+    OdomCache &cache = odom_caches_[static_cast<size_t>(params_.agent_id)];
     cache.odom = *msg;
     cache.receive_time = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
     cache.received = true;
@@ -266,7 +301,7 @@ void Swarm_Control_UGV::swarmCmdCallback(const sunray_msgs::UGVSwarmCMD::ConstPt
         return;
     }
 
-    if (msg->agent_id != 99U && msg->agent_id != static_cast<uint8_t>(params_.ugv_id))
+    if (msg->agent_id != 99U && msg->agent_id != static_cast<uint8_t>(params_.agent_id))
     {
         return;
     }
@@ -321,9 +356,7 @@ void Swarm_Control_UGV::swarmCmdCallback(const sunray_msgs::UGVSwarmCMD::ConstPt
         }
 
         GoalPoint candidate_goal;
-        candidate_goal.valid = formation_.GetFormationGoal(received_cmd.formation_cmd, params_.ugv_id, 0.0,
-                                                           candidate_goal.x, candidate_goal.y, candidate_goal.z,
-                                                           candidate_goal.yaw);
+        candidate_goal.valid = getFormationGoalForAgent(received_cmd.formation_cmd, params_.agent_id, 0.0, candidate_goal);
         if (!candidate_goal.valid)
         {
             ROS_WARN_THROTTLE(2.0, "formation cmd rejected: can not compute valid goal point.");
@@ -333,8 +366,9 @@ void Swarm_Control_UGV::swarmCmdCallback(const sunray_msgs::UGVSwarmCMD::ConstPt
         goal_point_ = candidate_goal;
         if (isDynamicFormationType(received_cmd.formation_cmd.formation_type))
         {
-            dynamic_formation_start_time_ = ros::Time::now();
-            ugv_swarm_state_.fsm_state = sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION;
+            dynamic_prepare_ready_time_ = ros::Time(0.0);
+            dynamic_formation_start_time_ = ros::Time(0.0);
+            ugv_swarm_state_.fsm_state = sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE;
         }
         else
         {
@@ -357,7 +391,7 @@ void Swarm_Control_UGV::swarmStatePubTimerCallback(const ros::TimerEvent &)
     const ros::Time now = ros::Time::now();
 
     ugv_swarm_state_.header.stamp = now;
-    ugv_swarm_state_.agent_id = static_cast<uint8_t>(params_.ugv_id);
+    ugv_swarm_state_.agent_id = static_cast<uint8_t>(params_.agent_id);
     ugv_swarm_state_.swarm_num = static_cast<uint32_t>(params_.swarm_num);
     ugv_swarm_state_.swarm_cmd = ugv_swarm_cmd_;
 
@@ -365,14 +399,14 @@ void Swarm_Control_UGV::swarmStatePubTimerCallback(const ros::TimerEvent &)
     ugv_swarm_state_.self_odom = nav_msgs::Odometry{};
     if (ugv_swarm_state_.self_odom_ready)
     {
-        ugv_swarm_state_.self_odom = odom_caches_[static_cast<size_t>(params_.ugv_id)].odom;
+        ugv_swarm_state_.self_odom = odom_caches_[static_cast<size_t>(params_.agent_id)].odom;
     }
 
     ugv_swarm_state_.ready_peer_num = 0;
     ugv_swarm_state_.peers_odom_ready = true;
     for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
     {
-        if (agent_id == params_.ugv_id)
+        if (agent_id == params_.agent_id)
         {
             continue;
         }
@@ -398,6 +432,7 @@ void Swarm_Control_UGV::swarmStatePubTimerCallback(const ros::TimerEvent &)
     {
     case sunray_msgs::UGVSwarmState::RETURN_HOME:
     case sunray_msgs::UGVSwarmState::SWARM_STATIC_FORMATION:
+    case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
     case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION:
         target_point = goal_point_.valid ? &goal_point_ : nullptr;
         break;
@@ -452,7 +487,7 @@ bool Swarm_Control_UGV::isReadyForSwarmCmd(const sunray_msgs::UGVSwarmCMD &cmd) 
     const ros::Time now = ros::Time::now();
     for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
     {
-        if (agent_id == params_.ugv_id)
+        if (agent_id == params_.agent_id)
         {
             continue;
         }
@@ -482,7 +517,7 @@ bool Swarm_Control_UGV::isReadyForSwarmCmd(const sunray_msgs::UGVSwarmCMD &cmd) 
 
 bool Swarm_Control_UGV::hasLocalOdom() const
 {
-    return isValidAgentId(params_.ugv_id) && odom_caches_[static_cast<size_t>(params_.ugv_id)].received;
+    return isValidAgentId(params_.agent_id) && odom_caches_[static_cast<size_t>(params_.agent_id)].received;
 }
 
 double Swarm_Control_UGV::getYawFromOdom(const nav_msgs::Odometry &odom)
@@ -507,17 +542,70 @@ bool Swarm_Control_UGV::isDynamicFormationType(const uint8_t formation_type)
 
 bool Swarm_Control_UGV::hasReachedGoal() const
 {
-    if (!goal_point_.valid || !hasLocalOdom())
+    return hasAgentReachedGoal(params_.agent_id, goal_point_);
+}
+
+bool Swarm_Control_UGV::getFormationGoalForAgent(const sunray_msgs::Formation &formation_cmd,
+                                                 const int agent_id,
+                                                 const double formation_time,
+                                                 GoalPoint &goal_point)
+{
+    goal_point = GoalPoint{};
+    goal_point.valid = formation_.GetFormationGoal(formation_cmd,
+                                                   agent_id,
+                                                   formation_time,
+                                                   goal_point.x,
+                                                   goal_point.y,
+                                                   goal_point.z,
+                                                   goal_point.yaw);
+    return goal_point.valid;
+}
+
+bool Swarm_Control_UGV::hasAgentReachedGoal(const int agent_id, const GoalPoint &goal_point) const
+{
+    if (!goal_point.valid || !isValidAgentId(agent_id) || !odom_caches_[static_cast<size_t>(agent_id)].received)
     {
         return false;
     }
 
-    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.ugv_id)].odom;
-    const double dx = goal_point_.x - self_odom.pose.pose.position.x;
-    const double dy = goal_point_.y - self_odom.pose.pose.position.y;
-    const double yaw_error = normalizeYaw(goal_point_.yaw - getYawFromOdom(self_odom));
+    const nav_msgs::Odometry &odom = odom_caches_[static_cast<size_t>(agent_id)].odom;
+    const double dx = goal_point.x - odom.pose.pose.position.x;
+    const double dy = goal_point.y - odom.pose.pose.position.y;
+    const double yaw_error = normalizeYaw(goal_point.yaw - getYawFromOdom(odom));
 
     return std::hypot(dx, dy) <= params_.goal_xy_tolerance && std::abs(yaw_error) <= params_.goal_yaw_tolerance;
+}
+
+bool Swarm_Control_UGV::isAgentOdomReady(const int agent_id, const ros::Time &now) const
+{
+    if (!isValidAgentId(agent_id))
+    {
+        return false;
+    }
+
+    const OdomCache &cache = odom_caches_[static_cast<size_t>(agent_id)];
+    return cache.received && ((now - cache.receive_time).toSec() <= params_.peer_odom_timeout);
+}
+
+bool Swarm_Control_UGV::areAllAgentsAtDynamicInitialGoal()
+{
+    const ros::Time now = ros::Time::now();
+    for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
+    {
+        if (!isAgentOdomReady(agent_id, now))
+        {
+            return false;
+        }
+
+        GoalPoint initial_goal;
+        if (!getFormationGoalForAgent(ugv_swarm_cmd_.formation_cmd, agent_id, 0.0, initial_goal) ||
+            !hasAgentReachedGoal(agent_id, initial_goal))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void Swarm_Control_UGV::updateOrcaCommand()
@@ -536,11 +624,11 @@ void Swarm_Control_UGV::updateOrcaCommand()
                             odom.twist.twist.linear.x, odom.twist.twist.linear.y);
     }
 
-    orca_.setAgentGoal(params_.ugv_id - 1, goal_point_.x, goal_point_.y);
+    orca_.setAgentGoal(params_.agent_id - 1, goal_point_.x, goal_point_.y);
 
     double vx = 0.0;
     double vy = 0.0;
-    if (!orca_.GetOrcaVelCmd(params_.ugv_id - 1, vx, vy))
+    if (!orca_.GetOrcaVelCmd(params_.agent_id - 1, vx, vy))
     {
         return;
     }
@@ -557,7 +645,7 @@ void Swarm_Control_UGV::updateOrcaCommand()
 
 void Swarm_Control_UGV::fillGoalPointFromSelfOdom(GoalPoint &goal_point) const
 {
-    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.ugv_id)].odom;
+    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.agent_id)].odom;
     goal_point.x = self_odom.pose.pose.position.x;
     goal_point.y = self_odom.pose.pose.position.y;
     goal_point.z = self_odom.pose.pose.position.z;
@@ -567,6 +655,8 @@ void Swarm_Control_UGV::fillGoalPointFromSelfOdom(GoalPoint &goal_point) const
 
 void Swarm_Control_UGV::switchToArrived(const HoldPointSource hold_point_source)
 {
+    dynamic_prepare_ready_time_ = ros::Time(0.0);
+
     if (hold_point_source == HoldPointSource::GOAL_POINT && goal_point_.valid)
     {
         hold_point_ = goal_point_;

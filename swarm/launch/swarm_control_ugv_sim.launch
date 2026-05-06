@@ -7,6 +7,7 @@
   -->
 
   <arg name="swarm_num" default="3" />
+  <arg name="agent_name" default="ugv" />
   <arg name="param_file" default="$(find sunray_swarm_control)/launch/swarm_control_ugv_sim.yaml" />
   <arg name="node_output" default="screen" />
   <arg name="enable_rviz_visualization" default="true" />
@@ -28,100 +29,110 @@
   <node if="$(eval int(arg('swarm_num')) >= 1)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv1_swarm_control"
+        name="$(arg agent_name)1_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="1" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="1" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 2)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv2_swarm_control"
+        name="$(arg agent_name)2_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="2" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="2" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 3)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv3_swarm_control"
+        name="$(arg agent_name)3_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="3" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="3" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 4)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv4_swarm_control"
+        name="$(arg agent_name)4_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="4" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="4" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 5)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv5_swarm_control"
+        name="$(arg agent_name)5_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="5" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="5" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 6)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv6_swarm_control"
+        name="$(arg agent_name)6_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="6" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="6" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 7)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv7_swarm_control"
+        name="$(arg agent_name)7_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="7" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="7" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 8)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv8_swarm_control"
+        name="$(arg agent_name)8_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="8" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="8" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 9)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv9_swarm_control"
+        name="$(arg agent_name)9_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="9" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="9" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
   <node if="$(eval int(arg('swarm_num')) >= 10)"
         pkg="sunray_swarm_control"
         type="swarm_control_ugv_node"
-        name="ugv10_swarm_control"
+        name="$(arg agent_name)10_swarm_control"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
-    <param name="ugv_id" type="int" value="10" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="10" />
     <param name="swarm_num" type="int" value="$(arg swarm_num)" />
   </node>
 
@@ -131,6 +142,7 @@
         name="rviz_visualization_ugv"
         output="$(arg node_output)">
     <rosparam command="load" file="$(arg param_file)" />
+    <param name="agent_name" value="$(arg agent_name)" />
     <param name="swarm_state_topic" value="/sunray/swarm/ugv_swarm_state" />
     <param name="marker_topic" value="$(arg rviz_marker_topic)" />
     <param name="frame_id" value="$(arg rviz_frame_id)" />
@@ -140,7 +152,6 @@
     <param name="trail_size" value="50" />
     <param name="mesh_scale" value="1.0" />
     <param name="velocity_scale" value="1.0" />
-    <param name="target_arrow_length" value="0.7" />
     <param name="text_height" value="0.28" />
   </node>
 
@@ -150,6 +161,7 @@
         name="swarm_control_ugv_monitor"
         output="screen">
     <param name="swarm_state_topic" value="/sunray/swarm/ugv_swarm_state" />
+    <param name="agent_name" value="$(arg agent_name)" />
     <param name="display_hz" value="1.0" />
     <param name="stale_timeout" value="1.0" />
     <param name="clear_screen" value="$(arg monitor_clear_screen)" />

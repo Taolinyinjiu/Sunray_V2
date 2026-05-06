@@ -328,7 +328,7 @@ void promptFormationParams(sunray_msgs::Formation &cmd)
 void loadDefaults(ros::NodeHandle &nh, std::string &topic_name, TerminalSession &session)
 {
     nh.param("swarm_cmd_topic", topic_name, std::string("/sunray/swarm/ugv_swarm_cmd"));
-    nh.param("default_agent_id", session.agent_id, 99);
+    nh.param("default_target_agent_id", session.agent_id, 99);
 
     int default_formation_type = static_cast<int>(sunray_msgs::Formation::STATIC_FORMATION_LINE);
     nh.param("default_formation_type", default_formation_type, default_formation_type);
@@ -382,7 +382,9 @@ int main(int argc, char **argv)
     loadDefaults(nh, topic_name, session);
 
     ros::Publisher pub = nh.advertise<sunray_msgs::UGVSwarmCMD>(topic_name, 10);
-    SUNRAY_INFO("ugv_swarm_cmd_pub_terminal ready: topic={} default_agent_id={}", topic_name, session.agent_id);
+    SUNRAY_INFO("ugv_swarm_cmd_pub_terminal ready: topic={} default_target_agent_id={}",
+                topic_name,
+                session.agent_id);
 
     while (ros::ok())
     {

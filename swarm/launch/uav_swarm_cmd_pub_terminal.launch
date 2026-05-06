@@ -15,7 +15,7 @@
         output="$(arg node_output)">
     <param name="swarm_cmd_topic" value="/sunray/swarm/uav_swarm_cmd" />
 
-    <param name="default_agent_id" value="99" />
+    <param name="default_target_agent_id" value="99" />
     <param name="default_formation_type" value="1" />
     <param name="default_leader_x" value="0.0" />
     <param name="default_leader_y" value="0.0" />

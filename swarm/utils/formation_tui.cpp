@@ -460,7 +460,7 @@ void editFormationDefaults(AppState &state)
 void loadParams(ros::NodeHandle &nh, AppState &state)
 {
     nh.param<std::string>("swarm_cmd_topic", state.config.swarm_cmd_topic, "/sunray/swarm/uav_swarm_cmd");
-    nh.param("default_agent_id", state.config.agent_id, 99);
+    nh.param("default_target_agent_id", state.config.agent_id, 99);
     nh.param("swarm_num", state.config.swarm_num, 3);
     nh.param("grid_resolution", state.config.grid_resolution, 1.0);
 

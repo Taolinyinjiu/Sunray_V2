@@ -39,6 +39,7 @@ class RvizVisualizationUavNode
         : nh_(), private_nh_("~")
     {
         private_nh_.param("swarm_state_topic", swarm_state_topic_, std::string("/sunray/swarm/uav_swarm_state"));
+        private_nh_.param("agent_name", agent_name_, std::string("uav"));
         private_nh_.param("marker_topic", marker_topic_, std::string("/sunray/swarm/uav_rviz_markers"));
         private_nh_.param("frame_id", frame_id_, std::string("world"));
         private_nh_.param("mesh_resource", mesh_resource_,
@@ -48,7 +49,6 @@ class RvizVisualizationUavNode
         private_nh_.param("trail_size", trail_size_, 50);
         private_nh_.param("mesh_scale", mesh_scale_, 1.0);
         private_nh_.param("velocity_scale", velocity_scale_, 1.0);
-        private_nh_.param("target_arrow_length", target_arrow_length_, 0.8);
         private_nh_.param("text_height", text_height_, 0.35);
         private_nh_.param("static_obstacle_height", static_obstacle_height_, 0.10);
         private_nh_.param("static_obstacle_alpha", static_obstacle_alpha_, 0.42);
@@ -273,7 +273,7 @@ class RvizVisualizationUavNode
         id_text.pose.position.z += 0.75;
         id_text.scale.z = text_height_;
         id_text.color = makeColor(1.0, 1.0, 1.0, 1.0);
-        id_text.text = "uav" + std::to_string(agent_id);
+        id_text.text = agent_name_ + std::to_string(agent_id);
         marker_array.markers.push_back(id_text);
 
         visualization_msgs::Marker task_text = baseMarker(agent_id, 3, stamp);
@@ -289,7 +289,7 @@ class RvizVisualizationUavNode
         {
             visualization_msgs::Marker trail = baseMarker(agent_id, 4, stamp);
             trail.type = visualization_msgs::Marker::LINE_STRIP;
-            trail.scale.x = 0.04;
+            trail.scale.x = 0.013;
             trail.color = colorForAgent(agent_id, 0.85);
             for (const geometry_msgs::Point &point : agent.trail)
             {
@@ -322,24 +322,11 @@ class RvizVisualizationUavNode
         visualization_msgs::Marker target_sphere = baseMarker(agent_id, 5, stamp);
         target_sphere.type = visualization_msgs::Marker::SPHERE;
         target_sphere.pose.position = state.target_pos;
-        target_sphere.scale.x = 0.28;
-        target_sphere.scale.y = 0.28;
-        target_sphere.scale.z = 0.28;
+        target_sphere.scale.x = 0.14;
+        target_sphere.scale.y = 0.14;
+        target_sphere.scale.z = 0.14;
         target_sphere.color = makeColor(1.0, 0.75, 0.1, 0.95);
         marker_array.markers.push_back(target_sphere);
-
-        visualization_msgs::Marker target_arrow = baseMarker(agent_id, 6, stamp);
-        target_arrow.type = visualization_msgs::Marker::ARROW;
-        target_arrow.points.push_back(state.target_pos);
-        geometry_msgs::Point arrow_end = state.target_pos;
-        arrow_end.x += std::cos(state.target_yaw) * target_arrow_length_;
-        arrow_end.y += std::sin(state.target_yaw) * target_arrow_length_;
-        target_arrow.points.push_back(arrow_end);
-        target_arrow.scale.x = 0.05;
-        target_arrow.scale.y = 0.15;
-        target_arrow.scale.z = 0.22;
-        target_arrow.color = makeColor(1.0, 0.55, 0.05, 0.95);
-        marker_array.markers.push_back(target_arrow);
 
         visualization_msgs::Marker target_text = baseMarker(agent_id, 7, stamp);
         target_text.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
@@ -347,7 +334,7 @@ class RvizVisualizationUavNode
         target_text.pose.position.z += 0.45;
         target_text.scale.z = text_height_ * 0.72;
         target_text.color = makeColor(1.0, 0.9, 0.35, 1.0);
-        target_text.text = "goal uav" + std::to_string(agent_id);
+        target_text.text = "goal " + agent_name_ + std::to_string(agent_id);
         marker_array.markers.push_back(target_text);
     }
 
@@ -356,7 +343,7 @@ class RvizVisualizationUavNode
         visualization_msgs::Marker marker;
         marker.header.frame_id = frame_id_;
         marker.header.stamp = stamp;
-        marker.ns = "uav_" + std::to_string(agent_id);
+        marker.ns = agent_name_ + "_" + std::to_string(agent_id);
         marker.id = local_id;
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.orientation.w = 1.0;
@@ -430,6 +417,8 @@ class RvizVisualizationUavNode
             {0.95, 0.85, 0.20},
             {0.20, 0.90, 0.90},
             {1.00, 0.35, 0.75},
+            {0.55, 0.90, 0.15},
+            {0.55, 0.55, 0.55},
         };
         const size_t idx = static_cast<size_t>(std::max(0, agent_id - 1)) % (sizeof(palette) / sizeof(palette[0]));
         return makeColor(palette[idx][0], palette[idx][1], palette[idx][2], alpha);
@@ -461,6 +450,8 @@ class RvizVisualizationUavNode
             return "STATIC_FORMATION";
         case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION:
             return "DYNAMIC_FORMATION";
+        case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+            return "DYNAMIC_PREPARE";
         default:
             return "UNKNOWN";
         }
@@ -528,6 +519,7 @@ class RvizVisualizationUavNode
     ros::Timer publish_timer_;
 
     std::string swarm_state_topic_;
+    std::string agent_name_{"uav"};
     std::string marker_topic_;
     std::string frame_id_;
     std::string mesh_resource_;
@@ -536,7 +528,6 @@ class RvizVisualizationUavNode
     int trail_size_{50};
     double mesh_scale_{1.0};
     double velocity_scale_{1.0};
-    double target_arrow_length_{0.8};
     double text_height_{0.35};
     double static_obstacle_height_{0.10};
     double static_obstacle_alpha_{0.42};

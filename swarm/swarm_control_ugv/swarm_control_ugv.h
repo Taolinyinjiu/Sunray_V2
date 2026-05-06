@@ -32,11 +32,12 @@ class Swarm_Control_UGV
   private:
     struct Params
     {
-        int ugv_id{1};                 // 本机编号，从 1 开始
+        int agent_id{1};                 // 本机编号，从 1 开始
         int swarm_num{1};              // 集群总数量
-        std::string ugv_name{"ugv"};   // 无人车命名前缀
+        std::string agent_name{"ugv"};   // 无人车命名前缀
         double control_loop_hz{50.0};  // 主循环频率，单位：Hz
         double peer_odom_timeout{0.1}; // 邻居里程计超时阈值，单位：秒
+        double dynamic_prepare_wait_time{2.0}; // 动态阵型全体就位后的等待时间，单位：秒
 
         double goal_xy_tolerance{0.1};  // XY 平面到达阈值，单位：米
         double goal_yaw_tolerance{0.1}; // yaw 到达阈值，单位：rad
@@ -96,6 +97,13 @@ class Swarm_Control_UGV
     static double normalizeYaw(double yaw);
     static bool isDynamicFormationType(uint8_t formation_type);
     bool hasReachedGoal() const;
+    bool getFormationGoalForAgent(const sunray_msgs::Formation &formation_cmd,
+                                  int agent_id,
+                                  double formation_time,
+                                  GoalPoint &goal_point);
+    bool hasAgentReachedGoal(int agent_id, const GoalPoint &goal_point) const;
+    bool isAgentOdomReady(int agent_id, const ros::Time &now) const;
+    bool areAllAgentsAtDynamicInitialGoal();
     void updateOrcaCommand();
     void fillGoalPointFromSelfOdom(GoalPoint &goal_point) const;
     void switchToArrived(HoldPointSource hold_point_source);
@@ -123,6 +131,7 @@ class Swarm_Control_UGV
     GoalPoint hold_point_{};
     GoalPoint return_point_{};
     ros::Time dynamic_formation_start_time_{0.0};
+    ros::Time dynamic_prepare_ready_time_{0.0};
     swarm_formation::formation formation_{};
     orca_swarm::ORCA orca_{};
 };

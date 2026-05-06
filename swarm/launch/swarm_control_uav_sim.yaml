@@ -1,12 +1,13 @@
 # 仿真模式下 swarm_control_uav_node 的公共参数。
 # 说明：
 # 1. 本文件中的参数会被每个无人机集群控制节点分别加载；
-# 2. uav_id 由 launch 文件按节点单独覆盖；
+# 2. agent_id 由 launch 文件按节点单独覆盖；
 
-uav_name: "uav"
+agent_name: "uav"
 
 control_loop_hz: 20.0        # Hz，集群控制状态机运行频率
 peer_odom_timeout: 0.1       # 秒，邻居 odom 超时阈值
+dynamic_prepare_wait_time: 2.0 # 秒，动态阵型全体抵达 t=0 初始点后的等待时间
 
 goal_xy_tolerance: 0.1       # 米，XY 平面到达阈值
 goal_z_tolerance: 0.05       # 米，高度到达阈值

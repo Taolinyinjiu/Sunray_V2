@@ -125,6 +125,8 @@ const char *uavStateName(const uint8_t state)
         return "STATIC_FORMATION";
     case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION:
         return "DYNAMIC_FORMATION";
+    case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+        return "DYNAMIC_PREPARE";
     default:
         return "UNKNOWN";
     }
@@ -144,6 +146,8 @@ const char *ugvStateName(const uint8_t state)
         return "STATIC_FORMATION";
     case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION:
         return "DYNAMIC_FORMATION";
+    case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+        return "DYNAMIC_PREPARE";
     default:
         return "UNKNOWN";
     }

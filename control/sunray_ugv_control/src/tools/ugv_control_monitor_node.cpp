@@ -181,9 +181,70 @@ std::string currentTargetText(const sunray_msgs::UGVControlFSMState &state)
     return ss.str();
 }
 
+std::string rawControlInputText(const sunray_msgs::UGVControlCMD &cmd)
+{
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2);
+
+    switch (cmd.control_cmd)
+    {
+    case sunray_msgs::UGVControlCMD::HOLD:
+        return "HOLD：无额外输入参数";
+    case sunray_msgs::UGVControlCMD::RETURN:
+        return "RETURN：使用内部返航点";
+    case sunray_msgs::UGVControlCMD::MOVE_POINT:
+        ss << "desired_pos = (" << cmd.desired_pos.x << ", " << cmd.desired_pos.y << ", " << cmd.desired_pos.z
+           << ") m  desired_yaw = " << cmd.desired_yaw * kRadToDeg << " deg";
+        return ss.str();
+    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
+        ss << "desired_vel = (" << cmd.desired_vel.x << ", " << cmd.desired_vel.y << ", " << cmd.desired_vel.z
+           << ") m/s  desired_yaw = " << cmd.desired_yaw * kRadToDeg << " deg";
+        return ss.str();
+    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
+        ss << "cmd_vel.linear = (" << cmd.cmd_vel.linear.x << ", " << cmd.cmd_vel.linear.y << ", "
+           << cmd.cmd_vel.linear.z << ") m/s  cmd_vel.angular.z = " << cmd.cmd_vel.angular.z * kRadToDeg
+           << " deg/s";
+        return ss.str();
+    case sunray_msgs::UGVControlCMD::MOVE_WGS84:
+        ss << "desired_wgs84_pos = (" << cmd.desired_wgs84_pos.latitude << ", "
+           << cmd.desired_wgs84_pos.longitude << ", " << cmd.desired_wgs84_pos.altitude
+           << ")  desired_yaw = " << cmd.desired_yaw * kRadToDeg << " deg";
+        return ss.str();
+    default:
+        return "无有效原始输入";
+    }
+}
+
+std::string odomTopicText(const sunray_msgs::UGVControlFSMState &state)
+{
+    const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
+    const std::string odom_topic = agent_prefix + "/sunray/localization/local_odom";
+    return colorText(odom_topic, kAnsiValue);
+}
+
+std::string cmdTopicText(const sunray_msgs::UGVControlFSMState &state)
+{
+    const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
+    const std::string cmd_topic = agent_prefix + "/sunray/ugv_control/control_cmd";
+    return colorText(cmd_topic, kAnsiValue);
+}
+
+std::string cmdVelTopicText(const sunray_msgs::UGVControlFSMState &state)
+{
+    const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
+    const std::string cmd_vel_topic = agent_prefix + "/sunray/ugv_control/cmd_vel";
+    return colorText(cmd_vel_topic, kAnsiValue);
+}
+
+std::string fsmStateTopicText(const sunray_msgs::UGVControlFSMState &state)
+{
+    const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
+    const std::string state_topic = agent_prefix + "/sunray/ugv_control/ugv_control_fsm_state";
+    return colorText(state_topic, kAnsiValue);
+}
+
 std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
 {
-    const double age = (ros::Time::now() - state.header.stamp).toSec();
     const geometry_msgs::Point &pos = state.self_odom.pose.pose.position;
     const double yaw = yawFromOdom(state.self_odom);
     const std::string agent_label = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
@@ -194,29 +255,45 @@ std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
        << " ===================" << kAnsiReset << "\n";
 
     ss << kAnsiLabel << " 基本状态 " << kAnsiReset
-       << "ID = " << static_cast<int>(state.agent_id)
-       << "  底盘 = " << colorText(driveTypeName(state.drive_type), kAnsiValue)
-       << "  FSM = " << coloredFsmName(state.fsm_state)
-       << "  状态延迟 = " << std::setw(5) << age << " s\n";
+       << "状态话题 -> " << fsmStateTopicText(state) << "\n";
 
-    ss << kAnsiLabel << " 输入健康 " << kAnsiReset
-       << "ODOM = " << okText(state.odom_valid)
-       << "  控制指令 = " << okText(state.control_cmd_valid)
-       << "  地理围栏 = " << okText(state.inside_geo_fence) << "\n";
+    ss << "          "
+       << "Name = " << state.agent_name
+       << "  ID = " << static_cast<int>(state.agent_id)
+       << "  底盘 = " << colorText(driveTypeName(state.drive_type), kAnsiValue)
+       << "  FSM = " << coloredFsmName(state.fsm_state) << "\n";
 
     ss << kAnsiLabel << " 本机位姿 " << kAnsiReset
-       << "x = " << std::setw(6) << pos.x << " m"
-       << "  y = " << std::setw(6) << pos.y << " m"
-       << "  z = " << std::setw(6) << pos.z << " m"
-       << "  yaw = " << std::setw(6) << yaw * kRadToDeg << " deg\n";
+       << "位姿话题 -> " << odomTopicText(state) << "\n";
 
-    ss << kAnsiLabel << " 输入命令 " << kAnsiReset
-       << "来源 = " << colorText(sourceName(state.active_ugv_control_cmd.cmd_source), kAnsiValue)
-       << "  模式 = " << coloredCmdName(state.active_ugv_control_cmd.control_cmd) << "\n";
+    ss << "          "
+       << "ODOM状态 = " << okText(state.odom_valid)
+       << "  地理围栏 = " << okText(state.inside_geo_fence) << "\n";
 
-    ss << kAnsiLabel << " 控制目标 " << kAnsiReset << currentTargetText(state) << "\n";
+    ss << "           "
+       << "x = " << std::setw(5) << pos.x << " m"
+       << "  y = " << std::setw(5) << pos.y << " m"
+       << "  z = " << std::setw(5) << pos.z << " m"
+       << "  yaw = " << std::setw(5) << yaw * kRadToDeg << " deg\n";
 
-    ss << kAnsiLabel << " 发布速度 " << kAnsiReset
+    ss << kAnsiLabel << " 控制输入 " << kAnsiReset
+       << "指令话题 -> " << cmdTopicText(state) << "\n";
+
+    ss << "          "
+       << "指令状态 = " << okText(state.control_cmd_valid)
+       << "  来源 = " << colorText(sourceName(state.active_ugv_control_cmd.cmd_source), kAnsiValue)
+       << "  控制指令 = " << coloredCmdName(state.active_ugv_control_cmd.control_cmd) << "\n";
+
+    ss << "           "
+       << "原始输入 -> " << rawControlInputText(state.active_ugv_control_cmd) << "\n";
+
+    ss << "           "
+       << "控制目标 -> " << currentTargetText(state) << "\n";
+
+    ss << kAnsiLabel << " 控制输出 " << kAnsiReset
+       << "速度话题 -> " << cmdVelTopicText(state) << "\n";
+
+    ss << "           "
        << "vx = " << std::setw(6) << state.controller_cmd_vel.linear.x << " m/s"
        << "  vy = " << std::setw(6) << state.controller_cmd_vel.linear.y << " m/s"
        << "  wz = " << std::setw(6) << state.controller_cmd_vel.angular.z * kRadToDeg << " deg/s\n";

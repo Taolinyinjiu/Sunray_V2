@@ -205,7 +205,7 @@ void UGVControlFSM::process_move() {
   if ((ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_VELOCITY ||
        ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY) &&
       time_since_cmd.toSec() > WAIT_VELCMD_TIME_) {
-    current_state_ = HOLD;
+    switch_to_hold();
     return;
   }
 

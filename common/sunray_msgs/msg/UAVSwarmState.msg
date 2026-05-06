@@ -28,6 +28,7 @@ uint8 RETURN_HOME=3
 uint8 ARRIVED=4
 uint8 SWARM_STATIC_FORMATION=5    # 正在执行静态编队控制，目标点固定或最终会收敛到固定点
 uint8 SWARM_DYNAMIC_FORMATION=6   # 正在执行动态编队控制，目标点会随时间持续变化
+uint8 SWARM_DYNAMIC_FORMATION_PREPARE=7 # 动态编队就位阶段：先抵达动态阵型 t=0 初始目标点，全体就位并等待后再开始动态追踪
 uint8 fsm_state
 
 # 当前集群控制目标点（根据formation计算得到）

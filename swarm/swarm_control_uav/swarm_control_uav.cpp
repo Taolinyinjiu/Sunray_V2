@@ -19,11 +19,13 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
 {
     // 1. 读取节点参数，确定本机编号、集群规模、控制频率、阵型参数和 ORCA 参数。
     // 基本参数
-    nh_.param("uav_id", params_.uav_id, 1);
+    nh_.param("agent_id", params_.agent_id, 1);
     nh_.param("swarm_num", params_.swarm_num, 1);
-    nh_.param("uav_name", params_.uav_name, std::string("uav"));
+    nh_.param("agent_name", params_.agent_name, std::string("uav"));
     nh_.param("control_loop_hz", params_.control_loop_hz, 50.0 /*Hz*/);
     nh_.param("peer_odom_timeout", params_.peer_odom_timeout, 0.1 /*秒*/);
+    nh_.param("dynamic_prepare_wait_time", params_.dynamic_prepare_wait_time, 2.0 /*秒*/);
+    params_.dynamic_prepare_wait_time = std::max(0.0, params_.dynamic_prepare_wait_time);
     // 目标点判断参数
     nh_.param("goal_xy_tolerance", params_.goal_xy_tolerance, 0.1 /*米*/);
     nh_.param("goal_z_tolerance", params_.goal_z_tolerance, 0.1 /*米*/);
@@ -103,7 +105,7 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
     }
 
     // 4. 创建 ROS 通信接口。
-    const std::string self_ns = "/" + params_.uav_name + std::to_string(params_.uav_id);
+    const std::string self_ns = "/" + params_.agent_name + std::to_string(params_.agent_id);
     const std::string local_odom_topic = self_ns + "/sunray/localization/local_odom";
     const std::string uav_fsm_state_topic = self_ns + "/sunray/fsm/state";
     const std::string control_cmd_topic = self_ns + "/sunray/uav_control_cmd";
@@ -120,13 +122,13 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
     peer_odom_subs_.reserve(std::max(0, params_.swarm_num - 1));
     for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
     {
-        if (agent_id == params_.uav_id)
+        if (agent_id == params_.agent_id)
         {
             continue;
         }
 
         const std::string peer_topic =
-            "/" + params_.uav_name + std::to_string(agent_id) + "/sunray/localization/local_odom";
+            "/" + params_.agent_name + std::to_string(agent_id) + "/sunray/localization/local_odom";
         peer_odom_subs_.push_back(
             nh_.subscribe<nav_msgs::Odometry>(peer_topic, 20,
                                               [this, agent_id](const nav_msgs::Odometry::ConstPtr &msg) {
@@ -148,7 +150,7 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
 
     // 5. 打印初始化结果，便于确认参数加载、话题绑定和阵型/ORCA 基础配置是否正确。
     SUNRAY_INFO("========== swarm_control_uav init ==========");
-    SUNRAY_INFO("uav_id={}", params_.uav_id);
+    SUNRAY_INFO("agent_id={}", params_.agent_id);
     SUNRAY_INFO("swarm_num={}", params_.swarm_num);
     SUNRAY_INFO("local_odom_topic={}", local_odom_topic);
     SUNRAY_INFO("uav_fsm_state_topic={}", uav_fsm_state_topic);
@@ -156,6 +158,7 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
     SUNRAY_INFO("swarm_state_topic={}", swarm_state_topic);
     SUNRAY_INFO("control_cmd_topic={}", control_cmd_topic);
     SUNRAY_INFO("peer_odom_timeout={:.3f}", params_.peer_odom_timeout);
+    SUNRAY_INFO("dynamic_prepare_wait_time={:.3f}", params_.dynamic_prepare_wait_time);
     SUNRAY_INFO("control_loop_hz={:.1f}", params_.control_loop_hz);
     SUNRAY_INFO("static_obstacles_enabled={}", params_.static_obstacles_enabled);
     SUNRAY_INFO("static_obstacles_num={}", params_.static_obstacle_x.size());
@@ -171,7 +174,7 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
 
     // 无人机集群状态初始化
     uav_swarm_state_.fsm_state = sunray_msgs::UAVSwarmState::INIT;
-    uav_swarm_state_.agent_id = static_cast<uint8_t>(params_.uav_id);
+    uav_swarm_state_.agent_id = static_cast<uint8_t>(params_.agent_id);
     uav_swarm_state_.swarm_num = static_cast<uint32_t>(params_.swarm_num);
 }
 
@@ -236,8 +239,7 @@ void Swarm_Control_UAV::swarm_control_main_loop(const ros::TimerEvent &)
         }
 
         // 静态阵型：目标点固定或最终收敛到固定点，因此保留“到达后切换 ARRIVED”的逻辑。
-        goal_point_.valid = formation_.GetFormationGoal(uav_swarm_cmd_.formation_cmd, params_.uav_id, 0.0,
-                                                        goal_point_.x, goal_point_.y, goal_point_.z, goal_point_.yaw);
+        goal_point_.valid = getFormationGoalForAgent(uav_swarm_cmd_.formation_cmd, params_.agent_id, 0.0, goal_point_);
 
         if (goal_point_.valid)
         {
@@ -249,6 +251,40 @@ void Swarm_Control_UAV::swarm_control_main_loop(const ros::TimerEvent &)
         }
         break;
 
+    case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+    {
+        const ros::Time now = ros::Time::now();
+
+        // 动态阵型先固定追踪 t=0 初始点，等所有智能体都到位后再统一开始按时间推进轨迹。
+        if (!getFormationGoalForAgent(uav_swarm_cmd_.formation_cmd, params_.agent_id, 0.0, goal_point_))
+        {
+            switchToArrived(HoverPointSource::CURRENT_ODOM);
+            break;
+        }
+
+        updateOrcaCommand();
+
+        if (areAllAgentsAtDynamicInitialGoal())
+        {
+            if (dynamic_prepare_ready_time_.isZero())
+            {
+                dynamic_prepare_ready_time_ = now;
+            }
+
+            if ((now - dynamic_prepare_ready_time_).toSec() >= params_.dynamic_prepare_wait_time)
+            {
+                dynamic_prepare_ready_time_ = ros::Time(0.0);
+                dynamic_formation_start_time_ = now;
+                uav_swarm_state_.fsm_state = sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION;
+            }
+        }
+        else
+        {
+            dynamic_prepare_ready_time_ = ros::Time(0.0);
+        }
+        break;
+    }
+
     case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION:
     {
         const double elapsed_time = std::max(0.0, (ros::Time::now() - dynamic_formation_start_time_).toSec());
@@ -259,8 +295,8 @@ void Swarm_Control_UAV::swarm_control_main_loop(const ros::TimerEvent &)
             break;
         }
 
-        goal_point_.valid = formation_.GetFormationGoal(uav_swarm_cmd_.formation_cmd, params_.uav_id, elapsed_time,
-                                                        goal_point_.x, goal_point_.y, goal_point_.z, goal_point_.yaw);
+        goal_point_.valid =
+            getFormationGoalForAgent(uav_swarm_cmd_.formation_cmd, params_.agent_id, elapsed_time, goal_point_);
         if (goal_point_.valid)
         {
             updateOrcaCommand();
@@ -276,7 +312,7 @@ void Swarm_Control_UAV::swarm_control_main_loop(const ros::TimerEvent &)
 
 void Swarm_Control_UAV::localOdomCallback(const nav_msgs::Odometry::ConstPtr &msg)
 {
-    OdomCache &cache = odom_caches_[static_cast<size_t>(params_.uav_id)];
+    OdomCache &cache = odom_caches_[static_cast<size_t>(params_.agent_id)];
     cache.odom = *msg;
     cache.receive_time = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
     cache.received = true;
@@ -310,7 +346,7 @@ void Swarm_Control_UAV::swarmCmdCallback(const sunray_msgs::UAVSwarmCMD::ConstPt
     }
 
     // 判断ID是否符合
-    if (msg->agent_id != 99U && msg->agent_id != static_cast<uint8_t>(params_.uav_id))
+    if (msg->agent_id != 99U && msg->agent_id != static_cast<uint8_t>(params_.agent_id))
     {
         return;
     }
@@ -415,8 +451,7 @@ void Swarm_Control_UAV::swarmCmdCallback(const sunray_msgs::UAVSwarmCMD::ConstPt
         }
 
         GoalPoint candidate_goal;
-        candidate_goal.valid = formation_.GetFormationGoal(received_cmd.formation_cmd, params_.uav_id, 0.0, candidate_goal.x,
-                                        candidate_goal.y, candidate_goal.z, candidate_goal.yaw);
+        candidate_goal.valid = getFormationGoalForAgent(received_cmd.formation_cmd, params_.agent_id, 0.0, candidate_goal);
         if (!candidate_goal.valid)
         {
             ROS_WARN_THROTTLE(2.0, "formation cmd rejected: can not compute valid goal point.");
@@ -425,9 +460,11 @@ void Swarm_Control_UAV::swarmCmdCallback(const sunray_msgs::UAVSwarmCMD::ConstPt
 
         if (isDynamicFormationType(received_cmd.formation_cmd.formation_type))
         {
-            // 切换到SWARM_DYNAMIC_FORMATION，并记录动态阵型开始时间
-            dynamic_formation_start_time_ = ros::Time::now();
-            uav_swarm_state_.fsm_state = sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION;
+            // 动态阵型先进入 t=0 初始点就位阶段，全体到位并等待后再开始计时追踪动态轨迹。
+            goal_point_ = candidate_goal;
+            dynamic_prepare_ready_time_ = ros::Time(0.0);
+            dynamic_formation_start_time_ = ros::Time(0.0);
+            uav_swarm_state_.fsm_state = sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE;
         }
         else
         {
@@ -450,7 +487,7 @@ void Swarm_Control_UAV::swarmStatePubTimerCallback(const ros::TimerEvent &)
     const ros::Time now = ros::Time::now();
 
     uav_swarm_state_.header.stamp = now;
-    uav_swarm_state_.agent_id = static_cast<uint8_t>(params_.uav_id);
+    uav_swarm_state_.agent_id = static_cast<uint8_t>(params_.agent_id);
     uav_swarm_state_.swarm_num = static_cast<uint32_t>(params_.swarm_num);
     uav_swarm_state_.swarm_cmd = uav_swarm_cmd_;
 
@@ -458,7 +495,7 @@ void Swarm_Control_UAV::swarmStatePubTimerCallback(const ros::TimerEvent &)
     uav_swarm_state_.self_odom = nav_msgs::Odometry{};
     if (uav_swarm_state_.self_odom_ready)
     {
-        uav_swarm_state_.self_odom = odom_caches_[static_cast<size_t>(params_.uav_id)].odom;
+        uav_swarm_state_.self_odom = odom_caches_[static_cast<size_t>(params_.agent_id)].odom;
     }
 
     uav_swarm_state_.ready_peer_num = 0;
@@ -466,7 +503,7 @@ void Swarm_Control_UAV::swarmStatePubTimerCallback(const ros::TimerEvent &)
 
     for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
     {
-        if (agent_id == params_.uav_id)
+        if (agent_id == params_.agent_id)
         {
             continue;
         }
@@ -492,6 +529,7 @@ void Swarm_Control_UAV::swarmStatePubTimerCallback(const ros::TimerEvent &)
     {
     case sunray_msgs::UAVSwarmState::RETURN_HOME:
     case sunray_msgs::UAVSwarmState::SWARM_STATIC_FORMATION:
+    case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
     case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION:
         target_point = goal_point_.valid ? &goal_point_ : nullptr;
         break;
@@ -546,7 +584,7 @@ bool Swarm_Control_UAV::isReadyForSwarmCmd(const sunray_msgs::UAVSwarmCMD &cmd) 
     const ros::Time now = ros::Time::now();
     for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
     {
-        if (agent_id == params_.uav_id)
+        if (agent_id == params_.agent_id)
         {
             continue;
         }
@@ -576,7 +614,7 @@ bool Swarm_Control_UAV::isReadyForSwarmCmd(const sunray_msgs::UAVSwarmCMD &cmd) 
 
 bool Swarm_Control_UAV::hasLocalOdom() const
 {
-    return isValidAgentId(params_.uav_id) && odom_caches_[static_cast<size_t>(params_.uav_id)].received;
+    return isValidAgentId(params_.agent_id) && odom_caches_[static_cast<size_t>(params_.agent_id)].received;
 }
 
 double Swarm_Control_UAV::getYawFromOdom(const nav_msgs::Odometry &odom)
@@ -606,20 +644,73 @@ bool Swarm_Control_UAV::isDynamicFormationType(const uint8_t formation_type)
 
 bool Swarm_Control_UAV::hasReachedGoal() const
 {
-    if (!goal_point_.valid)
+    return hasAgentReachedGoal(params_.agent_id, goal_point_);
+}
+
+bool Swarm_Control_UAV::getFormationGoalForAgent(const sunray_msgs::Formation &formation_cmd,
+                                                 const int agent_id,
+                                                 const double formation_time,
+                                                 GoalPoint &goal_point)
+{
+    goal_point = GoalPoint{};
+    goal_point.valid = formation_.GetFormationGoal(formation_cmd,
+                                                   agent_id,
+                                                   formation_time,
+                                                   goal_point.x,
+                                                   goal_point.y,
+                                                   goal_point.z,
+                                                   goal_point.yaw);
+    return goal_point.valid;
+}
+
+bool Swarm_Control_UAV::hasAgentReachedGoal(const int agent_id, const GoalPoint &goal_point) const
+{
+    if (!goal_point.valid || !isValidAgentId(agent_id) || !odom_caches_[static_cast<size_t>(agent_id)].received)
     {
         return false;
     }
 
-    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.uav_id)].odom;
-    const double dx = goal_point_.x - self_odom.pose.pose.position.x;
-    const double dy = goal_point_.y - self_odom.pose.pose.position.y;
-    const double dz = goal_point_.z - self_odom.pose.pose.position.z;
-    const double yaw_error = normalizeYaw(goal_point_.yaw - getYawFromOdom(self_odom));
+    const nav_msgs::Odometry &odom = odom_caches_[static_cast<size_t>(agent_id)].odom;
+    const double dx = goal_point.x - odom.pose.pose.position.x;
+    const double dy = goal_point.y - odom.pose.pose.position.y;
+    const double dz = goal_point.z - odom.pose.pose.position.z;
+    const double yaw_error = normalizeYaw(goal_point.yaw - getYawFromOdom(odom));
 
     const double xy_error = std::sqrt(dx * dx + dy * dy);
     return xy_error <= params_.goal_xy_tolerance && std::abs(dz) <= params_.goal_z_tolerance &&
            std::abs(yaw_error) <= params_.goal_yaw_tolerance;
+}
+
+bool Swarm_Control_UAV::isAgentOdomReady(const int agent_id, const ros::Time &now) const
+{
+    if (!isValidAgentId(agent_id))
+    {
+        return false;
+    }
+
+    const OdomCache &cache = odom_caches_[static_cast<size_t>(agent_id)];
+    return cache.received && ((now - cache.receive_time).toSec() <= params_.peer_odom_timeout);
+}
+
+bool Swarm_Control_UAV::areAllAgentsAtDynamicInitialGoal()
+{
+    const ros::Time now = ros::Time::now();
+    for (int agent_id = 1; agent_id <= params_.swarm_num; ++agent_id)
+    {
+        if (!isAgentOdomReady(agent_id, now))
+        {
+            return false;
+        }
+
+        GoalPoint initial_goal;
+        if (!getFormationGoalForAgent(uav_swarm_cmd_.formation_cmd, agent_id, 0.0, initial_goal) ||
+            !hasAgentReachedGoal(agent_id, initial_goal))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void Swarm_Control_UAV::updateOrcaCommand()
@@ -637,18 +728,18 @@ void Swarm_Control_UAV::updateOrcaCommand()
     }
 
     // 2.ORCA算法更新当前状态 - 本机的目标点
-    orca_.setAgentGoal(params_.uav_id - 1, goal_point_.x, goal_point_.y);
+    orca_.setAgentGoal(params_.agent_id - 1, goal_point_.x, goal_point_.y);
 
     // 3.从ORCA算法中获取速度
     double vx = 0.0;
     double vy = 0.0;
-    if (!orca_.GetOrcaVelCmd(params_.uav_id - 1, vx, vy))
+    if (!orca_.GetOrcaVelCmd(params_.agent_id - 1, vx, vy))
     {
         return;
     }
 
     // 4.发布无人机控制指令，目前z轴采用P控制计算速度
-    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.uav_id)].odom;
+    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.agent_id)].odom;
     const double z_error = goal_point_.z - self_odom.pose.pose.position.z;
     const double vz = clamp(z_error * params_.goal_z_kp, -params_.goal_z_vel_limit, params_.goal_z_vel_limit);
 
@@ -666,7 +757,7 @@ void Swarm_Control_UAV::updateOrcaCommand()
 
 void Swarm_Control_UAV::fillGoalPointFromSelfOdom(GoalPoint &goal_point) const
 {
-    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.uav_id)].odom;
+    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.agent_id)].odom;
     goal_point.x = self_odom.pose.pose.position.x;
     goal_point.y = self_odom.pose.pose.position.y;
     goal_point.z = self_odom.pose.pose.position.z;
@@ -676,6 +767,8 @@ void Swarm_Control_UAV::fillGoalPointFromSelfOdom(GoalPoint &goal_point) const
 
 void Swarm_Control_UAV::switchToArrived(const HoverPointSource hover_point_source)
 {
+    dynamic_prepare_ready_time_ = ros::Time(0.0);
+
     if (hover_point_source == HoverPointSource::GOAL_POINT && goal_point_.valid)
     {
         hover_point_ = goal_point_;

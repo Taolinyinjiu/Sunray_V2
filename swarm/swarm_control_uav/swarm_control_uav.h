@@ -32,9 +32,9 @@ class Swarm_Control_UAV
   private:
     struct Params
     {
-        int uav_id{1};                 // 本机编号，从 1 开始
+        int agent_id{1};                 // 本机编号，从 1 开始
         int swarm_num{1};              // 集群总数量
-        std::string uav_name{"uav"};   // 无人机命名前缀
+        std::string agent_name{"uav"};   // 无人机命名前缀
         double control_loop_hz{200.0}; // 主循环频率
 
         double goal_xy_tolerance{0.1};   // x-y 平面到达阈值
@@ -43,6 +43,7 @@ class Swarm_Control_UAV
         double goal_z_kp{1.0};           // 高度速度控制比例系数
         double goal_z_vel_limit{0.8};    // 高度速度控制限幅
         double peer_odom_timeout{0.1};   // 邻居里程计超时阈值
+        double dynamic_prepare_wait_time{2.0}; // 动态阵型全体就位后的等待时间
 
         double field_x_min{-100.0};      // 场地 X 最小值
         double field_x_max{100.0};       // 场地 X 最大值
@@ -101,6 +102,13 @@ class Swarm_Control_UAV
     static double clamp(double value, double min_value, double max_value);
     static bool isDynamicFormationType(uint8_t formation_type);
     bool hasReachedGoal() const;
+    bool getFormationGoalForAgent(const sunray_msgs::Formation &formation_cmd,
+                                  int agent_id,
+                                  double formation_time,
+                                  GoalPoint &goal_point);
+    bool hasAgentReachedGoal(int agent_id, const GoalPoint &goal_point) const;
+    bool isAgentOdomReady(int agent_id, const ros::Time &now) const;
+    bool areAllAgentsAtDynamicInitialGoal();
     void updateOrcaCommand();
     void fillGoalPointFromSelfOdom(GoalPoint &goal_point) const;
     void switchToArrived(HoverPointSource hover_point_source);
@@ -126,6 +134,7 @@ class Swarm_Control_UAV
     GoalPoint hover_point_{};
     GoalPoint return_point_{};
     ros::Time dynamic_formation_start_time_{0.0};
+    ros::Time dynamic_prepare_ready_time_{0.0};
     swarm_formation::formation formation_{};
     orca_swarm::ORCA orca_{};
 };

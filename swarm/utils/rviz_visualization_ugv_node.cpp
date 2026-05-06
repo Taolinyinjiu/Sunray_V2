@@ -38,6 +38,7 @@ class RvizVisualizationUgvNode
         : nh_(), private_nh_("~")
     {
         private_nh_.param("swarm_state_topic", swarm_state_topic_, std::string("/sunray/swarm/ugv_swarm_state"));
+        private_nh_.param("agent_name", agent_name_, std::string("ugv"));
         private_nh_.param("marker_topic", marker_topic_, std::string("/sunray/swarm/ugv_rviz_markers"));
         private_nh_.param("frame_id", frame_id_, std::string("world"));
         private_nh_.param("mesh_resource", mesh_resource_,
@@ -47,7 +48,6 @@ class RvizVisualizationUgvNode
         private_nh_.param("trail_size", trail_size_, 50);
         private_nh_.param("mesh_scale", mesh_scale_, 1.0);
         private_nh_.param("velocity_scale", velocity_scale_, 1.0);
-        private_nh_.param("target_arrow_length", target_arrow_length_, 0.7);
         private_nh_.param("text_height", text_height_, 0.28);
         private_nh_.param("static_obstacle_height", static_obstacle_height_, 0.08);
         private_nh_.param("static_obstacle_alpha", static_obstacle_alpha_, 0.42);
@@ -248,8 +248,14 @@ class RvizVisualizationUgvNode
         velocity.type = visualization_msgs::Marker::ARROW;
         velocity.points.push_back(pos);
         geometry_msgs::Point vel_end = pos;
-        vel_end.x += state.self_odom.twist.twist.linear.x * velocity_scale_;
-        vel_end.y += state.self_odom.twist.twist.linear.y * velocity_scale_;
+        const double yaw = yawFromQuaternion(state.self_odom.pose.pose.orientation.x,
+                                             state.self_odom.pose.pose.orientation.y,
+                                             state.self_odom.pose.pose.orientation.z,
+                                             state.self_odom.pose.pose.orientation.w);
+        const double body_vx = state.self_odom.twist.twist.linear.x;
+        const double body_vy = state.self_odom.twist.twist.linear.y;
+        vel_end.x += (body_vx * std::cos(yaw) - body_vy * std::sin(yaw)) * velocity_scale_;
+        vel_end.y += (body_vx * std::sin(yaw) + body_vy * std::cos(yaw)) * velocity_scale_;
         velocity.points.push_back(vel_end);
         velocity.scale.x = 0.035;
         velocity.scale.y = 0.10;
@@ -263,7 +269,7 @@ class RvizVisualizationUgvNode
         id_text.pose.position.z += 0.45;
         id_text.scale.z = text_height_;
         id_text.color = makeColor(1.0, 1.0, 1.0, 1.0);
-        id_text.text = "ugv" + std::to_string(agent_id);
+        id_text.text = agent_name_ + std::to_string(agent_id);
         marker_array.markers.push_back(id_text);
 
         visualization_msgs::Marker task_text = baseMarker(agent_id, 3, stamp);
@@ -279,7 +285,7 @@ class RvizVisualizationUgvNode
         {
             visualization_msgs::Marker trail = baseMarker(agent_id, 4, stamp);
             trail.type = visualization_msgs::Marker::LINE_STRIP;
-            trail.scale.x = 0.035;
+            trail.scale.x = 0.012;
             trail.color = colorForAgent(agent_id, 0.85);
             for (const geometry_msgs::Point &point : agent.trail)
             {
@@ -313,24 +319,11 @@ class RvizVisualizationUgvNode
         target_sphere.type = visualization_msgs::Marker::SPHERE;
         target_sphere.pose.position = state.target_pos;
         target_sphere.pose.position.z += 0.08;
-        target_sphere.scale.x = 0.22;
-        target_sphere.scale.y = 0.22;
-        target_sphere.scale.z = 0.22;
+        target_sphere.scale.x = 0.11;
+        target_sphere.scale.y = 0.11;
+        target_sphere.scale.z = 0.11;
         target_sphere.color = makeColor(1.0, 0.75, 0.1, 0.95);
         marker_array.markers.push_back(target_sphere);
-
-        visualization_msgs::Marker target_arrow = baseMarker(agent_id, 6, stamp);
-        target_arrow.type = visualization_msgs::Marker::ARROW;
-        target_arrow.points.push_back(state.target_pos);
-        geometry_msgs::Point arrow_end = state.target_pos;
-        arrow_end.x += std::cos(state.target_yaw) * target_arrow_length_;
-        arrow_end.y += std::sin(state.target_yaw) * target_arrow_length_;
-        target_arrow.points.push_back(arrow_end);
-        target_arrow.scale.x = 0.04;
-        target_arrow.scale.y = 0.12;
-        target_arrow.scale.z = 0.18;
-        target_arrow.color = makeColor(1.0, 0.55, 0.05, 0.95);
-        marker_array.markers.push_back(target_arrow);
 
         visualization_msgs::Marker target_text = baseMarker(agent_id, 7, stamp);
         target_text.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
@@ -338,7 +331,7 @@ class RvizVisualizationUgvNode
         target_text.pose.position.z += 0.35;
         target_text.scale.z = text_height_ * 0.75;
         target_text.color = makeColor(1.0, 0.9, 0.35, 1.0);
-        target_text.text = "goal ugv" + std::to_string(agent_id);
+        target_text.text = "goal " + agent_name_ + std::to_string(agent_id);
         marker_array.markers.push_back(target_text);
     }
 
@@ -347,7 +340,7 @@ class RvizVisualizationUgvNode
         visualization_msgs::Marker marker;
         marker.header.frame_id = frame_id_;
         marker.header.stamp = stamp;
-        marker.ns = "ugv_" + std::to_string(agent_id);
+        marker.ns = agent_name_ + "_" + std::to_string(agent_id);
         marker.id = local_id;
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.orientation.w = 1.0;
@@ -421,6 +414,8 @@ class RvizVisualizationUgvNode
             {0.95, 0.85, 0.20},
             {0.20, 0.90, 0.90},
             {1.00, 0.35, 0.75},
+            {0.55, 0.90, 0.15},
+            {0.55, 0.55, 0.55},
         };
         const size_t idx = static_cast<size_t>(std::max(0, agent_id - 1)) % (sizeof(palette) / sizeof(palette[0]));
         return makeColor(palette[idx][0], palette[idx][1], palette[idx][2], alpha);
@@ -432,6 +427,11 @@ class RvizVisualizationUgvNode
         const double dy = a.y - b.y;
         const double dz = a.z - b.z;
         return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    static double yawFromQuaternion(const double x, const double y, const double z, const double w)
+    {
+        return std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
     }
 
     static const char *swarmStateName(const uint8_t state)
@@ -448,6 +448,8 @@ class RvizVisualizationUgvNode
             return "STATIC_FORMATION";
         case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION:
             return "DYNAMIC_FORMATION";
+        case sunray_msgs::UGVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+            return "DYNAMIC_PREPARE";
         default:
             return "UNKNOWN";
         }
@@ -511,6 +513,7 @@ class RvizVisualizationUgvNode
     ros::Timer publish_timer_;
 
     std::string swarm_state_topic_;
+    std::string agent_name_{"ugv"};
     std::string marker_topic_;
     std::string frame_id_;
     std::string mesh_resource_;
@@ -519,7 +522,6 @@ class RvizVisualizationUgvNode
     int trail_size_{50};
     double mesh_scale_{1.0};
     double velocity_scale_{1.0};
-    double target_arrow_length_{0.7};
     double text_height_{0.28};
     double static_obstacle_height_{0.08};
     double static_obstacle_alpha_{0.42};

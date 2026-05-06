@@ -1,7 +1,7 @@
 /*
 本文件功能：
     1、订阅所有无人机发布的 UAVSwarmState
-    2、按 uav_id 汇总后，在一个终端中统一打印集群状态面板
+    2、按 agent_id 汇总后，在一个终端中统一打印集群状态面板
 */
 #include <algorithm>
 #include <cmath>
@@ -35,9 +35,9 @@ std::string colorText(const std::string &text, const char *color)
     return std::string(color) + text + kColorReset;
 }
 
-std::string panelTitle(const int agent_id)
+std::string panelTitle(const std::string &agent_name, const int agent_id)
 {
-    return std::string("无人机集群控制状态面板 /uav") + std::to_string(agent_id);
+    return std::string("无人机集群控制状态面板 /") + agent_name + std::to_string(agent_id);
 }
 
 std::string formatTargetAgentId(const uint8_t agent_id)
@@ -94,6 +94,8 @@ const char *swarmStateToString(const uint8_t state)
         return "SWARM_STATIC_FORMATION";
     case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION:
         return "SWARM_DYNAMIC_FORMATION";
+    case sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE:
+        return "SWARM_DYNAMIC_FORMATION_PREPARE";
     default:
         return "UNKNOWN";
     }
@@ -246,11 +248,12 @@ std::string controlOutputSummary(const sunray_msgs::UAVControlCMD &uav_cmd)
     return ss.str();
 }
 
-std::string formatSwarmControlUavStatus(const sunray_msgs::UAVSwarmState &swarm_state)
+std::string formatSwarmControlUavStatus(const sunray_msgs::UAVSwarmState &swarm_state,
+                                        const std::string &agent_name)
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
-    ss << kColorCyan << panelTitle(static_cast<int>(swarm_state.agent_id)) << kColorReset << '\n'
+    ss << kColorCyan << panelTitle(agent_name, static_cast<int>(swarm_state.agent_id)) << kColorReset << '\n'
        << " 基本状态 | 集群数量=" << swarm_state.swarm_num
        << "  本机ID=" << static_cast<int>(swarm_state.agent_id)
        << "  " << formatSelfOdomState(swarm_state.self_odom_ready)
@@ -288,6 +291,7 @@ std::string formatSwarmControlUavStatus(const sunray_msgs::UAVSwarmState &swarm_
     }
 
     if (swarm_state.fsm_state == sunray_msgs::UAVSwarmState::SWARM_STATIC_FORMATION ||
+        swarm_state.fsm_state == sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION_PREPARE ||
         swarm_state.fsm_state == sunray_msgs::UAVSwarmState::SWARM_DYNAMIC_FORMATION)
     {
         if (swarm_state.target_valid)
@@ -317,6 +321,7 @@ class SwarmControlUavMonitorNode
         : nh_(), private_nh_("~")
     {
         private_nh_.param("swarm_state_topic", swarm_state_topic_, std::string("/sunray/swarm/uav_swarm_state"));
+        private_nh_.param("agent_name", agent_name_, std::string("uav"));
         private_nh_.param("display_hz", display_hz_, 1.0);
         private_nh_.param("stale_timeout", stale_timeout_, 1.0);
         private_nh_.param("clear_screen", clear_screen_, true);
@@ -368,13 +373,13 @@ class SwarmControlUavMonitorNode
             const double age = (now - cached_state.receive_time).toSec();
             if (age > stale_timeout_)
             {
-                ss << kColorRed << "无人机集群控制状态面板 /uav" << item.first
+                ss << kColorRed << "无人机集群控制状态面板 /" << agent_name_ << item.first
                    << "  状态超时 age=" << std::fixed << std::setprecision(2) << age << " s" << kColorReset
                    << "\n\n";
                 continue;
             }
 
-            ss << formatSwarmControlUavStatus(cached_state.state) << '\n';
+            ss << formatSwarmControlUavStatus(cached_state.state, agent_name_) << '\n';
         }
 
         std::cout << ss.str() << std::flush;
@@ -400,6 +405,7 @@ class SwarmControlUavMonitorNode
     ros::Timer print_timer_{};
 
     std::string swarm_state_topic_{"/sunray/swarm/uav_swarm_state"};
+    std::string agent_name_{"uav"};
     double display_hz_{1.0};
     double stale_timeout_{1.0};
     bool clear_screen_{true};
