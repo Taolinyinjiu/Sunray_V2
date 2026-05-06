@@ -329,7 +329,7 @@ bool Raptor_Controller::takeoff(double relative_takeoff_height, double max_takeo
     const double pos_err = (uav_odometry_.position - quint_curve_.get_end_position()).norm();
     const double vel_err = uav_odometry_.velocity.norm();
     if (!arrival_helper::update_and_check(
-            takeoff_arrival_state_, arrival_judge_config_, pos_err, vel_err, now)) {
+            takeoff_arrival_state_, takeoff_arrival_config_, pos_err, vel_err, now)) {
         return false;
     }
 

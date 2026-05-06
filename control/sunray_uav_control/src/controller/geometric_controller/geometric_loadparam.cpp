@@ -75,12 +75,16 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         throw std::runtime_error("missing param 'arrival_judge_param.vel_stabile_err_mps'");
     }
 
+    if (!arrival_judge_param["max_pos_err_m"]) {
+        throw std::runtime_error("missing param 'arrival_judge_param.max_pos_err_m'");
+    }
+
     arrival_judge_config_.stable_time_s = arrival_judge_param["judge_stabile_time_s"].as<double>();
     arrival_judge_config_.pos_err_m = arrival_judge_param["pos_stabile_err_m"].as<double>();
     arrival_judge_config_.vel_err_mps = arrival_judge_param["vel_stabile_err_mps"].as<double>();
+    arrival_judge_config_.max_pos_err_m = arrival_judge_param["max_pos_err_m"].as<double>();
 
     takeoff_arrival_config_ = arrival_judge_config_;
-    takeoff_arrival_config_.require_pos_ok_before_vel_only = true;
 
     if (arrival_judge_config_.stable_time_s <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");
@@ -88,8 +92,8 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     if (arrival_judge_config_.pos_err_m <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.pos_stabile_err_m' must > 0");
     }
-    if (arrival_judge_config_.vel_err_mps <= 0.0) {
-        throw std::runtime_error("param 'arrival_judge_param.vel_stabile_err_mps' must > 0");
+    if (arrival_judge_config_.max_pos_err_m <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.max_pos_err_m' must > 0");
     }
 
     // ------------------- velocity_param -------------------

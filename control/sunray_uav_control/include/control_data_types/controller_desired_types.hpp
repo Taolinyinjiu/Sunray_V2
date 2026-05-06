@@ -32,12 +32,7 @@
 namespace controller_data_types {
 
 // ═══════════════════════════════════════════════════════════
-// 微分平坦轨迹点 结构体
-// 1.使用Optional包装，允许字段缺省
-//   - jerk 目前暂未有控制器使用
-//   - acceleration 缺省则控制器不使用轨迹加速度作为前馈项
-//   - velocity 缺省则控制器退化为纯位置轨迹控制
-// 2. 允许yaw以及yaw_rate缺省，缺省则保持上一时刻的yaw值
+// 微分平坦轨迹点结构体
 // ═══════════════════════════════════════════════════════════
 struct TargetTrajectoryPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -53,7 +48,6 @@ struct TargetTrajectoryPoint_t {
 
 // ═══════════════════════════════════════════════════════════
 // 期望位置点结构体
-// 1. 使用Optional包装，允许yaw缺省，缺省则保持上一时刻的yaw值
 // ═══════════════════════════════════════════════════════════
 struct TargetPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -63,7 +57,6 @@ struct TargetPoint_t {
 
 // ═══════════════════════════════════════════════════════════
 // 期望速度结构体
-// 1. 使用Optional包装，允许yaw以及yaw_rate缺省，缺省则保持上一时刻的yaw值
 // ═══════════════════════════════════════════════════════════
 struct TargetVelocity_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
