@@ -6,10 +6,15 @@
   <arg name="cloud_topic" default="${uav_ns}/sunray/localization/global_points" />
   <arg name="front_vis" default="false" />
 
+  <arg name="enable_rviz" default="true" />
+
   <!-- 向文件advanced_param_exp.xml中传递参数，并在xml文件中执行Diff_Planner的主节点 -->
   <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
     <arg name="odom_topic" value="$(arg odom_topic)" />
     <arg name="cloud_topic" value="$(arg cloud_topic)" />
     <arg name="front_vis" value="$(arg front_vis)" />
   </include>
+
+  <node if="$(arg enable_rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find diff_planner)/launch/include/single.rviz" required="true" />
+
 </launch>

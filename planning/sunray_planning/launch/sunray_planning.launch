@@ -43,6 +43,7 @@
            file="$(find ego_planner)/launch/exp/run_exp_single_lio.launch">
     <arg name="odom_topic" value="$(arg odom_topic)" />
     <arg name="cloud_topic" value="$(arg cloud_topic)" />
+    <param name="enable_rviz" value="$(arg enable_rviz)" />
   </include>
 
   <include if="$(eval arg('planner_type') == 'diff')"
@@ -50,5 +51,6 @@
     <arg name="odom_topic" value="$(arg odom_topic)" />
     <arg name="cloud_topic" value="$(arg cloud_topic)" />
     <arg name="front_vis" value="$(arg front_vis)" />
+    <param name="enable_rviz" value="$(arg enable_rviz)" />
   </include>
 </launch>

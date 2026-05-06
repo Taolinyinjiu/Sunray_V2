@@ -1,0 +1,30 @@
+> 本文档只是临时使用，在planning模块完善后应该被移除
+
+1. 首先sunray_planning并不需要遵循严格的启动顺序，我们可以在任意的时间阶段启动planning模块，但通常我会在起飞前启动或者悬停阶段启动
+2. sunray_planning模块有一个launch文件，用于启动与规划相关的所有子模块，子模块一共有三个
+ - planner本体：目前仅适配了ego与diff,diff可以认为是ego_v2
+ - sunray_planning状态机，用于planner本体与sunray控制模块交互，但目前仅实现了uav的控制模块，后续应该加入ugv部分，如果uav与ugv的控制命令能统一，则不需要额外添加，而是优化为对agent的控制命令
+ - rviz_goal_bridge 这个工具将rviz的2D nav goal话题数据转换为sunray_planning_cmd发布到surnay_planning模块
+
+当我们要进行一次实机仿真时，执行顺序为
+1. 启动仿真环节(pengyu_sim应该介入这里进行修改)
+roslaunch sunray
+2. 启动定位模块
+roslaunch localization_fusion localization_fusion.launch 
+3. 启动sunray_planning模块
+roslaunch sunray_planning sunray_planning.launch planner_type:=ego cloud_topic:=/uav1/global_points
+> 这里可以选择ego或者diff,但这里存在编译上的小问题，由于ego与diff都是高飞老师团队设计的，他们似乎在代码中复用了faster_planner的部分内容，这导致当使用build.sh编译时，如果同时勾选两者，能够顺利通过，但是启动时diff_planner会出现无法连接动态库的问题
+> 解决方式为 ： 先单独编译diff_planner 再编译ego_planner,因为我对ego_planner出现这个问题进行了修复，这样就可以同时使用两者
+
+4. 启动控制节点
+roslaunch sunray_uav_control uav_control.launch 
+> pengyu_sim的动力学模模型与gazebo似乎相差一些，主要表现在悬停油门，pengyu_sim似乎只需要0.2左右而gazebo是0.375附近，geometric_controller由于对悬停油门较为敏感，很难说在pengyu_sim上能否有好的表现，可以考虑先用px4_original_controller做测试，后续优化geometric_controller
+5. 启动控制终端（这一步只是为了起飞，用别的方式也行）
+rosrun control_tools uav_terminal_control_node
+
+在这一步后，应该检查无人机是否顺利起飞并进入hover状态， 如果进入了hover状态就可以通过rviz实现给目标点
+> 1.rviz的目标点捕获使用的是move_simple_goal话题
+> 2.rviz的目标点捕获工具似乎，是硬编码了uav1，这点需要注意下
+
+由于主要做的单机仿真，因此代码中可能有部分是uav1，pengyu_sim在适配planner的时候，可以先使用uav1进行测试，这些小bug正在被清理
+目前初步的想法是，使用agent_name与agent_id，不再区分uav与ugv，这样可以轻量化localization与planning模块
