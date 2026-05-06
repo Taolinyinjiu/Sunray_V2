@@ -7,8 +7,6 @@
   <!-- 私有节点变量，用于适配集群仿真 -->
   <arg name="uav_name" default="uav" />
   <arg name="uav_id" default="1" />
-  <!-- 如果use_private_params为true则从节点私有变量读取uav_name与uav_id，用于集群仿真 -->
-  <arg name="use_private_params" default="false" />
   <!-- 是否保存日志 -->
   <arg name="log_save" default="false" />
   <!-- 里程计话题名 -->
@@ -26,8 +24,6 @@
   <!-- 使能rviz桥接，主要是将rviz的2D nav_goal 转换为planning_cmd -->
   <arg name="enable_rviz_bridge" default="true" />
 
-  <param unless="$(arg use_private_params)" name="/uav_name" value="$(arg uav_name)" />
-  <param unless="$(arg use_private_params)" name="/uav_id" value="$(arg uav_id)" />
 
 <!-- 启动sunray_planning节点，本质为一个简单地状态机，获取planner的状态与sunray_uav_control的fsm状态，以及订阅planning_control_cmd，转发planner的position_cmd -->
   <node pkg="sunray_planning"
@@ -37,7 +33,6 @@
     <param name="planner_type" value="$(arg planner_type)" />
     <param name="uav_name" value="$(arg uav_name)" />
     <param name="uav_id" value="$(arg uav_id)" />
-    <param name="use_private_params" value="$(arg use_private_params)" />
     <param name="log_save" value="$(arg log_save)" />
   </node>
 

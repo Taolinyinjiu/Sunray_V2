@@ -1,7 +1,7 @@
 <launch>
   <!-- 地图尺寸与局部更新范围 -->
-  <arg name="map_size_x" default="5.5"/>
-  <arg name="map_size_y" default="5.5"/>
+  <arg name="map_size_x" default="20"/>
+  <arg name="map_size_y" default="20"/>
   <arg name="map_size_z" default="4.5"/>
   <arg name="local_map_size_x" default="5.5"/>
   <arg name="local_map_size_y" default="5.5"/>
