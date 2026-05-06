@@ -36,11 +36,11 @@ void EgoPlanner::init(ros::NodeHandle& private_nh) {
     std::string uav_name;
     int uav_id = 0;
 
-    if (!private_nh.getParam("/uav_name", uav_name) || uav_name.empty()) {
-        throw std::runtime_error("EgoPlanner: missing or empty /uav_name");
+    if (!private_nh.getParam("uav_name", uav_name) || uav_name.empty()) {
+        throw std::runtime_error("EgoPlanner: missing or empty uav_name");
     }
-    if (!private_nh.getParam("/uav_id", uav_id) || uav_id <= 0) {
-        throw std::runtime_error("EgoPlanner: missing or invalid /uav_id");
+    if (!private_nh.getParam("uav_id", uav_id) || uav_id <= 0) {
+        throw std::runtime_error("EgoPlanner: missing or invalid uav_id");
     }
 
     uav_ns_ = sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));

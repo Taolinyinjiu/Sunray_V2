@@ -242,10 +242,11 @@ void Sunray_FSM::show_static_info() {
                 fsm_config_.takeoff_land_param.takeoff_max_velocity,
                 fsm_config_.takeoff_land_param.land_type,
                 fsm_config_.takeoff_land_param.land_max_velocity);
-    SUNRAY_INFO("arrival judge: stable_time={:.2f} s  pos_err={:.3f} m  vel_err={:.3f} m/s",
+    SUNRAY_INFO("arrival judge: stable_time={:.2f} s  pos_err={:.3f} m  vel_err={:.3f} m/s  max_pos_err={:.3f} m",
                 fsm_config_.arrival_judge_param.judge_stabile_time_s,
                 fsm_config_.arrival_judge_param.pos_stabile_err_m,
-                fsm_config_.arrival_judge_param.vel_stabile_err_mps);
+                fsm_config_.arrival_judge_param.vel_stabile_err_mps,
+                fsm_config_.arrival_judge_param.max_pos_err_m);
     SUNRAY_INFO("timeout: odom={:.2f} s  mavros={:.2f} s  station={:.2f} s",
                 fsm_config_.msg_timeout_param.local_odometry,
                 fsm_config_.msg_timeout_param.mavros_connect,

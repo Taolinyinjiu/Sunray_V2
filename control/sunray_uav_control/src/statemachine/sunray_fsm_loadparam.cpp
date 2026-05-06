@@ -325,15 +325,14 @@ void loadArrivalJudgeParam(const YAML::Node& node, sunray_fsm::arrival_judge_par
                 "must > 0");
         }
     }
-    if (!node["vel_stabile_err_mps"]) {
+    if (!node["max_pos_err_m"]) {
         throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'arrival_judge_param: vel_stabile_err_mps'");
+            "the sunray_control_config.yaml miss param 'arrival_judge_param: max_pos_err_m'");
     } else {
-        param.vel_stabile_err_mps = node["vel_stabile_err_mps"].as<double>();
-        if (param.vel_stabile_err_mps <= 0) {
+        param.max_pos_err_m = node["max_pos_err_m"].as<double>();
+        if (param.max_pos_err_m <= 0) {
             throw std::runtime_error(
-                "the sunray_control_config.yaml param 'arrival_judge_param: vel_stabile_err_mps' "
-                "must > 0");
+                "the sunray_control_config.yaml param 'arrival_judge_param: max_pos_err_m' must > 0");
         }
     }
 }

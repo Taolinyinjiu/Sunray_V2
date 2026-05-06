@@ -31,8 +31,6 @@ enum class FlightMode : uint8_t {
     Raptor
 };
 
-std::string flightmode_to_string(control_common::FlightMode flight);
-
 // LandedState 与mavros消息定义对应，用于表示px4的着地检测器状态
 enum class LandedState : uint8_t {
     Undefined = 0,
@@ -42,8 +40,11 @@ enum class LandedState : uint8_t {
     Landing
 };
 
+// 辅助函数，将枚举类型转换为字符串类型，用于展示
+std::string flightmode_to_string(control_common::FlightMode flight);
 std::string landed_to_string(control_common::LandedState land_state);
 
+// px4里程计融合参数，选择使用vision_pose通道或者odometry通道进行融合
 enum class VisionFuseType : uint8_t{
     Undefined = 0,
     Vision_pose,

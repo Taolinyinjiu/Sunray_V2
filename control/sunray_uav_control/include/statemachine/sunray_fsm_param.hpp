@@ -60,6 +60,7 @@ struct arrival_judge_param_t {
     double judge_stabile_time_s{0.0};
     double pos_stabile_err_m{0.0};
     double vel_stabile_err_mps{0.0};
+    double max_pos_err_m{0.0};
 };
 // -------------------电子围栏参数-----------------------
 struct local_fence_param_t {

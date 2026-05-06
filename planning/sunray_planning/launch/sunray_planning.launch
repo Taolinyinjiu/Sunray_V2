@@ -1,39 +1,59 @@
+<!-- planner部分的launch需要根据5.6开的会议进行一些梳理，原有逻辑为分别开终端启动sunray_planning的launch，ego_planner自己的launch，以及rviz终端的转换工具 -->
+<!-- 为了适配pengyusim，我们将三个launch合并，也就是说只需要执行surnay_planning这一个launch，并指定planner_type就可以直接启动整个规划模块 -->
+<!-- 与localization模块操作逻辑一致  -->
 <launch>
-  <arg name="planner_type" default="diff" />
+  <!-- planner_type 用于选择ego或者diff，后续修改为0/1之类的，当前使用的是字符串 -->
+  <arg name="planner_type" default="ego" />
+  <!-- 私有节点变量，用于适配集群仿真 -->
   <arg name="uav_name" default="uav" />
   <arg name="uav_id" default="1" />
-  <arg name="node_name" default="sunray_planning_node" />
-  <arg name="set_global_params" default="true" />
-  <arg name="planning_cmd_sub_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/planning_cmd" />
-  <arg name="control_pub_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/uav_control_cmd" />
-  <arg name="planning_state_pub_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/planning_state" />
-  <arg name="control_fsm_state_sub_topic" default="/$(arg uav_name)$(arg uav_id)/sunray/fsm/state" />
-  <arg name="process_rate_hz" default="50.0" />
-  <arg name="state_pub_rate_hz" default="10.0" />
-  <arg name="auto_hover_on_timeout" default="true" />
-  <arg name="control_fsm_state_timeout_sec" default="1.0" />
-  <arg name="follow_control_fsm" default="true" />
+  <!-- 如果use_private_params为true则从节点私有变量读取uav_name与uav_id，用于集群仿真 -->
+  <arg name="use_private_params" default="false" />
+  <!-- 是否保存日志 -->
   <arg name="log_save" default="false" />
+  <!-- 里程计话题名 -->
+  <arg name="odom_topic" default="${uav_ns}/sunray/localization/local_odom" />
+  <!-- 点云话题名 -->
+  <!-- pengyu_sim 需要重点关注这里，planner内部实际上并没有检查里程计和点云消息的坐标系帧，只是要求两者在同一坐标系下，通常为world-->
+  <!-- gazebo仿真中，使用planning/sunray_planner_tools/launch/point_cloud_transform.launch 工具进行点云转换为全局 -->
+  <!-- 真机测试中使用海华哥修改过的fastlio，默认已经做了点云转换，话题映射为sunray/global_cloud? -->
+  <arg name="cloud_topic" default="${uav_ns}/sunray/localization/global_points" />
+  <!-- 是否进行视角裁剪(将360度的点云裁剪为机头前向120度,这个是diff_planner自己设计的) -->
+  <arg name="front_vis" default="false" />
+  <!-- 使能rviz，主要是打开一个rviz界面，默认为false，因为机载ssh连接时没有图形化 -->
+  <!-- TODO：这里稍后添加，rviz的配置在各个planner中的rviz_config下，有一个single.rviz -->
+  <arg name="enable_rviz" default="false" />
+  <!-- 使能rviz桥接，主要是将rviz的2D nav_goal 转换为planning_cmd -->
+  <arg name="enable_rviz_bridge" default="true" />
 
-  <param if="$(arg set_global_params)" name="/uav_name" value="$(arg uav_name)" />
-  <param if="$(arg set_global_params)" name="/uav_id" value="$(arg uav_id)" />
+  <param unless="$(arg use_private_params)" name="/uav_name" value="$(arg uav_name)" />
+  <param unless="$(arg use_private_params)" name="/uav_id" value="$(arg uav_id)" />
 
+<!-- 启动sunray_planning节点，本质为一个简单地状态机，获取planner的状态与sunray_uav_control的fsm状态，以及订阅planning_control_cmd，转发planner的position_cmd -->
   <node pkg="sunray_planning"
         type="sunray_planning_node"
-        name="$(arg node_name)"
+        name="sunray_planning_node"
         output="screen">
     <param name="planner_type" value="$(arg planner_type)" />
     <param name="uav_name" value="$(arg uav_name)" />
     <param name="uav_id" value="$(arg uav_id)" />
-    <param name="planning_cmd_sub_topic" value="$(arg planning_cmd_sub_topic)" />
-    <param name="control_pub_topic" value="$(arg control_pub_topic)" />
-    <param name="planning_state_pub_topic" value="$(arg planning_state_pub_topic)" />
-    <param name="control_fsm_state_sub_topic" value="$(arg control_fsm_state_sub_topic)" />
-    <param name="process_rate_hz" value="$(arg process_rate_hz)" />
-    <param name="state_pub_rate_hz" value="$(arg state_pub_rate_hz)" />
-    <param name="auto_hover_on_timeout" value="$(arg auto_hover_on_timeout)" />
-    <param name="control_fsm_state_timeout_sec" value="$(arg control_fsm_state_timeout_sec)" />
-    <param name="follow_control_fsm" value="$(arg follow_control_fsm)" />
+    <param name="use_private_params" value="$(arg use_private_params)" />
     <param name="log_save" value="$(arg log_save)" />
   </node>
+
+  <include if="$(arg enable_rviz_bridge)"
+           file="$(find sunray_planner_tools)/launch/rviz_goal_bridge.launch" />
+
+  <include if="$(eval arg('planner_type') == 'ego')"
+           file="$(find ego_planner)/launch/exp/run_exp_single_lio.launch">
+    <arg name="odom_topic" value="$(arg odom_topic)" />
+    <arg name="cloud_topic" value="$(arg cloud_topic)" />
+  </include>
+
+  <include if="$(eval arg('planner_type') == 'diff')"
+           file="$(find diff_planner)/launch/exp/run_exp_single_lio.launch">
+    <arg name="odom_topic" value="$(arg odom_topic)" />
+    <arg name="cloud_topic" value="$(arg cloud_topic)" />
+    <arg name="front_vis" value="$(arg front_vis)" />
+  </include>
 </launch>

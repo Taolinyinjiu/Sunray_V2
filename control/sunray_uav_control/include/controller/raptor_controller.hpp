@@ -94,6 +94,7 @@ class Raptor_Controller : public Controller_Interface {
     Eigen::Vector3d max_move_velocity_{Eigen::Vector3d::Ones()};
     double max_yaw_rate_rad_s_{0.5};
     arrival_helper::Config arrival_judge_config_{};
+    arrival_helper::Config takeoff_arrival_config_{};
 
     ros::NodeHandle nh_;
     MavrosHelper mavros_helper_;

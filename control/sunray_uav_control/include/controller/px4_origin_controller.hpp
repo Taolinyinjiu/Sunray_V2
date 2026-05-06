@@ -121,6 +121,11 @@ class PX4_OriginController : public Controller_Interface {
     bool move_point_impl(controller_data_types::TargetPoint_t point,
                          bool preserve_body_point_context);
     void reset_point_motion_context();
+    void clear_cached_setpoint();
+    controller_data_types::TargetTrajectoryPoint_t make_hold_desired_state(
+        const control_common::UAVStateEstimate& odom) const;
+    void publish_hold_setpoint(const Eigen::Vector3d& position, double yaw);
+    void reset_after_landing_success();
     double update_limited_yaw_target(double target_yaw, const ros::Time& now);
     void warn_if_trajectory_exceeds_limits(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;

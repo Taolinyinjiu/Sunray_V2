@@ -19,15 +19,15 @@
 namespace {
 constexpr double kControlFsmOverrideGraceSec = 2.0;
 
-std::string load_uav_namespace_or_throw(const ros::NodeHandle& nh) {
+std::string load_uav_namespace_or_throw(const ros::NodeHandle& private_nh) {
     std::string uav_name;
     int uav_id = 0;
 
-    if (!nh.getParam("/uav_name", uav_name) || uav_name.empty()) {
-        throw std::runtime_error("missing or empty param /uav_name");
+    if (!private_nh.getParam("uav_name", uav_name) || uav_name.empty()) {
+        throw std::runtime_error("missing or empty param uav_name");
     }
-    if (!nh.getParam("/uav_id", uav_id) || uav_id <= 0) {
-        throw std::runtime_error("missing or invalid param /uav_id");
+    if (!private_nh.getParam("uav_id", uav_id) || uav_id <= 0) {
+        throw std::runtime_error("missing or invalid param uav_id");
     }
 
     return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
@@ -183,7 +183,7 @@ void PlanningFSM::init() {
 }
 
 void PlanningFSM::load_param() {
-    uav_ns_ = load_uav_namespace_or_throw(nh_);
+    uav_ns_ = load_uav_namespace_or_throw(private_nh_);
     private_nh_.param("log_save", log_save_, false);
     init_logger();
 
