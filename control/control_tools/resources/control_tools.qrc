@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/control_tools">
+    <file>icons/spin_up.svg</file>
+    <file>icons/spin_down.svg</file>
+  </qresource>
+</RCC>

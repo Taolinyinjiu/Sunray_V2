@@ -13,6 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
   sunray_msgs
 )
 find_package(Qt5 REQUIRED COMPONENTS Widgets)
+qt5_add_resources(CONTROL_TOOLS_QRC
+  resources/control_tools.qrc
+)
 
 catkin_package(
   CATKIN_DEPENDS roscpp rospy std_msgs nav_msgs visualization_msgs rviz sunray_msgs
@@ -44,6 +47,7 @@ add_dependencies(ugv_terminal_control_node ${catkin_EXPORTED_TARGETS})
 
 add_executable(uav_control_panel_node
   src/uav_control_panel_node.cpp
+  ${CONTROL_TOOLS_QRC}
 )
 
 target_link_libraries(uav_control_panel_node

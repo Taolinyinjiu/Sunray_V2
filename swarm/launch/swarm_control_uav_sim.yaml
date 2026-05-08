@@ -24,7 +24,7 @@ field:
   z_max: 3.0                 # 米，仿真场地 Z 最大值
 
 orca:
-  neighbor_dist: 2.0         # 米，ORCA 搜索邻居半径，neighborDist 必须 > 2 * radius
+  neighbor_dist: 1.5         # 米，ORCA 搜索邻居半径，neighborDist 必须 > 2 * radius
   time_horizon: 2.0          # 秒，ORCA 预测避碰时间窗
   radius: 0.3                # 米，智能体避碰半径
   max_speed: 0.5             # 米/秒，ORCA 输出最大平面速度

@@ -266,6 +266,8 @@ class UAVControlPanel : public QMainWindow
         auto *main_layout = new QHBoxLayout(central);
         main_layout->setContentsMargins(16, 16, 16, 16);
         main_layout->setSpacing(14);
+        main_layout->setStretch(0, 4);
+        main_layout->setStretch(1, 7);
 
         auto *left_widget = new QWidget(central);
         auto *left_layout = new QVBoxLayout(left_widget);
@@ -276,6 +278,8 @@ class UAVControlPanel : public QMainWindow
         left_layout->addWidget(makeLogGroup(), 1);
 
         auto *right_group = new QGroupBox("三维视图");
+        right_group->setMinimumWidth(760);
+        right_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         auto *right_layout = new QVBoxLayout(right_group);
         right_layout->setContentsMargins(10, 18, 10, 10);
         setupRvizPanel();
@@ -289,6 +293,8 @@ class UAVControlPanel : public QMainWindow
     void setupRvizPanel()
     {
         rviz_panel_ = new ControlRenderPanel();
+        rviz_panel_->setMinimumSize(720, 520);
+        rviz_panel_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         rviz_panel_->setPickHeightProvider([this]() { return point_z_spin_ != nullptr ? point_z_spin_->value() : 0.0; });
         rviz_panel_->setPickCallback([this](const double x, const double y) {
             if (point_x_spin_ != nullptr && point_y_spin_ != nullptr)
@@ -415,6 +421,7 @@ class UAVControlPanel : public QMainWindow
         auto *layout = new QGridLayout(group);
         basic_label_ = new QLabel("-");
         pose_label_ = new QLabel("-");
+        takeoff_label_ = new QLabel("-");
         flight_label_ = new QLabel("-");
         cmd_label_ = new QLabel("-");
         topic_label_ = new QLabel("-");
@@ -423,12 +430,14 @@ class UAVControlPanel : public QMainWindow
         layout->addWidget(basic_label_, 0, 1);
         layout->addWidget(new QLabel("本机位姿"), 1, 0);
         layout->addWidget(pose_label_, 1, 1);
-        layout->addWidget(new QLabel("飞行参数"), 2, 0);
-        layout->addWidget(flight_label_, 2, 1);
-        layout->addWidget(new QLabel("当前指令"), 3, 0);
-        layout->addWidget(cmd_label_, 3, 1);
-        layout->addWidget(new QLabel("话题信息"), 4, 0);
-        layout->addWidget(topic_label_, 4, 1);
+        layout->addWidget(new QLabel("起飞高度"), 2, 0);
+        layout->addWidget(takeoff_label_, 2, 1);
+        layout->addWidget(new QLabel("飞行参数"), 3, 0);
+        layout->addWidget(flight_label_, 3, 1);
+        layout->addWidget(new QLabel("当前指令"), 4, 0);
+        layout->addWidget(cmd_label_, 4, 1);
+        layout->addWidget(new QLabel("话题信息"), 5, 0);
+        layout->addWidget(topic_label_, 5, 1);
         layout->setColumnStretch(1, 1);
         return group;
     }
@@ -450,7 +459,39 @@ class UAVControlPanel : public QMainWindow
             QMainWindow, QWidget { background: #111b22; color: #edf4f2; font-size: 14px; }
             QGroupBox { background: #18262f; border: 1px solid #314b57; border-radius: 10px; margin-top: 16px; padding: 14px 12px 12px 12px; font-weight: 600; }
             QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 8px; color: #78dcca; }
-            QDoubleSpinBox { background: #0d171e; color: #f6fbfa; border: 1px solid #36525f; border-radius: 7px; padding: 5px 8px; min-height: 26px; }
+            QDoubleSpinBox, QAbstractSpinBox {
+                background: #12202a;
+                color: #f7fcfb;
+                border: 1px solid #54707f;
+                border-radius: 7px;
+                padding: 4px 10px 4px 8px;
+                min-height: 26px;
+            }
+            QDoubleSpinBox:focus, QAbstractSpinBox:focus { border: 1px solid #7ed8be; }
+            QDoubleSpinBox::up-button, QDoubleSpinBox::down-button,
+            QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+                background: #213441;
+                border-left: 1px solid #54707f;
+                width: 20px;
+            }
+            QDoubleSpinBox::up-arrow, QAbstractSpinBox::up-arrow {
+                image: url(:/control_tools/icons/spin_up.svg);
+                width: 10px;
+                height: 10px;
+            }
+            QDoubleSpinBox::down-arrow, QAbstractSpinBox::down-arrow {
+                image: url(:/control_tools/icons/spin_down.svg);
+                width: 10px;
+                height: 10px;
+            }
+            QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover,
+            QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {
+                background: #2b4555;
+            }
+            QDoubleSpinBox::up-button:pressed, QDoubleSpinBox::down-button:pressed,
+            QAbstractSpinBox::up-button:pressed, QAbstractSpinBox::down-button:pressed {
+                background: #35586d;
+            }
             QPushButton { background: #1d8b74; color: white; border: 0px; border-radius: 8px; padding: 8px 14px; font-weight: 600; }
             QPushButton:hover { background: #28a68d; }
             QLabel { color: #d8e8e4; }
@@ -631,8 +672,8 @@ class UAVControlPanel : public QMainWindow
 
         if (has_fsm_state)
         {
-            flight_label_->setText(QString("takeoff_h=%1 m  takeoff_v=%2 m/s  land_type=%3  land_v=%4 m/s")
-                                       .arg(fsm_state.takeoff_relative_height, 0, 'f', 2)
+            takeoff_label_->setText(QString("%1 m").arg(fsm_state.takeoff_relative_height, 0, 'f', 2));
+            flight_label_->setText(QString("起飞速度=%1 m/s  降落类型=%2  降落速度=%3 m/s")
                                        .arg(fsm_state.takeoff_max_velocity, 0, 'f', 2)
                                        .arg(static_cast<int>(fsm_state.land_type))
                                        .arg(fsm_state.land_max_velocity, 0, 'f', 2));
@@ -642,6 +683,7 @@ class UAVControlPanel : public QMainWindow
         }
         else
         {
+            takeoff_label_->setText("等待 UAVControlFSMState...");
             flight_label_->setText("等待 UAVControlFSMState...");
             cmd_label_->setText("-");
         }
@@ -819,6 +861,14 @@ class UAVControlPanel : public QMainWindow
         axis_y.points[1].y = 1.2;
         marker_array.markers.push_back(axis_y);
 
+        visualization_msgs::Marker axis_z = axis_x;
+        axis_z.id = 3;
+        axis_z.color = makeColor(0.18, 0.45, 1.0, 1.0);
+        axis_z.points[1].x = 0.0;
+        axis_z.points[1].y = 0.0;
+        axis_z.points[1].z = 1.2;
+        marker_array.markers.push_back(axis_z);
+
         if (has_odom)
         {
             visualization_msgs::Marker uav = origin;
@@ -893,25 +943,27 @@ class UAVControlPanel : public QMainWindow
             visualization_msgs::Marker goal = origin;
             goal.ns = "goal";
             goal.id = 20;
-            goal.type = visualization_msgs::Marker::ARROW;
-            goal.scale.x = 0.05;
-            goal.scale.y = 0.12;
-            goal.scale.z = 0.12;
+            goal.type = visualization_msgs::Marker::SPHERE;
+            goal.pose.position = makePoint(goal_visual.x, goal_visual.y, goal_visual.z);
+            goal.scale.x = 0.14;
+            goal.scale.y = 0.14;
+            goal.scale.z = 0.14;
             goal.color = makeColor(1.0, 0.80, 0.15, 1.0);
-            goal.points.push_back(makePoint(goal_visual.x, goal_visual.y, goal_visual.z));
-            goal.points.push_back(makePoint(goal_visual.x + 0.45 * std::cos(goal_visual.yaw),
-                                            goal_visual.y + 0.45 * std::sin(goal_visual.yaw),
-                                            goal_visual.z));
             marker_array.markers.push_back(goal);
 
             visualization_msgs::Marker goal_text = origin;
             goal_text.ns = "goal";
             goal_text.id = 21;
             goal_text.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-            goal_text.pose.position = makePoint(goal_visual.x, goal_visual.y, goal_visual.z + 0.35);
+            goal_text.pose.position = makePoint(goal_visual.x, goal_visual.y, goal_visual.z + 0.30);
             goal_text.scale.z = 0.24;
             goal_text.color = makeColor(1.0, 0.92, 0.35, 1.0);
-            goal_text.text = goal_visual.label;
+            goal_text.text = QString("%1\n(%2, %3, %4)")
+                                 .arg(QString::fromStdString(goal_visual.label))
+                                 .arg(goal_visual.x, 0, 'f', 2)
+                                 .arg(goal_visual.y, 0, 'f', 2)
+                                 .arg(goal_visual.z, 0, 'f', 2)
+                                 .toStdString();
             marker_array.markers.push_back(goal_text);
         }
 
@@ -948,6 +1000,7 @@ class UAVControlPanel : public QMainWindow
     QDoubleSpinBox *body_vyaw_spin_{nullptr};
     QLabel *basic_label_{nullptr};
     QLabel *pose_label_{nullptr};
+    QLabel *takeoff_label_{nullptr};
     QLabel *flight_label_{nullptr};
     QLabel *cmd_label_{nullptr};
     QLabel *topic_label_{nullptr};
