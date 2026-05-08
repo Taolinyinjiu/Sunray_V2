@@ -137,6 +137,8 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(takeoff_land_node src/basic_example/takeoff_land.cpp)
 add_executable(move_point_node src/basic_example/move_point.cpp)
+add_executable(move_multipoint_node src/basic_example/move_multipoint.cpp)
+add_executable(move_point_and_return_node src/basic_example/move_point_and_return.cpp)
 add_executable(move_point_by_velocity_node src/velocity_example/move_point_by_velocity.cpp)
 add_executable(move_point_by_trajectory_node src/trajectory_example/move_point_by_trajectory.cpp)
 
@@ -150,6 +152,8 @@ add_executable(move_point_by_trajectory_node src/trajectory_example/move_point_b
 ## same as for the library above
 add_dependencies(takeoff_land_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_point_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_multipoint_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_point_and_return_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_point_by_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_point_by_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
@@ -158,6 +162,12 @@ target_link_libraries(takeoff_land_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(move_point_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(move_multipoint_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(move_point_and_return_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(move_point_by_velocity_node
@@ -185,6 +195,8 @@ target_link_libraries(move_point_by_trajectory_node
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
 install(TARGETS takeoff_land_node
   move_point_node
+  move_multipoint_node
+  move_point_and_return_node
   move_point_by_velocity_node
   move_point_by_trajectory_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

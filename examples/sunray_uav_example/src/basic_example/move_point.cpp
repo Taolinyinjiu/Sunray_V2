@@ -1,210 +1,146 @@
 /**
- * @file move_point.cpp
- * @brief Sunray单个无人机示例系列 - takeoff -> hover -> move 1 point -> land
+ * @file takeoff_land.cpp
+ * @brief Sunray单个无人机示例系列 - takeoff -> hover -> land
  * 运行要求：
  * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
  * [真实环境]：要求无人机周围无阻拦运动的障碍物
+ * [启动顺序]：为了保持example示例的简洁，我们并没有完整的启动流程保护措施，
  * 运行结果：
- * sunray系列无人机在当前位置起飞，达到指定高度后悬停5s，然后移动到指定位置悬停5s，随后降落在指定位置下方
+ * sunray系列无人机在当前位置起飞，达到指定高度后悬停10s，然后降落
+ * [补充说明]:
+ * 如需修改起飞降落的相关参数，请修改control文件夹中
+ * sunray_uav_control文件夹下config文件夹中的sunray_control_config.yaml中对应参数
  *
- * [补充说明]：
- * 这个文件用于教学/演示如何通过发布MOVE_POINT指令，在local坐标系下完成单点位置控制。
  */
-// 首先我们需要引入ros头文件，用于向ros注册节点，订阅sunray相关话题与发布控制指令
-#include "ros/init.h"
-#include "ros/node_handle.h"
-#include "ros/time.h"
-#include <Eigen/Dense>
-#include <ros/ros.h>
-// 我们需要引入sunray相关消息，用于发布sunray无人机控制指令，以及检测无人机当前状态
-#include <string>
-#include <string_uav_namespace_utils.hpp>
-#include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlFSMState.h>
-// 我们需要引入sunray_fsm头文件，用于获取无人机当前状态
-#include <statemachine/sunray_state_types.hpp>
 
-// 本示例example只进行一次定点飞行，因此使用宏定义在此处定义目标点
-#define TARGET_X 1.0
-#define TARGET_Y 0.0
-#define TARGET_Z 0.6
-#define TARGET_YAW 0.0
+// ros_msg_utils头文件，包含了大部分情况下需要的头文件
+#include <ros_msg_utils.h>
 
-// 如果系统还未准备好的等待时间
-const double WAIT_FOR_READY_TIME = 10;
-// 无人机准备就绪后准备起飞的等待时间
-const double READY_TO_TAKEOFF_TIME = 3.0;
-// 起飞后的第一次悬停时间
-const double TAKEOFF_HOVER_TIME = 5.0;
-// 移动到目标点后的第二次悬停时间
-const double TARGET_HOVER_TIME = 5.0;
-// 在等待状态机切换到MOVE时，重复发送MOVE_POINT指令的时间间隔
-const double MOVE_COMMAND_RETRY_TIME = 0.5;
+// 定义一些全局变量，后续使用
+std::string node_name;
+std::string agent_name;
+int agent_id;
+std::string agent_ns;  // agent命名空间，使用agent_name与agent_id构造
+// 其实这里我也想使用agent前缀，而不是uav前缀，但是考虑到uav和ugv没有统一，因此还是先使用了uav，看后续能不能尝试统一为agent
+sunray_msgs::UAVControlFSMState uav_state;
+sunray_msgs::UAVControlCMD uav_cmd;
 
-// 无人机当前状态
-sunray_fsm::SunrayState current_state = sunray_fsm::SunrayState::OFF;
+// 期望的目标点
+#define Point_X 1.0
+#define Point_Y 0.0
+#define Point_Z 0.6
 
-namespace {
+// 退出信号捕获函数
+void mySignalHandler(int sig) {
+    std::cout << "sunray_uav_example [takeoff_land] node exit..." << std::endl;
 
-sunray_msgs::UAVControlCMD make_basic_command(uint8_t control_cmd) {
-    sunray_msgs::UAVControlCMD cmd;
-    cmd.header.stamp = ros::Time::now();
-    cmd.cmd_source = sunray_msgs::UAVControlCMD::CONTROL_CMD;
-    cmd.control_cmd = control_cmd;
-    cmd.yaw_mode = sunray_msgs::UAVControlCMD::KEEP_YAW;
-    return cmd;
+    ros::shutdown();
+    exit(EXIT_SUCCESS);  // 或者使用 exit(0)
 }
 
-sunray_msgs::UAVControlCMD make_point_command(const Eigen::Vector3d& position, double yaw) {
-    sunray_msgs::UAVControlCMD cmd;
-    cmd.header.stamp = ros::Time::now();
-    cmd.cmd_source = sunray_msgs::UAVControlCMD::CONTROL_CMD;
-    cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_POINT;
-    cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
-    cmd.desired_pos.x = position.x();
-    cmd.desired_pos.y = position.y();
-    cmd.desired_pos.z = position.z();
-    cmd.desired_yaw = yaw;
-    return cmd;
+// 无人机状态回调函数
+void uav_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
+    uav_state = *msg;
 }
 
-}  // namespace
-
-// 无人机当前状态回调函数
-void Sunray_FSM_State_Callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
-    // 由于ros中的msg在传递时，使用的是uint8类型，而我们定义的current_state是sunray_fsm::SunrayState类型
-    // 因此我们需要做一次类型转换
-    // 这里的static_cast是安全的，因为sunray_fsm::SunrayState是一个枚举类型值与msg定义的值是一致的
-    current_state = static_cast<sunray_fsm::SunrayState>(msg->sunray_fsm_state);
-}
-
-// 节点主函数
+// 主函数
 int main(int argc, char** argv) {
-    // 向ros系统注册当前节点
-    ros::init(argc, argv, "move_point_example_node");
-    // 创建一个全局的ros节点句柄，为后续注册ros话题订阅者和发布者做准备
-    ros::NodeHandle nh;
-    // 使用ROS_INFO输出节点启动信息
-    ROS_INFO("move_point_example_node started");
-    ROS_INFO("sunray_uav will takeoff, hover, move to one target point, then land");
-    // 使用ros时间戳来检测是否到达了指定的时间
-    ros::Time time_node_start = ros::Time::now();
-    ros::Time time_ready_start = ros::Time(0);
-    ros::Time time_first_hover_start = ros::Time(0);
-    ros::Time time_move_command_sent = ros::Time(0);
-    ros::Time time_second_hover_start = ros::Time(0);
-    const Eigen::Vector3d target_position(TARGET_X, TARGET_Y, TARGET_Z);
-    const double target_yaw = TARGET_YAW;
-    bool move_command_sent = false;
-    bool move_started = false;
-    bool land_command_sent = false;
-    ROS_INFO("Move target set to [%.2f, %.2f, %.2f], yaw = %.2f rad.",
-             target_position.x(),
-             target_position.y(),
-             target_position.z(),
-             target_yaw);
+    // ros节点初始化
+    ros::init(argc, argv, "takeoff_land_node");
 
-    // 读取ros空间中的参数，确定当前无人机的命名标识符
-    std::string uav_namespace;
-    std::string uav_name;
-    int uav_id;
-    // 如果本节点先于mavros节点或者Gazebo仿真节点启动，则需要等待参数服务器中的uav_name和uav_id参数准备好
-    bool system_ready = false;
-    ros::Rate wait_rate(10.0);
-    while (ros::ok() && !system_ready) {
-        const bool has_uav_name = nh.getParam("/uav_name", uav_name);
-        const bool has_uav_id = nh.getParam("/uav_id", uav_id);
-        // 如果uav_name和uav_id参数都已经准备好，则系统准备就绪
-        if (has_uav_name && !uav_name.empty() && has_uav_id) {
-            system_ready = true;
-            uav_namespace = sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
-            ROS_INFO("System ready: namespace = %s", uav_namespace.c_str());
+    // 创建全局句柄与私有句柄
+    ros::NodeHandle nh;
+    ros::NodeHandle private_nh("~");
+
+    // 注册退出信号捕获函数
+    signal(SIGINT, mySignalHandler);
+
+    // 首先读取节点私有的uav_name与uav_id
+    private_nh.getParam("agent_name", agent_name);
+    if (agent_name.empty()) {
+        // 如果agent_name为空，说明需要读取全局参数
+        nh.getParam("agent_name", agent_name);
+        nh.getParam("agent_id", agent_id);
+    } else {
+        // 如果从节点私有参数空间读取的agent_name不为空，则继续读取agent_id
+        private_nh.getParam("agent_id", agent_id);
+    }
+    agent_ns = agent_name + std::to_string(agent_id);
+    agent_ns = sunray_common::normalize_uav_ns(agent_ns);  // 标准化命名空间
+    // 读取完成，开始初始化ros订阅者与发布者
+    // [订阅] 无人机状态
+    ros::Subscriber uav_state_sub = nh.subscribe<sunray_msgs::UAVControlFSMState>(
+        agent_ns + "/sunray/fsm/state", 10, uav_state_callback);
+    // [发布] 无人机控制指令
+    ros::Publisher control_cmd_pub =
+        nh.advertise<sunray_msgs::UAVControlCMD>(agent_ns + "/sunray/uav_control_cmd", 1);
+    // 进入主循环
+    int times = 0;
+    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_INIT)) {
+        // 首先判断当前无人机控制状态
+        ros::spinOnce();
+        ros::Duration(1.0).sleep();
+        if (times++ > 5)
+            ROS_ERROR("uav control state can't init success ...");
+    }
+    // 清理循环变量
+    times = 0;
+    // 初始化成功，发布起飞
+    uav_cmd.header.stamp = ros::Time::now();
+    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::TAKEOFF;
+    control_cmd_pub.publish(uav_cmd);
+    // 判断是否完成起飞
+    // 当uav_state从INIT变成HOVER时，认为起飞完成
+    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_HOVER)) {
+        ros::spinOnce();
+        ros::Duration(1.0).sleep();
+        if (times++ > 5)
+            ROS_INFO("uav is takeoffing and wait for enter hover ");
+    }
+    // 清理循环变量
+    times = 0;
+    // 完成起飞后，发布move_point命令，移动到目标点
+    ROS_INFO("uav takeoff successfully and now move to Point(%f,%f,%f) " ,Point_X,Point_Y,Point_Z);
+    uav_cmd.header.stamp = ros::Time::now();
+    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_POINT;
+    uav_cmd.desired_pos.x = Point_X;
+    uav_cmd.desired_pos.y = Point_Y;
+    uav_cmd.desired_pos.z = Point_Z;
+    control_cmd_pub.publish(uav_cmd);
+    // 首先判断是否会成功切换为move_point
+    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_MOVE)) {
+        ros::spinOnce();
+        ros::Duration(1.0).sleep();
+        // 如果超过5s还没有进入到move模式，那么我们认为可能是system_check模块认为当前无法进行运动，需要检查日志
+        // 发布降落命令
+        if (times++ > 5){
+            ROS_ERROR("Error : sunray control module can't checkout move state,please check sunray log");
+            uav_cmd.header.stamp = ros::Time::now();
+            uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::LAND;
+            control_cmd_pub.publish(uav_cmd);
             break;
         }
-        // 如果等待时间超过阈值，则系统准备失败，节点结束，需要重新启动
-        if ((ros::Time::now() - time_node_start).toSec() > WAIT_FOR_READY_TIME) {
-            ROS_FATAL("System long time not ready.");
-            ros::shutdown();
-            return 1;
-        }
-        wait_rate.sleep();
     }
-    // 创建ros话题发布者
-    ros::Publisher cmd_pub =
-        nh.advertise<sunray_msgs::UAVControlCMD>(uav_namespace + "/sunray/uav_control_cmd", 10);
-    // 创建ros话题订阅者，用于接收无人机当前状态
-    ros::Subscriber fsm_sub = nh.subscribe<sunray_msgs::UAVControlFSMState>(
-        uav_namespace + "/sunray/fsm/state", 10, Sunray_FSM_State_Callback);
-    ros::Rate loop_rate(20.0);
-    while (ros::ok()) {
-        // 调用ros::spinOnce()来处理ros订阅者的回调函数
+    // 清理循环变量
+    times = 0;
+    // 判断是否到达目标点
+    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_HOVER)) {
         ros::spinOnce();
-        if (current_state == sunray_fsm::SunrayState::INIT) {
-            // 如果已经发送过降落指令，并重新回到了INIT状态，则说明本次任务已经完成
-            if (land_command_sent) {
-                ROS_INFO("Mission completed, landed at target point.");
-                ros::shutdown();
-                return 0;
-            }
-            // 当系统处于INIT状态时，设置ready时间为第一次检测到INIT状态的时间
-            if (time_ready_start == ros::Time(0)) {
-                time_ready_start = ros::Time::now();
-            } else if ((ros::Time::now() - time_ready_start).toSec() > READY_TO_TAKEOFF_TIME) {
-                sunray_msgs::UAVControlCMD cmd =
-                    make_basic_command(sunray_msgs::UAVControlCMD::TAKEOFF);
-                cmd_pub.publish(cmd);
-            }
-        } else if (current_state == sunray_fsm::SunrayState::MOVE) {
-            // 一旦检测到MOVE状态，说明move_point指令已经被状态机接受
-            if (!move_started) {
-                move_started = true;
-                time_second_hover_start = ros::Time(0);
-                ROS_INFO("Move point command accepted, flying to target point.");
-            }
-        } else if (current_state == sunray_fsm::SunrayState::HOVER) {
-            // 第一次进入HOVER，表示起飞完成，先悬停一段时间
-            if (!move_command_sent) {
-                if (time_first_hover_start == ros::Time(0)) {
-                    time_first_hover_start = ros::Time::now();
-                    ROS_INFO("Takeoff completed, hover for %.1fs before moving.",
-                             TAKEOFF_HOVER_TIME);
-                } else if ((ros::Time::now() - time_first_hover_start).toSec() >
-                           TAKEOFF_HOVER_TIME) {
-                    sunray_msgs::UAVControlCMD cmd =
-                        make_point_command(target_position, target_yaw);
-                    cmd_pub.publish(cmd);
-                    move_command_sent = true;
-                    time_move_command_sent = ros::Time::now();
-                    ROS_INFO("Send MOVE_POINT to [%.2f, %.2f, %.2f], yaw = %.2f rad.",
-                             target_position.x(),
-                             target_position.y(),
-                             target_position.z(),
-                             target_yaw);
-                }
-            } else if (!move_started) {
-                // 如果已经发送了MOVE_POINT但还没切到MOVE状态，则按固定周期重复发送
-                if ((ros::Time::now() - time_move_command_sent).toSec() > MOVE_COMMAND_RETRY_TIME) {
-                    sunray_msgs::UAVControlCMD cmd =
-                        make_point_command(target_position, target_yaw);
-                    cmd_pub.publish(cmd);
-                    time_move_command_sent = ros::Time::now();
-                }
-            } else if (!land_command_sent) {
-                // 再次回到HOVER状态，说明无人机已经到达目标点，悬停一段时间后降落
-                if (time_second_hover_start == ros::Time(0)) {
-                    time_second_hover_start = ros::Time::now();
-                    ROS_INFO("Target point reached, hover for %.1fs before landing.",
-                             TARGET_HOVER_TIME);
-                } else if ((ros::Time::now() - time_second_hover_start).toSec() >
-                           TARGET_HOVER_TIME) {
-                    sunray_msgs::UAVControlCMD cmd =
-                        make_basic_command(sunray_msgs::UAVControlCMD::LAND);
-                    cmd_pub.publish(cmd);
-                    land_command_sent = true;
-                    ROS_INFO("Target hover completed, landing.");
-                }
-            }
-        }
-        loop_rate.sleep();
+        ros::Duration(1.0).sleep();
+        if (times++ > 5)
+            ROS_INFO("uav is moving and wait for enter hover ");
     }
+    // 清理循环变量
+    times = 0;
+
+    // 日志打印，到达目标点
+    ROS_INFO("uav is moved point successfully ,and then enter land state");
+    // 发布降落命令
+    uav_cmd.header.stamp = ros::Time::now();
+    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::LAND;
+    control_cmd_pub.publish(uav_cmd);
+
+    // 直接结束节点或等待成功降落？
+    ROS_INFO("uav is enter land mode and [takeoff_land] demo finished,quit !");
+    return 0;
 }

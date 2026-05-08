@@ -19,8 +19,10 @@
 #include <math.h>
 #include <map>
 #include <signal.h>
-
+#include <string>
+#include <stdint.h>
 #include "WGS84.h"
+#include "string_uav_namespace_utils.hpp"
 
 // Eigen
 #include <Eigen/Eigen>
@@ -28,7 +30,24 @@
 // ROS话题消息头文件
 
 // sunray_msgs
-#include <sunray_msgs/FormationOffsets.h>
+#include <sunray_msgs/Formation.h>
+#include <sunray_msgs/OdomStatus.h>
+#include <sunray_msgs/OrcaCmd.h>
+#include <sunray_msgs/OrcaSetup.h>
+#include <sunray_msgs/PlanningWaypoint.h>
+#include <sunray_msgs/Px4State.h>
+#include <sunray_msgs/UAVControlCMD.h>
+#include <sunray_msgs/UAVControlFSMState.h>
+#include <sunray_msgs/UAVControllerState.h>
+#include <sunray_msgs/UAVPlanningCMD.h>
+#include <sunray_msgs/UAVPlanningState.h>
+#include <sunray_msgs/UAVSwarmCMD.h>
+#include <sunray_msgs/UAVSwarmState.h>
+#include <sunray_msgs/UGVControlCMD.h>
+#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVSwarmCMD.h>
+#include <sunray_msgs/UGVSwarmState.h>
+#include <sunray_msgs/Vector2.h>
 
 // std_msgs
 #include <std_msgs/Float32.h>
@@ -67,6 +86,7 @@
 #include <mavros_msgs/ParamGet.h>
 #include <mavros_msgs/ParamSet.h>
 #include <mavros_msgs/ParamValue.h>
+
 // nav_msgs
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
@@ -79,4 +99,3 @@
 #include <tf2_ros/transform_broadcaster.h>  //发布动态坐标关系
 #include <tf2_ros/transform_listener.h>
 #include <gazebo_msgs/ModelState.h>
-
