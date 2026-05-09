@@ -78,8 +78,8 @@ int main(int argc, char** argv) {
         if (times++ > 5)
             ROS_ERROR("uav control state can't init success ...");
     }
+    
     // 初始化成功，发布起飞
-
     uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::TAKEOFF;
     control_cmd_pub.publish(uav_cmd);
     // 判断是否完成起飞
