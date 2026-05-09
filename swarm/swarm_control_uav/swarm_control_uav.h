@@ -40,8 +40,6 @@ class Swarm_Control_UAV
         double goal_xy_tolerance{0.1};   // x-y 平面到达阈值
         double goal_z_tolerance{0.1};    // z 方向到达阈值
         double goal_yaw_tolerance{0.1};  // yaw 到达阈值
-        double goal_z_kp{1.0};           // 高度速度控制比例系数
-        double goal_z_vel_limit{0.8};    // 高度速度控制限幅
         double peer_odom_timeout{0.1};   // 邻居里程计超时阈值
         double dynamic_prepare_wait_time{2.0}; // 动态阵型全体就位后的等待时间
 
@@ -99,7 +97,6 @@ class Swarm_Control_UAV
     bool hasLocalOdom() const;
     static double getYawFromOdom(const nav_msgs::Odometry &odom);
     static double normalizeYaw(double yaw);
-    static double clamp(double value, double min_value, double max_value);
     static bool isDynamicFormationType(uint8_t formation_type);
     bool hasReachedGoal() const;
     bool getFormationGoalForAgent(const sunray_msgs::Formation &formation_cmd,

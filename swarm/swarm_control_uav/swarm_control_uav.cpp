@@ -30,8 +30,6 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
     nh_.param("goal_xy_tolerance", params_.goal_xy_tolerance, 0.1 /*米*/);
     nh_.param("goal_z_tolerance", params_.goal_z_tolerance, 0.1 /*米*/);
     nh_.param("goal_yaw_tolerance", params_.goal_yaw_tolerance, 0.1 /*rad*/);
-    nh_.param("goal_z_kp", params_.goal_z_kp, 1.0);
-    nh_.param("goal_z_vel_limit", params_.goal_z_vel_limit, 0.8 /*米/秒*/);
     // 场地限制参数- 主要用于判定阵型目标点是否落在场地内部，否则无法生成阵型目标点
     nh_.param("field/x_min", params_.field_x_min, -50.0 /*米*/);
     nh_.param("field/x_max", params_.field_x_max, 50.0 /*米*/);
@@ -630,11 +628,6 @@ double Swarm_Control_UAV::normalizeYaw(const double yaw)
     return std::atan2(std::sin(yaw), std::cos(yaw));
 }
 
-double Swarm_Control_UAV::clamp(const double value, const double min_value, const double max_value)
-{
-    return std::max(min_value, std::min(value, max_value));
-}
-
 bool Swarm_Control_UAV::isDynamicFormationType(const uint8_t formation_type)
 {
     return formation_type == sunray_msgs::Formation::DYNAMIC_FORMATION_RING ||
@@ -738,11 +731,7 @@ void Swarm_Control_UAV::updateOrcaCommand()
         return;
     }
 
-    // 4.发布无人机控制指令，目前z轴采用P控制计算速度
-    const nav_msgs::Odometry &self_odom = odom_caches_[static_cast<size_t>(params_.agent_id)].odom;
-    const double z_error = goal_point_.z - self_odom.pose.pose.position.z;
-    const double vz = clamp(z_error * params_.goal_z_kp, -params_.goal_z_vel_limit, params_.goal_z_vel_limit);
-
+    // 4.发布无人机控制指令：XY 速度由 ORCA 输出，Z 轴交给 uav_control 的 fixed_height 模式锁定。
     uav_control_cmd_ = sunray_msgs::UAVControlCMD{};
     uav_control_cmd_.header.stamp = ros::Time::now();
     uav_control_cmd_.cmd_source = sunray_msgs::UAVControlCMD::SWARM_CONTROL;
@@ -750,7 +739,8 @@ void Swarm_Control_UAV::updateOrcaCommand()
     uav_control_cmd_.control_cmd = sunray_msgs::UAVControlCMD::MOVE_VELOCITY;
     uav_control_cmd_.desired_vel.x = vx;
     uav_control_cmd_.desired_vel.y = vy;
-    uav_control_cmd_.desired_vel.z = vz;
+    uav_control_cmd_.desired_vel.z = 0.0;
+    uav_control_cmd_.fixed_height = static_cast<float>(goal_point_.z);
     uav_control_cmd_.desired_yaw = static_cast<float>(goal_point_.yaw);
     control_cmd_pub_.publish(uav_control_cmd_);
 }

@@ -23,10 +23,10 @@ uint8 RETURN=3  # 返航
 uint8 KILL=4    # 紧急锁桨
 uint8 HOVER=5   # 当前位置悬停
 uint8 MOVE_POINT=6  # 移动到某一点
-uint8 MOVE_VELOCITY=7   # 使用速度模式控制
+uint8 MOVE_VELOCITY=7   # 使用速度模式控制，可以选择固定高度
 uint8 MOVE_TRAJECTORY=8 # 追踪轨迹
-uint8 MOVE_POINT_BODY=9 # 机体系下移动到某一点
-uint8 MOVE_VELOCITY_BODY=10  # 机体系下速度模式控制
+uint8 MOVE_POINT_BODY=9 # 固定高度，机体系下移动到某一点
+uint8 MOVE_VELOCITY_BODY=10  # 固定高度，机体系下速度模式控制
 uint8 MOVE_POINT_WGS84=11   # WGS84 经纬高定位
 # 控制命令
 uint8 control_cmd
@@ -42,8 +42,9 @@ geometry_msgs/Vector3 desired_jerk
 # 机体系
 Vector2 desired_body_xy_pos
 Vector2 desired_body_xy_vel
-# 机体系控制指令 使用fixed_height 设置期望的z轴高度
-# velocity控制指令，当fixed_height不为零和负值时，使用fixed_height锁定z轴高度，不再使用desired_vel字段中的z轴数据
+
+# MOVE_POINT_BODY和MOVE_VELOCITY_BODY模式下必须要填写fixed_height
+# MOVE_VELOCITY模式下，当fixed_height不为零和负值时，使用fixed_height锁定z轴高度，不再使用desired_vel字段中的z轴数据
 float32 fixed_height
 
 geographic_msgs/GeoPoint desired_wgs84_pos # 经纬高

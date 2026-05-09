@@ -130,7 +130,7 @@ swarm/
 
 功能：
 
-`swarm_control_uav_node` 是单架 UAV 的集群控制节点。每个无人机启动一个该节点。节点接收 `UAVSwarmCMD`，根据本机 ID 计算目标点，调用 ORCA 得到 XY 避碰速度，使用高度 P 控制生成 Z 方向速度，最终发布 `UAVControlCMD` 给 `sunray_uav_control`。
+`swarm_control_uav_node` 是单架 UAV 的集群控制节点。每个无人机启动一个该节点。节点接收 `UAVSwarmCMD`，根据本机 ID 计算目标点，调用 ORCA 得到 XY 避碰速度，并通过 `UAVControlCMD.fixed_height` 交给 `sunray_uav_control` 锁定 Z 轴高度。
 
 Subscribed Topics：
 
@@ -161,8 +161,6 @@ Parameters：
 | `goal_xy_tolerance` | `double` | `0.1` | m | XY 平面到达阈值 |
 | `goal_z_tolerance` | `double` | `0.1` | m | 高度到达阈值 |
 | `goal_yaw_tolerance` | `double` | `0.1` | rad | yaw 到达阈值 |
-| `goal_z_kp` | `double` | `1.0` | - | Z 方向速度 P 控制比例系数 |
-| `goal_z_vel_limit` | `double` | `0.8` | m/s | Z 方向速度限幅 |
 | `field/x_min` | `double` | `-50.0` | m | 阵型目标点 X 下界 |
 | `field/x_max` | `double` | `50.0` | m | 阵型目标点 X 上界 |
 | `field/y_min` | `double` | `-50.0` | m | 阵型目标点 Y 下界 |

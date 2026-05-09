@@ -12,8 +12,6 @@ dynamic_prepare_wait_time: 2.0 # 秒，动态阵型全体抵达 t=0 初始点后
 goal_xy_tolerance: 0.1       # 米，XY 平面到达阈值
 goal_z_tolerance: 0.05       # 米，高度到达阈值
 goal_yaw_tolerance: 0.05     # rad，偏航角到达阈值
-goal_z_kp: 1.0
-goal_z_vel_limit: 0.8        # 米/秒，高度速度限幅
 
 field:
   x_min: -20.0               # 米，仿真场地 X 最小值
