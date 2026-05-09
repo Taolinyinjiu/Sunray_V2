@@ -1,14 +1,17 @@
 /**
- * @file move_point_and_return.cpp
- * @brief Sunray单个无人机示例系列 - takeoff -> hover -> move 1 point -> land
+ * @file move_point_body.cpp
+ * @brief Sunray单个无人机示例系列 - takeoff -> move_point[body] -> return
  * 运行要求：
  * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
- * [真实环境]：要求无人机周围无阻拦运动的障碍物
+ * [真实环境]：要求无人机周围无阻拦运动的障碍物，
  * 运行结果：
- * sunray系列无人机在当前位置起飞，达到指定高度后悬停5s，然后移动到指定位置悬停5s，随后返航回到起飞的位置并降落
+ * sunray系列无人机在当前位置起飞，使用机体系控制命令move_point_body移动到指定的目标点，然后返航降落
+ * [补充说明]:
+ * 如需修改起飞降落的相关参数，请修改control文件夹中
+ * sunray_uav_control文件夹下config文件夹中的sunray_control_config.yaml中对应参数
  *
- * [补充一句：这个文件用于教学/演示什么内容]
  */
+
 // ros_msg_utils头文件，包含了大部分情况下需要的头文件
 #include <ros_msg_utils.h>
 
@@ -21,14 +24,15 @@ std::string agent_ns;  // agent命名空间，使用agent_name与agent_id构造
 sunray_msgs::UAVControlFSMState uav_state;
 sunray_msgs::UAVControlCMD uav_cmd;
 
-// 期望的目标点
+// 期望的目标点 [机体系]
 #define Point_X 1.0
 #define Point_Y 0.0
 #define Point_Z 0.6
 
 // 退出信号捕获函数
 void mySignalHandler(int sig) {
-    std::cout << "sunray_uav_example [move_point_and_return] node exit..." << std::endl;
+    std::cout << "sunray_uav_example [move_point_body] node exit..." << std::endl;
+
     ros::shutdown();
     exit(EXIT_SUCCESS);  // 或者使用 exit(0)
 }
@@ -41,7 +45,7 @@ void uav_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
 // 主函数
 int main(int argc, char** argv) {
     // ros节点初始化
-    ros::init(argc, argv, "move_point_and_return_node");
+    ros::init(argc, argv, "move_point_body_node");
 
     // 创建全局句柄与私有句柄
     ros::NodeHandle nh;
@@ -95,9 +99,9 @@ int main(int argc, char** argv) {
     // 清理循环变量
     times = 0;
     // 完成起飞后，发布move_point命令，移动到目标点
-    ROS_INFO("uav takeoff successfully and now move to Point(%f,%f,%f) " ,Point_X,Point_Y,Point_Z);
+    ROS_INFO("uav takeoff successfully and now move to bodyframe Point(%f,%f,%f) " ,Point_X,Point_Y,Point_Z);
     uav_cmd.header.stamp = ros::Time::now();
-    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_POINT;
+    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::MOVE_POINT_BODY;
     uav_cmd.desired_pos.x = Point_X;
     uav_cmd.desired_pos.y = Point_Y;
     uav_cmd.desired_pos.z = Point_Z;
@@ -129,16 +133,13 @@ int main(int argc, char** argv) {
     times = 0;
 
     // 日志打印，到达目标点
-    ROS_INFO("uav is moved point successfully ,and then enter return state");
+    ROS_INFO("uav is moved point successfully ,and then enter land state");
     // 发布降落命令
     uav_cmd.header.stamp = ros::Time::now();
-    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::RETURN;
+    uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::LAND;
     control_cmd_pub.publish(uav_cmd);
-    // 一次publish需要ros的spin才能实现，所以这里需要进行一次spin，如果觉得这样不保险，可以选择while循环查询进入到RETURN后再退出
-    ros::spinOnce();
-    // RETURN可以在sunray_uav_config.yaml文件中被配置为自动降落或切入悬停，如果配置文件中设置为切入悬停，则会导致本节点会持续悬停
 
     // 直接结束节点或等待成功降落？
-    ROS_INFO("uav is enter land mode and [move_point_and_return] demo finished,quit !");
+    ROS_INFO("uav is enter land mode and [move_point_body] demo finished,quit !");
     return 0;
 }

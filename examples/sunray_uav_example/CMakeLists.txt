@@ -137,10 +137,16 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(takeoff_land_node src/basic_example/takeoff_land.cpp)
 add_executable(move_point_node src/basic_example/move_point.cpp)
+add_executable(move_point_body_node src/basic_example/move_point_body.cpp)
 add_executable(move_multipoint_node src/basic_example/move_multipoint.cpp)
 add_executable(move_point_and_return_node src/basic_example/move_point_and_return.cpp)
-add_executable(move_point_by_velocity_node src/velocity_example/move_point_by_velocity.cpp)
-add_executable(move_point_by_trajectory_node src/trajectory_example/move_point_by_trajectory.cpp)
+add_executable(move_velocity_node src/velocity_example/move_velocity.cpp)
+add_executable(move_velocity_body_node src/velocity_example/move_velocity_body.cpp)
+add_executable(circle_velocity_node src/velocity_example/circle_velocity.cpp)
+add_executable(lemniscate_velocity_node src/velocity_example/lemniscate_velocity.cpp)
+add_executable(move_trajectory_node src/trajectory_example/move_trajectory.cpp)
+add_executable(circle_trajectory_node src/trajectory_example/circle_trajectory.cpp)
+add_executable(lemniscate_trajectory_node src/trajectory_example/lemniscate_trajectory.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -152,10 +158,16 @@ add_executable(move_point_by_trajectory_node src/trajectory_example/move_point_b
 ## same as for the library above
 add_dependencies(takeoff_land_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_point_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_point_body_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_multipoint_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_point_and_return_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(move_point_by_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(move_point_by_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_velocity_body_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(circle_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(lemniscate_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(circle_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(lemniscate_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(takeoff_land_node
@@ -164,16 +176,34 @@ target_link_libraries(takeoff_land_node
 target_link_libraries(move_point_node
   ${catkin_LIBRARIES}
 )
+target_link_libraries(move_point_body_node
+  ${catkin_LIBRARIES}
+)
 target_link_libraries(move_multipoint_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(move_point_and_return_node
   ${catkin_LIBRARIES}
 )
-target_link_libraries(move_point_by_velocity_node
+target_link_libraries(move_velocity_node
   ${catkin_LIBRARIES}
 )
-target_link_libraries(move_point_by_trajectory_node
+target_link_libraries(move_velocity_body_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(circle_velocity_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(lemniscate_velocity_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(move_trajectory_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(circle_trajectory_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(lemniscate_trajectory_node
   ${catkin_LIBRARIES}
 )
 
@@ -195,10 +225,16 @@ target_link_libraries(move_point_by_trajectory_node
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
 install(TARGETS takeoff_land_node
   move_point_node
+  move_point_body_node
   move_multipoint_node
   move_point_and_return_node
-  move_point_by_velocity_node
-  move_point_by_trajectory_node
+  move_velocity_node
+  move_velocity_body_node
+  circle_velocity_node
+  lemniscate_velocity_node
+  move_trajectory_node
+  circle_trajectory_node
+  lemniscate_trajectory_node
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

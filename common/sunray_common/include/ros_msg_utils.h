@@ -27,6 +27,10 @@
 // Eigen
 #include <Eigen/Eigen>
 
+// 通用库
+#include <math.h>
+
+
 // ROS话题消息头文件
 
 // sunray_msgs

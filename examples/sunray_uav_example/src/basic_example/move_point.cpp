@@ -1,5 +1,5 @@
 /**
- * @file takeoff_land.cpp
+ * @file move_point.cpp
  * @brief Sunray单个无人机示例系列 - takeoff -> hover -> land
  * 运行要求：
  * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
@@ -32,7 +32,7 @@ sunray_msgs::UAVControlCMD uav_cmd;
 
 // 退出信号捕获函数
 void mySignalHandler(int sig) {
-    std::cout << "sunray_uav_example [takeoff_land] node exit..." << std::endl;
+    std::cout << "sunray_uav_example [move_point] node exit..." << std::endl;
 
     ros::shutdown();
     exit(EXIT_SUCCESS);  // 或者使用 exit(0)
@@ -46,7 +46,7 @@ void uav_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
 // 主函数
 int main(int argc, char** argv) {
     // ros节点初始化
-    ros::init(argc, argv, "takeoff_land_node");
+    ros::init(argc, argv, "move_point_node");
 
     // 创建全局句柄与私有句柄
     ros::NodeHandle nh;
@@ -141,6 +141,6 @@ int main(int argc, char** argv) {
     control_cmd_pub.publish(uav_cmd);
 
     // 直接结束节点或等待成功降落？
-    ROS_INFO("uav is enter land mode and [takeoff_land] demo finished,quit !");
+    ROS_INFO("uav is enter land mode and [move_point] demo finished,quit !");
     return 0;
 }
