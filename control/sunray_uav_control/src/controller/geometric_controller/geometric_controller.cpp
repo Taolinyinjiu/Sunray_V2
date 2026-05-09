@@ -722,9 +722,13 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
 
 bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t velocity) {
     reset_point_motion_context();
+    const bool fixed_height_active = velocity.fixed_height > 0.0;
     const ros::Time now = velocity.stamp.isZero() ? ros::Time::now() : velocity.stamp;
     velocity.velocity =
         reference_limit_helper::clamp_velocity_per_axis(velocity.velocity, max_velocity_);
+    if (fixed_height_active) {
+        velocity.velocity.z() = 0.0;
+    }
     if (std::abs(velocity.yaw_rate) > 1e-6) {
         velocity.yaw_rate =
             reference_limit_helper::clamp_yaw_rate(velocity.yaw_rate, max_yaw_rate_rad_s_);
@@ -753,6 +757,9 @@ bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t
     mavros_helper_.pub_attitude_setpoint(setpoint);
     last_setpoint_ = setpoint;
     desired_state_.position = uav_odometry_.position;
+    if (fixed_height_active) {
+        desired_state_.position.z() = velocity.fixed_height;
+    }
     desired_state_.velocity = velocity.velocity;
     desired_state_.acceleration = Eigen::Vector3d::Zero();
     desired_state_.jerk = Eigen::Vector3d::Zero();
@@ -822,13 +829,8 @@ bool Geometric_Controller::move_velocity_body(
     world_velocity.stamp = velocity.stamp;
     world_velocity.velocity.x() = v_w_xy.x();
     world_velocity.velocity.y() = v_w_xy.y();
-
-    // body系速度接口采用“xy速度 + 固定高度”的混合语义，这里复用 z 轴位置增益
-    // 将高度误差转换为 z 方向速度指令，并使用通用速度上限进行限幅。
-    const double height_error = velocity.fixed_height - uav_odometry_.position.z();
-    const double z_velocity_cmd = geometric_controller_param_.pos_kp.z() * height_error;
-    world_velocity.velocity.z() =
-        std::clamp(z_velocity_cmd, -max_velocity_.z(), max_velocity_.z());
+    world_velocity.velocity.z() = 0.0;
+    world_velocity.fixed_height = velocity.fixed_height;
     world_velocity.yaw = yaw + velocity.yaw;
     world_velocity.yaw_rate = velocity.yaw_rate;
 

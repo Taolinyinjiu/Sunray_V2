@@ -150,6 +150,7 @@ class Geometric_AttitudeControl {
         integral_vel_.setZero();
         last_pos_error_.setZero();
         last_vel_error_.setZero();
+        last_velocity_fixed_height_active_ = false;
     }
 
     // 仅重置 z 轴积分与误差缓存，避免高度环残留影响下一段运动
@@ -188,6 +189,7 @@ class Geometric_AttitudeControl {
     // 主要用于与外部接口保持一致，并保留 set_initial_yaw() 的初始化入口
     double last_desired_yaw_{0.0};
     Control_Type last_control_type_{Control_Type::Undefine_};
+    bool last_velocity_fixed_height_active_{false};
 
     Geometric_AttitudeControl_DebugState_t last_debug_state_{};
 
@@ -220,8 +222,8 @@ class Geometric_AttitudeControl {
                                     double mav_yaw);
 
     // 纯速度控制：不引入轨迹加速度前馈，只由速度误差生成期望加速度
-    Eigen::Vector3d controlVelocity(const Eigen::Vector3d& target_vel,
-                                    const Eigen::Vector3d& mav_vel,
+    Eigen::Vector3d controlVelocity(const controller_data_types::TargetVelocity_t& des_state,
+                                    const control_common::UAVStateEstimate& current_odom,
                                     double target_yaw);
 
     // 由期望加速度调用姿态子控制器，计算 body rate 和归一化推力

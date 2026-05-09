@@ -42,11 +42,9 @@ geometry_msgs/Vector3 desired_jerk
 # 机体系
 Vector2 desired_body_xy_pos
 Vector2 desired_body_xy_vel
-# 机体系控制时使用fixed_height 设置期望的z轴高度
+# 机体系控制指令 使用fixed_height 设置期望的z轴高度
+# velocity控制指令，当fixed_height不为零和负值时，使用fixed_height锁定z轴高度，不再使用desired_vel字段中的z轴数据
 float32 fixed_height
-
-float32 desired_yaw
-float32 desired_yaw_rate
 
 geographic_msgs/GeoPoint desired_wgs84_pos # 经纬高
 
@@ -56,3 +54,7 @@ uint8 KEEP_YAW=0 # 保持当前的yaw角不变
 uint8 SET_YAW=1     # 控制yaw角
 uint8 SET_YAWRATE=2 # 控制yaw_rate
 uint8 yaw_mode
+
+# yaw角相关控制指令
+float32 desired_yaw
+float32 desired_yaw_rate

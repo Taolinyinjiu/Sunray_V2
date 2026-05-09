@@ -21,10 +21,10 @@ modules:
     dependencies: []
 
   # uav_control_example
-  sunray_uav_example:
-    description: "sunray项目中uav控制示例"
-    source_path: "examples/sunray_uav_example"
-    build_path: "build/sunray_uav_example"
+  sunray_uav_control_example:
+    description: "sunray项目中uav单机控制示例 - 无其他模块辅助，属于基本实例部分"
+    source_path: "examples/sunray_uav_control_example"
+    build_path: "build/sunray_uav_control_example"
     dependencies: []
 
   # 规划模块功能包

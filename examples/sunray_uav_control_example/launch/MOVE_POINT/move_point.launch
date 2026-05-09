@@ -1,14 +1,11 @@
 <launch>
-  <!-- trajectory_example/move_trajectory.cpp 启动入口 -->
+  <!-- MOVE_POINT/move_point.cpp 启动入口 -->
   <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
-  <arg name="node_name" default="move_trajectory_node" />
+  <arg name="node_name" default="move_point_node" />
 
-  <node pkg="sunray_uav_example"
-        type="move_trajectory_node"
-        name="$(arg node_name)"
-        output="screen">
+  <node pkg="sunray_uav_control_example" type="move_point_node" name="$(arg node_name)" output="screen">
     <param name="agent_name" type="str" value="$(arg agent_name)" />
     <param name="agent_id" type="int" value="$(arg agent_id)" />
   </node>

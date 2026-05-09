@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <package format="2">
-  <name>sunray_uav_example</name>
+  <name>sunray_uav_control_example</name>
   <version>0.0.0</version>
   <description>The sunray_uav_example package</description>
 

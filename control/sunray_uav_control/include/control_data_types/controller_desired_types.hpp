@@ -57,18 +57,22 @@ struct TargetPoint_t {
 
 // ═══════════════════════════════════════════════════════════
 // 期望速度结构体
+// update: 速度结构体中加入fix_height字段，当该字段值大于零时，认为只在xy方向进行速度控制
+// z轴交给sunray控制器进行固定高度控制，并围绕fixed_height进行闭环控制
 // ═══════════════════════════════════════════════════════════
 struct TargetVelocity_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     ros::Time stamp{ros::Time(0)};
     Eigen::Vector3d velocity{Eigen::Vector3d::Zero()};
+    double fixed_height{0.0};
     double yaw{0.0};
     double yaw_rate{0.0};
 };
 
 // ═══════════════════════════════════════════════════════════
 // body系位置控制结构体
-// 机体系仅描述水平面位移，z轴使用世界系固定高度
+// position_xy 字段机描述 体系下水平方向位移
+// fixed_height 字段描述 惯性系下z轴固定高度
 // ═══════════════════════════════════════════════════════════
 struct TargetBodyPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -79,7 +83,8 @@ struct TargetBodyPoint_t {
 
 // ═══════════════════════════════════════════════════════════
 // body系速度控制结构体
-// 机体系仅描述水平面速度，z轴使用世界系固定高度
+// velocity_xy 字段机描述 体系下水平方向期望速度
+// fixed_height 字段描述 惯性系下z轴固定高度
 // ═══════════════════════════════════════════════════════════
 struct TargetBodyVelocity_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

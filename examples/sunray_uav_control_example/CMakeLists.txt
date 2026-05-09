@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(sunray_uav_example)
+project(sunray_uav_control_example)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -135,18 +135,19 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(takeoff_land_node src/basic_example/takeoff_land.cpp)
-add_executable(move_point_node src/basic_example/move_point.cpp)
-add_executable(move_point_body_node src/basic_example/move_point_body.cpp)
-add_executable(move_multipoint_node src/basic_example/move_multipoint.cpp)
-add_executable(move_point_and_return_node src/basic_example/move_point_and_return.cpp)
-add_executable(move_velocity_node src/velocity_example/move_velocity.cpp)
-add_executable(move_velocity_body_node src/velocity_example/move_velocity_body.cpp)
-add_executable(circle_velocity_node src/velocity_example/circle_velocity.cpp)
-add_executable(lemniscate_velocity_node src/velocity_example/lemniscate_velocity.cpp)
-add_executable(move_trajectory_node src/trajectory_example/move_trajectory.cpp)
-add_executable(circle_trajectory_node src/trajectory_example/circle_trajectory.cpp)
-add_executable(lemniscate_trajectory_node src/trajectory_example/lemniscate_trajectory.cpp)
+add_executable(takeoff_land_node src/basic/takeoff_land.cpp)
+add_executable(move_point_node src/MOVE_POINT/move_point.cpp)
+add_executable(move_point_body_node src/MOVE_POINT_BODY/move_point_body.cpp)
+add_executable(move_multipoint_node src/MOVE_POINT/move_multipoint.cpp)
+add_executable(move_point_and_return_node src/MOVE_POINT/move_point_and_return.cpp)
+add_executable(move_velocity_node src/MOVE_VELOCITY/move_velocity.cpp)
+add_executable(move_velocity_fixed_height_node src/MOVE_VELOCITY/move_velocity_fixed_height.cpp)
+add_executable(move_velocity_body_node src/MOVE_VELOCITY_BODY/move_velocity_body.cpp)
+add_executable(circle_velocity_node src/MOVE_VELOCITY/circle_velocity.cpp)
+add_executable(lemniscate_velocity_node src/MOVE_VELOCITY/lemniscate_velocity.cpp)
+add_executable(move_trajectory_node src/MOVE_TRAJECTORY/move_trajectory.cpp)
+add_executable(circle_trajectory_node src/MOVE_TRAJECTORY/circle_trajectory.cpp)
+add_executable(lemniscate_trajectory_node src/MOVE_TRAJECTORY/lemniscate_trajectory.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -162,6 +163,7 @@ add_dependencies(move_point_body_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catk
 add_dependencies(move_multipoint_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_point_and_return_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(move_velocity_fixed_height_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_velocity_body_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(circle_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(lemniscate_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -186,6 +188,9 @@ target_link_libraries(move_point_and_return_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(move_velocity_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(move_velocity_fixed_height_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(move_velocity_body_node
@@ -229,6 +234,7 @@ install(TARGETS takeoff_land_node
   move_multipoint_node
   move_point_and_return_node
   move_velocity_node
+  move_velocity_fixed_height_node
   move_velocity_body_node
   circle_velocity_node
   lemniscate_velocity_node

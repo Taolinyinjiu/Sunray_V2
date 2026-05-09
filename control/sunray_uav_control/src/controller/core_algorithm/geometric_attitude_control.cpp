@@ -119,19 +119,26 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     const control_common::UAVStateEstimate& current_odom,
     ThrustCommandPolicy thrust_policy) {
 
+    const bool fixed_height_active = des_state.fixed_height > 0.0;
     if (last_control_type_ != Control_Type::Velocity_) {
         reset_integral();
+    } else if (fixed_height_active != last_velocity_fixed_height_active_) {
+        // fixed_height 模式切换时只清理 z 轴积分，避免高度环残留影响下一段速度控制。
+        reset_vertical_integral();
     }
     last_control_type_ = Control_Type::Velocity_;
+    last_velocity_fixed_height_active_ = fixed_height_active;
 
-    const Eigen::Vector3d mav_vel = current_odom.velocity;
     const Eigen::Quaterniond& curr_att = current_odom.orientation;
 
-    const Eigen::Vector3d target_vel = des_state.velocity;
+    Eigen::Vector3d target_vel = des_state.velocity;
+    if (fixed_height_active) {
+        target_vel.z() = 0.0;
+    }
     last_desired_yaw_ = des_state.yaw;
     const double target_yaw = des_state.yaw;
 
-    const Eigen::Vector3d a_des = controlVelocity(target_vel, mav_vel, target_yaw);
+    const Eigen::Vector3d a_des = controlVelocity(des_state, current_odom, target_yaw);
 
     Eigen::Vector4d bodyrate_cmd;
     computeBodyRateCmd(bodyrate_cmd, a_des, curr_att, target_yaw);
@@ -142,6 +149,9 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     output.orientation = acc2quaternion(a_des, target_yaw);
     controller_data_types::TargetTrajectoryPoint_t debug_state;
     debug_state.position = current_odom.position;
+    if (fixed_height_active) {
+        debug_state.position.z() = des_state.fixed_height;
+    }
     debug_state.velocity = target_vel;
     debug_state.acceleration = Eigen::Vector3d::Zero();
     debug_state.jerk = Eigen::Vector3d::Zero();
@@ -261,13 +271,27 @@ Eigen::Vector3d Geometric_AttitudeControl::controlPosition(const Eigen::Vector3d
     return a_fb + target_acc - a_rd - gravity_vec;
 }
 
-Eigen::Vector3d Geometric_AttitudeControl::controlVelocity(const Eigen::Vector3d& target_vel,
-                                                           const Eigen::Vector3d& mav_vel,
-                                                           double target_yaw) {
+Eigen::Vector3d Geometric_AttitudeControl::controlVelocity(
+    const controller_data_types::TargetVelocity_t& des_state,
+    const control_common::UAVStateEstimate& current_odom,
+    double target_yaw) {
 
     const Eigen::Vector3d gravity_vec(0.0, 0.0, -param_.gravity);
     const Eigen::Quaterniond q_ref = acc2quaternion(-gravity_vec, target_yaw);
     const Eigen::Matrix3d R_ref = q_ref.toRotationMatrix();
+    Eigen::Vector3d target_vel = des_state.velocity;
+    const Eigen::Vector3d mav_vel = current_odom.velocity;
+    const bool fixed_height_active = des_state.fixed_height > 0.0;
+
+    if (fixed_height_active) {
+        target_vel.z() = 0.0;
+        const Eigen::Vector3d pos_error(0.0, 0.0, des_state.fixed_height - current_odom.position.z());
+        const Eigen::Vector3d vel_error = target_vel - mav_vel;
+        const Eigen::Vector3d a_fb = poscontroller(pos_error, vel_error);
+        const Eigen::Vector3d a_rd = R_ref * param_.D.asDiagonal() * R_ref.transpose() * target_vel;
+        return a_fb - a_rd - gravity_vec;
+    }
+
     const Eigen::Vector3d vel_error = target_vel - mav_vel;
     const double dt = 1.0 / std::max(1.0, param_.controller_hz);
 

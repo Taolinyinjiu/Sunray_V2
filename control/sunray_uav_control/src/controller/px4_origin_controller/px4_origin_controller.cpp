@@ -694,20 +694,36 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
 bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t velocity) {
     reset_point_motion_context();
     // 请注意，velocity是一个比较危险的接口，我们会默认返回true
+    const bool fixed_height_active = velocity.fixed_height > 0.0;
     velocity.velocity =
         reference_limit_helper::clamp_velocity_per_axis(velocity.velocity, max_velocity_);
+    if (fixed_height_active) {
+        velocity.velocity.z() = 0.0;
+    }
     control_common::Mavros_SetpointLocal velocity_setpoint;
     velocity_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
 #ifndef Raptor_Test
-    velocity_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
-                             control_common::Mavros_SetpointLocal::Mask::IgnorePy |
-                             control_common::Mavros_SetpointLocal::Mask::IgnorePz |
-                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
-                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
-                             control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    if (fixed_height_active) {
+        velocity_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnorePy |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    } else {
+        velocity_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnorePx |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnorePy |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnorePz |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
+                                 control_common::Mavros_SetpointLocal::Mask::IgnoreAfz;
+    }
 #endif
 
     velocity_setpoint.velocity = velocity.velocity;
+    if (fixed_height_active) {
+        velocity_setpoint.position.z() = velocity.fixed_height;
+    }
     if (std::abs(velocity.yaw_rate) > 1e-6) {
         yaw_reference_state_.reset();
         velocity_setpoint.yaw = uav_odometry_.get_yaw();

@@ -1,0 +1,12 @@
+<launch>
+  <!-- basic/takeoff_land.cpp 启动入口 -->
+  <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="node_name" default="takeoff_land_node" />
+
+  <node pkg="sunray_uav_control_example" type="takeoff_land_node" name="$(arg node_name)" output="screen">
+    <param name="agent_name" type="str" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="$(arg agent_id)" />
+  </node>
+</launch>

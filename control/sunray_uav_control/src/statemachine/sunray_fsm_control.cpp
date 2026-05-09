@@ -141,6 +141,7 @@ void Sunray_FSM::update_controller_output() {
             controller_data_types::TargetVelocity_t velocity;
             velocity.stamp = uav_control_cmd.timestamp;
             velocity.velocity = uav_control_cmd.velocity;
+            velocity.fixed_height = uav_control_cmd.fixed_height;
             if (uav_control_cmd.yaw_mode == control_common::UavControlCmd::YawMode::SET_YAW) {
                 velocity.yaw = uav_control_cmd.yaw;
             } else if (uav_control_cmd.yaw_mode ==
