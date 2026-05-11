@@ -311,8 +311,17 @@ std::string formatUavCommand(const sunray_msgs::UAVControlCMD &cmd)
            << cmd.desired_pos.z << ") m  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
         break;
     case sunray_msgs::UAVControlCMD::MOVE_VELOCITY:
-        ss << "  原始输入 -> desired_vel=(" << cmd.desired_vel.x << ", " << cmd.desired_vel.y << ", "
-           << cmd.desired_vel.z << ") m/s  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
+        if (cmd.fixed_height > 0.0f)
+        {
+            ss << "  原始输入 -> xy_vel=(" << cmd.desired_vel.x << ", " << cmd.desired_vel.y
+               << ") m/s  fixed_height=" << cmd.fixed_height << " m  yaw=" << cmd.desired_yaw * kRadToDeg
+               << " deg";
+        }
+        else
+        {
+            ss << "  原始输入 -> desired_vel=(" << cmd.desired_vel.x << ", " << cmd.desired_vel.y << ", "
+               << cmd.desired_vel.z << ") m/s  yaw=" << cmd.desired_yaw * kRadToDeg << " deg";
+        }
         break;
     case sunray_msgs::UAVControlCMD::MOVE_POINT_BODY:
         ss << "  原始输入 -> body_pos=(" << cmd.desired_body_xy_pos.x << ", " << cmd.desired_body_xy_pos.y

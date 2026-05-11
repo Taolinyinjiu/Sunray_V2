@@ -42,6 +42,7 @@ namespace
 {
 constexpr double kDegToRad = 0.017453292519943295;
 constexpr double kRadToDeg = 57.29577951308232;
+constexpr int kContinuousCommandIntervalMs = 200;  // 5 Hz
 
 struct GoalVisual
 {
@@ -226,6 +227,10 @@ class UAVControlPanel : public QMainWindow
         connect(refresh_timer_, &QTimer::timeout, this, [this]() { refreshState(); });
         refresh_timer_->start(200);
 
+        command_publish_timer_ = new QTimer(this);
+        connect(command_publish_timer_, &QTimer::timeout, this, [this]() { publishActiveCommand(); });
+        command_publish_timer_->start(kContinuousCommandIntervalMs);
+
         shutdown_timer_ = new QTimer(this);
         connect(shutdown_timer_, &QTimer::timeout, this, [this]() {
             if (!ros::ok())
@@ -364,17 +369,19 @@ class UAVControlPanel : public QMainWindow
 
         vel_x_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         vel_y_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
-        vel_z_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
+        vel_height_spin_ = makeSpin(1.5, -10.0, 100.0, 0.1);
         vel_yaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0);
-        auto *vel_btn = new QPushButton("发送 MOVE_VELOCITY");
+        auto *vel_btn = new QPushButton("持续发送 MOVE_VELOCITY");
         connect(vel_btn, &QPushButton::clicked, this, [this]() { publishMoveVelocity(); });
 
         body_vx_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         body_vy_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         body_vh_spin_ = makeSpin(1.5, -10.0, 100.0, 0.1);
         body_vyaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0);
-        auto *body_vel_btn = new QPushButton("发送 MOVE_VELOCITY_BODY");
+        auto *body_vel_btn = new QPushButton("持续发送 MOVE_VELOCITY_BODY");
+        auto *stop_publish_btn = new QPushButton("停止持续发送");
         connect(body_vel_btn, &QPushButton::clicked, this, [this]() { publishMoveVelocityBody(); });
+        connect(stop_publish_btn, &QPushButton::clicked, this, [this]() { stopContinuousCommand(); });
 
         layout->addWidget(new QLabel("快捷指令"), 0, 0);
         layout->addWidget(takeoff_btn, 0, 1);
@@ -397,10 +404,10 @@ class UAVControlPanel : public QMainWindow
         layout->addWidget(body_yaw_spin_, 2, 4);
         layout->addWidget(body_point_btn, 2, 5);
 
-        layout->addWidget(new QLabel("速度 vx/vy/vz/yaw(deg)"), 3, 0);
+        layout->addWidget(new QLabel("速度 vx/vy/height/yaw(deg)"), 3, 0);
         layout->addWidget(vel_x_spin_, 3, 1);
         layout->addWidget(vel_y_spin_, 3, 2);
-        layout->addWidget(vel_z_spin_, 3, 3);
+        layout->addWidget(vel_height_spin_, 3, 3);
         layout->addWidget(vel_yaw_spin_, 3, 4);
         layout->addWidget(vel_btn, 3, 5);
 
@@ -410,8 +417,9 @@ class UAVControlPanel : public QMainWindow
         layout->addWidget(body_vh_spin_, 4, 3);
         layout->addWidget(body_vyaw_spin_, 4, 4);
         layout->addWidget(body_vel_btn, 4, 5);
+        layout->addWidget(stop_publish_btn, 4, 6);
 
-        layout->setColumnStretch(6, 1);
+        layout->setColumnStretch(7, 1);
         return group;
     }
 
@@ -515,13 +523,8 @@ class UAVControlPanel : public QMainWindow
         if (control_cmd == sunray_msgs::UAVControlCMD::HOVER) {
             cmd.yaw_mode = sunray_msgs::UAVControlCMD::KEEP_YAW;
         }
-        last_sent_yaw_mode_ = cmd.yaw_mode;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            last_sent_cmd_ = cmd;
-        }
-        cmd_pub_.publish(cmd);
-        appendLog(QString("发布 %1 -> %2").arg(cmdName(control_cmd)).arg(QString::fromStdString(cmd_topic_)));
+        publishCommand(cmd, false);
+        appendLog(QString("单次发布 %1 -> %2").arg(cmdName(control_cmd)).arg(QString::fromStdString(cmd_topic_)));
     }
 
     void publishMovePoint()
@@ -531,13 +534,8 @@ class UAVControlPanel : public QMainWindow
         cmd.desired_pos.y = point_y_spin_->value();
         cmd.desired_pos.z = point_z_spin_->value();
         cmd.desired_yaw = point_yaw_spin_->value() * kDegToRad;
-        last_sent_yaw_mode_ = cmd.yaw_mode;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            last_sent_cmd_ = cmd;
-        }
-        cmd_pub_.publish(cmd);
-        appendLog(QString("发布 MOVE_POINT x=%1 y=%2 z=%3 yaw=%4deg")
+        publishCommand(cmd, false);
+        appendLog(QString("单次发布 MOVE_POINT x=%1 y=%2 z=%3 yaw=%4deg")
                       .arg(point_x_spin_->value(), 0, 'f', 2)
                       .arg(point_y_spin_->value(), 0, 'f', 2)
                       .arg(point_z_spin_->value(), 0, 'f', 2)
@@ -551,13 +549,8 @@ class UAVControlPanel : public QMainWindow
         cmd.desired_body_xy_pos.y = body_y_spin_->value();
         cmd.fixed_height = body_height_spin_->value();
         cmd.desired_yaw = body_yaw_spin_->value() * kDegToRad;
-        last_sent_yaw_mode_ = cmd.yaw_mode;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            last_sent_cmd_ = cmd;
-        }
-        cmd_pub_.publish(cmd);
-        appendLog(QString("发布 MOVE_POINT_BODY x=%1 y=%2 h=%3 yaw=%4deg")
+        publishCommand(cmd, false);
+        appendLog(QString("单次发布 MOVE_POINT_BODY x=%1 y=%2 h=%3 yaw=%4deg")
                       .arg(body_x_spin_->value(), 0, 'f', 2)
                       .arg(body_y_spin_->value(), 0, 'f', 2)
                       .arg(body_height_spin_->value(), 0, 'f', 2)
@@ -569,18 +562,14 @@ class UAVControlPanel : public QMainWindow
         sunray_msgs::UAVControlCMD cmd = makeBaseCmd(sunray_msgs::UAVControlCMD::MOVE_VELOCITY);
         cmd.desired_vel.x = vel_x_spin_->value();
         cmd.desired_vel.y = vel_y_spin_->value();
-        cmd.desired_vel.z = vel_z_spin_->value();
+        cmd.desired_vel.z = 0.0;
+        cmd.fixed_height = vel_height_spin_->value();
         cmd.desired_yaw = vel_yaw_spin_->value() * kDegToRad;
-        last_sent_yaw_mode_ = cmd.yaw_mode;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            last_sent_cmd_ = cmd;
-        }
-        cmd_pub_.publish(cmd);
-        appendLog(QString("发布 MOVE_VELOCITY vx=%1 vy=%2 vz=%3 yaw=%4deg")
+        publishCommand(cmd, true);
+        appendLog(QString("开始 5Hz 发布 MOVE_VELOCITY vx=%1 vy=%2 h=%3 yaw=%4deg")
                       .arg(vel_x_spin_->value(), 0, 'f', 2)
                       .arg(vel_y_spin_->value(), 0, 'f', 2)
-                      .arg(vel_z_spin_->value(), 0, 'f', 2)
+                      .arg(vel_height_spin_->value(), 0, 'f', 2)
                       .arg(vel_yaw_spin_->value(), 0, 'f', 2));
     }
 
@@ -591,17 +580,59 @@ class UAVControlPanel : public QMainWindow
         cmd.desired_body_xy_vel.y = body_vy_spin_->value();
         cmd.fixed_height = body_vh_spin_->value();
         cmd.desired_yaw = body_vyaw_spin_->value() * kDegToRad;
-        last_sent_yaw_mode_ = cmd.yaw_mode;
-        {
-            std::lock_guard<std::mutex> lock(state_mutex_);
-            last_sent_cmd_ = cmd;
-        }
-        cmd_pub_.publish(cmd);
-        appendLog(QString("发布 MOVE_VELOCITY_BODY vx=%1 vy=%2 h=%3 yaw=%4deg")
+        publishCommand(cmd, true);
+        appendLog(QString("开始 5Hz 发布 MOVE_VELOCITY_BODY vx=%1 vy=%2 h=%3 yaw=%4deg")
                       .arg(body_vx_spin_->value(), 0, 'f', 2)
                       .arg(body_vy_spin_->value(), 0, 'f', 2)
                       .arg(body_vh_spin_->value(), 0, 'f', 2)
                       .arg(body_vyaw_spin_->value(), 0, 'f', 2));
+    }
+
+    void stopContinuousCommand()
+    {
+        bool was_active = false;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            was_active = has_active_cmd_;
+            active_cmd_ = sunray_msgs::UAVControlCMD{};
+            has_active_cmd_ = false;
+        }
+
+        appendLog(was_active ? "停止 5Hz 持续发布" : "当前没有正在持续发布的指令");
+    }
+
+    void publishCommand(sunray_msgs::UAVControlCMD cmd, const bool continuous)
+    {
+        cmd.header.stamp = ros::Time::now();
+        last_sent_yaw_mode_ = cmd.yaw_mode;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            last_sent_cmd_ = cmd;
+            active_cmd_ = continuous ? cmd : sunray_msgs::UAVControlCMD{};
+            has_active_cmd_ = continuous;
+        }
+        cmd_pub_.publish(cmd);
+    }
+
+    void publishActiveCommand()
+    {
+        sunray_msgs::UAVControlCMD cmd;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            if (!has_active_cmd_)
+            {
+                return;
+            }
+            cmd = active_cmd_;
+        }
+
+        cmd.header.stamp = ros::Time::now();
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            active_cmd_ = cmd;
+            last_sent_cmd_ = cmd;
+        }
+        cmd_pub_.publish(cmd);
     }
 
     void appendLog(const QString &text)
@@ -747,7 +778,7 @@ class UAVControlPanel : public QMainWindow
             goal.valid = true;
             goal.x = odom.pose.pose.position.x + cmd.desired_vel.x;
             goal.y = odom.pose.pose.position.y + cmd.desired_vel.y;
-            goal.z = odom.pose.pose.position.z + cmd.desired_vel.z;
+            goal.z = cmd.fixed_height > 0.0 ? cmd.fixed_height : odom.pose.pose.position.z + cmd.desired_vel.z;
             goal.yaw = cmd.desired_yaw;
             goal.label = "MOVE_VELOCITY(1s)";
             break;
@@ -992,7 +1023,7 @@ class UAVControlPanel : public QMainWindow
     QDoubleSpinBox *body_yaw_spin_{nullptr};
     QDoubleSpinBox *vel_x_spin_{nullptr};
     QDoubleSpinBox *vel_y_spin_{nullptr};
-    QDoubleSpinBox *vel_z_spin_{nullptr};
+    QDoubleSpinBox *vel_height_spin_{nullptr};
     QDoubleSpinBox *vel_yaw_spin_{nullptr};
     QDoubleSpinBox *body_vx_spin_{nullptr};
     QDoubleSpinBox *body_vy_spin_{nullptr};
@@ -1006,6 +1037,7 @@ class UAVControlPanel : public QMainWindow
     QLabel *topic_label_{nullptr};
     QPlainTextEdit *log_view_{nullptr};
     QTimer *refresh_timer_{nullptr};
+    QTimer *command_publish_timer_{nullptr};
     QTimer *shutdown_timer_{nullptr};
     ControlRenderPanel *rviz_panel_{nullptr};
     rviz::VisualizationManager *rviz_manager_{nullptr};
@@ -1014,9 +1046,11 @@ class UAVControlPanel : public QMainWindow
     sunray_msgs::UAVControlFSMState fsm_state_{};
     nav_msgs::Odometry odom_{};
     sunray_msgs::UAVControlCMD last_sent_cmd_{};
+    sunray_msgs::UAVControlCMD active_cmd_{};
     std::deque<geometry_msgs::Point> trail_{};
     bool has_fsm_state_{false};
     bool has_odom_{false};
+    bool has_active_cmd_{false};
     uint8_t last_sent_yaw_mode_{sunray_msgs::UAVControlCMD::SET_YAW};
 };
 } // namespace
