@@ -3,20 +3,15 @@
  * @brief 基于px4原生控制环的控制器，从Controller_Interface派生
  * @details
     1. 引入Mavros_Helper类用于读取px4数据
-    2. 引入Mavros_ParamManager类用于读取+修改 px4参数
-    3. 向Sunray_FSM提供规范的函数实现
-    4. 发布controller_state话题，属于自定义消息sunray_msgs::UAVControllerState
-    5. 修改构造函数为仅存储ros句柄，显示调用init()函数进行初始化
-    6. 初始化检查使用void类型，如果检查失败会通过抛出异常的方式终止程序运行
+    2. 向Sunray_FSM提供规范的函数实现
+    3. 向Sunray_FSM提供规范的运动控制与状态查询接口
+    4. 修改构造函数为仅存储ros句柄，显示调用init()函数进行初始化
+    5. 初始化检查使用void类型，如果检查失败会通过抛出异常的方式终止程序运行
        运行时检查函数使用bool类型，检查失败通过返回false警告
-    7. TODO: [ ] 实现public中需要的函数
-             [-] 实现controller_state_pub_的初始化
+    6. TODO: [ ] 实现public中需要的函数
              [-] 实现pub_timer_的初始化
              [ ] 实现px4_mode和px4_arm的同步(从mavros_helper中读取数据)
              [ ] desired_state_初始化
-             [-] 引入Mavros_ParamManager类，修改EV_CTRL以及相关参数
-             [ ] 修改Mavros_ParamManager类名为MavrosParam
-             [ ] 引入px4_nsh_simulator 实现重启ekf2或者将ekf2重启放在Mavros_Param或者Helper？
              [ ] 考虑是否为不同的定位源引入不同的参数配置？比如EV_Delay之类？
  * @author Taolinyinjiu@YunDrone Tech (sirui@yundrone.com)
  * @date 2026-03-30
@@ -30,19 +25,11 @@
 #include "mavros_helper/mavros_helper.hpp"
 #include "utils/arrival_helper.hpp"
 #include "utils/reference_limit_helper.hpp"
-#include <px4_param_manager/px4_param_manager.h>
+#include "utils/yaw_curve.hpp"
 #include <ros/node_handle.h>
 #include <string>
 #include <atomic>
-#include <mutex>
 #include "utils/quintic_curve.hpp"
-// 在这里构造参数结构体？对于原生控制器，要检查什么参数呢
-struct Original_Param {
-    // 1, vision_pose
-    int fuse_odom_type{0};
-    double fuse_odom_frequency{0.0};
-    // 2. 暂时没想到
-};
 
 class PX4_OriginController : public Controller_Interface {
   public:
@@ -82,44 +69,29 @@ class PX4_OriginController : public Controller_Interface {
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
     bool is_point_complete() override;
-    // ----------------------控制器状态话题更新函数-----------------
-    void pub_controller_state() override;  // 发布controller_state
-    void printf_logs(uint8_t log_level) override;  // 为 Sunray_FSM 提供同步日志输出
   private:
-    struct LogSnapshot {
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-        bool controller_ready{false};
-        bool takeoff_complete{false};
-        bool land_complete{false};
-        bool point_complete{false};
-        bool has_uav_odometry{false};
-        bool can_fuse{false};
-
-        control_common::Mavros_State px4_state{};
-        control_common::UAVStateEstimate odom{};
-        control_common::Mavros_SetpointLocal px4_local_target{};
-        control_common::Mavros_SetpointAttitude px4_attitude_target{};
-        control_common::Mavros_SetpointLocal last_setpoint{};
-        controller_data_types::TargetTrajectoryPoint_t desired_state{};
-        Eigen::Vector3d hover_point{Eigen::Vector3d::Zero()};
-        double hover_yaw{0.0};
+    enum class MotionCurveOwner {
+        None = 0,
+        MovePoint,
+        Takeoff,
+        Land,
     };
 
     // ----------------------配置相关-----------------------
     std::string config_yamlfile_path_;
-    std::string uav_ns_;
-    Original_Param config_param_;
+    int fuse_odom_type_{0};
+    double fuse_odom_frequency_{0.0};
     // ----------------------检查相关-----------------------
     // void 类型 + throw后缀 = 整个启动过程只会执行一次，抛出异常则终止启动
     // bool 类型 表示运行过程中检查，会反复调用maybe
-    void load_and_validate_config_or_throw();   // 读取并校验yaml文件配置的参数
-    void ensure_fusion_param_ready_or_throw();  // 检查外部里程计融合参数是否正确
+    void load_and_validate_config_or_throw();  // 读取并校验yaml文件配置的参数
 
     bool check_px4_basic_state();      // 检查px4飞控的状态
     bool check_mavros_stream_ready();  // 检查mavros_helper是否在稳定的更新数据
     bool move_point_impl(controller_data_types::TargetPoint_t point,
                          bool preserve_body_point_context);
+    void clear_motion_curve();
+    void begin_motion_curve(MotionCurveOwner owner);
     void reset_point_motion_context();
     void clear_cached_setpoint();
     controller_data_types::TargetTrajectoryPoint_t make_hold_desired_state(
@@ -130,8 +102,6 @@ class PX4_OriginController : public Controller_Interface {
     void warn_if_trajectory_exceeds_limits(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
     void cache_local_setpoint(const control_common::Mavros_SetpointLocal& setpoint);
-    void update_log_snapshot();
-    LogSnapshot get_log_snapshot() const;
     std::atomic<bool> controller_ready_{false};
     // ---------------------定时器回调函数---------------------
     void pub_px4_state_timer_cb(const ros::TimerEvent&);    // 发布PX4State话题
@@ -139,16 +109,15 @@ class PX4_OriginController : public Controller_Interface {
     // -------------------ros句柄与mavros辅助类-----------------
     ros::NodeHandle nh_;
     MavrosHelper mavros_helper_;
-    PX4_ParamManager mavros_param_;
-    // ---------------------曲线辅助类-----------------
-    curve::QuinticCurve quint_curve_;
-    curve::QuinticCurve move_point_curve_;
+    // ---------------------共享曲线辅助类-----------------
+    curve::QuinticCurve motion_curve_;
+    curve::QuinticYawCurve yaw_curve_;
+    MotionCurveOwner motion_curve_owner_{MotionCurveOwner::None};
     // --------------------px4状态-----------------------
     control_common::FlightMode px4_mode_ = control_common::FlightMode::Undefined;
     control_common::LandedState px4_land_ = control_common::LandedState::Undefined;
     bool px4_arm_ = false;
     double pub_px4_state_freq_ = 100.0;  // 考虑简单点，在这里硬编码px4state的发布频率
-    bool param_state_ = false;
     // 初始时刻的yaw角(弧度 rad)，用于起飞锁定
     double takeoff_yaw_ = 0.0;
     double land_yaw_ = 0.0;
@@ -159,9 +128,8 @@ class PX4_OriginController : public Controller_Interface {
     ros::Time last_checkout_offboard_time_{ros::Time(0)};
     // arm解锁成功的触发时间
     ros::Time last_arm_time_{ros::Time(0)};
-    // 到达稳定判定参数
+    // 到达稳定判定参数：takeoff/move_point 共用配置，误差定义由调用侧决定
     arrival_helper::Config arrival_judge_config_{};
-    arrival_helper::Config takeoff_arrival_config_{};  // 起飞阶段使用, 先进入位置窗口再允许 velocity-only 回退
     Eigen::Vector3d max_velocity_{Eigen::Vector3d::Ones()};
     double max_yaw_rate_rad_s_{0.5};
     // 降落阶段开始的时间
@@ -171,7 +139,7 @@ class PX4_OriginController : public Controller_Interface {
     arrival_helper::State takeoff_arrival_state_{};
     arrival_helper::State point_arrival_state_{};
     reference_limit_helper::YawReferenceState yaw_reference_state_{};
-    bool point_target_initialized_{false};
+    bool point_target_initialized_{false}; 
     bool body_point_target_initialized_{false};
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointLocal last_setpoint_{};
@@ -190,12 +158,7 @@ class PX4_OriginController : public Controller_Interface {
     ros::Time last_odom_timestamp_{ros::Time(0)};
     // --------------------期望状态--------------------
     controller_data_types::TargetTrajectoryPoint_t desired_state_;
-    // ros话题发布者
-    ros::Publisher controller_state_pub_;  // 发布controller状态话题数据
     // ros定时器
     ros::Timer pub_px4_state_timer;     // 用于发布话题数据的定时器
     ros::Timer pub_vision_pose_timer_;  // 用于发布vision_pose的定时器
-
-    mutable std::mutex log_snapshot_mutex_;
-    LogSnapshot log_snapshot_{};
 };

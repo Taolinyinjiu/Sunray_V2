@@ -13,6 +13,8 @@ struct Config {
     double pos_err_m{0.15};                   // 位置误差
     double vel_err_mps{0.15};                 // 速度误差
     double max_pos_err_m{0.0};                // 最大位置误差
+    double yaw_err_rad{0.12};                 // 偏航误差
+    double yaw_rate_err_rad_s{0.2};           // 偏航角速度误差
     double vel_only_long_time_factor{3.0};    // 满足最大位置误差和速度误差时的判断稳定时间
     double vel_only_force_time_factor{10.0};  // 只满足速度误差时的判断稳定时间
 };
@@ -68,6 +70,23 @@ inline bool update_and_check(State& state,
             config.vel_only_force_time_factor * config.stable_time_s;
 
     return both_ok_long_enough || vel_only_within_max_pos || vel_only_force_complete;
+}
+
+inline bool update_pose_and_check(State& state,
+                                  const Config& config,
+                                  double pos_err,
+                                  double vel_err,
+                                  double yaw_err_rad,
+                                  double yaw_rate_err_rad_s,
+                                  const ros::Time& now) {
+    const bool yaw_ok = yaw_err_rad < config.yaw_err_rad;
+    const bool yaw_rate_ok = yaw_rate_err_rad_s < config.yaw_rate_err_rad_s;
+    if (!yaw_ok || !yaw_rate_ok) {
+        state.both_ok_since = ros::Time(0);
+        state.vel_ok_since = ros::Time(0);
+        return false;
+    }
+    return update_and_check(state, config, pos_err, vel_err, now);
 }
 
 }  // namespace arrival_helper

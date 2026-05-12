@@ -105,8 +105,8 @@ Swarm_Control_UAV::Swarm_Control_UAV(ros::NodeHandle &nh)
     // 4. 创建 ROS 通信接口。
     const std::string self_ns = "/" + params_.agent_name + std::to_string(params_.agent_id);
     const std::string local_odom_topic = self_ns + "/sunray/localization/local_odom";
-    const std::string uav_fsm_state_topic = self_ns + "/sunray/fsm/state";
-    const std::string control_cmd_topic = self_ns + "/sunray/uav_control_cmd";
+    const std::string uav_fsm_state_topic = self_ns + "/sunray/uav_control/control_state";
+    const std::string control_cmd_topic = self_ns + "/sunray/uav_control/control_cmd";
     const std::string swarm_cmd_topic = "/sunray/swarm/uav_swarm_cmd";
     const std::string swarm_state_topic = "/sunray/swarm/uav_swarm_state";
 
@@ -186,7 +186,7 @@ void Swarm_Control_UAV::swarm_control_main_loop(const ros::TimerEvent &)
 
     case sunray_msgs::UAVSwarmState::TAKEOFF:
         // 无人机控制器已切换至FSM_HOVER，证明起飞成功，则将本程序状态机切换为ARRIVED
-        if (uav_control_fsm_state_.sunray_fsm_state == sunray_msgs::UAVControlFSMState::FSM_HOVER)
+        if (uav_control_fsm_state_.control_state == sunray_msgs::UAVControlState::HOVER)
         {
             // 记录当前位置为返航点
             fillGoalPointFromSelfOdom(return_point_);
@@ -196,7 +196,7 @@ void Swarm_Control_UAV::swarm_control_main_loop(const ros::TimerEvent &)
 
     case sunray_msgs::UAVSwarmState::LAND:
         // 无人机控制器已切换至FSM_INIT，证明降落成功，则将本程序状态机切换为INIT
-        if (uav_control_fsm_state_.sunray_fsm_state == sunray_msgs::UAVControlFSMState::FSM_INIT)
+        if (uav_control_fsm_state_.control_state == sunray_msgs::UAVControlState::INIT)
         {
             uav_swarm_state_.fsm_state = sunray_msgs::UAVSwarmState::INIT;
         }
@@ -316,7 +316,7 @@ void Swarm_Control_UAV::localOdomCallback(const nav_msgs::Odometry::ConstPtr &ms
     cache.received = true;
 }
 
-void Swarm_Control_UAV::uavFsmStateCallback(const sunray_msgs::UAVControlFSMState::ConstPtr &msg)
+void Swarm_Control_UAV::uavFsmStateCallback(const sunray_msgs::UAVControlState::ConstPtr &msg)
 {
     uav_control_fsm_state_ = *msg;
     has_uav_fsm_state_ = true;
@@ -360,7 +360,7 @@ void Swarm_Control_UAV::swarmCmdCallback(const sunray_msgs::UAVSwarmCMD::ConstPt
     case sunray_msgs::UAVSwarmCMD::SWARM_TAKEOFF:
         // 需要同时满足两个条件：当前状态为INIT，无人机控制状态机为INIT，才可以触发起飞指令
         if (uav_swarm_state_.fsm_state != sunray_msgs::UAVSwarmState::INIT ||
-            uav_control_fsm_state_.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_INIT)
+            uav_control_fsm_state_.control_state != sunray_msgs::UAVControlState::INIT)
         {
             return;
         }

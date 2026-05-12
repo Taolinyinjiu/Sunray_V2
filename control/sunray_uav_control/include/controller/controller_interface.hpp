@@ -32,9 +32,9 @@ class Controller_Interface {
     virtual bool move_velocity(controller_data_types::TargetVelocity_t velocity) = 0;
     // 控制无人机跟踪轨迹点
     virtual bool move_trajectory(controller_data_types::TargetTrajectoryPoint_t trajpoint) = 0;
-    // 运动到机体系的某一点
+    // 运动到机体系的某一点, 其中 yaw 仍按惯性系绝对角解释
     virtual bool move_point_body(controller_data_types::TargetBodyPoint_t point) = 0;
-    // 以机体系速度的方式运动
+    // 以机体系速度的方式运动, 其中 yaw 仍按惯性系绝对角解释, yaw_rate 为角速度
     virtual bool move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) = 0;
     // 移动到WGS84下的某一点
     virtual bool move_point_wgs84(geographic_msgs::GeoPoint point) = 0;
@@ -42,10 +42,5 @@ class Controller_Interface {
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_land_complete() = 0;
     virtual bool is_point_complete() = 0;
-    // ---------------------控制器状态发布接口----------------------
-    virtual void pub_controller_state() = 0;
-    // 为了将Sunray_FSM与Mavros/PX4解耦，这里还是决定，参数由控制器自己读取yaml文件而不是函数传递
-    // ---------------------控制器日志流发布接口----------------------
-    virtual void printf_logs(uint8_t log_level) = 0;
   protected:
 };

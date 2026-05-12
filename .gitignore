@@ -64,6 +64,7 @@ CLAUDE.md
 
 # AI generated notes
 control/sunray_uav_control/ai_result/
+ai_result/
 docs/
 
 # Machine-specific VINS configuration

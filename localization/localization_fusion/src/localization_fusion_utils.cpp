@@ -6,19 +6,15 @@
 
 // 这里我们只需要实现一个函数，就是从指定的路径中加载配置参数
 SourceConfig load_config_from_yaml(const std::string& yaml_path,
-                                   const int source_id,
-                                   const std::string& uav_ns) {
+                                   const int source_id) {
     // 构建用于返回的结构体
     SourceConfig result_config;
     // 根据传入的yaml文件路径，查找对应的yaml文件
     // 首先检查yaml路径是否为空
     if (yaml_path.empty()) {
-        // 为空则抛出异常
-        throw std::invalid_argument("yaml_path connot be empty");
+        throw std::invalid_argument("yaml_path cannot be empty");
     } else if (source_id < 0) {
         throw std::invalid_argument("the source_id: " + std::to_string(source_id) + ", it must >= 0");
-    } else if (uav_ns.empty()) {
-        throw std::invalid_argument("uav_ns connot be empty");
     }
     // 输入初步没有问题，尝试读取yaml文件
     // 构造一个YAML的根节点

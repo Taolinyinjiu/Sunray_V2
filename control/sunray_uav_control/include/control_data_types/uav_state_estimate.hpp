@@ -38,7 +38,7 @@ struct UAVStateEstimate {
     UAVStateEstimate() = default;
     UAVStateEstimate(const nav_msgs::Odometry& msg);
     // 提取yaw角
-    double get_yaw(){
+    double get_yaw() const {
         return eigen_helper::get_yaw_from_orientation(orientation);
     }
 };

@@ -1,60 +1,65 @@
+<!-- 单机使用定位源启动文件，根据传入的参数source_id决定启动对应的定位源 -->
 <launch>
-  <!-- 当前使用的定位源配置 -->
-  <arg name="source_id" default="3" />
-  <!-- 配置文件路径 -->
-  <arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
-  <!-- OdomStatus输出的频率 -->
-  <arg name="health_rate_hz" default="10.0" />
-  <!-- 是否使用localization_fusion节点接收时刻时间戳替代定位源发送时刻时间戳 -->
-  <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
-  <!-- 是否将日志保存到文件 -->
-  <arg name="log_save" default="false" />
-  <arg name="uav_name" default="uav" />
-  <arg name="uav_id" default="1" />
-  <arg name="node_name" default="localization_fusion" />
-  <arg name="world_frame_id" default="world" />
-  <arg name="set_global_params" default="true" />
-  <arg name="test" default="false" />
+    <!-- 使用的定位源配置 -->
+    <arg name="source_id" default="3" />
+    <!-- 使用的配置文件路径 -->
+    <arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
+    <!-- 定位信息检查的频率，建议不低于10Hz -->
+    <arg name="health_rate_hz" default="10.0" />
+    <!-- 使用接收时间戳代替里程计发送时间戳，用于在某些仿真环节使用仿真时间戳的场景 -->
+    <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
+    <!-- agent_name与agent_id 用于仿真环节或者特殊调试环节，指定智能体标识符 -->
+    <arg name="agent_name" default="uav" />
+    <arg name="agent_id" default="1" />
+    <!-- 当下面的use_private_agent_key为true时，节点使用上面定义的agent_name与agent_id -->
+    <arg name="use_private_agent_key" default="false" />
+    <!-- 注意,仿真环节中localization_fusion_swarm依据这个node_name来区分多实例节点名，移除后会导致多机节点冲突 -->
+    <arg name="node_name" default="localization_fusion" />
+    <!-- 是否启动定位状态监视器，集群场景建议关闭并改用 swarm_monitor -->
+    <arg name="enable_monitor" default="true" />
 
-  <param if="$(arg set_global_params)" name="/uav_name" value="$(arg uav_name)" />
-  <param if="$(arg set_global_params)" name="/uav_id" value="$(arg uav_id)" />
+    <!--
+      根据 source_id 启动对应的定位源子 launch。
+      这里先只保留条件占位，具体 include 内容由后续填写。
+    -->
+    <group if="$(eval int(arg('source_id')) == 0)">
+        <!-- source_id = 0, VIOBOT -->
+    </group>
+    <group if="$(eval int(arg('source_id')) == 1)">
+        <!-- source_id = 1, MOCAP -->
+        <include file="$(find localization_fusion)/source_launch/start_mocap.launch" />
+    </group>
+    <group if="$(eval int(arg('source_id')) == 2)">
+        <!-- source_id = 2, VINS -->
+    </group>
+    <group if="$(eval int(arg('source_id')) == 3)">
+        <!-- source_id = 3, GAZEBO -->
+    </group>
+    <group if="$(eval int(arg('source_id')) == 4)">
+        <!-- source_id = 4, GAZEBO_ARUCO -->
+    </group>
+    <group if="$(eval int(arg('source_id')) == 5)">
+        <!-- source_id = 5, PENGYU_SIM -->
+    </group>
+    <group if="$(eval int(arg('source_id')) == 6)">
+        <!-- source_id = 6, Fast_LIO_EKF -->
+        <include file="$(find localization_fusion)/source_launch/start_fastlio_ekf.launch" />
+    </group>
 
-  <!-- 根据不同的定位源，启动不同的子launch -->
-  <group if="$(eval int(arg('source_id')) == 0)">
-    <include file="$(find localization_fusion)/launch/localization_viobot.launch" />
-  </group>
-
-  <group if="$(eval int(arg('source_id')) == 1)">
-    <include file="$(find localization_fusion)/launch/localization_mocap.launch" />
-  </group>
-
-  <group if="$(eval int(arg('source_id')) == 2)">
-    <include file="$(find localization_fusion)/launch/localization_vins.launch" />
-  </group>
-
-  <group if="$(eval int(arg('source_id')) == 3)">
-  <!-- 单独的gazebo仿真实际上不需要启动什么东西，但是这里为了保持形式上的统一，以及后续可能会有什么想要增加的，就在这里也放了一行 -->
-    <include file="$(find localization_fusion)/launch/localization_gazebo.launch" />
-  </group>
-
-  <group if="$(eval int(arg('source_id')) == 4)">
-    <include file="$(find localization_fusion)/launch/localization_gazebo_aruco.launch" />
-  </group>
-
-  <group if="$(eval int(arg('source_id')) == 6)">
-    <include file="$(find localization_fusion)/launch/localization_fastlio_ekf.launch" />
-  </group>
-
-  <!-- 启动融合节点 -->
-  <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg node_name)" output="screen">
-    <!-- 将参数设置为节点私有参数 -->
-    <param name="source_id" value="$(arg source_id)" />
-    <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-    <param name="health_rate_hz" value="$(arg health_rate_hz)" />
-    <param name="use_receive_time" value="$(arg use_receive_time)" />
-    <param name="log_save" value="$(arg log_save)" />
-    <param name="uav_name" value="$(arg uav_name)" />
-    <param name="uav_id" value="$(arg uav_id)" />
-    <param name="world_frame_id" value="$(arg world_frame_id)" />
-  </node>
+    <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg node_name)" output="screen">
+        <param name="source_id" value="$(arg source_id)" />
+        <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+        <param name="health_rate_hz" value="$(arg health_rate_hz)" />
+        <param name="use_receive_time" value="$(arg use_receive_time)" />
+        <param name="agent_name" value="$(arg agent_name)" />
+        <param name="agent_id" value="$(arg agent_id)" />
+        <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    </node>
+    <!-- 定位模块输出状态监听节点 -->
+    <node pkg="localization_fusion"
+        type="localization_fusion_monitor_node"
+        name="localization_fusion_monitor"
+        output="screen"
+        if="$(arg enable_monitor)">
+    </node>
 </launch>

@@ -45,10 +45,9 @@ void loadBasicParam(const YAML::Node& node, sunray_fsm::basic_param_t& param) {
         throw std::runtime_error("the sunray_control_config.yaml miss param 'controller_types'");
     } else {
         param.controller_types = node["controller_types"].as<int>();
-        if (param.controller_types != 0 && param.controller_types != 1 &&
-            param.controller_types != 2) {
+        if (param.controller_types != 0 && param.controller_types != 1) {
             throw std::runtime_error(
-                "the sunray_control_config.yaml param 'controller_types' only can 0, 1，2");
+                "the sunray_control_config.yaml param 'controller_types' only can 0 or 1");
         }
     }
     // -----------------------控制器更新频率----------------------
@@ -101,103 +100,6 @@ void loadBasicParam(const YAML::Node& node, sunray_fsm::basic_param_t& param) {
         if (param.fuse_odom_frequency <= 0) {
             throw std::runtime_error(
                 "the sunray_control_config.yaml param 'fuse_odom_frequency' must > 0");
-        }
-    }
-    // ---------------------日志开关--------------------
-    if (node["log_save"]) {
-        param.log_save = node["log_save"].as<bool>();
-    }
-    // ---------------------日志等级--------------------
-    if (node["log_level"]) {
-        const int log_level = node["log_level"].as<int>();
-        if (log_level < 0 || log_level > 2) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param 'log_level' only can 0, 1, 2");
-        }
-        param.log_level = static_cast<uint8_t>(log_level);
-    }
-}
-// 从yaml文件构造的节点中，读取protect_param字段的内容
-void loadProtectParam(const YAML::Node& node, sunray_fsm::protect_param_t& param) {
-    // 首先，如果传入的node为空，或者不是键值对的形式，则抛出异常
-    if (!node || !node.IsMap()) {
-        throw std::runtime_error(
-            "the sunray_control_config.yaml protect_param is missing a valid protect_param map");
-    }
-    // 先判断存在，再读取值，再判断值是否允许
-    // -----------------------飞行任务中的最低电压----------------------
-    if (!node["low_voltage"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'low_voltage'");
-    } else {
-        param.low_voltage = node["low_voltage"].as<double>();
-        if (param.low_voltage <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml param 'low_voltage' must > 0");
-        }
-    }
-    // -----------------------达到最低电压时执行的操作----------------------
-    if (!node["low_voltage_operate"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'low_voltage_operate'");
-    } else {
-        param.low_voltage_operate = node["low_voltage_operate"].as<int>();
-        if (param.low_voltage_operate != 0 && param.low_voltage_operate != 1 &&
-            param.low_voltage_operate != 2) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param low_voltage_operate only can 0, 1, 2");
-        }
-    }
-    // -----------------------是否允许在无遥控器连接时启动无人机----------------------
-    if (!node["control_with_no_rc"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'control_with_no_rc'");
-    } else {
-        param.control_with_no_rc = node["control_with_no_rc"].as<bool>();
-    }
-    // -----------------------当遥控器状态从连接变成丢失连接时，执行的操作----------------------
-    if (!node["lost_with_rc"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'lost_with_rc'");
-    } else {
-        param.lost_with_rc = node["lost_with_rc"].as<int>();
-        if (param.lost_with_rc != 0 && param.lost_with_rc != 1 && param.lost_with_rc != 2) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param lost_with_rc only can 0, 1, 2");
-        }
-    }
-    // -----------------------是否允许代码解锁无人机----------------------
-    if (!node["arm_with_code"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'arm_with_code'");
-    } else {
-        param.arm_with_code = node["arm_with_code"].as<bool>();
-    }
-    // -----------------------是否允许代码起飞无人机----------------------
-    if (!node["takeoff_with_code"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'takeoff_with_code'");
-    } else {
-        param.takeoff_with_code = node["takeoff_with_code"].as<bool>();
-    }
-    // -----------------------是否进行倾倒检测----------------------
-    if (!node["check_flip"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'check_flip'");
-    } else {
-        param.check_flip = node["check_flip"].as<bool>();
-    }
-    // -----------------------飞行任务中的最低电压----------------------
-    if (!node["tilt_angle_max"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'tilt_angle_max'");
-    } else {
-        param.tilt_angle_max = node["tilt_angle_max"].as<double>();
-        if (param.tilt_angle_max <= 0) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param 'tilt_angle_max' must > 0");
-        }
-    }
-    // -----------------------当msg超时执行的操作---------------------
-    if (!node["msg_timeout_operate"]) {
-        throw std::runtime_error("the sunray_control_config.yaml miss param 'msg_timeout_operate'");
-    } else {
-        param.msg_timeout_operate = node["msg_timeout_operate"].as<int>();
-        if (param.msg_timeout_operate != 0 && param.msg_timeout_operate != 1 &&
-            param.msg_timeout_operate != 2) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param msg_timeout_operate only can 0, 1, 2");
         }
     }
 }
@@ -294,46 +196,6 @@ void loadTakeoffLandParam(const YAML::Node& node, sunray_fsm::takeoff_land_param
         throw std::runtime_error("the sunray_control_config.yaml miss param 'return_with_land'");
     } else {
         param.return_with_land = node["return_with_land"].as<bool>();
-    }
-}
-// 从yaml文件构造的节点中，读取arrival_judge_param字段的内容
-void loadArrivalJudgeParam(const YAML::Node& node, sunray_fsm::arrival_judge_param_t& param) {
-    // 首先，如果传入的node为空，或者不是键值对的形式，则抛出异常
-    if (!node || !node.IsMap()) {
-        throw std::runtime_error("the sunray_control_config.yaml arrival_judge_param is missing a "
-                                 "valid arrival_judge_param map");
-    }
-    // 先判断存在，再读取值
-    if (!node["judge_stabile_time_s"]) {
-        throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'arrival_judge_param: judge_stabile_time_s'");
-    } else {
-        param.judge_stabile_time_s = node["judge_stabile_time_s"].as<double>();
-        if (param.judge_stabile_time_s <= 0) {
-            throw std::runtime_error("the sunray_control_config.yaml param "
-                                     "'arrival_judge_param: judge_stabile_time_s' must > 0");
-        }
-    }
-    if (!node["pos_stabile_err_m"]) {
-        throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'arrival_judge_param: pos_stabile_err_m'");
-    } else {
-        param.pos_stabile_err_m = node["pos_stabile_err_m"].as<double>();
-        if (param.pos_stabile_err_m <= 0) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param 'arrival_judge_param: pos_stabile_err_m' "
-                "must > 0");
-        }
-    }
-    if (!node["max_pos_err_m"]) {
-        throw std::runtime_error(
-            "the sunray_control_config.yaml miss param 'arrival_judge_param: max_pos_err_m'");
-    } else {
-        param.max_pos_err_m = node["max_pos_err_m"].as<double>();
-        if (param.max_pos_err_m <= 0) {
-            throw std::runtime_error(
-                "the sunray_control_config.yaml param 'arrival_judge_param: max_pos_err_m' must > 0");
-        }
     }
 }
 // 从yaml文件构造的节点中，读取local_fence_param字段的的内容

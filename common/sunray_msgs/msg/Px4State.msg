@@ -11,12 +11,10 @@ bool connected	            # mavros 是否与 px4 建立链路连接
 bool rc_available	        # RC遥控器链路是否连接
 bool armed	                # 飞控解锁状态
 uint8 flight_mode           # PX4 当前飞行模式枚举
-string flight_mode_name	    # PX4 当前飞行模式（如 OFFBOARD / POSCTL / AUTO.LAND）
 uint8 system_status	        # 飞控系统状态（mavros_msgs/State.system_status）
 
 # -------------/mavros/extended_state-------------
 uint8 landed_state	        # 起降状态枚举（mavros_msgs/ExtendedState.landed_state）
-string landed_state_name    # 起降状态以字符串的方式显示
 
 # -------------/mavros/sys_status-------------
 float32 battery_voltage_v	# 当前电压

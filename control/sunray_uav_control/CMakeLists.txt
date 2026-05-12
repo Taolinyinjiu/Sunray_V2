@@ -24,7 +24,6 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geographic_msgs
   mavros_msgs
-  px4_bridge
   sunray_common
   sunray_msgs
 )
@@ -41,7 +40,6 @@ catkin_package(
     std_msgs
     geographic_msgs
     mavros_msgs
-    px4_bridge
     sunray_common
     sunray_msgs
   DEPENDS Eigen3 yaml-cpp
@@ -52,33 +50,25 @@ catkin_package(
 # -----------------------------
 add_library(sunray_uav_control_lib
   src/mavros_helper/mavros_helper.cpp
-  src/mavros_helper/mavros_helper_data_types.cpp
   src/controller/px4_origin_controller/px4_origin_controller.cpp
-  src/controller/px4_origin_controller/px4_origin_controller_logs.cpp
+  src/controller/px4_origin_controller/px4_origin_loadparam.cpp
   src/controller/core_algorithm/hoverthrust_estimator.cpp
   src/controller/geometric_controller/geometric_controller.cpp
   src/controller/geometric_controller/geometric_loadparam.cpp
-  src/controller/geometric_controller/geometric_logs.cpp
-  src/controller/raptor_controller/raptor_controller.cpp
-  src/controller/raptor_controller/raptor_loadparam.cpp
-  src/controller/raptor_controller/raptor_logs.cpp
   src/controller/core_algorithm/geometric_attitude_control.cpp
-  src/controller/core_algorithm/attitude_slover.cpp
   src/statemachine/sunray_fsm_loadparam.cpp
   src/statemachine/sunray_fsm.cpp
   src/statemachine/sunray_fsm_transition.cpp
   src/statemachine/sunray_fsm_control.cpp
   src/statemachine/sunray_fsm_checks.cpp
-  src/statemachine/sunray_fsm_logs.cpp
 )
+add_dependencies(sunray_uav_control_lib ${catkin_EXPORTED_TARGETS})
 
 target_include_directories(sunray_uav_control_lib
   PUBLIC
     include
     ${catkin_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
 )
 
 target_link_libraries(sunray_uav_control_lib
@@ -99,10 +89,39 @@ target_compile_definitions(sunray_uav_control_lib
 add_executable(uav_control_node
   src/uav_control_node.cpp
 )
+add_dependencies(uav_control_node ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(uav_control_node
   PRIVATE
     sunray_uav_control_lib
+)
+
+add_executable(uav_control_monitor_node
+  src/tools/uav_control_monitor_node.cpp
+)
+add_dependencies(uav_control_monitor_node ${catkin_EXPORTED_TARGETS})
+target_include_directories(uav_control_monitor_node
+  PRIVATE
+    ${catkin_INCLUDE_DIRS}
+)
+
+target_link_libraries(uav_control_monitor_node
+  PRIVATE
+    ${catkin_LIBRARIES}
+)
+
+add_executable(uav_control_swarm_monitor_node
+  src/tools/uav_control_swarm_monitor_node.cpp
+)
+add_dependencies(uav_control_swarm_monitor_node ${catkin_EXPORTED_TARGETS})
+target_include_directories(uav_control_swarm_monitor_node
+  PRIVATE
+    ${catkin_INCLUDE_DIRS}
+)
+
+target_link_libraries(uav_control_swarm_monitor_node
+  PRIVATE
+    ${catkin_LIBRARIES}
 )
 
 # -----------------------------
@@ -111,6 +130,7 @@ target_link_libraries(uav_control_node
 add_executable(origin_controller_takeoff_test
   test/px4_origin_controller_takeoff/origin_controller_test.cpp
 )
+add_dependencies(origin_controller_takeoff_test ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(origin_controller_takeoff_test
   PRIVATE
@@ -120,6 +140,7 @@ target_link_libraries(origin_controller_takeoff_test
 add_executable(origin_controller_square_test
   test/px4_origin_controller_takeoff/origin_controller_square.cpp
 )
+add_dependencies(origin_controller_square_test ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(origin_controller_square_test
   PRIVATE
@@ -129,6 +150,7 @@ target_link_libraries(origin_controller_square_test
 add_executable(origin_controller_square_test_velocity
   test/px4_origin_controller_takeoff/origin_controller_square_velocity.cpp
 )
+add_dependencies(origin_controller_square_test_velocity ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(origin_controller_square_test_velocity
   PRIVATE
@@ -138,6 +160,7 @@ target_link_libraries(origin_controller_square_test_velocity
 add_executable(hoverthrust_estimator_ros_test_node
   test/hoverthrust_estimator/hoverthrust_estimator_ros_test_node.cpp
 )
+add_dependencies(hoverthrust_estimator_ros_test_node ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(hoverthrust_estimator_ros_test_node
   PRIVATE
@@ -177,6 +200,21 @@ if(CATKIN_ENABLE_TESTING)
         sunray_uav_control_lib
     )
   endif()
+
+  catkin_add_gtest(body_frame_reference_helper_test
+    test/body_frame_reference_helper_test.cpp
+  )
+  if(TARGET body_frame_reference_helper_test)
+    target_include_directories(body_frame_reference_helper_test
+      PRIVATE
+        include
+        ${catkin_INCLUDE_DIRS}
+        ${EIGEN3_INCLUDE_DIRS}
+    )
+    target_link_libraries(body_frame_reference_helper_test
+        sunray_uav_control_lib
+    )
+  endif()
 endif()
 
 # -----------------------------
@@ -197,6 +235,8 @@ install(DIRECTORY launch/
 install(TARGETS
   sunray_uav_control_lib
   uav_control_node
+  uav_control_monitor_node
+  uav_control_swarm_monitor_node
   origin_controller_takeoff_test
   origin_controller_square_test
   origin_controller_square_test_velocity

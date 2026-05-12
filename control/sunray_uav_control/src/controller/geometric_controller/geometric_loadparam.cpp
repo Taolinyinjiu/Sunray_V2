@@ -78,13 +78,21 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     if (!arrival_judge_param["max_pos_err_m"]) {
         throw std::runtime_error("missing param 'arrival_judge_param.max_pos_err_m'");
     }
+    if (!arrival_judge_param["yaw_stabile_err_deg"]) {
+        throw std::runtime_error("missing param 'arrival_judge_param.yaw_stabile_err_deg'");
+    }
+    if (!arrival_judge_param["yaw_rate_stabile_err_deg_s"]) {
+        throw std::runtime_error("missing param 'arrival_judge_param.yaw_rate_stabile_err_deg_s'");
+    }
 
     arrival_judge_config_.stable_time_s = arrival_judge_param["judge_stabile_time_s"].as<double>();
     arrival_judge_config_.pos_err_m = arrival_judge_param["pos_stabile_err_m"].as<double>();
     arrival_judge_config_.vel_err_mps = arrival_judge_param["vel_stabile_err_mps"].as<double>();
     arrival_judge_config_.max_pos_err_m = arrival_judge_param["max_pos_err_m"].as<double>();
-
-    takeoff_arrival_config_ = arrival_judge_config_;
+    arrival_judge_config_.yaw_err_rad =
+        deg2rad(arrival_judge_param["yaw_stabile_err_deg"].as<double>());
+    arrival_judge_config_.yaw_rate_err_rad_s =
+        deg2rad(arrival_judge_param["yaw_rate_stabile_err_deg_s"].as<double>());
 
     if (arrival_judge_config_.stable_time_s <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.judge_stabile_time_s' must > 0");
@@ -94,6 +102,13 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     }
     if (arrival_judge_config_.max_pos_err_m <= 0.0) {
         throw std::runtime_error("param 'arrival_judge_param.max_pos_err_m' must > 0");
+    }
+    if (arrival_judge_config_.yaw_err_rad <= 0.0) {
+        throw std::runtime_error("param 'arrival_judge_param.yaw_stabile_err_deg' must > 0");
+    }
+    if (arrival_judge_config_.yaw_rate_err_rad_s <= 0.0) {
+        throw std::runtime_error(
+            "param 'arrival_judge_param.yaw_rate_stabile_err_deg_s' must > 0");
     }
 
     // ------------------- velocity_param -------------------
@@ -139,16 +154,6 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     }
     attitude_command_mode_ =
         (control_type == 0) ? AttitudeCommandMode::Attitude : AttitudeCommandMode::BodyRate;
-
-    if (!controller_param["attitude_type"]) {
-        throw std::runtime_error("missing param 'sunray_controller_param.attitude_type'");
-    }
-    geometric_controller_param_.attitude_type = controller_param["attitude_type"].as<int>();
-    if (geometric_controller_param_.attitude_type != 0 &&
-        geometric_controller_param_.attitude_type != 1) {
-        throw std::runtime_error(
-            "param 'sunray_controller_param.attitude_type' must be 0 (quaternion) or 1 (SO3)");
-    }
 
     if (!controller_param["attitude_tau"]) {
         throw std::runtime_error("missing param 'sunray_controller_param.attitude_tau'");
@@ -200,15 +205,4 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
                 "param 'sunray_controller_param.hover_thrust_estimator_type' must be 0, 1 or 2");
         }
     }
-}
-
-void Geometric_Controller::ensure_fusion_param_ready_or_throw() {
-    if (fuse_odom_type == 0) {
-        return;
-    }
-    // Geometric_Controller 不依赖 PX4_ParamManager，无法自动读写 EKF2 参数。
-    // 使用者需在起飞前手动确认以下 PX4 参数已正确设置：
-    //   EKF2_EV_CTRL : enable_horizontal_position + enable_vertical_position + enable_yaw
-    //   EKF2_HGT_REF : vision
-    // 这里原先会打印告警，由操作员自行确认；目前先静音，避免干扰 FSM 日志。
 }

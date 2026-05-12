@@ -6,7 +6,7 @@ Usage:
      ./tools/code_intel/merge_compile_commands.py
 
   2) Merge specific build subdirectories or json files:
-     ./tools/code_intel/merge_compile_commands.py uav_control px4_bridge
+     ./tools/code_intel/merge_compile_commands.py uav_control
      ./tools/code_intel/merge_compile_commands.py build/uav_control/compile_commands.json
 
 Options:

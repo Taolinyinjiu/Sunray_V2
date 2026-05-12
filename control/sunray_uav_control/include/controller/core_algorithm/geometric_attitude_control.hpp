@@ -14,7 +14,6 @@
 
 #include "control_data_types/controller_desired_types.hpp"
 #include "control_data_types/uav_state_estimate.hpp"
-#include "controller/core_algorithm/attitude_slover.hpp"
 #include "controller/core_algorithm/hoverthrust_estimator.hpp"
 #include <Eigen/Dense>
 #include <memory>
@@ -43,8 +42,7 @@ struct Geometric_AttitudeControl_Param_t {
     double max_acc{9.0};                            // 位置环加速度输出限幅 (m/s²)
 
     // ── 姿态环参数 ──────────────────────────────────────────
-    double attitude_tau{0.1};  // 姿态控制时间常数：越小响应越快，太小会振荡
-    int attitude_type{0};      // 0 = 四元数误差法, 1 = 几何 SO3 法 (Lee 2010)
+    double attitude_tau{0.1};  // SO3 姿态控制时间常数：越小响应越快，太小会振荡
 
     // ── 物理参数 ────────────────────────────────────────────
     double drone_mass{1.5};  // 无人机质量 (kg)
@@ -114,7 +112,7 @@ class Geometric_AttitudeControl {
     Geometric_AttitudeControl() = default;
     ~Geometric_AttitudeControl() = default;
 
-    // 加载参数，同时根据 param.attitude_type 实例化对应的姿态子控制器
+    // 加载参数
     void load_param(const Geometric_AttitudeControl_Param_t& param);
 
     // 主控制计算接口
@@ -171,9 +169,6 @@ class Geometric_AttitudeControl {
   private:
     Geometric_AttitudeControl_Param_t param_;
 
-    // 由 attitude_type 决定运行时实例类型（0: Quaternion_Solver, 1: SO3_Solver）
-    std::shared_ptr<Attitude_Slover> att_controller_;
-
     // 悬停推力估计器：由 core 持有，controller 仅负责注入观测数据
     std::unique_ptr<thrust_estimator::HoverThrustEstimator> hover_thrust_estimator_;
 
@@ -201,6 +196,17 @@ class Geometric_AttitudeControl {
     double compose_thrust_command(double collective_acc,
                                   ThrustCommandPolicy thrust_policy) const;
     static double wrap_angle(double angle_rad);
+    static Eigen::Vector3d so3_attitude_error(const Eigen::Quaterniond& curr_att,
+                                              const Eigen::Quaterniond& ref_att) {
+        const Eigen::Matrix3d R = curr_att.toRotationMatrix();
+        const Eigen::Matrix3d R_d = ref_att.toRotationMatrix();
+        const Eigen::Matrix3d e_R_hat = 0.5 * (R.transpose() * R_d - R_d.transpose() * R);
+        return Eigen::Vector3d(e_R_hat(2, 1), e_R_hat(0, 2), e_R_hat(1, 0));
+    }
+    Eigen::Vector3d solve_so3_bodyrate(const Eigen::Quaterniond& curr_att,
+                                       const Eigen::Quaterniond& ref_att) const {
+        return (2.0 / param_.attitude_tau) * so3_attitude_error(curr_att, ref_att);
+    }
     Eigen::Vector3d compute_attitude_error(const Eigen::Quaterniond& curr_att,
                                            const Eigen::Quaterniond& ref_att) const;
     void update_debug_state(const controller_data_types::TargetTrajectoryPoint_t& des_state,
@@ -226,7 +232,7 @@ class Geometric_AttitudeControl {
                                     const control_common::UAVStateEstimate& current_odom,
                                     double target_yaw);
 
-    // 由期望加速度调用姿态子控制器，计算 body rate 和归一化推力
+    // 由期望加速度计算 SO3 姿态误差对应的 body rate 和归一化推力
     // bodyrate_cmd: [ωx, ωy, ωz, thrust_acc]，第4维为 a_des·zb (m/s²)
     void computeBodyRateCmd(Eigen::Vector4d& bodyrate_cmd,
                             const Eigen::Vector3d& a_des,

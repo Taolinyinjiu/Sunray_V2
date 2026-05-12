@@ -40,14 +40,9 @@ class LocalizationFusion {
     // 主循环（单线程 ros::spin）
     void Spin();
 
-    // 添加打印函数
-    void printf_terminal();
-
   private:
     // ---- 初始化阶段 ----
     bool load_param();  // 加载参数，校验参数
-    void init_logger();  // 初始化sunray_log
-    std::string make_log_file_path() const;  // 生成日志文件路径
 
     // ---- 回调函数 ----
     /*
@@ -80,7 +75,7 @@ class LocalizationFusion {
     因此他是一个和local一样连续，高频的，我们直接在relocalization_callback中发布tf而非publish_global_odom_from_local或者healthtimer_callback
     因为这个global并不需要从local中推导
     4.
-    由于我们使用了10Hz的定时器进行状态检查，因此将OdomStatus的发布也放置在healthtimer_callback中
+    由于我们使用了10Hz的定时器进行状态检查，因此将OdomState的发布也放置在healthtimer_callback中
     */
     void publish_global_odom_from_local(const nav_msgs::Odometry& msg);  // 当global由local推导时，在local的回调中使用这个函数发布global
 
@@ -104,20 +99,18 @@ class LocalizationFusion {
     tf2_ros::TransformBroadcaster tf_broadcaster_;
 
     // ---------------- Config 相关参数 ----------------
-    std::string uav_ns_;                // 从全局参数中读取 uav_id+ uav_name 组成uav_namespace
-    std::string config_yamlfile_path_;  // yaml 参数文件的路径
+    std::string agent_key_;              // 使用辅助函数读取智能体命名标识符
+    std::string config_yamlfile_path_;  // 定位源配置yaml文件的路径
     int selected_source_id_{-1};        // launch文件中所指定的定位源编号
     SourceConfig selected_source_{};  // 结合launch文件中的source_id,从config文件中构建读取参数并缓存
     bool has_selected_source_{false};  // 状态标识符，表示是否读取到了配置参数
     double health_rate_hz_{10};
     bool use_receive_time_{false}; // 使用接收时刻时间戳替换里程计信息时间戳
-    bool log_save_{false};         // 是否保存文件日志
     
     // 输出topic约定
-    std::string global_odometry_topic_{"${uav_ns}/sunray/localization/global_odom"};
-    std::string local_odometry_topic_{"${uav_ns}/sunray/localization/local_odom"};
-    std::string odom_status_topic_{"${uav_ns}/sunray/localization/odom_status"};
-    std::string log_file_path_;    // 日志文件绝对路径（启用文件日志时有效）
+    std::string global_odometry_topic_{"${agent_key}/sunray/localization/global_odom"};
+    std::string local_odometry_topic_{"${agent_key}/sunray/localization/local_odom"};
+    std::string odom_state_topic_{"${agent_key}/sunray/localization/odom_state"};
 
     // 输出 frame 约定：sunray_global -> world -> sunray_local -> base_link
     std::string global_frame_id_{"sunray_global"};
@@ -131,19 +124,20 @@ class LocalizationFusion {
     nav_msgs::Odometry last_odometry_data_;        // 最新的odometry数据
     nav_msgs::Odometry last_relocalization_data_;  // 最新的重定位数据
 
-    bool has_odometry_data_{false};        // odometry回调函数是否接受到数据
-    bool has_relocalization_data_{false};  // relocalization回调函数是否接受到数据
+    // 里程计数据时间戳
+    ros::Time odometry_received_stamp_;
+    // 重定位数据时间戳
+    ros::Time relocalization_received_stamp_;
 
-    bool relocalization_data_valid_{false};
+    // 里程计数据是否有效
+    bool odometry_valid_{false};
+    // 重定位数据是否有效
+    bool relocalization_valid_{false};
+    // 里程计数据更新频率
+    double odometry_update_hz{0.0};
+    std::deque<double> hz_stamps_;  // 滑动窗口时间戳，用于频率估计
 
-    ros::Time last_odometry_rx_time_{ros::Time(0)};  // 最新的odometry数据接收时间
-    double odometry_input_rate_hz_{0.0};  // odometry输入频率估计
-    double relocalization_input_rate_hz_{0.0};  // relocalization输入频率估计
-    std::deque<double> odometry_rate_samples_s_;  // odometry频率估计窗口
-    std::deque<double> relocalization_rate_samples_s_;  // relocalization频率估计窗口
-
-    bool odometry_data_timeout_{false};  // local系数据是否超时
-
+    // ------tf变换----
     geometry_msgs::TransformStamped global_to_world_tf_;  // sunray_global -> world
     geometry_msgs::TransformStamped world_to_local_tf_;   // world -> sunray_local
     geometry_msgs::TransformStamped local_to_base_tf_;    // sunray_local -> base_link

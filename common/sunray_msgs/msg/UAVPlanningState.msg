@@ -1,69 +1,24 @@
 std_msgs/Header header
-uint32 task_id
 
-uint8 UNDEFINE=0
-# 这里描述具体的planner类型
-uint8 PLANNER_EGO=1
-uint8 PLANNER_DIFF=2
-uint8 PLANNER_FUEL=3
-uint8 PLANNER_SUPER=4
-uint8 planner_type
+# 这里描述当前sunray_planning在于哪个规划器进行交互
 string planner_type_string
 
-# 这里描述planner当前的状态
-uint8 PLANNER_STATE_UNDEFINE=0
-uint8 PLANNER_STATE_INIT=1
-uint8 PLANNER_STATE_WAIT_TARGET=2
-uint8 PLANNER_STATE_GENERATE=3
-uint8 PLANNER_STATE_REPLAN=4
-uint8 PLANNER_STATE_EXEC=5
-uint8 PLANNER_STATE_PAUSE=6
-uint8 PLANNER_STATE_SUCCESS=7
-uint8 PLANNER_STATE_FAIL=8
-uint8 PLANNER_STATE_EMERGENCY_STOP=9
-uint8 planner_state
-string planner_state_string
-
 # 这里描述规划模块状态机当前的状态
-uint8 INIT=0
-uint8 READY=1
-uint8 PLANNING=2
-uint8 ARRIVED=3
-# ARRIVED与HOVER在正确执行时等价，在打断时，比如轨迹执行的中段发送悬停命令，进入HOVER而非ARRIVED
-uint8 HOVER=4
-uint8 LAND=5
-uint8 TAKEOFF=6
-uint8 RETURN=7
-uint8 MOVE=8
-uint8 EMERGENCY_KILL=9
-uint8 planning_fsm_state
-string planning_fsm_state_string
+uint8 OFF=0 # OFF阶段表示当前不满足Planning基本运行条件
+uint8 INIT=1 # INIT阶段表示Planning当前正常启动,并可接收UAVPlanningCMD指令
+uint8 TAKEOFF=2 # TAKEOFF状态同步UAVControl部分,用于表示当前无人机处于起飞阶段
+uint8 LAND=3 # LAND状态同步UAVControl部分,用于表示当前无人机处于降落阶段
+uint8 PLANNING=4 # PLANNING状态表示持续的移动
+uint8 ARRIVED=5 # ARRIVED表示到达了目标点
+uint8 PLAN_FAILED=6 # PLAN_FAILED表示目标点无法到达
 
-# 这里表示当前目标点的坐标系
-uint8 SUNRAY_LOCAL=1
-uint8 SUNRAY_GLOBAL=2
-uint8 planning_frame
-string planning_frame_string
+# PLAN_FAILED 需要搭配一个错误码,表示无法到达的原因,这里简单地描述可能的情况
+# 1. 目标点在规划可行性空间中无法达到,比如无人机与目标点之间存在无法绕开的障碍物
+# 2. 规划过程被外部指令打断
 
-# 这里表示目标点类型的方式
-uint8 GOAL_SINGLE=1
-uint8 GOAL_MULTI=2
-uint8 goal_type
-string goal_type_string
+uint8 sunray_planning_state
 
-# ----------- 命令来源枚举 -------------
-uint8 SUNRAY_STATION=1  	# SUNRAY地面站
-uint8 RC_CONTROLLER=2    	# RC遥控器控制
-uint8 TERMINAL=3  		    # 终端TUI/命令行控制
-uint8 CONTROL_CMD=4    		# Sunray系列代码控制
-uint8 cmd_source
-string cmd_source_string
+# PLANNING模块的home点
+geometry_msgs/Vector3 home_point
 
-# 总的航点以及当前执行的航点
-uint32 waypoint_count
-uint32 current_waypoint_index
-
-# 当前执行的目标点
-PlanningWaypoint current_target
-# 任务队列中最后的目标点
-PlanningWaypoint final_target
+UAVPlanningCMD planning_cmd

@@ -13,11 +13,6 @@
 #include "utils/orientation_utils.hpp"
 #include <ros/ros.h>
 
-// -------------------------控制器状态消息发布------------------
-void Sunray_FSM::pub_controller_state() {
-    sunray_controller_->pub_controller_state();
-}
-
 // -------------------------控制指令执行函数------------------
 // 首先我们是这样来设计这个函数的，我们为这个函数新建一个线程，以200Hz的频率or100Hz的频率来运行，这个频率取决于config文件中的controller_update_frequency参数决定
 // 然后这个函数是一个void类型，因为线程单独运行并不需要返回值
@@ -217,7 +212,6 @@ void Sunray_FSM::controller_update_loop() {
             last_pushed_odom_stamp = odom_snapshot.timestamp;
         }
         update_controller_output();
-        pub_controller_state();  // 在这里才输出controller的状态，是因为我们使用的是基于反馈的控制器，如果输入量没有变化的话，没有什么意义
         rate.sleep();
     }
 }

@@ -1,3 +1,5 @@
+// TODO：测试工作完成后，选择一个子类作为geometric_controller的默认推力实现，移除本文件
+// expect: core_algorithm文件夹下仅留一个geometric_control.hpp文件
 #pragma once
 
 #include <Eigen/Dense>

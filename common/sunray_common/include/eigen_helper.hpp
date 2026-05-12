@@ -13,6 +13,26 @@ inline double get_yaw_from_orientation(const Eigen::Quaterniond& orientation) {
                       1.0 - 2.0 * (orientation.y() * orientation.y() + orientation.z() * orientation.z()));
 }
 
+inline Eigen::Vector3d get_euler_from_orientation(const Eigen::Quaterniond& q) {
+    double sinr_cosp = 2.0 * (q.w() * q.x() + q.y() * q.z());
+    double cosr_cosp = 1.0 - 2.0 * (q.x() * q.x() + q.y() * q.y());
+    double roll = std::atan2(sinr_cosp, cosr_cosp);
+
+    double sinp = 2.0 * (q.w() * q.y() - q.z() * q.x());
+    double pitch;
+    if (std::abs(sinp) >= 1.0) {
+        pitch = std::copysign(M_PI / 2.0, sinp);
+    } else {
+        pitch = std::asin(sinp);
+    }
+
+    double siny_cosp = 2.0 * (q.w() * q.z() + q.x() * q.y());
+    double cosy_cosp = 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z());
+    double yaw = std::atan2(siny_cosp, cosy_cosp);
+
+    return Eigen::Vector3d(roll, pitch, yaw);
+}
+
 inline double wrap_angle(double angle_rad) {
     return std::atan2(std::sin(angle_rad), std::cos(angle_rad));
 }

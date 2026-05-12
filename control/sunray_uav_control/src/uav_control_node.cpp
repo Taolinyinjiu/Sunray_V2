@@ -1,5 +1,4 @@
 #include "statemachine/sunray_fsm.hpp"
-#include "sunray_log.hpp"
 #include <atomic>
 #include <csignal>  // 捕获中断信号头文件
 // 这里有一个全局变量，用来指示节点的while循环什么时候停止
@@ -44,12 +43,8 @@ int main(int argc, char** argv) {
     while (ros::ok() && !stop_request) {
         // 状态机更新
         sunray_fsm.process();
-        // 打印运行过程中的状态日志
-        sunray_fsm.show_logs();
         rate.sleep();
     }
-    // 打印退出日志
-    SUNRAY_INFO("uav control node shutdown now");
     spinner.stop();
     ros::shutdown();
     return 0;

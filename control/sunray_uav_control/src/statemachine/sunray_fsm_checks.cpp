@@ -33,27 +33,9 @@ void Sunray_FSM::check_controller_ready() {
 
 // 检查是否允许起飞
 bool Sunray_FSM::check_allow_takeoff() {
-    // 这里的思路是这样的，首先函数的结果作为类变量allow_takeoff_的值缓存，所有需要判断能否起飞的程序，都是直接判断变量allow_takeoff_是否为true来进行起飞
-    // check_allow_takeoff()实际上是一个被定时器调用，综合分析各个消息，来决定是否起飞的函数，可以认为是一个信息处理中枢
-    // 1. 首先是配置文件中 takeoff_with_code
-    // 是否为true，如果该值为false，则要求rc节点存在并且持续发送连接状态
-    // 2. 外部system_check模块是否正常工作，如果正常工作则其数据需要被参考，比如是否允许起飞之类
-
-    // 构造临时变量
-    bool temp_allow_state;
-
-    // 首先读取参数takeoff_with_code
-    if (fsm_config_.protect_param.takeoff_with_code == true) {
-        temp_allow_state = true;
-    } else {
-        temp_allow_state = false;
-    }
-    // 这里处理遥控器传递的信息
-    if (rc_connected == true) {  // 首先遥控器要连接
-        // 这里判断需要再设计一下
-    }
-    // 将临时变量更新到类变量
-    allow_takeoff_ = temp_allow_state;
+    // protect_param 已迁移给 system_check，当前 FSM 不再承担起飞授权策略。
+    // 在 system_check 接管前，这里仅保持最小行为：控制器就绪后允许 TAKEOFF 转移。
+    allow_takeoff_ = true;
     return allow_takeoff_;
 }
 

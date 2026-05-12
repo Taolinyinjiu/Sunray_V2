@@ -11,7 +11,8 @@
 #include "sunray_fsm_param.hpp"
 #include "sunray_state_types.hpp"
 #include "sunray_msgs/UAVControlCMD.h"
-#include "sunray_msgs/OdomStatus.h"
+#include "sunray_msgs/OdomState.h"
+#include "sunray_msgs/UAVControlState.h"
 #include <nav_msgs/Odometry.h>
 #include "controller/controller_interface.hpp"
 #include "control_data_types/uav_control_cmd_types.hpp"
@@ -51,7 +52,6 @@ class Sunray_FSM {
     void init();                    // 包括配置读取，ros订阅+发布，初始化定时器
     double get_update_frequency();  // 获取更新频率
     void process();                 // 状态机低频更新，处理事件队列
-    void show_logs();               // 在终端中打印各种log? 0.0
 
   private:
     // ------------------------- 表驱动FSM类型 -------------------------
@@ -68,12 +68,9 @@ class Sunray_FSM {
     // ------------------------- 函数 -------------------------
     // init() = load_param() + set_subscriber() + set_publisher() + register_controller
     void load_param();           // 读取参数
-    void init_logger();          // 初始化sunray_log
     void init_subscriber();      // 初始化订阅者
     void init_publisher();       // 初始化发布者
     void register_controller();  // 注册控制器
-    void show_static_info();     // 打印一次性的静态配置和参数信息
-    std::string make_log_file_path() const;  // 生成日志文件路径
 
     // 状态检查部分
     void check_controller_ready();  // 检查controller是否就绪，就绪则Sunray_FSM State: OFF -> INIT
@@ -88,14 +85,13 @@ class Sunray_FSM {
     // --------------------------话题回调函数------------------------
     // 为了保持话题的高频回调，基本上回调函数都只负责将收到的消息转换为结构体变量缓存，不做其他处理
     void local_odom_callback(const nav_msgs::Odometry& msg);  // local系里程计回调函数
-    void localization_state_callback(const sunray_msgs::OdomStatus& msg);  // 用于查看里程计状态
+    void localization_state_callback(const sunray_msgs::OdomState& msg);  // 用于查看里程计状态
     void uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg);  // 订阅控制指令话题
     void system_check_callback();  // 系统状态检查话题
 
     // --------------------------定时器回调函数-------------------------
     void
     pub_sunray_fsm_state();  // 发布状态机的相关信息，自定义话题类型，频率由config.yaml文件固定，从fsm_config_读取
-    void pub_controller_state();  // 发布控制器的相关信息
     // -------------------------控制指令执行函数------------------
     void controller_update_loop();  // 控制线程主循环
     void update_controller_output();
@@ -164,10 +160,8 @@ class Sunray_FSM {
     sunray_fsm::sunray_fsm_config_t fsm_config_;                       // 状态机参数结构体
     std::vector<sunray_fsm::Transition> sunray_state_transmit_table_;  // 成员变量
     bool rc_connected{false};  // 遥控器连接状态，这里是从sunray_rc_joy_node节点传递？
-    bool log_save_{false};   // 是否保存文件日志
-    std::string log_file_path_;  // 启用文件日志时的输出路径
     bool has_localization_status_{false};
-    sunray_msgs::OdomStatus last_localization_status_;
+    sunray_msgs::OdomState last_localization_status_;
     ros::Time last_localization_status_receive_time_{ros::Time(0)};
     double localization_status_rate_hz_{0.0};
     std::deque<double> localization_status_rate_samples_s_;

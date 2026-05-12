@@ -32,9 +32,9 @@ struct SourceConfig {
     LocalizationMode localization_mode{LocalizationMode::LOCAL};  // 配置定位源的输入类型
     std::string odometry_topic{""};
     std::string relocalization_topic{""};
-    double timeout_s{0.2};  // 配置超时时间
+    double timeout_s{0.5};  // 配置超时时间
 };
 
 // 读整个 yaml 文件，返回转译后的 source_id 对应的 config 结构体
 SourceConfig
-load_config_from_yaml(const std::string& yaml_path, const int source_id, const std::string& uav_ns);
+load_config_from_yaml(const std::string& yaml_path, const int source_id);

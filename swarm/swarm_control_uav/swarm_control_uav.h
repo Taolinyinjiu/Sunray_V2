@@ -13,7 +13,7 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlFSMState.h>
+#include <sunray_msgs/UAVControlState.h>
 #include <sunray_msgs/UAVSwarmCMD.h>
 #include <sunray_msgs/UAVSwarmState.h>
 
@@ -86,7 +86,7 @@ class Swarm_Control_UAV
     };
 
     void localOdomCallback(const nav_msgs::Odometry::ConstPtr &msg);
-    void uavFsmStateCallback(const sunray_msgs::UAVControlFSMState::ConstPtr &msg);
+    void uavFsmStateCallback(const sunray_msgs::UAVControlState::ConstPtr &msg);
     void peerOdomCallback(const nav_msgs::Odometry::ConstPtr &msg, int agent_id);
     void swarmCmdCallback(const sunray_msgs::UAVSwarmCMD::ConstPtr &msg);
     void swarm_control_main_loop(const ros::TimerEvent &event);
@@ -123,7 +123,7 @@ class Swarm_Control_UAV
 
     sunray_msgs::UAVControlCMD uav_control_cmd_{};
     std::vector<OdomCache> odom_caches_{}; // 下标直接使用 agent_id，0 号位保留不用
-    sunray_msgs::UAVControlFSMState uav_control_fsm_state_{};
+    sunray_msgs::UAVControlState uav_control_fsm_state_{};
     bool has_uav_fsm_state_{false};
     sunray_msgs::UAVSwarmCMD uav_swarm_cmd_{};
     sunray_msgs::UAVSwarmState uav_swarm_state_{};

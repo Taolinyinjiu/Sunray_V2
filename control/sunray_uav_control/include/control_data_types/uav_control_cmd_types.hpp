@@ -9,35 +9,40 @@
 #include <sunray_msgs/UAVControlCMD.h>
 namespace control_common {
 struct UavControlCmd {
+    // ----------- 命令来源枚举 -------------
     enum class CmdSource : uint8_t {
-        UNDEFINE = 0,    // 未定义的来源
-        SUNRAY_STATION,  // Sunray地面站控制
-        RC_CONTROLLER,   // RC遥控器控制
-        TERMINAL,        // 终端控制
-        CONTROL_CMD      // 控制命令(所有从代码中实现的控制)
+        UNDEFINE = 0,         // 未定义的来源
+        SUNRAY_STATION = 1,   // Sunray地面站控制
+        RC_CONTROLLER = 2,    // RC遥控器控制
+        TERMINAL = 3,         // 终端控制
+        SWARM_CONTROL = 4,    // 来自集群模块的控制命令
+        PLANNING = 5,         // 来自规划模块的控制指令
+        EXAMPLE_DEMO = 6      // 来自示例模块的控制指令
     };
+    // ------------- 控制命令枚举 ------------
     enum class ControlCmd : uint8_t {
-        UNDEFINE = 0,        //	未知指令
-        TAKEOFF,             // [特殊]起飞指令
-        LAND,                // [特殊]降落指令
-        RETURN,              // [特殊]返航指令
-        KILL,                // [特殊]锁桨指令
-        HOVER,               // [特殊]悬停指令：在当前位置悬停
-        MOVE_POINT,          // 移动指令：移动到某一点
-        MOVE_VELOCITY,       // 速度指令：控制无人机的速度
-        MOVE_TRAJECTORY,     // 轨迹指令：跟踪轨迹
-        MOVE_POINT_BODY,     // 移动指令：移动到机体系下的某一点
-        MOVE_VELOCITY_BODY,  // 速度指令：控制无人机在机体系下的速度
-        MOVE_POINT_WGS84     // 移动指令：移动到经纬高系下的某一点
-
+        UNDEFINE = 0,            //	未知指令
+        TAKEOFF = 1,             // [特殊]起飞指令
+        LAND = 2,                // [特殊]降落指令
+        RETURN = 3,              // [特殊]返航指令
+        KILL = 4,                // [特殊]锁桨指令
+        HOVER = 5,               // [特殊]悬停指令：在当前位置悬停
+        MOVE_POINT = 6,          // 移动指令：移动到某一点
+        MOVE_VELOCITY = 7,       // 速度指令：控制无人机的速度
+        MOVE_TRAJECTORY = 8,     // 轨迹指令：跟踪轨迹
+        MOVE_POINT_BODY = 9,     // 移动指令：移动到机体系下的某一点
+        MOVE_VELOCITY_BODY = 10, // 速度指令：控制无人机在机体系下的速度
+        MOVE_POINT_WGS84 = 11    // 移动指令：移动到经纬高系下的某一点
     };
+    // ------------偏航角控制模式枚举---------
     enum class YawMode : uint8_t {
         KEEP_YAW = 0,     // 保持当前yaw角不变
-        SET_YAW = 1,      // 设置yaw角
-        SET_YAWRATE = 2,  // 设置yaw角的角速度
+        SET_YAW = 1,      // 设置惯性系绝对yaw角
+        SET_YAWRATE = 2,  // 设置yaw角速度
     };
     // ------时间戳-----
     ros::Time timestamp{ros::Time(0)};
+    // 控制指令
     CmdSource cmd_source{CmdSource::UNDEFINE};     // 控制指令来源
     ControlCmd control_cmd{ControlCmd::UNDEFINE};  // 控制指令类型
     // ---------------根据ControlCmd决定msg中的数据如何填充---------------------
@@ -55,6 +60,7 @@ struct UavControlCmd {
     double yaw{0.0};
     double yaw_rate{0.0};
     // body系控制时，z轴使用世界系固定高度语义
+    // velocity控制时，可选使用fixed_height让z轴高度保持不变
     double fixed_height{0.0};
     // 设计一个辅助的构造函数，用来快速的提取控制话题中的数据
     UavControlCmd() = default;
@@ -64,88 +70,10 @@ struct UavControlCmd {
 // ---------------一个简单的构造函数，用于简化提取ros msg的数据--------------
 inline UavControlCmd::UavControlCmd(const sunray_msgs::UAVControlCMD& msg) {
     timestamp = msg.header.stamp;
-    // 由于我们msg定义和结构体定义一一对应，实际上这里可以使用隐式类型转换，但是为了代码的可读性，我么使用显式的switch‘
-    // 首先枚举命令来源
-    switch (msg.cmd_source) {
-    case sunray_msgs::UAVControlCMD::UNDEFINE:
-        cmd_source = CmdSource::UNDEFINE;
-        break;
-    case sunray_msgs::UAVControlCMD::SUNRAY_STATION:
-        cmd_source = CmdSource::SUNRAY_STATION;
-        break;
-    case sunray_msgs::UAVControlCMD::RC_CONTROLLER:
-        cmd_source = CmdSource::RC_CONTROLLER;
-        break;
-    case sunray_msgs::UAVControlCMD::TERMINAL:
-        cmd_source = CmdSource::TERMINAL;
-        break;
-    case sunray_msgs::UAVControlCMD::CONTROL_CMD:
-        cmd_source = CmdSource::CONTROL_CMD;
-        break;
-    default:
-        cmd_source = CmdSource::UNDEFINE;
-        // 实际上，这里需要添加打印到日志，然后打印当前的msg.cmd_source
-        break;
-    }
-    // 然后枚举控制命令
-    switch (msg.control_cmd) {
-    case sunray_msgs::UAVControlCMD::UNDEFINE:
-        control_cmd = ControlCmd::UNDEFINE;
-        break;
-    case sunray_msgs::UAVControlCMD::TAKEOFF:
-        control_cmd = ControlCmd::TAKEOFF;
-        break;
-    case sunray_msgs::UAVControlCMD::LAND:
-        control_cmd = ControlCmd::LAND;
-        break;
-    case sunray_msgs::UAVControlCMD::RETURN:
-        control_cmd = ControlCmd::RETURN;
-        break;
-    case sunray_msgs::UAVControlCMD::KILL:
-        control_cmd = ControlCmd::KILL;
-        break;
-    case sunray_msgs::UAVControlCMD::HOVER:
-        control_cmd = ControlCmd::HOVER;
-        break;
-    case sunray_msgs::UAVControlCMD::MOVE_POINT:
-        control_cmd = ControlCmd::MOVE_POINT;
-        break;
-    case sunray_msgs::UAVControlCMD::MOVE_VELOCITY:
-        control_cmd = ControlCmd::MOVE_VELOCITY;
-        break;
-    case sunray_msgs::UAVControlCMD::MOVE_TRAJECTORY:
-        control_cmd = ControlCmd::MOVE_TRAJECTORY;
-        break;
-    case sunray_msgs::UAVControlCMD::MOVE_POINT_BODY:
-        control_cmd = ControlCmd::MOVE_POINT_BODY;
-        break;
-    case sunray_msgs::UAVControlCMD::MOVE_VELOCITY_BODY:
-        control_cmd = ControlCmd::MOVE_VELOCITY_BODY;
-        break;
-    case sunray_msgs::UAVControlCMD::MOVE_POINT_WGS84:
-        control_cmd = ControlCmd::MOVE_POINT_WGS84;
-        break;
-    default:
-        control_cmd = ControlCmd::UNDEFINE;
-        // 实际上，这里需要添加打印到日志，然后打印当前的msg.control_cmd
-        break;
-    }
-    // 枚举yaw角控制模式
-    switch (msg.yaw_mode) {
-    case sunray_msgs::UAVControlCMD::KEEP_YAW:
-        yaw_mode = YawMode::KEEP_YAW;
-        break;
-    case sunray_msgs::UAVControlCMD::SET_YAW:
-        yaw_mode = YawMode::SET_YAW;
-        break;
-    case sunray_msgs::UAVControlCMD::SET_YAWRATE:
-        yaw_mode = YawMode::SET_YAWRATE;
-        break;
-    default:
-        yaw_mode = YawMode::KEEP_YAW;
-        // 实际上，这里需要添加打印到日志，然后打印当前的msg.yaw_mode
-        break;
-    }
+    // 内部枚举值与 UAVControlCMD.msg 保持一一对应，直接做静态类型转换即可。
+    cmd_source = static_cast<CmdSource>(msg.cmd_source);
+    control_cmd = static_cast<ControlCmd>(msg.control_cmd);
+    yaw_mode = static_cast<YawMode>(msg.yaw_mode);
     // 默认提取惯性系数据
     position.x() = msg.desired_pos.x;
     position.y() = msg.desired_pos.y;
@@ -163,7 +91,8 @@ inline UavControlCmd::UavControlCmd(const sunray_msgs::UAVControlCMD& msg) {
     jerk.y() = msg.desired_jerk.y;
     jerk.z() = msg.desired_jerk.z;
 
-    // body系控制单独携带 body-xy + fixed_height，需要覆盖默认解析结果
+    // body系控制单独携带 body-xy + fixed_height，需要覆盖默认解析结果；
+    // yaw / yaw_rate 仍按惯性系语义提取
     if (control_cmd == ControlCmd::MOVE_POINT_BODY) {
         body_position_xy.x() = msg.desired_body_xy_pos.x;
         body_position_xy.y() = msg.desired_body_xy_pos.y;

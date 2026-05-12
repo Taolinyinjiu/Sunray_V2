@@ -7,11 +7,11 @@
 #include "utils/arrival_helper.hpp"
 #include "utils/reference_limit_helper.hpp"
 #include "utils/quintic_curve.hpp"
+#include "utils/yaw_curve.hpp"
 #include <ros/node_handle.h>
 #include <ros/time.h>
 #include <string>
 #include <atomic>
-#include <mutex>
 #include <Eigen/Dense>
 
 /**
@@ -25,11 +25,10 @@
  *   - 发布 AttitudeTarget，可按配置选择 Attitude 或 BodyRate 模式
  *   - calculateControl 不需要 IMU 输入
  *   - move_trajectory 真正实现（直接将 trajpoint 传入核心算法）
- *   - takeoff 不依赖 QuinticCurve，直接以目标高度点跟踪
+ *   - takeoff 使用平滑爬升曲线，move_point 使用位置参考平滑
  *
  * 故意不引入的依赖：
- *   - PX4_ParamManager（EKF2 参数管理）
- *   - curve::QuinticCurve（五次项轨迹曲线）
+ *   - PX4 参数管理职责（已迁移至 system_check 方向）
  */
 class Geometric_Controller : public Controller_Interface {
   public:
@@ -74,40 +73,20 @@ class Geometric_Controller : public Controller_Interface {
     bool is_land_complete() override;
     bool is_point_complete() override;
 
-    // ----------------------控制器状态话题更新函数-----------------
-    void pub_controller_state() override;  // 发布控制器参考量/反馈量/误差与输出
-    void printf_logs(uint8_t log_level) override;  // 为 Sunray_FSM 提供同步日志输出
-
   private:
     enum class AttitudeCommandMode : uint8_t {
         Attitude = 0,
         BodyRate = 1,
     };
 
-    struct LogSnapshot {
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-        bool controller_ready{false};
-        bool takeoff_complete{false};
-        bool land_complete{false};
-        bool point_complete{false};
-        bool has_uav_odometry{false};
-        bool has_imu{false};
-        bool can_fuse{false};
-        bool land_near_ground{false};
-
-        control_common::Mavros_State px4_state{};
-        control_common::UAVStateEstimate odom{};
-        controller_data_types::TargetTrajectoryPoint_t desired_state{};
-        Eigen::Vector3d hover_point{Eigen::Vector3d::Zero()};
-        double hover_yaw{0.0};
-        control_common::Mavros_SetpointAttitude last_setpoint{};
-        Geometric_AttitudeControl_DebugState_t debug_state{};
+    enum class MotionCurveOwner : uint8_t {
+        None = 0,
+        MovePoint = 1,
+        Takeoff = 2,
     };
 
     // ----------------------配置相关-----------------------
     std::string config_yamlfile_path_;
-    std::string uav_ns_;
     Geometric_AttitudeControl_Param_t geometric_controller_param_;
     Geometric_AttitudeControl controller_;
     AttitudeCommandMode attitude_command_mode_{AttitudeCommandMode::BodyRate};
@@ -118,8 +97,7 @@ class Geometric_Controller : public Controller_Interface {
 
     // ----------------------检查相关-----------------------
     // void 类型 + throw 后缀 = 整个启动过程只执行一次，抛出异常则终止启动
-    void load_and_validate_config_or_throw();   // 读取并校验 yaml 文件配置
-    void ensure_fusion_param_ready_or_throw();  // 检查外部里程计融合参数是否就绪
+    void load_and_validate_config_or_throw();  // 读取并校验 yaml 文件配置
 
     // bool 类型 = 运行过程中反复检查
     bool check_px4_basic_state();      // 检查 px4 飞控基础状态
@@ -139,6 +117,8 @@ class Geometric_Controller : public Controller_Interface {
                                 const char* reason);
     bool move_point_impl(controller_data_types::TargetPoint_t point,
                          bool preserve_body_point_context);
+    void clear_motion_curve();
+    void begin_motion_curve(MotionCurveOwner owner);
     void reset_point_motion_context();
     double update_limited_yaw_target(double target_yaw, const ros::Time& now);
     double integrate_limited_yaw_rate(double yaw_rate_cmd, const ros::Time& now);
@@ -149,8 +129,6 @@ class Geometric_Controller : public Controller_Interface {
     publish_trajectory_setpoint(const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
                                 ThrustCommandPolicy thrust_policy =
                                     ThrustCommandPolicy::UseEstimatedAnchor);
-    void update_log_snapshot();
-    LogSnapshot get_log_snapshot() const;
 
     std::atomic<bool> controller_ready_{false};
 
@@ -163,8 +141,8 @@ class Geometric_Controller : public Controller_Interface {
     MavrosHelper mavros_helper_;
 
     // --------------------到达判断
+    // takeoff/move_point 共用配置，调用侧决定误差如何构造。
     arrival_helper::Config arrival_judge_config_{};
-    arrival_helper::Config takeoff_arrival_config_{};  // 起飞阶段使用, 先进入位置窗口再允许 velocity-only 回退
 
     // --------------------px4 状态缓存-----------------------
     double pub_px4_state_freq_{100.0};  // px4state 话题发布频率（Hz）
@@ -179,9 +157,10 @@ class Geometric_Controller : public Controller_Interface {
     takeoff_land::TakeoffTuning takeoff_tuning_{};
     takeoff_land::TakeoffState takeoff_state_{};
 
-    // 五次项起飞曲线（平滑爬升，避免直接发送目标位置引起的阶跃响应）
-    curve::QuinticCurve quint_curve_;
-    curve::QuinticCurve move_point_curve_;
+    // 共享轨迹曲线：takeoff/move_point 轮流占用，通过 owner 显式管理生命周期。
+    curve::QuinticCurve motion_curve_;
+    MotionCurveOwner motion_curve_owner_{MotionCurveOwner::None};
+    curve::QuinticYawCurve yaw_curve_;
 
     // 降落阶段相关状态
     takeoff_land::LandingTuning landing_tuning_{};
@@ -213,16 +192,10 @@ class Geometric_Controller : public Controller_Interface {
     ros::Time last_odom_timestamp_{ros::Time(0)};
     bool imu_acc_is_specific_force_{true};
 
-    // --------------------期望状态（用于调试/日志）--------------------
+    // --------------------期望状态--------------------
     controller_data_types::TargetTrajectoryPoint_t desired_state_;
-
-    // ----------------------ros 话题发布者-----------------------
-    ros::Publisher controller_state_pub_;
 
     // ----------------------ros 定时器-----------------------
     ros::Timer pub_px4_state_timer_;    // 周期发布 PX4State
     ros::Timer pub_vision_pose_timer_;  // 周期发布 vision_pose
-
-    mutable std::mutex log_snapshot_mutex_;
-    LogSnapshot log_snapshot_{};
 };

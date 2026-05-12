@@ -71,8 +71,9 @@ struct TargetVelocity_t {
 
 // ═══════════════════════════════════════════════════════════
 // body系位置控制结构体
-// position_xy 字段机描述 体系下水平方向位移
-// fixed_height 字段描述 惯性系下z轴固定高度
+// position_xy 字段描述机体系下水平方向位移
+// fixed_height 字段描述惯性系下z轴固定高度
+// yaw 字段描述惯性系绝对 yaw 角
 // ═══════════════════════════════════════════════════════════
 struct TargetBodyPoint_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -83,8 +84,10 @@ struct TargetBodyPoint_t {
 
 // ═══════════════════════════════════════════════════════════
 // body系速度控制结构体
-// velocity_xy 字段机描述 体系下水平方向期望速度
-// fixed_height 字段描述 惯性系下z轴固定高度
+// velocity_xy 字段描述机体系下水平方向期望速度
+// fixed_height 字段描述惯性系下z轴固定高度
+// yaw 字段描述惯性系绝对 yaw 角
+// yaw_rate 字段描述 yaw 角速度
 // ═══════════════════════════════════════════════════════════
 struct TargetBodyVelocity_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -219,7 +219,7 @@ std::string swarmCmdTopicText()
 
 std::string controlCmdTopicText(const std::string &agent_name, const sunray_msgs::UAVSwarmState &state)
 {
-    return colorText(agentPrefix(agent_name, state) + "/sunray/uav_control_cmd", kColorWhite);
+    return colorText(agentPrefix(agent_name, state) + "/sunray/uav_control/control_cmd", kColorWhite);
 }
 
 std::string formatFormationCommand(const sunray_msgs::Formation &formation_cmd)

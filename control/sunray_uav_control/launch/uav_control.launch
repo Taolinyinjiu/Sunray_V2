@@ -1,20 +1,37 @@
 <launch>
   <arg name="config_yamlfile_path"
        default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
-  <arg name="uav_name" default="uav" />
-  <arg name="uav_id" default="1" />
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
   <arg name="node_name" default="uav_control_node" />
   <arg name="set_global_params" default="true" />
+  <arg name="use_private_agent_key" default="false" />
+  <arg name="enable_single_monitor" default="true" />
+  <arg name="monitor_print_hz" default="2.0" />
+  <arg name="monitor_stale_timeout" default="1.0" />
 
-  <param if="$(arg set_global_params)" name="/uav_name" value="$(arg uav_name)" />
-  <param if="$(arg set_global_params)" name="/uav_id" value="$(arg uav_id)" />
+  <param if="$(arg set_global_params)" name="/agent_name" value="$(arg agent_name)" />
+  <param if="$(arg set_global_params)" name="/agent_id" value="$(arg agent_id)" />
 
   <node pkg="sunray_uav_control"
         type="uav_control_node"
         name="$(arg node_name)"
         output="screen">
     <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-    <param name="uav_name" value="$(arg uav_name)" />
-    <param name="uav_id" value="$(arg uav_id)" />
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+  </node>
+
+  <node if="$(arg enable_single_monitor)"
+        pkg="sunray_uav_control"
+        type="uav_control_monitor_node"
+        name="$(arg agent_name)$(arg agent_id)_uav_control_monitor"
+        output="screen">
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    <param name="print_hz" value="$(arg monitor_print_hz)" />
+    <param name="stale_timeout" value="$(arg monitor_stale_timeout)" />
   </node>
 </launch>

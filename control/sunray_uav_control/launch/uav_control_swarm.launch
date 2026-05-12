@@ -1,23 +1,31 @@
 <launch>
   <arg name="config_yamlfile_path"
        default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
-  <arg name="uav_name" default="uav" />
-  <arg name="uav_id" default="1" />
-  <arg name="uav_num" default="3" />
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="agent_num" default="3" />
+  <arg name="monitor_print_hz" default="2.0" />
+  <arg name="monitor_stale_timeout" default="1.0" />
 
   <include file="$(find sunray_uav_control)/launch/uav_control.launch">
     <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-    <arg name="uav_name" value="$(arg uav_name)" />
-    <arg name="uav_id" value="$(arg uav_id)" />
-    <arg name="node_name" value="$(eval 'uav_control_node_' + str(int(arg('uav_id'))))" />
+    <arg name="agent_name" value="$(arg agent_name)" />
+    <arg name="agent_id" value="$(arg agent_id)" />
+    <arg name="node_name" value="$(eval 'uav_control_node_' + str(int(arg('agent_id'))))" />
     <arg name="set_global_params" value="false" />
+    <arg name="use_private_agent_key" value="true" />
+    <arg name="enable_single_monitor" value="false" />
+    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
   </include>
 
   <include file="$(find sunray_uav_control)/launch/uav_control_swarm.launch"
-           if="$(eval int(arg('uav_num')) > int(arg('uav_id')))">
+           if="$(eval int(arg('agent_num')) > int(arg('agent_id')))">
       <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-      <arg name="uav_name" value="$(arg uav_name)" />
-      <arg name="uav_id" value="$(eval int(arg('uav_id')) + 1)" />
-      <arg name="uav_num" value="$(arg uav_num)" />
+      <arg name="agent_name" value="$(arg agent_name)" />
+      <arg name="agent_id" value="$(eval int(arg('agent_id')) + 1)" />
+      <arg name="agent_num" value="$(arg agent_num)" />
+      <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
+      <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
   </include>
 </launch>

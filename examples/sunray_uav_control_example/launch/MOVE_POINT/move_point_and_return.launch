@@ -4,6 +4,7 @@
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="move_point_and_return_node" />
+  <arg name="use_private_agent_key" default="false" />
 
   <node pkg="sunray_uav_control_example"
         type="move_point_and_return_node"
@@ -11,5 +12,6 @@
         output="screen">
     <param name="agent_name" type="str" value="$(arg agent_name)" />
     <param name="agent_id" type="int" value="$(arg agent_id)" />
+    <param name="use_private_agent_key" type="bool" value="$(arg use_private_agent_key)" />
   </node>
 </launch>

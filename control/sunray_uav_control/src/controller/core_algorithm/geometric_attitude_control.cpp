@@ -10,7 +10,7 @@
  */
 
 #include "controller/core_algorithm/geometric_attitude_control.hpp"
-#include "controller/core_algorithm/geometric_ctrl_math.hpp"
+#include "eigen_helper.hpp"
 #include <ros/console.h>
 #include <algorithm>
 #include <cmath>
@@ -21,13 +21,6 @@
 
 void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param_t& param) {
     param_ = param;
-
-    // 根据 attitude_type 实例化对应的姿态子控制器
-    if (param_.attitude_type == 0) {
-        att_controller_ = std::make_shared<Quaternion_Solver>(param_.attitude_tau);
-    } else {
-        att_controller_ = std::make_shared<SO3_Solver>(param_.attitude_tau);
-    }
 
     // 悬停推力估计器由 core 持有，默认沿用 controller 侧现有配置语义。
     switch (param_.hover_thrust_estimator_type) {
@@ -326,7 +319,7 @@ Eigen::Vector3d Geometric_AttitudeControl::controlVelocity(
 
 // ─────────────────────────────────────────────────────────────────────────
 // computeBodyRateCmd
-// 期望加速度 → 期望姿态 → 调用姿态子控制器 → body rate + thrust_acc
+// 期望加速度 → 期望姿态 → SO3 姿态误差解算 → body rate + thrust_acc
 // ─────────────────────────────────────────────────────────────────────────
 void Geometric_AttitudeControl::computeBodyRateCmd(Eigen::Vector4d& bodyrate_cmd,
                                                    const Eigen::Vector3d& a_des,
@@ -336,11 +329,8 @@ void Geometric_AttitudeControl::computeBodyRateCmd(Eigen::Vector4d& bodyrate_cmd
     // 由期望加速度方向 + 偏航角计算期望姿态四元数
     const Eigen::Quaterniond q_des = acc2quaternion(a_des, mav_yaw);
 
-    // 调用姿态求解器，只计算期望角速度
-    att_controller_->update(curr_att, q_des, a_des);
-
-    // 填充 body rate（前三分量）
-    bodyrate_cmd.head(3) = att_controller_->get_desired_rate();
+    // 使用 SO3 姿态误差解算期望 body rate。
+    bodyrate_cmd.head(3) = solve_so3_bodyrate(curr_att, q_des);
 
     // 输出 collective thrust 对应的总加速度需求。
     // 这里优先匹配世界系 z 轴加速度：u * zb.z = a_des.z。
@@ -386,7 +376,7 @@ Eigen::Quaterniond Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector
         yb_des(2), zb_des(2);
 
     // 旋转矩阵 → 四元数（Shepperd 方法，避免数值奇异）
-    const Eigen::Vector4d q_vec = rot2Quaternion(rotmat);
+    const Eigen::Vector4d q_vec = eigen_helper::rot2Quaternion(rotmat);
     return Eigen::Quaterniond(q_vec(0), q_vec(1), q_vec(2), q_vec(3));
 }
 
@@ -401,15 +391,7 @@ double Geometric_AttitudeControl::wrap_angle(double angle_rad) {
 Eigen::Vector3d Geometric_AttitudeControl::compute_attitude_error(
     const Eigen::Quaterniond& curr_att,
     const Eigen::Quaterniond& ref_att) const {
-    if (param_.attitude_type == 0) {
-        const Eigen::Quaterniond q_err = curr_att.inverse() * ref_att;
-        return std::copysign(1.0, q_err.w()) * Eigen::Vector3d(q_err.x(), q_err.y(), q_err.z());
-    }
-
-    const Eigen::Matrix3d R = curr_att.toRotationMatrix();
-    const Eigen::Matrix3d R_d = ref_att.toRotationMatrix();
-    const Eigen::Matrix3d e_R_hat = 0.5 * (R.transpose() * R_d - R_d.transpose() * R);
-    return Eigen::Vector3d(e_R_hat(2, 1), e_R_hat(0, 2), e_R_hat(1, 0));
+    return so3_attitude_error(curr_att, ref_att);
 }
 
 void Geometric_AttitudeControl::update_debug_state(

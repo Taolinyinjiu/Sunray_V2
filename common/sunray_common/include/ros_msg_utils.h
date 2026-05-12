@@ -22,7 +22,7 @@
 #include <string>
 #include <stdint.h>
 #include "WGS84.h"
-#include "string_uav_namespace_utils.hpp"
+#include "agent_key_helper.hpp"
 
 // Eigen
 #include <Eigen/Eigen>
@@ -35,14 +35,13 @@
 
 // sunray_msgs
 #include <sunray_msgs/Formation.h>
-#include <sunray_msgs/OdomStatus.h>
+#include <sunray_msgs/OdomState.h>
 #include <sunray_msgs/OrcaCmd.h>
 #include <sunray_msgs/OrcaSetup.h>
 #include <sunray_msgs/PlanningWaypoint.h>
 #include <sunray_msgs/Px4State.h>
 #include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlFSMState.h>
-#include <sunray_msgs/UAVControllerState.h>
+#include <sunray_msgs/UAVControlState.h>
 #include <sunray_msgs/UAVPlanningCMD.h>
 #include <sunray_msgs/UAVPlanningState.h>
 #include <sunray_msgs/UAVSwarmCMD.h>

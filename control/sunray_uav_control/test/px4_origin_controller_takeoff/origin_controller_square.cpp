@@ -120,7 +120,7 @@ class OriginControllerSquareTest {
                 controller_data_types::TargetBodyPoint_t target;
                 target.position_xy = delta_b.head<2>();
                 target.fixed_height = square_center_w_.z();
-                target.yaw = 0.0;  // 相对yaw增量=0，保持朝向
+                target.yaw = mavrosYaw();  // body模式下yaw为惯性系绝对角，保持当前朝向
                 arrived = controller_.move_point_body(target);
             } else {
                 controller_data_types::TargetPoint_t target;
@@ -162,10 +162,7 @@ class OriginControllerSquareTest {
     }
 
     double mavrosYaw() const {
-        // 若你已有统一接口可直接替换
-        // 这里只是复用 controller 内部风格，测试节点可不直接读helper
-        // 简化：使用当前里程计姿态转换也可以，这里暂用0，建议改成你的真实yaw来源
-        return 0.0;
+        return current_odom_.get_yaw();
     }
 
   private:

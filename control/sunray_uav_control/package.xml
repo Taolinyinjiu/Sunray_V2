@@ -19,7 +19,6 @@
   <depend>std_msgs</depend>
   <depend>geographic_msgs</depend>
   <depend>mavros_msgs</depend>
-  <depend>px4_bridge</depend>
 
   <depend>sunray_common</depend>
   <depend>sunray_msgs</depend>

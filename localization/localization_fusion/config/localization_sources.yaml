@@ -12,9 +12,9 @@ sources_list:
     #   # 3: local_with_aruco 同时输入local和global系下的里程计，但global系是偶尔输入 fastlio2 + aruco_relocalization
     #   localization_mode: 0
     #   # odometry_topic 表示订阅的里程计话题名
-    #   # 由于yaml文件无法实现读取动态的ros参数，但考虑到会有多机的需求，因此这里使用${uav_ns}作为前缀时，表示订阅的话题前加上无人机的标识符uav_name+uav_id
+    #   # 由于yaml文件无法实现读取动态的ros参数，但考虑到会有多机的需求，因此这里使用${agent_key}作为前缀时，表示订阅的话题前加上智能体标识符
     #   # 假设当前为单机仿真，则订阅话题为"/uav1/sunray/example/odom"
-    #   odometry_topic: "${uav_ns}/sunray/example/odom"
+    #   odometry_topic: "${agent_key}/sunray/example/odom"
     #   # relocalization_topic 表示订阅的重定位话题名，重定位话题的数据类型应该为nav_msgs::Odometry
     #   # odometry_types: 2 or 3, relocalization_topic 作为global系数据输出，tf树根据两者值构造
     #   relocalization_topic: ""
@@ -35,7 +35,7 @@ sources_list:
         # 输入类型：只输入global系下的里程计
         localization_mode: global
         # 订阅的里程计话题
-        odometry_topic: "${uav_ns}/sunray/odometry"
+        odometry_topic: "${agent_key}/sunray/odometry"
         # 订阅的重定位话题
         relocalization_topic: ""
 
@@ -55,7 +55,7 @@ sources_list:
         # 输入类型：只输入global系下的里程计
         localization_mode: global
         # 订阅的里程计话题
-        odometry_topic: "${uav_ns}/sunray/gazebo_pose"
+        odometry_topic: "${agent_key}/sunray/gazebo_pose"
         # 订阅的重定位话题
         relocalization_topic: ""
 
@@ -65,19 +65,20 @@ sources_list:
         # 输入类型：输入local系下的里程计和基于aruco的重定位
         localization_mode: local_with_aruco
         # 订阅的里程计话题
-        odometry_topic: "${uav_ns}/sunray_odom_in"
+        odometry_topic: "${agent_key}/sunray_odom_in"
         # 订阅的重定位话题
         relocalization_topic: "/aruco_test"
-
+    # Pengyu_SIM仿真器，基于RVIZ平台
     PENGYU_SIM:
         # 定位源序号
         source_id: 5
         # 输入类型：只输入local系下的里程计
         localization_mode: local
         # 订阅的里程计话题
-        odometry_topic: "${uav_ns}/pengyu_sim/odom"
+        odometry_topic: "${agent_key}/pengyu_sim/odom"
         # 订阅的重定位话题
         relocalization_topic: ""
+        
     # 基于EKF的高频Fastlio里程计
     Fast_LIO_EKF:
         # 定位源序号

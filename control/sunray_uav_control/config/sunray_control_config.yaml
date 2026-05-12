@@ -8,22 +8,18 @@ basic_param:
     gravity: 9.8
     # 归一化悬停推力 (从px4的日志中直接读取)
     hover_thrust_percent: 0.375
-    # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:rl_raptor_controller(不支持速度接口)
+    # 控制器类型 0:px4_position_controller 1:sunray_attitude_controller 2:raptor_controller已移除，后续讨论如何处理类似问题
     controller_types: 1
     # 控制器更新频率(Hz)
     controller_update_frequency: 100
     # 状态机低频监督循环频率(Hz)
     supervisor_update_frequency: 10
-    # 订阅的里程计话题名称,使用${uav_ns}表示当前uav标识符uav1之类的
-    odom_topic_name: "${uav_ns}/sunray/localization/local_odom"
+    # 订阅的里程计话题名称,使用${agent_key}表示当前智能体标识符uav1之类的ros话题前缀
+    odom_topic_name: "${agent_key}/sunray/localization/local_odom"
     # 里程计融合类型 0: disable 1：vision_pose 2:odometry 建议在当前里程计没有协方差时选择vision_pose
     fuse_odom_type: 1
     # 里程计融合的频率(需要根据外部里程计的更新频率决定，融合频率应当低于或者等于外部里程计更新频率)
     fuse_odom_frequency: 50
-    # 是否将日志保存到文件(存储在Sunray仓库根目录的log目录下) TODO：是否考虑提供为ulog文件从而支持图表展示
-    log_save: false
-    # 日记详细程度 (0:基础信息 1:中等信息 2:完整日志)
-    log_level: 0
 
 # -------------------保护参数-----------------------
 protect_param:
@@ -75,6 +71,7 @@ takeoff_land_param:
 # -------------------到达稳定判定参数-----------------------
 # 起飞过程和位置控制模式，使用该参数用于判断当前是否到达目标点并保持稳定
 # 当位置误差和速度误差同时进入稳定范围，并持续保持 judge_stabile_time_s 秒后，认为当前任务已经到达目标
+# 对于 move_point / move_point_body，yaw 误差和 yaw 角速度也必须同时进入稳定范围
 # 当速度误差达到允许范围，并保持 3x judge_stabile_time_s 后，如果当前的位置误差小于最大位置误差,
 # 则也认为当前任务达到了目标点,这是为了防止在某些外部干扰较大的影响下,无人机无法完成任务卡在当前环节
 # 为了防止外部里程计漂移(同一个位置,3分钟后z轴高度降低了30cm这样的小幅度),
@@ -84,6 +81,8 @@ arrival_judge_param:
     pos_stabile_err_m: 0.08
     vel_stabile_err_mps: 0.12
     max_pos_err_m: 0.3
+    yaw_stabile_err_deg: 8.0
+    yaw_rate_stabile_err_deg_s: 10.0
 
 # -------------------电子围栏参数-----------------------
 # TODO：该参数当前并未实际使用
@@ -116,13 +115,9 @@ sunray_controller_param:
   # 控制器输出类型， 0:attitude+thrust  1:bodyrate+thrust
   # 使用attitude作为输出时，控制器的动态性能有所下降，误差增大
   control_type: 1
-  # 姿态误差的表示方法 0 = 四元数误差法（简单，推荐）  1 = 几何SO3法（更精确）
-  # 在没有高速率大机动的情况下，两者效果近似
-  attitude_type: 1
 
   # 悬停推力估计器类型 0: 低通滤波器 1: RLS最小二乘法估计 2:卡尓曼滤波估计
   hover_thrust_estimator_type: 1
-  # 默认参数为bodyrate作为输出的参数，如果切换为attitude作为输出，需要调整参数，通常为增大2、3倍的样子
   # 位置环PID参数
   pos_kp: [1.5, 1.5, 1.5]
   pos_ki: [0.0, 0.0, 0.2]

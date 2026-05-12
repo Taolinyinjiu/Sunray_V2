@@ -96,7 +96,7 @@ class OriginControllerSquareTest {
                 controller_data_types::TargetBodyPoint_t target;
                 target.position_xy = body_steps_[current_vertex_idx_].head<2>();
                 target.fixed_height = square_center_.z();
-                target.yaw = 0.0;  // body语义下作为相对yaw增量，0表示保持当前朝向
+                target.yaw = current_odom_.get_yaw();  // body模式下yaw为惯性系绝对角，保持当前朝向
                 arrived = controller_.move_point_body(target);
             } else {
                 controller_data_types::TargetPoint_t target;

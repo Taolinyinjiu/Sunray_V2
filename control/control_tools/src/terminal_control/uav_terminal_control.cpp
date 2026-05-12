@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
 
     int uav_id = 1;
     nh.param("uav_id", uav_id, 1);
-    std::string topic = "/uav" + std::to_string(uav_id) + "/sunray/uav_control_cmd";
+    std::string topic = "/uav" + std::to_string(uav_id) + "/sunray/uav_control/control_cmd";
 
     ros::Publisher control_pub = nh.advertise<sunray_msgs::UAVControlCMD>(topic, 1);
     ros::Duration(0.5).sleep();

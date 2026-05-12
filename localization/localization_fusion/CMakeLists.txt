@@ -46,13 +46,11 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
   ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../control/sunray_uav_control/include/utils
 )
 
 # Core library: class implementation (no main function)
 add_library(localization_fusion_core
   src/localization_fusion.cpp
-  src/localization_fusion_logs.cpp
   src/localization_fusion_utils.cpp
 )
 target_link_libraries(localization_fusion_core
@@ -77,7 +75,31 @@ add_dependencies(localization_fusion_node
   ${catkin_EXPORTED_TARGETS}
 )
 
-install(TARGETS localization_fusion_core localization_fusion_node
+# Monitor node: terminal panel for single-agent localization state
+add_executable(localization_fusion_monitor_node
+  src/tools/localization_fusion_monitor_node.cpp
+)
+target_link_libraries(localization_fusion_monitor_node
+  ${catkin_LIBRARIES}
+)
+add_dependencies(localization_fusion_monitor_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+# Swarm monitor node: terminal panel for multi-agent heterogeneous swarm
+add_executable(localization_fusion_swarm_monitor_node
+  src/tools/localization_fusion_swarm_monitor_node.cpp
+)
+target_link_libraries(localization_fusion_swarm_monitor_node
+  ${catkin_LIBRARIES}
+)
+add_dependencies(localization_fusion_swarm_monitor_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+install(TARGETS localization_fusion_core localization_fusion_node localization_fusion_monitor_node localization_fusion_swarm_monitor_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

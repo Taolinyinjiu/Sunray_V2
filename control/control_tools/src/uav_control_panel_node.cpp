@@ -2,12 +2,12 @@
 本程序功能：
     1、Qt 无人机控制面板
     2、发布 UAVControlCMD
-    3、订阅 UAVControlFSMState 和 local_odom 并显示无人机状态
+    3、订阅 UAVControlState 和 local_odom 并显示无人机状态
 */
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
 #include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlFSMState.h>
+#include <sunray_msgs/UAVControlState.h>
 #include <visualization_msgs/MarkerArray.h>
 
 #include <QApplication>
@@ -81,21 +81,21 @@ QString fsmName(const uint8_t state)
 {
     switch (state)
     {
-    case sunray_msgs::UAVControlFSMState::FSM_OFF:
+    case sunray_msgs::UAVControlState::OFF:
         return "OFF";
-    case sunray_msgs::UAVControlFSMState::FSM_INIT:
+    case sunray_msgs::UAVControlState::INIT:
         return "INIT";
-    case sunray_msgs::UAVControlFSMState::FSM_TAKEOFF:
+    case sunray_msgs::UAVControlState::TAKEOFF:
         return "TAKEOFF";
-    case sunray_msgs::UAVControlFSMState::FSM_HOVER:
+    case sunray_msgs::UAVControlState::HOVER:
         return "HOVER";
-    case sunray_msgs::UAVControlFSMState::FSM_RETURN:
+    case sunray_msgs::UAVControlState::RETURN:
         return "RETURN";
-    case sunray_msgs::UAVControlFSMState::FSM_LAND:
+    case sunray_msgs::UAVControlState::LAND:
         return "LAND";
-    case sunray_msgs::UAVControlFSMState::FSM_MOVE:
+    case sunray_msgs::UAVControlState::MOVE:
         return "MOVE";
-    case sunray_msgs::UAVControlFSMState::EMERGENCY_KILL:
+    case sunray_msgs::UAVControlState::EMERGENCY_KILL:
         return "KILL";
     default:
         return "UNKNOWN";
@@ -245,8 +245,8 @@ class UAVControlPanel : public QMainWindow
     {
         nh_.param("uav_id", uav_id_, 1);
         const std::string prefix = "/uav" + std::to_string(uav_id_);
-        nh_.param("cmd_topic", cmd_topic_, prefix + "/sunray/uav_control_cmd");
-        nh_.param("fsm_state_topic", fsm_state_topic_, prefix + "/sunray/fsm/state");
+        nh_.param("cmd_topic", cmd_topic_, prefix + "/sunray/uav_control/control_cmd");
+        nh_.param("fsm_state_topic", fsm_state_topic_, prefix + "/sunray/uav_control/control_state");
         nh_.param("odom_topic", odom_topic_, prefix + "/sunray/localization/local_odom");
         nh_.param("rviz_frame_id", rviz_frame_id_, std::string("world"));
         nh_.param("marker_topic", marker_topic_, prefix + "/sunray/uav_control_panel/markers");
@@ -611,7 +611,7 @@ class UAVControlPanel : public QMainWindow
                                        .arg(text));
     }
 
-    void fsmStateCallback(const sunray_msgs::UAVControlFSMState::ConstPtr &msg)
+    void fsmStateCallback(const sunray_msgs::UAVControlState::ConstPtr &msg)
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         fsm_state_ = *msg;
@@ -637,7 +637,7 @@ class UAVControlPanel : public QMainWindow
 
     void refreshState()
     {
-        sunray_msgs::UAVControlFSMState fsm_state;
+        sunray_msgs::UAVControlState fsm_state;
         nav_msgs::Odometry odom;
         sunray_msgs::UAVControlCMD last_sent_cmd;
         std::deque<geometry_msgs::Point> trail;
@@ -653,7 +653,7 @@ class UAVControlPanel : public QMainWindow
             has_odom = has_odom_;
         }
 
-        basic_label_->setText(QString("/uav%1  FSM=%2").arg(uav_id_).arg(has_fsm_state ? fsmName(fsm_state.sunray_fsm_state) : "等待状态..."));
+        basic_label_->setText(QString("/uav%1  FSM=%2").arg(uav_id_).arg(has_fsm_state ? fsmName(fsm_state.control_state) : "等待状态..."));
 
         if (has_odom)
         {
@@ -678,13 +678,13 @@ class UAVControlPanel : public QMainWindow
                                        .arg(static_cast<int>(fsm_state.land_type))
                                        .arg(fsm_state.land_max_velocity, 0, 'f', 2));
             cmd_label_->setText(QString("%1  |  yaw_mode=%2")
-                                    .arg(cmdName(fsm_state.control_cmd))
+                                    .arg(cmdName(fsm_state.last_cmd.control_cmd))
                                     .arg(yawModeName(last_sent_yaw_mode_)));
         }
         else
         {
-            takeoff_label_->setText("等待 UAVControlFSMState...");
-            flight_label_->setText("等待 UAVControlFSMState...");
+            takeoff_label_->setText("等待 UAVControlState...");
+            flight_label_->setText("等待 UAVControlState...");
             cmd_label_->setText("-");
         }
 
@@ -801,11 +801,11 @@ class UAVControlPanel : public QMainWindow
     }
 
     QString currentTaskText(const bool has_fsm_state,
-                            const sunray_msgs::UAVControlFSMState &fsm_state,
+                            const sunray_msgs::UAVControlState &fsm_state,
                             const sunray_msgs::UAVControlCMD &cmd,
                             const GoalVisual &goal) const
     {
-        QString task = has_fsm_state ? fsmName(fsm_state.sunray_fsm_state) : "WAIT_FSM";
+        QString task = has_fsm_state ? fsmName(fsm_state.control_state) : "WAIT_FSM";
         task += " | ";
         task += cmdName(cmd.control_cmd);
         if (goal.valid)
@@ -819,7 +819,7 @@ class UAVControlPanel : public QMainWindow
     }
 
     void publishVisualization(const bool has_fsm_state,
-                              const sunray_msgs::UAVControlFSMState &fsm_state,
+                              const sunray_msgs::UAVControlState &fsm_state,
                               const bool has_odom,
                               const nav_msgs::Odometry &odom,
                               const sunray_msgs::UAVControlCMD &last_sent_cmd,
@@ -1011,7 +1011,7 @@ class UAVControlPanel : public QMainWindow
     rviz::VisualizationManager *rviz_manager_{nullptr};
 
     std::mutex state_mutex_;
-    sunray_msgs::UAVControlFSMState fsm_state_{};
+    sunray_msgs::UAVControlState fsm_state_{};
     nav_msgs::Odometry odom_{};
     sunray_msgs::UAVControlCMD last_sent_cmd_{};
     std::deque<geometry_msgs::Point> trail_{};

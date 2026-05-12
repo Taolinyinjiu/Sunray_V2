@@ -16,14 +16,13 @@ find_package(catkin REQUIRED COMPONENTS
 ## Add message definitions after creating files under msg/
 add_message_files(
   FILES
-  OdomStatus.msg
+  OdomState.msg
   OrcaCmd.msg
   OrcaSetup.msg
   Px4State.msg
   PlanningWaypoint.msg
   UAVControlCMD.msg
-  UAVControlFSMState.msg
-  UAVControllerState.msg
+  UAVControlState.msg
   UAVPlanningCMD.msg
   UAVPlanningState.msg
   UAVSwarmCMD.msg

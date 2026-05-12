@@ -1,36 +1,37 @@
+<!-- 异构集群使用定位源启动文件，根据设计思路，该launch仅用于仿真环境，搭配 localization_fusion_swarm_monitor.launch实现对输出的监听 -->
 <launch>
-  <arg name="source_id" default="3" />
-  <arg name="config_yamlfile_path"
-       default="$(find localization_fusion)/config/localization_sources.yaml" />
+  <arg name="source_id" default="5" />
+  <arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
   <arg name="health_rate_hz" default="10.0" />
   <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
-  <arg name="log_save" default="false" />
-  <arg name="uav_name" default="uav" />
-  <arg name="uav_id" default="1" />
-  <arg name="uav_num" default="6" />
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="agent_num" default="6" />
+  <arg name="use_private_agent_key" default="false" />
+  <arg name="enable_monitor" default="false" />
 
   <include file="$(find localization_fusion)/launch/localization_fusion.launch">
-    <arg name="source_id" value="$(arg source_id)" />
+    <arg name="source_id"            value="$(arg source_id)" />
     <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-    <arg name="health_rate_hz" value="$(arg health_rate_hz)" />
-    <arg name="use_receive_time" value="$(arg use_receive_time)" />
-    <arg name="log_save" value="$(arg log_save)" />
-    <arg name="uav_name" value="$(arg uav_name)" />
-    <arg name="uav_id" value="$(arg uav_id)" />
-    <arg name="node_name" value="$(eval 'localization_fusion_' + str(int(arg('uav_id'))))" />
-    <arg name="set_global_params" value="false" />
-    <arg name="test" value="false" />
+    <arg name="health_rate_hz"       value="$(arg health_rate_hz)" />
+    <arg name="use_receive_time"     value="$(arg use_receive_time)" />
+    <arg name="agent_name"           value="$(arg agent_name)" />
+    <arg name="agent_id"             value="$(arg agent_id)" />
+    <arg name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    <arg name="enable_monitor"       value="$(arg enable_monitor)" />
+    <arg name="node_name"            value="$(eval 'localization_fusion_' + str(int(arg('agent_id'))))" />
   </include>
 
   <include file="$(find localization_fusion)/launch/localization_fusion_swarm.launch"
-           if="$(eval int(arg('uav_num')) > int(arg('uav_id')))">
-    <arg name="source_id" value="$(arg source_id)" />
+           if="$(eval int(arg('agent_num')) > int(arg('agent_id')))">
+    <arg name="source_id"            value="$(arg source_id)" />
     <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-    <arg name="health_rate_hz" value="$(arg health_rate_hz)" />
-    <arg name="use_receive_time" value="$(arg use_receive_time)" />
-    <arg name="log_save" value="$(arg log_save)" />
-    <arg name="uav_name" value="$(arg uav_name)" />
-    <arg name="uav_id" value="$(eval int(arg('uav_id')) + 1)" />
-    <arg name="uav_num" value="$(arg uav_num)" />
+    <arg name="health_rate_hz"       value="$(arg health_rate_hz)" />
+    <arg name="use_receive_time"     value="$(arg use_receive_time)" />
+    <arg name="agent_name"           value="$(arg agent_name)" />
+    <arg name="agent_id"             value="$(eval int(arg('agent_id')) + 1)" />
+    <arg name="agent_num"            value="$(arg agent_num)" />
+    <arg name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    <arg name="enable_monitor"       value="$(arg enable_monitor)" />
   </include>
 </launch>

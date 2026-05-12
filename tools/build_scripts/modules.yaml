@@ -67,18 +67,6 @@ modules:
     build_path: "build/sunray_planner_tools"
     dependencies: ["sunray_msgs"]
 
-  # Sunray 重构中的 PX4_Bridge
-  px4_bridge:
-    description: "Sunray 重构中的uav_control"
-    source_path: "common/px4_bridge"
-    build_path: "build/px4_bridge"
-    dependencies: []
-  # Sunray 重构中的demo
-  px4_param_tui:
-    description: "Sunray 重构中的测试demo"
-    source_path: "test/px4_param_tui"
-    build_path: "build/px4_param_tui"
-    dependencies: []
   sunray_msgs:
     description: "Sunray 重构中的测试demo"
     source_path: "common/sunray_msgs"
@@ -191,7 +179,7 @@ groups:
   # common测试
   common_test:
     description: "common测试"
-    modules: ["px4_bridge"]
+    modules: []
   # control测试
   control_test:
     description: "control测试"
@@ -249,7 +237,6 @@ groups:
         "sunray_msgs",
         "sunray_mavros",
         "vrpn_client_ros",
-        "px4_bridge",
         "localization_fusion",
         "uav_control",
         "sunray_swarm_control",

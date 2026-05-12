@@ -1,19 +1,14 @@
 #include "statemachine/sunray_fsm.hpp"
 #include "statemachine/sunray_fsm_loadparam.hpp"
-#include "sunray_log.hpp"
-#include "string_uav_namespace_utils.hpp"
-#include "utils/sunray_panel_log_utils.hpp"
-#include "utils/uav_param_utils.hpp"
+#include "agent_key_helper.hpp"
 #include <cmath>
 #include <ros/ros.h>
-#include <ros/package.h>
 #include <stdexcept>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
-#include <sunray_msgs/UAVControlFSMState.h>
+#include <sunray_msgs/UAVControlState.h>
 #include "controller/px4_origin_controller.hpp"
 #include "controller/geometric_controller.hpp"
-#include "controller/raptor_controller.hpp"
-#include <sunray_msgs/OdomStatus.h>
+#include <sunray_msgs/OdomState.h>
 #include "utils/orientation_utils.hpp"
 
 // Sunray_FSM更新路径
@@ -29,6 +24,14 @@ namespace {
 
 double round_to_3_decimals(double value) {
     return std::round(value * 1000.0) / 1000.0;
+}
+
+geometry_msgs::Vector3 toVector3Msg(const Eigen::Vector3d& value) {
+    geometry_msgs::Vector3 msg;
+    msg.x = value.x();
+    msg.y = value.y();
+    msg.z = value.z();
+    return msg;
 }
 
 void update_input_rate(double& averaged_rate_hz,
@@ -66,7 +69,12 @@ void update_input_rate(double& averaged_rate_hz,
 // 构造函数
 Sunray_FSM::Sunray_FSM(ros::NodeHandle& nh) {
     nh_ = nh;
-    uav_ns_ = sunray_control::load_uav_namespace_or_throw(nh_);
+    ros::NodeHandle private_nh("~");
+    bool use_private_agent_key = false;
+    private_nh.param("use_private_agent_key", use_private_agent_key, false);
+    uav_ns_ = use_private_agent_key
+                  ? sunray_common::get_agent_key_from_private()
+                  : sunray_common::get_agent_key_from_global();
 }
 // 析构函数
 Sunray_FSM::~Sunray_FSM() {
@@ -84,50 +92,9 @@ void Sunray_FSM::init() {
 
     // 初始化状态转移表
     init_transition_table();
-    // 打印一次性静态信息
-    show_static_info();
     // 控制器更新线程
     stop_controller_thread_.store(false, std::memory_order_relaxed);
     controller_update_thread_ = std::thread(&Sunray_FSM::controller_update_loop, this);
-}
-
-void Sunray_FSM::init_logger() {
-    SunrayLogConfig cfg;
-    cfg.name = "sunray_uav_control_" + uav_ns_;
-    cfg.console_level = SunrayLogLevel::info;
-    cfg.file_level = SunrayLogLevel::trace;
-    cfg.async = false;
-
-    if (log_save_) {
-        log_file_path_ = make_log_file_path();
-        cfg.file_path = log_file_path_;
-    }
-
-    SunrayLogger::instance().Init(cfg);
-    auto logger = SunrayLogger::instance().Get();
-    if (logger && !logger->sinks().empty()) {
-        logger->sinks().front()->set_pattern("%v");
-    }
-
-    SUNRAY_INFO("sunray_uav_control logger initialized. log_save={} file_path={}",
-                log_save_,
-                log_save_ ? log_file_path_ : "disabled");
-}
-
-std::string Sunray_FSM::make_log_file_path() const {
-    const std::string package_path = ros::package::getPath("sunray_uav_control");
-    if (package_path.empty()) {
-        throw std::runtime_error("failed to locate package path for sunray_uav_control");
-    }
-
-    const std::string control_root = sunray_parent_directory(package_path);
-    const std::string repo_root = sunray_parent_directory(control_root);
-    if (repo_root.empty()) {
-        throw std::runtime_error("failed to infer repository root from package path: " +
-                                 package_path);
-    }
-
-    return repo_root + "/log/sunray_uav_control/" + sunray_make_startup_timestamp() + ".log";
 }
 
 // 获取状态机的更新频率
@@ -188,27 +155,13 @@ void Sunray_FSM::load_param() {
     // 顺利读取，取出各个字段对应的部分
     // 由于这里会写的很长，所以将他们分为几个不同的函数用来填充结构体
     loadBasicParam(root["basic_param"], fsm_config_.basic_param);
-    log_save_ = fsm_config_.basic_param.log_save;
-    init_logger();
-
-    SUNRAY_INFO("Loading sunray_control_config.yaml from {} start", config_yamlfile_path_);
-    SUNRAY_INFO("load basic_param");
-    SUNRAY_INFO("load protect_param");
-    loadProtectParam(root["protect_param"], fsm_config_.protect_param);
-    SUNRAY_INFO("load msg_timeout_param");
     loadMsgTimeoutParam(root["msg_timeout_param"], fsm_config_.msg_timeout_param);
-    SUNRAY_INFO("load takeoff_land_param");
     loadTakeoffLandParam(root["takeoff_land_param"], fsm_config_.takeoff_land_param);
-    SUNRAY_INFO("load arrival_judge_param");
-    loadArrivalJudgeParam(root["arrival_judge_param"], fsm_config_.arrival_judge_param);
-    SUNRAY_INFO("load local_fence_param");
     loadLocalFenceParam(root["local_fence_param"], fsm_config_.local_fence_param);
-    SUNRAY_INFO("load velocity_param");
     loadVelocityParam(root["velocity_param"], fsm_config_.velocity_param);
-    SUNRAY_INFO("Loading sunray_control_config.yaml from {} end", config_yamlfile_path_);
     // 标准化里程计话题
     fsm_config_.basic_param.odom_topic_name =
-        sunray_common::replace_uav_ns(fsm_config_.basic_param.odom_topic_name, uav_ns_);
+        sunray_common::replace_agent_key(fsm_config_.basic_param.odom_topic_name, uav_ns_);
 }
 // 初始化订阅者
 void Sunray_FSM::init_subscriber() {
@@ -216,13 +169,13 @@ void Sunray_FSM::init_subscriber() {
     local_odom_sub_ = nh_.subscribe(
         fsm_config_.basic_param.odom_topic_name, 10, &Sunray_FSM::local_odom_callback, this);
     // 订阅外部定位源状态
-    localization_state_sub_ = nh_.subscribe(uav_ns_ + "/sunray/localization/odom_status",
+    localization_state_sub_ = nh_.subscribe(uav_ns_ + "/sunray/localization/odom_state",
                                             10,
                                             &Sunray_FSM::localization_state_callback,
                                             this);
     // 订阅无人机控制指令
     uav_control_cmd_sub_ = nh_.subscribe(
-        uav_ns_ + "/sunray/uav_control_cmd", 10, &Sunray_FSM::uav_control_cmd_callback, this);
+        uav_ns_ + "/sunray/uav_control/control_cmd", 10, &Sunray_FSM::uav_control_cmd_callback, this);
     // 订阅状态检查指令
     // 由于系统状态检查没有自定义话题类型，这里先注释掉
     // system_check_sub_ = nh_.subscribe(
@@ -233,7 +186,7 @@ void Sunray_FSM::init_subscriber() {
 void Sunray_FSM::init_publisher() {
     // 状态机当前状态发布者
     sunray_fsm_state_pub_ =
-        nh_.advertise<sunray_msgs::UAVControlFSMState>(uav_ns_ + "/sunray/fsm/state", 10);
+        nh_.advertise<sunray_msgs::UAVControlState>(uav_ns_ + "/sunray/uav_control/control_state", 10);
     sunray_odom_debug_pub_ =
         nh_.advertise<nav_msgs::Odometry>(uav_ns_ + "/surnay/debug/odometrry", 10);
 }
@@ -256,14 +209,7 @@ void Sunray_FSM::register_controller() {
         }
         break;
     }
-    case 2: {
-        sunray_controller_ = std::make_shared<Raptor_Controller>(nh_);
-        if (sunray_controller_->init() == false) {
-            throw std::runtime_error("{Raptor_Controller initialization failed");
-        }
-        break;
-    }
-        // 这里没有default分支，因为load_param()界定了fsm_config_.basic_param.controller_types只会有0，1，2三个值，不可能有其他值被传入
+        // 这里没有default分支，因为 load_param() 已界定 controller_types 只会有 0 或 1。
     }
 }
 
@@ -305,7 +251,7 @@ void Sunray_FSM::local_odom_callback(const nav_msgs::Odometry& msg) {
 }
 
 // 外部里程计状态回调函数
-void Sunray_FSM::localization_state_callback(const sunray_msgs::OdomStatus& msg) {
+void Sunray_FSM::localization_state_callback(const sunray_msgs::OdomState& msg) {
     const ros::Time receive_time = ros::Time::now();
     std::lock_guard<std::mutex> lk(localization_status_mutex_);
     last_localization_status_ = msg;
@@ -320,14 +266,6 @@ void Sunray_FSM::localization_state_callback(const sunray_msgs::OdomStatus& msg)
 void Sunray_FSM::uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg) {
     // 构造临时变量
     control_common::UavControlCmd temp_cmd(msg);
-    if (fsm_config_.basic_param.controller_types == 2 &&
-        (temp_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY ||
-         temp_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY)) {
-        ROS_WARN_THROTTLE(1.0,
-                          "[Sunray_FSM][%s] Raptor controller does not support velocity commands, ignore request",
-                          uav_ns_.c_str());
-        return;
-    }
     // 更新缓存
     {
         std::lock_guard<std::mutex> lk(cmd_mutex_);
@@ -383,6 +321,9 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     // 打一份快照
     sunray_fsm::SunrayState fsm_state_snapshot;
     control_common::UavControlCmd last_cmd_snapshot;
+    control_common::UAVStateEstimate odom_snapshot;
+    bool has_valid_odometry_snapshot = false;
+    ros::Time last_valid_odom_receive_time_snapshot{0.0};
     {
         std::lock_guard<std::mutex> lk1(state_mutex_);
         fsm_state_snapshot = fsm_state_;
@@ -391,8 +332,14 @@ void Sunray_FSM::pub_sunray_fsm_state() {
         std::lock_guard<std::mutex> lk2(cmd_mutex_);
         last_cmd_snapshot = last_control_cmd_;
     }
+    {
+        std::lock_guard<std::mutex> lk3(odom_mutex_);
+        odom_snapshot = last_odometry_;
+        has_valid_odometry_snapshot = has_valid_odometry_;
+        last_valid_odom_receive_time_snapshot = last_valid_odom_receive_time_;
+    }
     // 构建要发布的消息
-    sunray_msgs::UAVControlFSMState fsm_state_msg;
+    sunray_msgs::UAVControlState fsm_state_msg;
     // 首先填充话题头
     fsm_state_msg.header.stamp = ros::Time::now();
     // 当前起飞参数
@@ -405,10 +352,30 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     fsm_state_msg.home_point.x = round_to_3_decimals(home_point_.x());
     fsm_state_msg.home_point.y = round_to_3_decimals(home_point_.y());
     fsm_state_msg.home_point.z = round_to_3_decimals(home_point_.z());
-    // 当前的控制指令(由于两者的数据类型不同，一个是uint8另一个是强类型枚举，但是由于值都是一一对应的，因此这里用类型转换)
-    fsm_state_msg.control_cmd = static_cast<uint8_t>(last_cmd_snapshot.control_cmd);
-    // 状态机的状态同样使用静态类型转换
-    fsm_state_msg.sunray_fsm_state = static_cast<uint8_t>(fsm_state_snapshot);
+    // 当前的控制指令
+    fsm_state_msg.last_cmd.header.stamp = last_cmd_snapshot.timestamp;
+    fsm_state_msg.last_cmd.cmd_source = static_cast<uint8_t>(last_cmd_snapshot.cmd_source);
+    fsm_state_msg.last_cmd.control_cmd = static_cast<uint8_t>(last_cmd_snapshot.control_cmd);
+    fsm_state_msg.last_cmd.desired_pos = toVector3Msg(last_cmd_snapshot.position);
+    fsm_state_msg.last_cmd.desired_vel = toVector3Msg(last_cmd_snapshot.velocity);
+    fsm_state_msg.last_cmd.desired_acc = toVector3Msg(last_cmd_snapshot.acceleration);
+    fsm_state_msg.last_cmd.desired_jerk = toVector3Msg(last_cmd_snapshot.jerk);
+    fsm_state_msg.last_cmd.desired_body_xy_pos.x = last_cmd_snapshot.body_position_xy.x();
+    fsm_state_msg.last_cmd.desired_body_xy_pos.y = last_cmd_snapshot.body_position_xy.y();
+    fsm_state_msg.last_cmd.desired_body_xy_vel.x = last_cmd_snapshot.body_velocity_xy.x();
+    fsm_state_msg.last_cmd.desired_body_xy_vel.y = last_cmd_snapshot.body_velocity_xy.y();
+    fsm_state_msg.last_cmd.fixed_height = last_cmd_snapshot.fixed_height;
+    fsm_state_msg.last_cmd.desired_wgs84_pos = last_cmd_snapshot.wgs84_position;
+    fsm_state_msg.last_cmd.yaw_mode = static_cast<uint8_t>(last_cmd_snapshot.yaw_mode);
+    fsm_state_msg.last_cmd.desired_yaw = last_cmd_snapshot.yaw;
+    fsm_state_msg.last_cmd.desired_yaw_rate = last_cmd_snapshot.yaw_rate;
+    // 状态机状态
+    fsm_state_msg.control_state = static_cast<uint8_t>(fsm_state_snapshot);
+    // 与已有消息定义保持兼容：仅暴露关键的里程计健康状态
+    fsm_state_msg.odometry_lost = !last_valid_odom_receive_time_snapshot.isZero() &&
+                                  (ros::Time::now() - last_valid_odom_receive_time_snapshot).toSec() >
+                                      fsm_config_.msg_timeout_param.local_odometry;
+    fsm_state_msg.odometry_valid = has_valid_odometry_snapshot;
     // 发布消息
     sunray_fsm_state_pub_.publish(fsm_state_msg);
 }

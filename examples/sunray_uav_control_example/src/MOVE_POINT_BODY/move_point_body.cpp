@@ -17,11 +17,8 @@
 
 // 定义一些全局变量，后续使用
 std::string node_name;
-std::string agent_name;
-int agent_id;
-std::string agent_ns;  // agent命名空间，使用agent_name与agent_id构造
-// 其实这里我也想使用agent前缀，而不是uav前缀，但是考虑到uav和ugv没有统一，因此还是先使用了uav，看后续能不能尝试统一为agent
-sunray_msgs::UAVControlFSMState uav_state;
+std::string agent_key;
+sunray_msgs::UAVControlState uav_state;
 sunray_msgs::UAVControlCMD uav_cmd;
 
 // 期望的目标点 [机体系]
@@ -38,7 +35,7 @@ void mySignalHandler(int sig) {
 }
 
 // 无人机状态回调函数
-void uav_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
+void uav_state_callback(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     uav_state = *msg;
 }
 
@@ -54,28 +51,21 @@ int main(int argc, char** argv) {
     // 注册退出信号捕获函数
     signal(SIGINT, mySignalHandler);
 
-    // 首先读取节点私有的uav_name与uav_id
-    private_nh.getParam("agent_name", agent_name);
-    if (agent_name.empty()) {
-        // 如果agent_name为空，说明需要读取全局参数
-        nh.getParam("agent_name", agent_name);
-        nh.getParam("agent_id", agent_id);
-    } else {
-        // 如果从节点私有参数空间读取的agent_name不为空，则继续读取agent_id
-        private_nh.getParam("agent_id", agent_id);
-    }
-    agent_ns = agent_name + std::to_string(agent_id);
-    agent_ns = sunray_common::normalize_uav_ns(agent_ns);  // 标准化命名空间
+    bool use_private_agent_key = false;
+    private_nh.param("use_private_agent_key", use_private_agent_key, false);
+    agent_key = use_private_agent_key
+        ? sunray_common::get_agent_key_from_private()
+        : sunray_common::get_agent_key_from_global();
     // 读取完成，开始初始化ros订阅者与发布者
     // [订阅] 无人机状态
-    ros::Subscriber uav_state_sub = nh.subscribe<sunray_msgs::UAVControlFSMState>(
-        agent_ns + "/sunray/fsm/state", 10, uav_state_callback);
+    ros::Subscriber uav_state_sub = nh.subscribe<sunray_msgs::UAVControlState>(
+        agent_key + "/sunray/uav_control/control_state", 10, uav_state_callback);
     // [发布] 无人机控制指令
     ros::Publisher control_cmd_pub =
-        nh.advertise<sunray_msgs::UAVControlCMD>(agent_ns + "/sunray/uav_control_cmd", 1);
+        nh.advertise<sunray_msgs::UAVControlCMD>(agent_key + "/sunray/uav_control/control_cmd", 1);
     // 进入主循环
     int times = 0;
-    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_INIT)) {
+    while (ros::ok() && (uav_state.control_state != sunray_msgs::UAVControlState::INIT)) {
         // 首先判断当前无人机控制状态
         ros::spinOnce();
         ros::Duration(1.0).sleep();
@@ -86,11 +76,12 @@ int main(int argc, char** argv) {
     times = 0;
     // 初始化成功，发布起飞
     uav_cmd.header.stamp = ros::Time::now();
+    uav_cmd.cmd_source = sunray_msgs::UAVControlCMD::EXAMPLE_DEMO;
     uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::TAKEOFF;
     control_cmd_pub.publish(uav_cmd);
     // 判断是否完成起飞
     // 当uav_state从INIT变成HOVER时，认为起飞完成
-    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_HOVER)) {
+    while (ros::ok() && (uav_state.control_state != sunray_msgs::UAVControlState::HOVER)) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
@@ -107,7 +98,7 @@ int main(int argc, char** argv) {
     uav_cmd.desired_pos.z = Point_Z;
     control_cmd_pub.publish(uav_cmd);
     // 首先判断是否会成功切换为move_point
-    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_MOVE)) {
+    while (ros::ok() && (uav_state.control_state != sunray_msgs::UAVControlState::MOVE)) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         // 如果超过5s还没有进入到move模式，那么我们认为可能是system_check模块认为当前无法进行运动，需要检查日志
@@ -123,7 +114,7 @@ int main(int argc, char** argv) {
     // 清理循环变量
     times = 0;
     // 判断是否到达目标点
-    while (ros::ok() && (uav_state.sunray_fsm_state != sunray_msgs::UAVControlFSMState::FSM_HOVER)) {
+    while (ros::ok() && (uav_state.control_state != sunray_msgs::UAVControlState::HOVER)) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)

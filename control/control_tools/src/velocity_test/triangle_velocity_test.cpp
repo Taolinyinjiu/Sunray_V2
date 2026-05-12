@@ -8,7 +8,7 @@
 
 #include <sunray_msgs/Px4State.h>
 #include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlFSMState.h>
+#include <sunray_msgs/UAVControlState.h>
 
 namespace {
 
@@ -19,7 +19,7 @@ struct Point3 {
 };
 
 sunray_msgs::Px4State g_px4_state;
-sunray_msgs::UAVControlFSMState g_fsm_state;
+sunray_msgs::UAVControlState g_fsm_state;
 bool g_has_px4_state = false;
 bool g_has_fsm_state = false;
 
@@ -42,7 +42,7 @@ void px4_state_callback(const sunray_msgs::Px4State::ConstPtr& msg) {
     g_has_px4_state = true;
 }
 
-void fsm_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
+void fsm_state_callback(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     g_fsm_state = *msg;
     g_has_fsm_state = true;
 }
@@ -50,7 +50,7 @@ void fsm_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg) {
 sunray_msgs::UAVControlCMD make_cmd(uint8_t control_cmd, double fixed_yaw_rad) {
     sunray_msgs::UAVControlCMD cmd;
     cmd.header.stamp = ros::Time::now();
-    cmd.cmd_source = sunray_msgs::UAVControlCMD::CONTROL_CMD;
+    cmd.cmd_source = sunray_msgs::UAVControlCMD::EXAMPLE_DEMO;
     cmd.control_cmd = control_cmd;
     cmd.yaw_mode = sunray_msgs::UAVControlCMD::SET_YAW;
     cmd.desired_yaw = fixed_yaw_rad;
@@ -78,7 +78,7 @@ bool wait_until_fsm_state(uint8_t target_state, double timeout_s, double rate_hz
     const ros::Time deadline = ros::Time::now() + ros::Duration(timeout_s);
     while (ros::ok() && ros::Time::now() < deadline) {
         ros::spinOnce();
-        if (g_has_fsm_state && g_fsm_state.sunray_fsm_state == target_state) {
+        if (g_has_fsm_state && g_fsm_state.control_state == target_state) {
             return true;
         }
         rate.sleep();
@@ -130,12 +130,12 @@ int main(int argc, char** argv) {
     nh.param("land_wait_timeout_s", land_wait_timeout_s, 30.0);
 
     const std::string uav_ns = "/" + uav_name + std::to_string(uav_id);
-    const std::string cmd_topic = uav_ns + "/sunray/uav_control_cmd";
-    const std::string fsm_topic = uav_ns + "/sunray/fsm/state";
+    const std::string cmd_topic = uav_ns + "/sunray/uav_control/control_cmd";
+    const std::string fsm_topic = uav_ns + "/sunray/uav_control/control_state";
     const std::string px4_state_topic = uav_ns + "/sunray/px4_state";
 
     ros::Subscriber fsm_sub =
-        nh.subscribe<sunray_msgs::UAVControlFSMState>(fsm_topic, 10, fsm_state_callback);
+        nh.subscribe<sunray_msgs::UAVControlState>(fsm_topic, 10, fsm_state_callback);
     ros::Subscriber px4_state_sub =
         nh.subscribe<sunray_msgs::Px4State>(px4_state_topic, 10, px4_state_callback);
     ros::Publisher cmd_pub = nh.advertise<sunray_msgs::UAVControlCMD>(cmd_topic, 10);
@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
     }
 
     ROS_INFO("system connected, waiting for FSM INIT...");
-    if (!wait_until_fsm_state(sunray_msgs::UAVControlFSMState::FSM_INIT,
+    if (!wait_until_fsm_state(sunray_msgs::UAVControlState::INIT,
                               takeoff_wait_timeout_s,
                               rate_hz)) {
         ROS_ERROR("timeout waiting for FSM INIT");
@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
                          rate_hz);
 
     ROS_INFO("waiting for FSM HOVER after takeoff...");
-    if (!wait_until_fsm_state(sunray_msgs::UAVControlFSMState::FSM_HOVER,
+    if (!wait_until_fsm_state(sunray_msgs::UAVControlState::HOVER,
                               takeoff_wait_timeout_s,
                               rate_hz)) {
         ROS_ERROR("timeout waiting for FSM HOVER after takeoff");
@@ -252,7 +252,7 @@ int main(int argc, char** argv) {
 
     ROS_INFO("waiting for FSM INIT after landing...");
     if (!wait_until_fsm_state(
-            sunray_msgs::UAVControlFSMState::FSM_INIT, land_wait_timeout_s, rate_hz)) {
+            sunray_msgs::UAVControlState::INIT, land_wait_timeout_s, rate_hz)) {
         ROS_WARN("landing completion wait timeout");
         return 1;
     }

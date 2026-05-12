@@ -2,13 +2,13 @@ sources_list:
     MOCAP:
         source_id: 1
         localization_mode: global
-        odometry_topic: "${uav_ns}/sunray/odometry"
+        odometry_topic: "${agent_key}/sunray/odometry"
         relocalization_topic: ""
 
     GAZEBO:
         source_id: 3
         localization_mode: global
-        odometry_topic: "${uav_ns}/odom"
+        odometry_topic: "${agent_key}/odom"
         relocalization_topic: ""
         
     PENGYU_SIM:
@@ -17,6 +17,6 @@ sources_list:
         # 输入类型：只输入local系下的里程计
         localization_mode: local
         # 订阅的里程计话题
-        odometry_topic: "${uav_ns}/pengyu_sim/odom"
+        odometry_topic: "${agent_key}/pengyu_sim/odom"
         # 订阅的重定位话题
         relocalization_topic: ""
