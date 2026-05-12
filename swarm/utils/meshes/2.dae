@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <contributor>
+      <authoring_tool>Sunray compact UGV mesh</authoring_tool>
+    </contributor>
+    <unit name="meter" meter="1"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+
+  <library_effects>
+    <effect id="body_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <lambert>
+            <diffuse><color>0.05 0.38 0.95 1.0</color></diffuse>
+          </lambert>
+        </technique>
+      </profile_COMMON>
+    </effect>
+    <effect id="deck_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <lambert>
+            <diffuse><color>0.02 0.14 0.28 1.0</color></diffuse>
+          </lambert>
+        </technique>
+      </profile_COMMON>
+    </effect>
+    <effect id="front_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <lambert>
+            <diffuse><color>1.0 0.62 0.08 1.0</color></diffuse>
+          </lambert>
+        </technique>
+      </profile_COMMON>
+    </effect>
+    <effect id="wheel_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <lambert>
+            <diffuse><color>0.015 0.015 0.018 1.0</color></diffuse>
+          </lambert>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+
+  <library_materials>
+    <material id="body_material" name="body_material"><instance_effect url="#body_effect"/></material>
+    <material id="deck_material" name="deck_material"><instance_effect url="#deck_effect"/></material>
+    <material id="front_material" name="front_material"><instance_effect url="#front_effect"/></material>
+    <material id="wheel_material" name="wheel_material"><instance_effect url="#wheel_effect"/></material>
+  </library_materials>
+
+  <library_geometries>
+    <!-- 车体：长0.24m，宽0.14m，高0.045m。加上前向箭头后总长度约0.28m，不超过0.30m。 -->
+    <geometry id="body_geometry" name="body">
+      <mesh>
+        <source id="body_positions">
+          <float_array id="body_positions_array" count="24">
+            -0.120 -0.070 0.030   0.120 -0.070 0.030   0.120 0.070 0.030   -0.120 0.070 0.030
+            -0.120 -0.070 0.075   0.120 -0.070 0.075   0.120 0.070 0.075   -0.120 0.070 0.075
+          </float_array>
+          <technique_common>
+            <accessor source="#body_positions_array" count="8" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="body_vertices"><input semantic="POSITION" source="#body_positions"/></vertices>
+        <triangles material="body_material" count="12">
+          <input semantic="VERTEX" source="#body_vertices" offset="0"/>
+          <p>
+            0 1 2  0 2 3
+            4 6 5  4 7 6
+            0 4 5  0 5 1
+            1 5 6  1 6 2
+            2 6 7  2 7 3
+            3 7 4  3 4 0
+          </p>
+        </triangles>
+      </mesh>
+    </geometry>
+
+    <!-- 上层小甲板，让车体看起来更有层次。 -->
+    <geometry id="deck_geometry" name="deck">
+      <mesh>
+        <source id="deck_positions">
+          <float_array id="deck_positions_array" count="24">
+            -0.075 -0.045 0.075   0.070 -0.045 0.075   0.070 0.045 0.075   -0.075 0.045 0.075
+            -0.060 -0.035 0.105   0.055 -0.035 0.105   0.055 0.035 0.105   -0.060 0.035 0.105
+          </float_array>
+          <technique_common>
+            <accessor source="#deck_positions_array" count="8" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="deck_vertices"><input semantic="POSITION" source="#deck_positions"/></vertices>
+        <triangles material="deck_material" count="12">
+          <input semantic="VERTEX" source="#deck_vertices" offset="0"/>
+          <p>
+            0 1 2  0 2 3
+            4 6 5  4 7 6
+            0 4 5  0 5 1
+            1 5 6  1 6 2
+            2 6 7  2 7 3
+            3 7 4  3 4 0
+          </p>
+        </triangles>
+      </mesh>
+    </geometry>
+
+    <!-- 前向箭头，明确车头朝 +X。 -->
+    <geometry id="front_geometry" name="front_marker">
+      <mesh>
+        <source id="front_positions">
+          <float_array id="front_positions_array" count="9">
+            0.145 0.000 0.092   0.095 -0.030 0.092   0.095 0.030 0.092
+          </float_array>
+          <technique_common>
+            <accessor source="#front_positions_array" count="3" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="front_vertices"><input semantic="POSITION" source="#front_positions"/></vertices>
+        <triangles material="front_material" count="1">
+          <input semantic="VERTEX" source="#front_vertices" offset="0"/>
+          <p>0 1 2</p>
+        </triangles>
+      </mesh>
+    </geometry>
+
+    <!-- 单个轮子：用八边形棱柱近似小轮，轮轴沿Y方向。 -->
+    <geometry id="wheel_geometry" name="wheel">
+      <mesh>
+        <source id="wheel_positions">
+          <float_array id="wheel_positions_array" count="48">
+            0.030 -0.014 0.030   0.021 -0.014 0.051   0.000 -0.014 0.060   -0.021 -0.014 0.051
+            -0.030 -0.014 0.030  -0.021 -0.014 0.009  0.000 -0.014 0.000   0.021 -0.014 0.009
+            0.030 0.014 0.030    0.021 0.014 0.051    0.000 0.014 0.060    -0.021 0.014 0.051
+            -0.030 0.014 0.030   -0.021 0.014 0.009   0.000 0.014 0.000    0.021 0.014 0.009
+          </float_array>
+          <technique_common>
+            <accessor source="#wheel_positions_array" count="16" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="wheel_vertices"><input semantic="POSITION" source="#wheel_positions"/></vertices>
+        <triangles material="wheel_material" count="28">
+          <input semantic="VERTEX" source="#wheel_vertices" offset="0"/>
+          <p>
+            0 1 9  0 9 8
+            1 2 10  1 10 9
+            2 3 11  2 11 10
+            3 4 12  3 12 11
+            4 5 13  4 13 12
+            5 6 14  5 14 13
+            6 7 15  6 15 14
+            7 0 8  7 8 15
+            0 2 1  0 3 2  0 4 3  0 5 4  0 6 5  0 7 6
+            8 9 10  8 10 11  8 11 12  8 12 13  8 13 14  8 14 15
+          </p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="body" name="body">
+        <instance_geometry url="#body_geometry">
+          <bind_material><technique_common><instance_material symbol="body_material" target="#body_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+      <node id="deck" name="deck">
+        <instance_geometry url="#deck_geometry">
+          <bind_material><technique_common><instance_material symbol="deck_material" target="#deck_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+      <node id="front" name="front">
+        <instance_geometry url="#front_geometry">
+          <bind_material><technique_common><instance_material symbol="front_material" target="#front_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+      <node id="wheel_fl" name="wheel_fl">
+        <translate>0.080 0.082 0.000</translate>
+        <instance_geometry url="#wheel_geometry">
+          <bind_material><technique_common><instance_material symbol="wheel_material" target="#wheel_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+      <node id="wheel_fr" name="wheel_fr">
+        <translate>0.080 -0.082 0.000</translate>
+        <instance_geometry url="#wheel_geometry">
+          <bind_material><technique_common><instance_material symbol="wheel_material" target="#wheel_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+      <node id="wheel_rl" name="wheel_rl">
+        <translate>-0.080 0.082 0.000</translate>
+        <instance_geometry url="#wheel_geometry">
+          <bind_material><technique_common><instance_material symbol="wheel_material" target="#wheel_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+      <node id="wheel_rr" name="wheel_rr">
+        <translate>-0.080 -0.082 0.000</translate>
+        <instance_geometry url="#wheel_geometry">
+          <bind_material><technique_common><instance_material symbol="wheel_material" target="#wheel_material"/></technique_common></bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+
+  <scene>
+    <instance_visual_scene url="#Scene"/>
+  </scene>
+</COLLADA>
