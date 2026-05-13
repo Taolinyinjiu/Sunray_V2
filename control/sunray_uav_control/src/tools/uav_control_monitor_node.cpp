@@ -1,9 +1,9 @@
 /*
 本程序功能：
-    1、订阅单机 UAVControlState
-    2、额外订阅单机 local_odom，用于在终端同步显示本机位姿与速度
-    3、以终端状态面板形式显示 sunray_uav_control 的核心输入、状态和参数
-    4、让 sunray_uav_control 本体只负责控制逻辑，不负责打印
+    1. 读取 agent_name、agent_id 和 agent_num，自动生成 /{agent_name}{id}
+    2. 订阅每个智能体的 uav_control/control_state 和 localization/local_odom
+    3. 以终端状态面板形式集中显示单机或集群所有智能体的 UAV 控制状态
+    4. 让 uav_control_node 本体只负责控制逻辑，不负责打印
 */
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
@@ -14,9 +14,11 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "agent_key_helper.hpp"
 
@@ -40,7 +42,21 @@ struct CachedState
     ros::Time receive_time{0.0};
 };
 
-CachedState g_state;
+struct AgentTopics
+{
+    std::string control_state_topic;
+    std::string local_odom_topic;
+    std::string control_cmd_topic;
+};
+
+struct AgentMonitor
+{
+    int agent_id{1};
+    std::string agent_key;
+    AgentTopics topics;
+};
+
+std::map<int, CachedState> g_states;
 std::mutex g_mutex;
 
 std::string formatDouble(const double value, const int precision = 2)
@@ -58,6 +74,11 @@ std::string colorText(const std::string &text, const char *color)
 std::string okText(const bool ok)
 {
     return ok ? colorText("正常", kAnsiGood) : colorText("异常", kAnsiBad);
+}
+
+std::string topicValueText(const std::string &topic)
+{
+    return colorText(topic.empty() ? "-" : topic, kAnsiValue);
 }
 
 double yawFromOdom(const nav_msgs::Odometry &odom)
@@ -215,19 +236,13 @@ std::string coloredCmdName(const uint8_t cmd)
     }
 }
 
-std::string stateTopicText(const std::string &agent_key)
+AgentTopics buildAgentTopics(const std::string &agent_key)
 {
-    return colorText(agent_key + "/sunray/uav_control/control_state", kAnsiValue);
-}
-
-std::string odomTopicText(const std::string &agent_key)
-{
-    return colorText(agent_key + "/sunray/localization/local_odom", kAnsiValue);
-}
-
-std::string cmdTopicText(const std::string &agent_key)
-{
-    return colorText(agent_key + "/sunray/uav_control/control_cmd", kAnsiValue);
+    AgentTopics topics;
+    topics.control_state_topic = agent_key + "/sunray/uav_control/control_state";
+    topics.local_odom_topic = agent_key + "/sunray/localization/local_odom";
+    topics.control_cmd_topic = agent_key + "/sunray/uav_control/control_cmd";
+    return topics;
 }
 
 std::string landConfigText(const sunray_msgs::UAVControlState &state)
@@ -333,25 +348,48 @@ std::string rawControlInputText(const sunray_msgs::UAVControlCMD &cmd)
     }
 }
 
-std::string buildPanel(const std::string &agent_key, const CachedState &cached)
+std::string buildPanel(const AgentMonitor &agent, const CachedState &cached)
 {
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2);
+    ss << colorText("=================== UAV 控制状态面板 | " + agent.agent_key +
+                         " ===================",
+                     kAnsiTitle)
+       << "\n";
+
+    if (!cached.has_state)
+    {
+        ss << colorText(" 基本状态 ", kAnsiLabel)
+           << "状态话题（发布） -> " << topicValueText(agent.topics.control_state_topic) << "\n";
+        ss << "          " << colorText("等待 UAVControlState...", kAnsiWarn) << "\n";
+        ss << colorText(" 本机位姿 ", kAnsiLabel)
+           << "位姿话题（订阅） -> " << topicValueText(agent.topics.local_odom_topic) << "\n";
+        ss << "          " << colorText("等待 local_odom...", kAnsiWarn) << "\n";
+        ss << colorText(" 控制输入 ", kAnsiLabel)
+           << "指令话题（订阅） -> " << topicValueText(agent.topics.control_cmd_topic) << "\n";
+        return ss.str();
+    }
+
     const sunray_msgs::UAVControlState &state = cached.state;
     const sunray_msgs::UAVControlCMD &cmd = state.last_cmd;
 
-    std::ostringstream ss;
-    ss << std::fixed << std::setprecision(2);
-    ss << kAnsiTitle << "=================== UAV 控制状态面板 | " << agent_key
-       << " ===================" << kAnsiReset << "\n";
-
-    ss << kAnsiLabel << " 基本状态 " << kAnsiReset
-       << "状态话题（发布） -> " << stateTopicText(agent_key) << "\n";
+    ss << colorText(" 基本状态 ", kAnsiLabel)
+       << "状态话题（发布） -> " << topicValueText(agent.topics.control_state_topic) << "\n";
     ss << "          "
        << "FSM = " << coloredFsmName(state.control_state)
        << "  里程计有效 = " << okText(state.odometry_valid)
        << "  里程计超时 = " << okText(!state.odometry_lost) << "\n";
 
-    ss << kAnsiLabel << " 本机位姿 " << kAnsiReset
-       << "位姿话题（订阅） -> " << odomTopicText(agent_key) << "\n";
+    ss << colorText(" 起降参数 ", kAnsiLabel)
+       << "takeoff_h = " << formatDouble(state.takeoff_relative_height)
+       << " m  takeoff_vmax = " << formatDouble(state.takeoff_max_velocity) << " m/s\n";
+    ss << "          "
+       << "land -> " << landConfigText(state) << "\n";
+    ss << "          "
+       << "home -> " << homePointText(state) << "\n";
+
+    ss << colorText(" 本机位姿 ", kAnsiLabel)
+       << "位姿话题（订阅） -> " << topicValueText(agent.topics.local_odom_topic) << "\n";
     if (cached.has_local_odom)
     {
         ss << "          " << odomPoseText(cached.local_odom) << "\n";
@@ -362,67 +400,67 @@ std::string buildPanel(const std::string &agent_key, const CachedState &cached)
         ss << "          " << colorText("等待 local_odom...", kAnsiWarn) << "\n";
     }
 
-    ss << kAnsiLabel << " 控制输入 " << kAnsiReset
-       << "指令话题（订阅） -> " << cmdTopicText(agent_key) << "\n";
+    ss << colorText(" 控制输入 ", kAnsiLabel)
+       << "指令话题（订阅） -> " << topicValueText(agent.topics.control_cmd_topic) << "\n";
     ss << "          "
        << "来源 = " << colorText(sourceName(cmd.cmd_source), kAnsiValue)
        << "  控制指令 = " << coloredCmdName(cmd.control_cmd)
        << "  Yaw模式 = " << colorText(yawModeName(cmd.yaw_mode), kAnsiValue) << "\n";
     ss << "          " << "原始输入 -> " << rawControlInputText(cmd) << "\n";
 
-    ss << kAnsiLabel << " 起降参数 " << kAnsiReset << "\n";
-    ss << "          "
-       << "takeoff_h = " << formatDouble(state.takeoff_relative_height)
-       << " m  takeoff_vmax = " << formatDouble(state.takeoff_max_velocity) << " m/s\n";
-    ss << "          "
-       << "land -> " << landConfigText(state) << "\n";
-    ss << "          "
-       << "home -> " << homePointText(state) << "\n";
-
     return ss.str();
 }
 
-void stateCallback(const sunray_msgs::UAVControlState::ConstPtr &msg)
+void stateCallback(const sunray_msgs::UAVControlState::ConstPtr &msg, const int agent_id)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_state.state = *msg;
-    g_state.has_state = true;
-    g_state.receive_time = ros::Time::now();
+    CachedState &cached = g_states[agent_id];
+    cached.state = *msg;
+    cached.has_state = true;
+    cached.receive_time = ros::Time::now();
 }
 
-void odomCallback(const nav_msgs::Odometry::ConstPtr &msg)
+void odomCallback(const nav_msgs::Odometry::ConstPtr &msg, const int agent_id)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_state.local_odom = *msg;
-    g_state.has_local_odom = true;
+    CachedState &cached = g_states[agent_id];
+    cached.local_odom = *msg;
+    cached.has_local_odom = true;
 }
 
-void printPanel(const ros::TimerEvent &, const std::string &agent_key, const double stale_timeout)
+void printPanel(const ros::TimerEvent &,
+                const std::vector<AgentMonitor> &agents,
+                const double stale_timeout)
 {
-    CachedState cached;
+    std::map<int, CachedState> states;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        cached = g_state;
+        states = g_states;
     }
 
     std::cout << "\033[2J\033[H";
-    if (!cached.has_state)
+    if (agents.empty())
     {
         std::cout << colorText("UAV 控制状态面板", kAnsiTitle) << "\n";
-        std::cout << "等待 UAVControlState...\n";
+        std::cout << "等待 UAVControlState 消息...\n";
         std::cout.flush();
         return;
     }
 
     const ros::Time now = ros::Time::now();
-    if ((now - cached.receive_time).toSec() > stale_timeout)
+    for (const AgentMonitor &agent : agents)
     {
-        std::cout << colorText(agent_key + " 状态超时", kAnsiBad) << "\n";
-        std::cout.flush();
-        return;
-    }
+        const auto it = states.find(agent.agent_id);
+        const CachedState cached = (it == states.end()) ? CachedState{} : it->second;
 
-    std::cout << buildPanel(agent_key, cached) << "\n";
+        if (cached.has_state && (now - cached.receive_time).toSec() > stale_timeout)
+        {
+            std::cout << colorText(agent.agent_key + " 状态超时", kAnsiBad) << "\n";
+            continue;
+        }
+
+        std::cout << buildPanel(agent, cached);
+    }
     std::cout.flush();
 }
 
@@ -433,31 +471,54 @@ int main(int argc, char **argv)
     ros::init(argc, argv, "uav_control_monitor_node");
     ros::NodeHandle nh("~");
 
-    bool use_private_agent_key = false;
+    std::string agent_name = "uav";
+    int agent_id = 1;
+    int agent_num = 1;
     double print_hz = 2.0;
     double stale_timeout = 1.0;
-    nh.param("use_private_agent_key", use_private_agent_key, false);
+    nh.param("agent_name", agent_name, agent_name);
+    nh.param("agent_id", agent_id, agent_id);
+    nh.param("agent_num", agent_num, agent_num);
     nh.param("print_hz", print_hz, print_hz);
     nh.param("stale_timeout", stale_timeout, stale_timeout);
 
-    const std::string agent_key = use_private_agent_key
-                                      ? sunray_common::get_agent_key_from_private()
-                                      : sunray_common::get_agent_key_from_global();
-    const std::string state_topic = agent_key + "/sunray/uav_control/control_state";
-    const std::string odom_topic = agent_key + "/sunray/localization/local_odom";
+    const int num = std::max(1, agent_num);
+    std::vector<AgentMonitor> agents;
+    std::vector<ros::Subscriber> subs;
+    agents.reserve(static_cast<size_t>(num));
+    subs.reserve(static_cast<size_t>(num * 2));
 
-    ros::Subscriber state_sub = nh.subscribe<sunray_msgs::UAVControlState>(
-        state_topic, 20, stateCallback);
-    ros::Subscriber odom_sub = nh.subscribe<nav_msgs::Odometry>(
-        odom_topic, 20, odomCallback);
+    for (int i = 1; i <= num; ++i)
+    {
+        const int current_agent_id = (num == 1) ? std::max(1, agent_id) : i;
+        AgentMonitor agent;
+        agent.agent_id = current_agent_id;
+        agent.agent_key = sunray_common::normalize_agent_key(agent_name + std::to_string(current_agent_id));
+        agent.topics = buildAgentTopics(agent.agent_key);
 
-    ROS_INFO("uav_control_monitor_node subscribe state: %s", state_topic.c_str());
-    ROS_INFO("uav_control_monitor_node subscribe odom : %s", odom_topic.c_str());
+        agents.push_back(agent);
+        g_states[current_agent_id] = CachedState{};
+
+        subs.push_back(nh.subscribe<sunray_msgs::UAVControlState>(
+            agent.topics.control_state_topic, 10,
+            [current_agent_id](const sunray_msgs::UAVControlState::ConstPtr &msg) {
+                stateCallback(msg, current_agent_id);
+            }));
+
+        subs.push_back(nh.subscribe<nav_msgs::Odometry>(
+            agent.topics.local_odom_topic, 10,
+            [current_agent_id](const nav_msgs::Odometry::ConstPtr &msg) {
+                odomCallback(msg, current_agent_id);
+            }));
+
+        ROS_INFO("uav_control_monitor subscribe: %s", agent.topics.control_state_topic.c_str());
+        ROS_INFO("uav_control_monitor subscribe: %s", agent.topics.local_odom_topic.c_str());
+    }
 
     ros::Timer print_timer = nh.createTimer(
         ros::Duration(1.0 / std::max(0.1, print_hz)),
-        [agent_key, stale_timeout](const ros::TimerEvent &event) {
-            printPanel(event, agent_key, stale_timeout);
+        [&agents, stale_timeout](const ros::TimerEvent &event) {
+            printPanel(event, agents, stale_timeout);
         });
 
     ros::spin();

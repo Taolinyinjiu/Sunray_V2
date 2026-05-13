@@ -110,20 +110,6 @@ target_link_libraries(uav_control_monitor_node
     ${catkin_LIBRARIES}
 )
 
-add_executable(uav_control_swarm_monitor_node
-  src/tools/uav_control_swarm_monitor_node.cpp
-)
-add_dependencies(uav_control_swarm_monitor_node ${catkin_EXPORTED_TARGETS})
-target_include_directories(uav_control_swarm_monitor_node
-  PRIVATE
-    ${catkin_INCLUDE_DIRS}
-)
-
-target_link_libraries(uav_control_swarm_monitor_node
-  PRIVATE
-    ${catkin_LIBRARIES}
-)
-
 # -----------------------------
 # Runtime test/demo executables
 # -----------------------------
@@ -236,7 +222,6 @@ install(TARGETS
   sunray_uav_control_lib
   uav_control_node
   uav_control_monitor_node
-  uav_control_swarm_monitor_node
   origin_controller_takeoff_test
   origin_controller_square_test
   origin_controller_square_test_velocity

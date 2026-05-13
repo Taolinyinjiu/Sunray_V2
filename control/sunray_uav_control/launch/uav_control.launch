@@ -3,11 +3,10 @@
        default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
-  <arg name="node_name" default="uav_control_node" />
+  <arg name="node_name" default="$(eval 'uav_control_node_' + str(int(arg('agent_id'))))" />
   <arg name="set_global_params" default="true" />
   <arg name="use_private_agent_key" default="false" />
   <arg name="enable_single_monitor" default="true" />
-  <arg name="monitor_print_hz" default="2.0" />
   <arg name="monitor_stale_timeout" default="1.0" />
 
   <param if="$(arg set_global_params)" name="/agent_name" value="$(arg agent_name)" />
@@ -30,8 +29,6 @@
         output="screen">
     <param name="agent_name" value="$(arg agent_name)" />
     <param name="agent_id" value="$(arg agent_id)" />
-    <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
-    <param name="print_hz" value="$(arg monitor_print_hz)" />
-    <param name="stale_timeout" value="$(arg monitor_stale_timeout)" />
+    <param name="agent_num" value="1" />
   </node>
 </launch>

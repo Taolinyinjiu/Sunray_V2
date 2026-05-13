@@ -3,9 +3,8 @@
        default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
-  <arg name="agent_num" default="3" />
-  <arg name="monitor_print_hz" default="2.0" />
-  <arg name="monitor_stale_timeout" default="1.0" />
+  <arg name="agent_num" default="6" />
+  <arg name="enable_monitor" default="true" />
 
   <include file="$(find sunray_uav_control)/launch/uav_control.launch">
     <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
@@ -15,8 +14,6 @@
     <arg name="set_global_params" value="false" />
     <arg name="use_private_agent_key" value="true" />
     <arg name="enable_single_monitor" value="false" />
-    <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
-    <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
   </include>
 
   <include file="$(find sunray_uav_control)/launch/uav_control_swarm.launch"
@@ -25,7 +22,16 @@
       <arg name="agent_name" value="$(arg agent_name)" />
       <arg name="agent_id" value="$(eval int(arg('agent_id')) + 1)" />
       <arg name="agent_num" value="$(arg agent_num)" />
-      <arg name="monitor_print_hz" value="$(arg monitor_print_hz)" />
-      <arg name="monitor_stale_timeout" value="$(arg monitor_stale_timeout)" />
   </include>
+
+  <group if="$(arg enable_monitor)">
+    <node if="$(eval int(arg('agent_id')) == 1)"
+          pkg="sunray_uav_control"
+          type="uav_control_monitor_node"
+          name="uav_control_monitor_swarm"
+          output="screen">
+      <param name="agent_name" value="$(arg agent_name)" />
+      <param name="agent_num" value="$(arg agent_num)" />
+    </node>
+  </group>
 </launch>
