@@ -1,0 +1,12 @@
+<launch>
+  <arg name="launcher_config"
+       default="$(find simulation_tools)/config/sunray_launcher.yaml" />
+
+  <node pkg="simulation_tools"
+        type="sunray_launcher_node"
+        name="sunray_launcher_node"
+        output="screen">
+    <param name="launcher_config" value="$(arg launcher_config)" />
+    <rosparam file="$(arg launcher_config)" command="load" />
+  </node>
+</launch>

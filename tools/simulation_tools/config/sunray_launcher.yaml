@@ -1,0 +1,248 @@
+launch_groups:
+  - name: "定位融合模块"
+    items:
+      - title: "无人机定位融合"
+        package: "localization_fusion"
+        launch: "localization_fusion.launch"
+        args:
+          - "source_id:=5"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        description: "启动单架无人机 localization_fusion，默认 source_id=5 对接 pengyu_sim odom。"
+
+      - title: "无人车定位融合"
+        package: "localization_fusion"
+        launch: "localization_fusion.launch"
+        args:
+          - "source_id:=5"
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+        description: "启动单辆无人车 localization_fusion，默认 source_id=5 对接 pengyu_sim odom。"
+
+      - title: "集群无人机定位融合"
+        package: "localization_fusion"
+        launch: "localization_fusion_swarm.launch"
+        args:
+          - "source_id:=5"
+          - "agent_name:=uav"
+          - "agent_num:=6"
+        description: "递归启动 1..agent_num 的无人机 localization_fusion，并启动统一定位监控。"
+
+      - title: "集群无人车定位融合"
+        package: "localization_fusion"
+        launch: "localization_fusion_swarm.launch"
+        args:
+          - "source_id:=5"
+          - "agent_name:=ugv"
+          - "agent_num:=6"
+        description: "递归启动 1..agent_num 的无人车 localization_fusion，并启动统一定位监控。"
+
+  - name: "无人机控制模块"
+    items:
+      - title: "单机无人机控制"
+        package: "sunray_uav_control"
+        launch: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+        description: "启动单机 sunray_uav_control 控制节点和状态监控。"
+
+      - title: "集群无人机控制"
+        package: "sunray_uav_control"
+        launch: "uav_control_swarm.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_num:=6"
+          - "enable_monitor:=true"
+        description: "启动多架无人机控制节点和统一监控。"
+
+      - title: "无人机控制面板"
+        package: "control_tools"
+        launch: "uav_control_panel.launch"
+        description: "启动 UAV Control Panel，用于下发 UAVControlCMD 并查看控制状态。"
+
+  - name: "无人车控制模块"
+    items:
+      - title: "单车无人车控制"
+        package: "sunray_ugv_control"
+        launch: "ugv_control.launch"
+        args:
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+          - "enable_monitor:=true"
+          - "enable_rviz_visualization:=true"
+          - "enable_rviz:=false"
+        description: "启动单车 sunray_ugv_control 控制节点、监控和 RViz marker 发布节点。"
+
+      - title: "集群无人车控制"
+        package: "sunray_ugv_control"
+        launch: "ugv_control_swarm.launch"
+        args:
+          - "agent_name:=ugv"
+          - "swarm_num:=6"
+          - "enable_monitor:=true"
+          - "enable_rviz_visualization:=false"
+          - "enable_rviz:=false"
+        description: "启动多车控制节点和统一监控。"
+
+      - title: "无人车控制面板"
+        package: "sunray_ugv_control"
+        launch: "ugv_control_panel.launch"
+        description: "启动 UGV Control Panel，用于下发 UGVControlCMD 并查看控制状态。"
+
+  - name: "规划模块"
+    items:
+      - title: "Sunray Planning Ego"
+        package: "sunray_planning"
+        launch: "sunray_planning.launch"
+        args:
+          - "planner_type:=ego"
+          - "uav_name:=uav"
+          - "uav_id:=1"
+          - "enable_rviz:=false"
+          - "enable_rviz_bridge:=true"
+        description: "启动 sunray_planning 并接入 ego planner。"
+
+      - title: "Sunray Planning Diff"
+        package: "sunray_planning"
+        launch: "sunray_planning.launch"
+        args:
+          - "planner_type:=diff"
+          - "uav_name:=uav"
+          - "uav_id:=1"
+          - "enable_rviz:=false"
+          - "enable_rviz_bridge:=true"
+        description: "启动 sunray_planning 并接入 diff planner。"
+
+      - title: "RViz Goal Bridge"
+        package: "sunray_planner_tools"
+        launch: "rviz_goal_bridge.launch"
+        description: "将 RViz 目标点转换为规划模块可用的 planning command。"
+
+      - title: "PointCloud Transform"
+        package: "sunray_planner_tools"
+        launch: "point_cloud_transform.launch"
+        description: "点云坐标转换工具，常用于 Gazebo/仿真点云接入规划模块。"
+
+  - name: "无人机集群控制模块"
+    items:
+      - title: "无人机集群控制仿真"
+        package: "sunray_swarm_control"
+        launch: "swarm_control_uav_sim.launch"
+        args:
+          - "agent_name:=uav"
+          - "swarm_num:=6"
+          - "enable_monitor:=true"
+          - "enable_rviz:=true"
+        description: "启动 UAV 集群控制节点、统一监控、RViz marker 和 RViz。"
+
+      - title: "无人机集群指令终端"
+        package: "sunray_swarm_control"
+        launch: "uav_swarm_cmd_pub_terminal.launch"
+        description: "启动 UAVSwarmCMD 终端发布工具。"
+
+      - title: "集群控制面板"
+        package: "sunray_swarm_control"
+        launch: "swarm_control_panel.launch"
+        description: "启动集群 Qt 控制面板，同时支持 UAV / UGV 集群指令。"
+
+      - title: "ORCA 测试"
+        package: "sunray_swarm_control"
+        launch: "orca_test.launch"
+        description: "运行 ORCA + formation 压力测试节点。"
+
+  - name: "无人车集群控制模块"
+    items:
+      - title: "无人车集群控制仿真"
+        package: "sunray_swarm_control"
+        launch: "swarm_control_ugv_sim.launch"
+        args:
+          - "agent_name:=ugv"
+          - "swarm_num:=6"
+          - "enable_monitor:=true"
+          - "enable_rviz:=true"
+        description: "启动 UGV 集群控制节点、统一监控、RViz marker 和 RViz。"
+
+      - title: "无人车集群指令终端"
+        package: "sunray_swarm_control"
+        launch: "ugv_swarm_cmd_pub_terminal.launch"
+        description: "启动 UGVSwarmCMD 终端发布工具。"
+
+      - title: "集群控制面板"
+        package: "sunray_swarm_control"
+        launch: "swarm_control_panel.launch"
+        description: "启动集群 Qt 控制面板，同时支持 UAV / UGV 集群指令。"
+
+  - name: "pengyu_sim仿真器模块"
+    items:
+      - title: "无人机动力学仿真"
+        package: "px4_control_simulator"
+        launch: "px4_uav_simulator.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "launch_rviz:=true"
+        description: "外部 pengyu_sim 包：启动单架无人机动力学、PX4 控制模拟和 fake mavros bridge。"
+
+      - title: "集群无人机动力学仿真"
+        package: "px4_control_simulator"
+        launch: "px4_uav_simulator_swarm.launch"
+        args:
+          - "agent_name:=uav"
+          - "swarm_num:=6"
+          - "launch_rviz:=false"
+          - "enable_status_print:=true"
+        description: "外部 pengyu_sim 包：启动多架无人机仿真。需要先 source pengyu_sim 工作空间。"
+
+      - title: "无人车动力学仿真"
+        package: "ugv_simulator"
+        launch: "ugv_simulator.launch"
+        args:
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+          - "swarm_num:=1"
+          - "drive_type:=mecanum"
+        description: "外部 pengyu_sim 包：启动无人车动力学仿真"
+
+      - title: "集群无人车动力学仿真"
+        package: "ugv_simulator"
+        launch: "ugv_simulator.launch"
+        args:
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+          - "swarm_num:=6"
+          - "drive_type:=mecanum"
+        description: "外部 pengyu_sim 包：启动无人车动力学仿真，默认swarm_num为6"
+
+  - name: "Gazebo仿真器模块"
+    items:
+      - title: "Gazebo 单无人机"
+        package: "sunray_simulator"
+        launch: "launch_uav_demo/sunray_sim_1uav.launch"
+        description: "启动 Sunray Gazebo 单无人机场景。"
+
+      - title: "Gazebo 三无人机"
+        package: "sunray_simulator"
+        launch: "launch_uav_demo/sunray_sim_3uav.launch"
+        description: "启动 Sunray Gazebo 三无人机场景。"
+
+      - title: "Gazebo 六无人机"
+        package: "sunray_simulator"
+        launch: "launch_uav_demo/sunray_sim_6uav.launch"
+        description: "启动 Sunray Gazebo 六无人机场景。"
+
+      - title: "Gazebo 单无人车"
+        package: "sunray_simulator"
+        launch: "launch_ugv_demo/sunray_sim_1ugv.launch"
+        description: "启动 Sunray Gazebo 单无人车场景。"
+
+      - title: "Gazebo 三无人车"
+        package: "sunray_simulator"
+        launch: "launch_ugv_demo/sunray_sim_3ugv.launch"
+        description: "启动 Sunray Gazebo 三无人车场景。"
+
+      - title: "Gazebo 空世界"
+        package: "sunray_simulator"
+        launch: "launch_basic/sunray_px4_basic.launch"
+        description: "启动 Gazebo/PX4 基础仿真环境。"

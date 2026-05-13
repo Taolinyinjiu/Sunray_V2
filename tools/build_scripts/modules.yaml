@@ -19,6 +19,11 @@ modules:
     source_path: "control/control_tools"
     build_path: "build/control_tools"
     dependencies: []
+  simulation_tools:
+    description: "Sunray 仿真和模块启动器工具"
+    source_path: "tools/simulation_tools"
+    build_path: "build/simulation_tools"
+    dependencies: []
 
   # uav_control_example
   sunray_uav_control_example:
@@ -192,7 +197,7 @@ groups:
   # 仿真
   Simulation:
     description: "仿真功能包"
-    modules: ["sunray_simulator"]
+    modules: ["sunray_simulator", "simulation_tools"]
 
   # 机型分类
   S-150-Basic:
