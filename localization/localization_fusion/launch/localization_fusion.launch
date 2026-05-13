@@ -12,9 +12,7 @@
     <arg name="agent_name" default="uav" />
     <arg name="agent_id" default="1" />
     <!-- 当下面的use_private_agent_key为true时，节点使用上面定义的agent_name与agent_id -->
-    <arg name="use_private_agent_key" default="false" />
-    <!-- 注意,仿真环节中localization_fusion_swarm依据这个node_name来区分多实例节点名，移除后会导致多机节点冲突 -->
-    <arg name="node_name" default="localization_fusion" />
+    <arg name="use_private_agent_key" default="true" />
     <!-- 是否启动定位状态监视器，集群场景建议关闭并改用 swarm_monitor -->
     <arg name="enable_monitor" default="true" />
 
@@ -46,7 +44,8 @@
         <include file="$(find localization_fusion)/source_launch/start_fastlio_ekf.launch" />
     </group>
 
-    <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg node_name)" output="screen">
+    <!-- ROS节点名，默认按 agent_name + agent_id 命名，例如 localization_fusion_uav1 -->
+    <node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion_$(arg agent_name)$(arg agent_id)" output="screen">
         <param name="source_id" value="$(arg source_id)" />
         <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
         <param name="health_rate_hz" value="$(arg health_rate_hz)" />
@@ -55,11 +54,15 @@
         <param name="agent_id" value="$(arg agent_id)" />
         <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
     </node>
+
     <!-- 定位模块输出状态监听节点 -->
     <node pkg="localization_fusion"
         type="localization_fusion_monitor_node"
         name="localization_fusion_monitor"
         output="screen"
         if="$(arg enable_monitor)">
+        <param name="agent_name" value="$(arg agent_name)" />
+        <param name="source_id" value="$(arg source_id)" />
+        <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
     </node>
 </launch>

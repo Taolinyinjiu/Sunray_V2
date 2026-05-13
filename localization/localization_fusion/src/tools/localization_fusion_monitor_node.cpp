@@ -1,11 +1,12 @@
 /*
 本程序功能：
-    1. 订阅 {agent_key}/sunray/localization/odom_state 话题
-    2. 订阅 {agent_key}/sunray/localization/local_odom 话题
+    1. 读取 agent_name 和 agent_num，自动生成 /{agent_name}{id}
+    2. 订阅每个智能体的 sunray/localization/odom_state 话题
     3. 以终端状态面板形式显示 localization_fusion 的核心状态与位姿输出
     4. 让 localization_fusion 本体只负责融合逻辑，不负责打印
 */
 #include <ros/ros.h>
+#include <ros/package.h>
 #include <nav_msgs/Odometry.h>
 #include <sunray_msgs/OdomState.h>
 
@@ -19,6 +20,7 @@
 #include <vector>
 
 #include "agent_key_helper.hpp"
+#include "localization_fusion_types.hpp"
 
 namespace
 {
@@ -33,12 +35,27 @@ const char *kAnsiValue = "\033[1;37m";
 
 constexpr double kRadToDeg = 57.29577951308232;
 
+struct EulerAngle
+{
+    double roll{0.0};
+    double pitch{0.0};
+    double yaw{0.0};
+};
+
 struct CachedState
 {
     sunray_msgs::OdomState state{};
-    nav_msgs::Odometry     local_odom{};
-    bool                   has_local{false};
+    bool                   has_state{false};
     ros::Time              receive_time{0.0};
+};
+
+struct AgentTopics
+{
+    std::string external_odom_topic;
+    std::string relocalization_topic;
+    std::string local_odom_topic;
+    std::string global_odom_topic;
+    std::string odom_state_topic;
 };
 
 std::map<int, CachedState> g_states;
@@ -81,19 +98,95 @@ std::string modeName(const uint8_t mode)
     }
 }
 
-std::string coloredModeName(const uint8_t mode)
+std::string modeDescription(const uint8_t mode)
 {
     switch (mode)
     {
     case sunray_msgs::OdomState::LOCAL:
+        return "局部odom=全局odom";
     case sunray_msgs::OdomState::GLOBAL:
-        return colorText(modeName(mode), kAnsiGood);
+        return "局部odom=全局odom";
+    case sunray_msgs::OdomState::LOCAL_AND_GLOBAL:
+        return "局部odom和全局odom分别来自外部输入";
+    case sunray_msgs::OdomState::LOCAL_WITH_ARUCO:
+        return "局部odom连续输出，全局odom由重定位TF推算";
+    default:
+        return "未知模式";
+    }
+}
+
+std::string coloredModeName(const uint8_t mode)
+{
+    const std::string text = modeName(mode) + "(" + modeDescription(mode) + ")";
+    switch (mode)
+    {
+    case sunray_msgs::OdomState::LOCAL:
+    case sunray_msgs::OdomState::GLOBAL:
+        return colorText(text, kAnsiGood);
     case sunray_msgs::OdomState::LOCAL_AND_GLOBAL:
     case sunray_msgs::OdomState::LOCAL_WITH_ARUCO:
-        return colorText(modeName(mode), kAnsiWarn);
+        return colorText(text, kAnsiWarn);
     default:
-        return colorText(modeName(mode), kAnsiBad);
+        return colorText(text, kAnsiBad);
     }
+}
+
+std::string topicValueText(const std::string &topic)
+{
+    return colorText(topic.empty() ? "-" : topic, kAnsiValue);
+}
+
+std::string localOdomTopicFromAgentKey(const std::string &agent_key)
+{
+    return agent_key + "/sunray/localization/local_odom";
+}
+
+std::string globalOdomTopicFromAgentKey(const std::string &agent_key)
+{
+    return agent_key + "/sunray/localization/global_odom";
+}
+
+std::string odomStateTopicFromAgentKey(const std::string &agent_key)
+{
+    return agent_key + "/sunray/localization/odom_state";
+}
+
+AgentTopics buildAgentTopics(const std::string &agent_key,
+                             const SourceConfig &source_config)
+{
+    AgentTopics topics;
+    topics.external_odom_topic =
+        sunray_common::replace_agent_key(source_config.odometry_topic, agent_key);
+    topics.relocalization_topic =
+        sunray_common::replace_agent_key(source_config.relocalization_topic, agent_key);
+    topics.local_odom_topic = localOdomTopicFromAgentKey(agent_key);
+    topics.global_odom_topic = globalOdomTopicFromAgentKey(agent_key);
+    topics.odom_state_topic = odomStateTopicFromAgentKey(agent_key);
+    return topics;
+}
+
+bool shouldPrintLocalOdom(const uint8_t mode)
+{
+    return mode == sunray_msgs::OdomState::LOCAL ||
+           mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL ||
+           mode == sunray_msgs::OdomState::LOCAL_WITH_ARUCO;
+}
+
+bool shouldPrintGlobalOdom(const uint8_t mode)
+{
+    return mode == sunray_msgs::OdomState::GLOBAL ||
+           mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL;
+}
+
+bool externalOdomIsGlobal(const uint8_t mode)
+{
+    return mode == sunray_msgs::OdomState::GLOBAL;
+}
+
+bool shouldPrintRelocalizationTopic(const uint8_t mode)
+{
+    return mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL ||
+           mode == sunray_msgs::OdomState::LOCAL_WITH_ARUCO;
 }
 
 std::string stampText(const ros::Time &stamp)
@@ -105,73 +198,157 @@ std::string stampText(const ros::Time &stamp)
     return colorText(ss.str(), kAnsiValue);
 }
 
-double yawFromOdom(const nav_msgs::Odometry &odom)
+EulerAngle eulerFromOdom(const nav_msgs::Odometry &odom)
 {
     const auto &q = odom.pose.pose.orientation;
-    return std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+    EulerAngle euler;
+
+    euler.roll = std::atan2(2.0 * (q.w * q.x + q.y * q.z),
+                            1.0 - 2.0 * (q.x * q.x + q.y * q.y));
+
+    const double sin_pitch = 2.0 * (q.w * q.y - q.z * q.x);
+    if (std::abs(sin_pitch) >= 1.0)
+    {
+        euler.pitch = std::copysign(M_PI / 2.0, sin_pitch);
+    }
+    else
+    {
+        euler.pitch = std::asin(sin_pitch);
+    }
+
+    euler.yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
+                           1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+    return euler;
 }
 
-std::string odomPoseText(const nav_msgs::Odometry &odom)
+std::string odomFrameText(const nav_msgs::Odometry &odom)
+{
+    std::ostringstream ss;
+    ss << "frame_id = " << odom.header.frame_id
+       << "  child_frame_id = " << (odom.child_frame_id.empty() ? "-" : odom.child_frame_id);
+    return colorText(ss.str(), kAnsiValue);
+}
+
+std::string odomPositionText(const nav_msgs::Odometry &odom)
 {
     const auto &p = odom.pose.pose.position;
-    const double yaw = yawFromOdom(odom);
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
     ss << "x = " << std::setw(7) << p.x << " m"
        << "  y = " << std::setw(7) << p.y << " m"
-       << "  z = " << std::setw(7) << p.z << " m"
-       << "  yaw = " << std::setw(7) << yaw * kRadToDeg << " deg";
+       << "  z = " << std::setw(7) << p.z << " m";
     return colorText(ss.str(), kAnsiValue);
 }
 
 std::string odomVelText(const nav_msgs::Odometry &odom)
 {
     const auto &v = odom.twist.twist.linear;
-    const double wz = odom.twist.twist.angular.z;
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
     ss << "vx = " << std::setw(6) << v.x << " m/s"
        << "  vy = " << std::setw(6) << v.y << " m/s"
-       << "  vz = " << std::setw(6) << v.z << " m/s"
-       << "  wz = " << std::setw(6) << wz * kRadToDeg << " deg/s";
+       << "  vz = " << std::setw(6) << v.z << " m/s";
     return colorText(ss.str(), kAnsiValue);
 }
 
-std::string buildPanel(const std::string &agent_key, const CachedState &cached)
+std::string odomAttitudeText(const nav_msgs::Odometry &odom)
 {
-    const sunray_msgs::OdomState &state = cached.state;
+    const EulerAngle euler = eulerFromOdom(odom);
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2);
+    ss << "roll = " << std::setw(7) << euler.roll * kRadToDeg << " deg"
+       << "  pitch = " << std::setw(7) << euler.pitch * kRadToDeg << " deg"
+       << "  yaw = " << std::setw(7) << euler.yaw * kRadToDeg << " deg";
+    return colorText(ss.str(), kAnsiValue);
+}
+
+std::string buildPanel(const std::string &agent_key,
+                       const AgentTopics &topics,
+                       const CachedState &cached)
+{
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
 
-    ss << colorText("========== Localization Fusion 状态面板 | " + agent_key + " ==========", kAnsiTitle) << "\n";
+    ss << colorText("============== Localization Fusion 状态面板 | " + agent_key + " ==============", kAnsiTitle) << "\n";
 
-    ss << colorText(" 定位源    ", kAnsiLabel)
-       << "来源 = " << colorText(sourceName(state.external_source), kAnsiValue)
-       << "  模式 = " << coloredModeName(state.localization_mode) << "\n";
-
-    ss << colorText(" 里程计    ", kAnsiLabel)
-       << "状态 = " << okText(state.odometry_valid)
-       << "  更新频率 = " << colorText(std::to_string(static_cast<int>(state.odometry_update_hz + 0.5f)) + " Hz", kAnsiValue)
-       << "  最新时间戳 = " << stampText(state.odometry_received_stamp) << "\n";
-
-    if (state.localization_mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL ||
-        state.localization_mode == sunray_msgs::OdomState::LOCAL_WITH_ARUCO)
+    if (!cached.has_state)
     {
-        ss << colorText(" 重定位    ", kAnsiLabel)
-           << "状态 = " << okText(state.relocalization_valid)
-           << "  最新时间戳 = " << stampText(state.relocalization_received_stamp) << "\n";
+        ss << colorText(" 订阅话题  ", kAnsiLabel)
+           << "odom状态话题: " << topicValueText(topics.odom_state_topic) << "\n";
+        ss << colorText(" 基本信息  ", kAnsiLabel) << colorText("等待 OdomState...", kAnsiWarn) << "\n";
+        ss << colorText(" 局部odom  ", kAnsiLabel);
+        ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
+        return ss.str();
     }
 
-    ss << colorText(" local_odom", kAnsiLabel) << " ";
-    if (cached.has_local)
+    const sunray_msgs::OdomState &state = cached.state;
+
+    ss << colorText(" 订阅话题  ", kAnsiLabel)
+       << (externalOdomIsGlobal(state.localization_mode) ? "外部定位源（全局）话题: " : "外部定位源（局部）话题: ")
+       << topicValueText(topics.external_odom_topic) << "\n";
+    if (shouldPrintRelocalizationTopic(state.localization_mode))
     {
-        ss << "frame = " << colorText(cached.local_odom.header.frame_id, kAnsiValue) << "\n";
-        ss << "           位置: " << odomPoseText(cached.local_odom) << "\n";
-        ss << "           速度: " << odomVelText(cached.local_odom) << "\n";
+        ss << "           "
+           << (state.localization_mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL
+                   ? "外部定位源（全局）话题: "
+                   : "外部定位源（重定位）话题: ")
+           << topicValueText(topics.relocalization_topic) << "\n";
     }
-    else
+
+    bool has_printed_publish_title = false;
+    if (shouldPrintLocalOdom(state.localization_mode))
     {
-        ss << colorText("等待数据...", kAnsiWarn) << "\n";
+        ss << colorText(" 发布话题  ", kAnsiLabel)
+           << "局部odom话题: " << topicValueText(topics.local_odom_topic) << "\n";
+        has_printed_publish_title = true;
+    }
+    if (shouldPrintGlobalOdom(state.localization_mode))
+    {
+        ss << (has_printed_publish_title ? "           " : colorText(" 发布话题  ", kAnsiLabel))
+           << "全局odom话题: " << topicValueText(topics.global_odom_topic) << "\n";
+    }
+
+    ss << colorText(" 基本信息  ", kAnsiLabel)
+       << "外部定位源 = " << colorText(sourceName(state.external_source), kAnsiValue)
+       << "  状态 = " << okText(state.odometry_valid)
+       << "  频率 = " << colorText(std::to_string(static_cast<int>(state.odometry_update_hz + 0.5f)) + " Hz", kAnsiValue)
+       << "\n";
+
+    ss << "           "
+       << "定位模式 = " << coloredModeName(state.localization_mode)
+       << "  重定位状态 = " << okText(state.relocalization_valid)
+       << "\n";
+
+    if (shouldPrintLocalOdom(state.localization_mode))
+    {
+        ss << colorText(" 局部odom  ", kAnsiLabel);
+        if (!state.local_odom.header.stamp.isZero())
+        {
+            ss << "frame: " << odomFrameText(state.local_odom) << "\n";
+            ss << "           位置 : " << odomPositionText(state.local_odom) << "\n";
+            ss << "           速度 : " << odomVelText(state.local_odom) << "\n";
+            ss << "           姿态 : " << odomAttitudeText(state.local_odom) << "\n";
+        }
+        else
+        {
+            ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
+        }
+    }
+
+    if (shouldPrintGlobalOdom(state.localization_mode))
+    {
+        ss << colorText(" 全局odom  ", kAnsiLabel);
+        if (!state.global_odom.header.stamp.isZero())
+        {
+            ss << "frame: " << odomFrameText(state.global_odom) << "\n";
+            ss << "           位置 : " << odomPositionText(state.global_odom) << "\n";
+            ss << "           速度 : " << odomVelText(state.global_odom) << "\n";
+            ss << "           姿态 : " << odomAttitudeText(state.global_odom) << "\n";
+        }
+        else
+        {
+            ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
+        }
     }
 
     return ss.str();
@@ -182,19 +359,13 @@ void stateCallback(const sunray_msgs::OdomState::ConstPtr &msg, const int agent_
     std::lock_guard<std::mutex> lock(g_mutex);
     CachedState &cached = g_states[agent_id];
     cached.state = *msg;
+    cached.has_state = true;
     cached.receive_time = ros::Time::now();
-}
-
-void localOdomCallback(const nav_msgs::Odometry::ConstPtr &msg, const int agent_id)
-{
-    std::lock_guard<std::mutex> lock(g_mutex);
-    CachedState &cached = g_states[agent_id];
-    cached.local_odom = *msg;
-    cached.has_local = true;
 }
 
 void printPanel(const ros::TimerEvent &,
                 const std::vector<std::string> &agent_keys,
+                const std::vector<AgentTopics> &agent_topics,
                 const double stale_timeout)
 {
     std::map<int, CachedState> states;
@@ -219,12 +390,15 @@ void printPanel(const ros::TimerEvent &,
         const std::string &key = (id >= 1 && id <= static_cast<int>(agent_keys.size()))
                                      ? agent_keys[static_cast<size_t>(id - 1)]
                                      : "agent" + std::to_string(id);
-        if ((now - item.second.receive_time).toSec() > stale_timeout)
+        const AgentTopics topics = (id >= 1 && id <= static_cast<int>(agent_topics.size()))
+                                       ? agent_topics[static_cast<size_t>(id - 1)]
+                                       : buildAgentTopics(key, SourceConfig{});
+        if (item.second.has_state && (now - item.second.receive_time).toSec() > stale_timeout)
         {
             std::cout << colorText(key + " 状态超时", kAnsiBad) << "\n";
             continue;
         }
-        std::cout << buildPanel(key, item.second) << "\n";
+        std::cout << buildPanel(key, topics, item.second);
     }
     std::cout.flush();
 }
@@ -238,39 +412,56 @@ int main(int argc, char **argv)
 
     std::string agent_name = "uav";
     int agent_num = 1;
-    double print_hz = 2.0;
+    int source_id = 3;
+    std::string config_yamlfile_path;
+    double print_hz = 5.0;
     double stale_timeout = 1.0;
     nh.param("agent_name", agent_name, agent_name);
     nh.param("agent_num", agent_num, agent_num);
+    nh.param("source_id", source_id, source_id);
+    nh.param("config_yamlfile_path", config_yamlfile_path,
+             std::string(ros::package::getPath("localization_fusion") + "/config/localization_sources.yaml"));
     nh.param("print_hz", print_hz, print_hz);
     nh.param("stale_timeout", stale_timeout, stale_timeout);
 
+    SourceConfig source_config;
+    try
+    {
+        source_config = load_config_from_yaml(config_yamlfile_path, source_id);
+    }
+    catch (const std::exception &e)
+    {
+        ROS_ERROR("localization_fusion_monitor failed to load config: %s", e.what());
+        return 1;
+    }
+
     const int num = std::max(1, agent_num);
     std::vector<std::string> agent_keys;
+    std::vector<AgentTopics> agent_topics;
     std::vector<ros::Subscriber> subs;
     agent_keys.reserve(static_cast<size_t>(num));
-    subs.reserve(static_cast<size_t>(num * 3));
+    agent_topics.reserve(static_cast<size_t>(num));
+    subs.reserve(static_cast<size_t>(num));
 
     for (int id = 1; id <= num; ++id)
     {
         const std::string key = sunray_common::normalize_agent_key(agent_name + std::to_string(id));
+        const AgentTopics topics = buildAgentTopics(key, source_config);
         agent_keys.push_back(key);
+        agent_topics.push_back(topics);
+        g_states[id] = CachedState{};
 
         subs.push_back(nh.subscribe<sunray_msgs::OdomState>(
-            key + "/sunray/localization/odom_state", 10,
+            topics.odom_state_topic, 10,
             [id](const sunray_msgs::OdomState::ConstPtr &msg) { stateCallback(msg, id); }));
 
-        subs.push_back(nh.subscribe<nav_msgs::Odometry>(
-            key + "/sunray/localization/local_odom", 10,
-            [id](const nav_msgs::Odometry::ConstPtr &msg) { localOdomCallback(msg, id); }));
-
-        ROS_INFO("localization_fusion_monitor subscribe: %s", (key + "/sunray/localization/[odom_state|local_odom]").c_str());
+        ROS_INFO("localization_fusion_monitor subscribe: %s", topics.odom_state_topic.c_str());
     }
 
     ros::Timer print_timer = nh.createTimer(
         ros::Duration(1.0 / std::max(0.1, print_hz)),
-        [&agent_keys, stale_timeout](const ros::TimerEvent &e) {
-            printPanel(e, agent_keys, stale_timeout);
+        [&agent_keys, &agent_topics, stale_timeout](const ros::TimerEvent &e) {
+            printPanel(e, agent_keys, agent_topics, stale_timeout);
         });
 
     ros::spin();

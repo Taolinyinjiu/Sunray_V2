@@ -58,7 +58,7 @@ class LocalizationFusion {
     对于持续输入重定位的模式，比如mid360使用点云匹配先验地图，得到持续的global输入，此时我们将tf直接在relocalization_callback进行更新，因为他是持续发布的
     */
     void odometry_callback(const nav_msgs::OdometryConstPtr& msg);  // 里程计输入
-    void relocalization_callback(const nav_msgs::OdometryConstPtr& msg);  // 重定位输入：local 在 global 下的位姿（global->world）
+    void relocalization_callback(const nav_msgs::OdometryConstPtr& msg);  // 重定位输入：T_global_base，并结合 T_local_base 反推 T_global_local = T_global_base * inverse(T_local_base)
     void healthtimer_callback(const ros::TimerEvent &e);  // 周期检查 local/global 是否收到新数据,判断是否超时,更新local_odom_valid/global_odom_valid,发布 odom_state
 
     // ---- 发布相关----
@@ -80,7 +80,7 @@ class LocalizationFusion {
     void publish_global_odom_from_local(const nav_msgs::Odometry& msg);  // 当global由local推导时，在local的回调中使用这个函数发布global
 
     // ------TF 广播相关-----
-    void broadcast_local_to_base_tf(const nav_msgs::Odometry& local_odom);  // 发布 sunray_local -> base_link
+    void broadcast_local_to_base_tf(const nav_msgs::Odometry& local_odom);  // 发布 {agent}/sunray_local -> {agent}/base_link
 
   private:
     // ---------------- ROS 相关参数 ----------------
@@ -112,7 +112,7 @@ class LocalizationFusion {
     std::string local_odometry_topic_{"${agent_key}/sunray/localization/local_odom"};
     std::string odom_state_topic_{"${agent_key}/sunray/localization/odom_state"};
 
-    // 输出 frame 约定：sunray_global -> world -> sunray_local -> base_link
+    // 输出 frame 约定：world -> {agent}/sunray_global -> {agent}/sunray_local -> {agent}/base_link
     std::string global_frame_id_{"sunray_global"};
     std::string world_frame_id_{"world"};
     std::string local_frame_id_{"sunray_local"};
@@ -121,7 +121,8 @@ class LocalizationFusion {
     // 线程锁,在实现过程中注意到这个线程锁没有使用，先注释掉，如果后续测试过程中发现需要加入提高性能，再接入
     // mutable std::mutex mutex_;
 
-    nav_msgs::Odometry last_odometry_data_;        // 最新的odometry数据
+    nav_msgs::Odometry last_odometry_data_;        // 最新发布的local_odom数据
+    nav_msgs::Odometry last_global_odometry_data_; // 最新发布的global_odom数据
     nav_msgs::Odometry last_relocalization_data_;  // 最新的重定位数据
 
     // 里程计数据时间戳
@@ -138,9 +139,9 @@ class LocalizationFusion {
     std::deque<double> hz_stamps_;  // 滑动窗口时间戳，用于频率估计
 
     // ------tf变换----
-    geometry_msgs::TransformStamped global_to_world_tf_;  // sunray_global -> world
-    geometry_msgs::TransformStamped world_to_local_tf_;   // world -> sunray_local
-    geometry_msgs::TransformStamped local_to_base_tf_;    // sunray_local -> base_link
+    geometry_msgs::TransformStamped world_to_global_tf_;  // world -> {agent}/sunray_global
+    geometry_msgs::TransformStamped global_to_local_tf_;  // {agent}/sunray_global -> {agent}/sunray_local
+    geometry_msgs::TransformStamped local_to_base_tf_;    // {agent}/sunray_local -> {agent}/base_link
 };
 
 // clang-format on

@@ -75,31 +75,21 @@ add_dependencies(localization_fusion_node
   ${catkin_EXPORTED_TARGETS}
 )
 
-# Monitor node: terminal panel for single-agent localization state
+# Monitor node: terminal panel for one or more localization_fusion agents
 add_executable(localization_fusion_monitor_node
   src/tools/localization_fusion_monitor_node.cpp
+  src/localization_fusion_utils.cpp
 )
 target_link_libraries(localization_fusion_monitor_node
   ${catkin_LIBRARIES}
+  yaml-cpp
 )
 add_dependencies(localization_fusion_monitor_node
   ${${PROJECT_NAME}_EXPORTED_TARGETS}
   ${catkin_EXPORTED_TARGETS}
 )
 
-# Swarm monitor node: terminal panel for multi-agent heterogeneous swarm
-add_executable(localization_fusion_swarm_monitor_node
-  src/tools/localization_fusion_swarm_monitor_node.cpp
-)
-target_link_libraries(localization_fusion_swarm_monitor_node
-  ${catkin_LIBRARIES}
-)
-add_dependencies(localization_fusion_swarm_monitor_node
-  ${${PROJECT_NAME}_EXPORTED_TARGETS}
-  ${catkin_EXPORTED_TARGETS}
-)
-
-install(TARGETS localization_fusion_core localization_fusion_node localization_fusion_monitor_node localization_fusion_swarm_monitor_node
+install(TARGETS localization_fusion_core localization_fusion_node localization_fusion_monitor_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

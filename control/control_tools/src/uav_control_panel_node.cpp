@@ -799,15 +799,7 @@ class UAVControlPanel : public QMainWindow
             break;
 
         case sunray_msgs::UAVControlCMD::HOVER:
-            if (!has_odom)
-            {
-                break;
-            }
-            goal.valid = true;
-            goal.x = odom.pose.pose.position.x;
-            goal.y = odom.pose.pose.position.y;
-            goal.z = odom.pose.pose.position.z;
-            goal.yaw = current_yaw;
+            // HOVER 会由控制器锁定当前点，但面板不把它显示成新的目标点，避免误解为持续发送点位。
             goal.label = "HOVER";
             break;
 
