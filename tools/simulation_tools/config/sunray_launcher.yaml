@@ -1,6 +1,161 @@
 external_workspaces:
   - "~/pengyu_sim"
 
+quick_launch_groups:
+  - title: "单无人机控制联调"
+    description: "pengyu_sim 单机 UAV 仿真 + 定位融合 + UAV 控制 + UAV 控制面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "launch_rviz:=false"
+        delay_sec: 2.0
+      - ref: "定位融合模块/无人机定位融合"
+        args:
+          - "source_id:=5"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        delay_sec: 2.0
+      - ref: "无人机控制模块/单机无人机控制"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "enable_rviz:=true"
+        delay_sec: 2.0
+      - ref: "无人机控制模块/无人机控制面板"
+
+  - title: "单无人机规划验证"
+    description: "地图/局部点云 + 单机 UAV 仿真 + 定位 + 控制 + diff 规划"
+    items:
+      - title: "全局点云发布"
+        package: "map_generator"
+        launch: "map_publisher.launch"
+        args:
+          - "launch_rviz:=false"
+        delay_sec: 0.5
+      - title: "局部点云渲染"
+        package: "local_sensing"
+        launch: "local_sensing_mid360.launch"
+        delay_sec: 0.5
+      - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "launch_rviz:=false"
+        delay_sec: 1.0
+      - ref: "定位融合模块/无人机定位融合"
+        args:
+          - "source_id:=5"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        delay_sec: 1.0
+      - ref: "无人机控制模块/单机无人机控制"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "enable_rviz:=true"
+        delay_sec: 1.0
+      - ref: "规划模块/Sunray Planning Diff"
+        args:
+          - "planner_type:=diff"
+          - "uav_name:=uav"
+          - "uav_id:=1"
+          - "enable_rviz:=false"
+          - "enable_rviz_bridge:=true"
+
+  - title: "6机无人机集群仿真"
+    description: "pengyu_sim 6机 UAV 仿真 + 集群定位 + 集群控制 + UAV swarm 控制 + 集群面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/集群无人机动力学仿真"
+        args:
+          - "agent_name:=uav"
+          - "swarm_num:=6"
+          - "launch_rviz:=false"
+          - "enable_status_print:=true"
+        delay_sec: 1.5
+      - ref: "定位融合模块/集群无人机定位融合"
+        args:
+          - "source_id:=5"
+          - "agent_name:=uav"
+          - "agent_num:=6"
+        delay_sec: 1.0
+      - ref: "无人机控制模块/集群无人机控制"
+        args:
+          - "agent_name:=uav"
+          - "agent_num:=6"
+          - "enable_monitor:=true"
+        delay_sec: 1.0
+      - ref: "无人机集群控制模块/无人机集群控制仿真"
+        args:
+          - "agent_name:=uav"
+          - "swarm_num:=6"
+          - "enable_monitor:=true"
+          - "enable_rviz:=true"
+        delay_sec: 1.0
+      - ref: "无人机集群控制模块/集群控制面板"
+
+  - title: "单无人车控制联调"
+    description: "pengyu_sim 单车 UGV 仿真 + 定位融合 + UGV 控制 + UGV 控制面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/无人车动力学仿真"
+        args:
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+          - "swarm_num:=1"
+          - "drive_type:=mecanum"
+        delay_sec: 1.0
+      - ref: "定位融合模块/无人车定位融合"
+        args:
+          - "source_id:=5"
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+        delay_sec: 1.0
+      - ref: "无人车控制模块/单车无人车控制"
+        args:
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+          - "enable_monitor:=true"
+          - "enable_rviz_visualization:=true"
+          - "enable_rviz:=true"
+        delay_sec: 1.0
+      - ref: "无人车控制模块/无人车控制面板"
+
+  - title: "6车无人车集群仿真"
+    description: "pengyu_sim 6车 UGV 仿真 + 集群定位 + 集群控制 + UGV swarm 控制 + 集群面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/集群无人车动力学仿真"
+        args:
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+          - "swarm_num:=6"
+          - "drive_type:=mecanum"
+        delay_sec: 1.5
+      - ref: "定位融合模块/集群无人车定位融合"
+        args:
+          - "source_id:=5"
+          - "agent_name:=ugv"
+          - "agent_num:=6"
+        delay_sec: 1.0
+      - ref: "无人车控制模块/集群无人车控制"
+        args:
+          - "agent_name:=ugv"
+          - "swarm_num:=6"
+          - "enable_monitor:=true"
+          - "enable_rviz_visualization:=false"
+          - "enable_rviz:=false"
+        delay_sec: 1.0
+      - ref: "无人车集群控制模块/无人车集群控制仿真"
+        args:
+          - "agent_name:=ugv"
+          - "swarm_num:=6"
+          - "enable_monitor:=true"
+          - "enable_rviz:=true"
+        delay_sec: 1.0
+      - ref: "无人车集群控制模块/集群控制面板"
+
 launch_groups:
   - name: "状态监控"
     items:

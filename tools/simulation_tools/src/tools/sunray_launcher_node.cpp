@@ -52,6 +52,7 @@ namespace
 {
 
 constexpr int kLaunchIndexRole = Qt::UserRole + 1;
+constexpr int kQuickLaunchIndexRole = Qt::UserRole + 2;
 constexpr int kPidFileWarmupMsec = 3000;
 
 struct LaunchItem
@@ -68,6 +69,24 @@ struct LaunchGroup
 {
     std::string name;
     std::vector<int> item_indices;
+};
+
+struct QuickLaunchStep
+{
+    std::string ref;
+    std::string title;
+    std::string package;
+    std::string launch;
+    std::vector<std::string> args;
+    double delay_sec{0.0};
+    int linked_launch_index{-1};
+};
+
+struct QuickLaunchGroup
+{
+    std::string title;
+    std::string description;
+    std::vector<QuickLaunchStep> steps;
 };
 
 struct ExternalWorkspace
@@ -89,6 +108,15 @@ struct LaunchRuntime
     QDateTime start_time;
     bool running{false};
     bool stop_requested{false};
+};
+
+struct QuickLaunchRuntime
+{
+    LaunchRuntime terminal;
+    QStringList step_script_paths;
+    QStringList step_titles;
+    std::vector<int> linked_launch_indices;
+    bool running{false};
 };
 
 struct CpuSample
@@ -419,6 +447,21 @@ std::string readFirstLine(const QString &path)
     return line;
 }
 
+std::vector<pid_t> readPidListFile(const QString &path)
+{
+    std::ifstream file(path.toStdString());
+    std::vector<pid_t> pids;
+    long pid = 0;
+    while (file >> pid)
+    {
+        if (pid > 0)
+        {
+            pids.push_back(static_cast<pid_t>(pid));
+        }
+    }
+    return pids;
+}
+
 QString sanitizeFileToken(QString text)
 {
     text.replace("/", "_");
@@ -467,6 +510,7 @@ public:
 
         loadExternalWorkspacesFromRosParam();
         loadLaunchItemsFromRosParam();
+        loadQuickLaunchGroupsFromRosParam();
         buildUi();
 
         refresh_timer_ = new QTimer(this);
@@ -631,6 +675,143 @@ private:
         }
     }
 
+    void loadQuickLaunchGroupsFromRosParam()
+    {
+        XmlRpc::XmlRpcValue groups;
+        if (!private_nh_.getParam("quick_launch_groups", groups) ||
+            groups.getType() != XmlRpc::XmlRpcValue::TypeArray)
+        {
+            return;
+        }
+
+        for (int i = 0; i < groups.size(); ++i)
+        {
+            XmlRpc::XmlRpcValue group_value = groups[i];
+            if (group_value.getType() != XmlRpc::XmlRpcValue::TypeStruct ||
+                !group_value.hasMember("title") ||
+                !group_value.hasMember("items"))
+            {
+                continue;
+            }
+
+            QuickLaunchGroup group;
+            group.title = xmlRpcToString(group_value["title"]);
+            if (group_value.hasMember("description"))
+            {
+                group.description = xmlRpcToString(group_value["description"]);
+            }
+
+            XmlRpc::XmlRpcValue items = group_value["items"];
+            if (items.getType() != XmlRpc::XmlRpcValue::TypeArray)
+            {
+                continue;
+            }
+
+            for (int j = 0; j < items.size(); ++j)
+            {
+                XmlRpc::XmlRpcValue item_value = items[j];
+                if (item_value.getType() != XmlRpc::XmlRpcValue::TypeStruct)
+                {
+                    continue;
+                }
+
+                QuickLaunchStep step;
+                if (item_value.hasMember("ref"))
+                {
+                    step.ref = xmlRpcToString(item_value["ref"]);
+                }
+                if (item_value.hasMember("title"))
+                {
+                    step.title = xmlRpcToString(item_value["title"]);
+                }
+                if (item_value.hasMember("package"))
+                {
+                    step.package = xmlRpcToString(item_value["package"]);
+                }
+                if (item_value.hasMember("launch"))
+                {
+                    step.launch = xmlRpcToString(item_value["launch"]);
+                }
+                if (item_value.hasMember("args"))
+                {
+                    step.args = xmlRpcToStringList(item_value["args"]);
+                }
+                if (item_value.hasMember("delay_sec") &&
+                    (item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeDouble ||
+                     item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeInt))
+                {
+                    step.delay_sec = static_cast<double>(item_value["delay_sec"]);
+                }
+
+                resolveQuickLaunchStep(step);
+                if (!step.package.empty() && !step.launch.empty())
+                {
+                    group.steps.push_back(step);
+                }
+            }
+
+            if (!group.title.empty() && !group.steps.empty())
+            {
+                quick_launch_groups_.push_back(group);
+            }
+        }
+    }
+
+    void resolveQuickLaunchStep(QuickLaunchStep &step) const
+    {
+        if (step.ref.empty())
+        {
+            return;
+        }
+
+        const int idx = findLaunchItemByRef(step.ref);
+        if (idx < 0)
+        {
+            ROS_WARN("simulation_tools: quick launch ref not found: %s", step.ref.c_str());
+            return;
+        }
+
+        const LaunchItem &item = launch_items_[static_cast<size_t>(idx)];
+        step.linked_launch_index = idx;
+        if (step.title.empty())
+        {
+            step.title = item.title;
+        }
+        if (step.package.empty())
+        {
+            step.package = item.package;
+        }
+        if (step.launch.empty())
+        {
+            step.launch = item.launch;
+        }
+        if (step.args.empty())
+        {
+            step.args = item.args;
+        }
+    }
+
+    int findLaunchItemByRef(const std::string &ref) const
+    {
+        const size_t slash_pos = ref.find('/');
+        if (slash_pos == std::string::npos)
+        {
+            return -1;
+        }
+
+        const std::string group_name = ref.substr(0, slash_pos);
+        const std::string title = ref.substr(slash_pos + 1);
+        for (int i = 0; i < static_cast<int>(launch_items_.size()); ++i)
+        {
+            const LaunchItem &item = launch_items_[static_cast<size_t>(i)];
+            if (item.group == group_name && item.title == title)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     void buildUi()
     {
         setWindowTitle("Sunray Launcher");
@@ -675,7 +856,7 @@ private:
         left_layout->addWidget(header);
 
         auto *splitter = new QSplitter(Qt::Vertical);
-        splitter->addWidget(buildLaunchTree());
+        splitter->addWidget(buildLaunchArea());
         splitter->addWidget(buildDetailPanel());
         splitter->addWidget(buildInfoPanel());
         splitter->setStretchFactor(0, 5);
@@ -714,6 +895,70 @@ private:
         )");
 
         selectFirstLaunchItem();
+    }
+
+    QWidget *buildLaunchArea()
+    {
+        auto *container = new QWidget();
+        auto *layout = new QVBoxLayout(container);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(8);
+        layout->addWidget(buildQuickLaunchPanel());
+        layout->addWidget(buildLaunchTree(), 1);
+        return container;
+    }
+
+    QWidget *buildQuickLaunchPanel()
+    {
+        auto *box = new QGroupBox("快速启动");
+        auto *layout = new QVBoxLayout(box);
+
+        quick_launch_tree_ = new QTreeWidget();
+        quick_launch_tree_->setColumnCount(4);
+        quick_launch_tree_->setHeaderLabels(QStringList() << "场景" << "状态" << "步骤" << "说明");
+        quick_launch_tree_->setRootIsDecorated(false);
+        quick_launch_tree_->setIndentation(0);
+        quick_launch_tree_->setItemsExpandable(false);
+        quick_launch_tree_->setExpandsOnDoubleClick(false);
+        quick_launch_tree_->setAllColumnsShowFocus(true);
+        quick_launch_tree_->setMinimumHeight(130);
+        quick_launch_tree_->setMaximumHeight(190);
+        quick_launch_tree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        quick_launch_tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        quick_launch_tree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        quick_launch_tree_->header()->setSectionResizeMode(3, QHeaderView::Stretch);
+
+        for (int i = 0; i < static_cast<int>(quick_launch_groups_.size()); ++i)
+        {
+            const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(i)];
+            auto *item = new QTreeWidgetItem(quick_launch_tree_);
+            item->setText(0, QString::fromStdString(group.title));
+            item->setText(1, "未运行");
+            item->setText(2, QString("%1 个 launch").arg(group.steps.size()));
+            item->setText(3, QString::fromStdString(group.description));
+            item->setData(0, kQuickLaunchIndexRole, i);
+            quick_item_by_index_[i] = item;
+        }
+
+        connect(quick_launch_tree_, &QTreeWidget::currentItemChanged, this,
+                [this](QTreeWidgetItem *, QTreeWidgetItem *) { updateButtons(); });
+
+        auto *button_row = new QHBoxLayout();
+        quick_start_btn_ = new QPushButton("启动快速场景");
+        quick_stop_btn_ = new QPushButton("停止快速场景");
+        quick_stop_btn_->setObjectName("stopButton");
+        auto *hint = new QLabel("使用 Ubuntu Terminal 多标签启动：每个 launch 一个 tab，按配置顺序延时启动");
+        hint->setObjectName("mutedLabel");
+        button_row->addWidget(hint, 1);
+        button_row->addWidget(quick_start_btn_);
+        button_row->addWidget(quick_stop_btn_);
+
+        connect(quick_start_btn_, &QPushButton::clicked, this, [this]() { startSelectedQuickLaunch(); });
+        connect(quick_stop_btn_, &QPushButton::clicked, this, [this]() { stopSelectedQuickLaunch(); });
+
+        layout->addWidget(quick_launch_tree_);
+        layout->addLayout(button_row);
+        return box;
     }
 
     QWidget *buildLaunchTree()
@@ -931,8 +1176,168 @@ private:
         const int idx = selectedLaunchIndex();
         if (idx >= 0)
         {
+            const int quick_idx = findRunningQuickLaunchForLinkedLaunch(idx);
+            if (quick_idx >= 0 && launch_runtimes_.find(idx) == launch_runtimes_.end())
+            {
+                stopQuickLaunch(quick_idx);
+                return;
+            }
             stopLaunch(idx);
         }
+    }
+
+    int selectedQuickLaunchIndex() const
+    {
+        if (!quick_launch_tree_ || !quick_launch_tree_->currentItem())
+        {
+            return -1;
+        }
+        const QVariant value = quick_launch_tree_->currentItem()->data(0, kQuickLaunchIndexRole);
+        return value.isValid() ? value.toInt() : -1;
+    }
+
+    void startSelectedQuickLaunch()
+    {
+        const int idx = selectedQuickLaunchIndex();
+        if (idx >= 0)
+        {
+            startQuickLaunch(idx);
+        }
+    }
+
+    void stopSelectedQuickLaunch()
+    {
+        const int idx = selectedQuickLaunchIndex();
+        if (idx >= 0)
+        {
+            stopQuickLaunch(idx);
+        }
+    }
+
+    void startQuickLaunch(const int idx)
+    {
+        if (idx < 0 || idx >= static_cast<int>(quick_launch_groups_.size()))
+        {
+            return;
+        }
+        if (isQuickLaunchRunning(idx))
+        {
+            appendLog("快速启动场景已在运行: " + quick_launch_groups_[static_cast<size_t>(idx)].title);
+            return;
+        }
+        const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(idx)];
+        QuickLaunchRuntime runtime;
+        runtime.terminal.start_time = QDateTime::currentDateTime();
+        runtime.linked_launch_indices = collectLinkedLaunchIndices(group);
+
+        if (!prepareQuickLaunchRuntime(idx, group, runtime))
+        {
+            appendLog("快速启动失败: 无法创建 terminal wrapper。");
+            updateQuickLaunchStatus(idx, "未运行");
+            updateButtons();
+            return;
+        }
+
+        auto *process = new QProcess(this);
+        const QStringList terminal_command = buildQuickTerminalCommand(runtime, group);
+        if (terminal_command.isEmpty())
+        {
+            appendLog("快速启动失败: 没有找到 gnome-terminal，无法使用 Ubuntu Terminal 多标签。");
+            cleanupRuntimeFiles(runtime.terminal);
+            updateQuickLaunchStatus(idx, "未运行");
+            updateButtons();
+            return;
+        }
+
+        process->setProgram(terminal_command.first());
+        process->setArguments(terminal_command.mid(1));
+        connect(process,
+                static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished),
+                this,
+                [this, process, idx](int exit_code, QProcess::ExitStatus exit_status) {
+                    if (exit_code != 0 || exit_status != QProcess::NormalExit)
+                    {
+                        appendLog("快速启动 terminal 异常退出: " +
+                                  quick_launch_groups_[static_cast<size_t>(idx)].title +
+                                  " exit_code=" + std::to_string(exit_code) +
+                                  " status=" + (exit_status == QProcess::NormalExit ? "normal" : "crashed"));
+                    }
+                    quick_terminal_processes_.erase(idx);
+                    process->deleteLater();
+                    updateButtons();
+                });
+
+        quick_launch_runtimes_[idx] = runtime;
+        quick_terminal_processes_[idx] = process;
+        process->start();
+        if (!process->waitForStarted(1500))
+        {
+            appendLog("快速启动失败: " + group.title + "  error=" + process->errorString().toStdString());
+            quick_terminal_processes_.erase(idx);
+            process->deleteLater();
+            cleanupRuntimeFiles(runtime.terminal);
+            updateQuickLaunchStatus(idx, "未运行");
+            updateButtons();
+            return;
+        }
+
+        quick_launch_runtimes_[idx].terminal.terminal_pid = process->processId();
+        quick_launch_runtimes_[idx].terminal.running = true;
+        quick_launch_runtimes_[idx].running = true;
+        updateQuickLaunchStatus(idx, "运行 0s");
+        markLinkedLaunchesRunning(quick_launch_runtimes_[idx], "运行(快速)");
+        appendLog("已使用 Ubuntu Terminal 多标签启动快速场景: " + group.title);
+        updateButtons();
+    }
+
+    std::vector<int> collectLinkedLaunchIndices(const QuickLaunchGroup &group) const
+    {
+        std::vector<int> indices;
+        for (const QuickLaunchStep &step : group.steps)
+        {
+            if (step.linked_launch_index >= 0 &&
+                std::find(indices.begin(), indices.end(), step.linked_launch_index) == indices.end())
+            {
+                indices.push_back(step.linked_launch_index);
+            }
+        }
+        return indices;
+    }
+
+    void markLinkedLaunchesRunning(const QuickLaunchRuntime &runtime, const QString &status)
+    {
+        for (const int linked_idx : runtime.linked_launch_indices)
+        {
+            updateLaunchStatus(linked_idx, status);
+        }
+        updateGroupTabStatus();
+    }
+
+    bool isLaunchActive(const int idx) const
+    {
+        if (isRunning(idx))
+        {
+            return true;
+        }
+
+        return findRunningQuickLaunchForLinkedLaunch(idx) >= 0;
+    }
+
+    int findRunningQuickLaunchForLinkedLaunch(const int linked_idx) const
+    {
+        for (const auto &entry : quick_launch_runtimes_)
+        {
+            if (!isQuickLaunchRunning(entry.first))
+            {
+                continue;
+            }
+            const std::vector<int> &indices = entry.second.linked_launch_indices;
+            if (std::find(indices.begin(), indices.end(), linked_idx) != indices.end())
+            {
+                return entry.first;
+            }
+        }
+        return -1;
     }
 
     void startLaunch(const int idx)
@@ -1131,8 +1536,173 @@ private:
         return true;
     }
 
+    bool prepareQuickLaunchRuntime(const int idx,
+                                   const QuickLaunchGroup &group,
+                                   QuickLaunchRuntime &runtime) const
+    {
+        QDir runtime_dir(QDir::tempPath() + "/sunray_launcher_panel");
+        if (!runtime_dir.exists() && !runtime_dir.mkpath("."))
+        {
+            return false;
+        }
+
+        const QString base_name = QString("quick_%1_%2_%3")
+                                      .arg(idx)
+                                      .arg(QDateTime::currentMSecsSinceEpoch())
+                                      .arg(sanitizeFileToken(QString::fromStdString(group.title)));
+        runtime.terminal.script_path = runtime_dir.filePath(base_name);
+        runtime.terminal.pid_file = runtime_dir.filePath(base_name + ".pid");
+        runtime.terminal.done_file = runtime_dir.filePath(base_name + ".done");
+        runtime.terminal.command = QString("quick_launch:%1").arg(QString::fromStdString(group.title));
+
+        bool has_valid_step = false;
+        int valid_step_index = 0;
+        double start_delay_sec = 0.0;
+        for (size_t i = 0; i < group.steps.size(); ++i)
+        {
+            const QuickLaunchStep &step = group.steps[i];
+            const QString command = buildRoslaunchCommand(step);
+            if (command.isEmpty())
+            {
+                continue;
+            }
+
+            const QString step_script_path = quickStepScriptPath(runtime, valid_step_index);
+            if (!writeQuickStepScript(step_script_path,
+                                      group,
+                                      step,
+                                      command,
+                                      valid_step_index,
+                                      group.steps.size(),
+                                      start_delay_sec))
+            {
+                return false;
+            }
+            runtime.step_script_paths << step_script_path;
+            runtime.step_titles << QString::fromStdString(step.title.empty() ? step.package : step.title);
+            has_valid_step = true;
+            ++valid_step_index;
+            start_delay_sec += std::max(0.0, step.delay_sec);
+        }
+
+        if (!has_valid_step)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    QString quickStepScriptPath(const QuickLaunchRuntime &runtime, const int step_index) const
+    {
+        return QString("%1_step_%2.sh").arg(runtime.terminal.script_path).arg(step_index);
+    }
+
+    bool writeQuickStepScript(const QString &path,
+                              const QuickLaunchGroup &group,
+                              const QuickLaunchStep &step,
+                              const QString &command,
+                              const int step_index,
+                              const size_t step_count,
+                              const double start_delay_sec) const
+    {
+        std::ofstream script(path.toStdString());
+        if (!script)
+        {
+            return false;
+        }
+
+        const QString step_title = QString::fromStdString(step.title.empty() ? step.package : step.title);
+        script << "#!/usr/bin/env bash\n";
+        script << "set +e\n";
+        if (step_index == 0)
+        {
+            script << "rm -f " << shellQuote(path.section("_step_", 0, 0) + ".pid").toStdString() << " "
+                   << shellQuote(path.section("_step_", 0, 0) + ".done").toStdString() << "\n";
+        }
+        script << "echo \"$$\" >> " << shellQuote(path.section("_step_", 0, 0) + ".pid").toStdString() << "\n";
+        if (start_delay_sec > 0.0)
+        {
+            script << "sleep " << start_delay_sec << "\n";
+        }
+        for (const QString &line : buildExternalWorkspaceEnvironmentLines())
+        {
+            script << line.toStdString() << "\n";
+        }
+        script << "clear\n";
+        script << "echo " << shellQuote("============================================================").toStdString() << "\n";
+        script << "echo " << shellQuote(QString("[Sunray] 快速启动场景: %1").arg(QString::fromStdString(group.title))).toStdString() << "\n";
+        script << "echo " << shellQuote(QString("[Sunray] 当前 Terminal Tab %1/%2: %3")
+                                            .arg(step_index + 1)
+                                            .arg(step_count)
+                                            .arg(step_title))
+                                      .toStdString()
+               << "\n";
+        script << "echo " << shellQuote("[Sunray] Command: " + command).toStdString() << "\n";
+        script << "echo " << shellQuote("[Sunray] 停止整组: 使用启动器的“停止快速场景”按钮").toStdString() << "\n";
+        script << "echo " << shellQuote("============================================================").toStdString() << "\n";
+        script << "trap 'exit 130' INT TERM HUP\n";
+        script << command.toStdString() << "\n";
+        script << "exit_code=$?\n";
+        script << "trap - INT TERM HUP\n";
+        script << "echo \"$exit_code\" >> " << shellQuote(path.section("_step_", 0, 0) + ".done").toStdString() << "\n";
+        script << "echo \"[Sunray] roslaunch exited with code ${exit_code}. Press Enter to keep/close this tab.\"\n";
+        script << "read\n";
+        script.close();
+
+        return ::chmod(path.toStdString().c_str(), 0755) == 0;
+    }
+
+    QString buildRoslaunchCommand(const QuickLaunchStep &step) const
+    {
+        const std::string launch_file = resolveLaunchFilePath(step.package, step.launch);
+        if (!QFileInfo::exists(QString::fromStdString(launch_file)))
+        {
+            return "";
+        }
+
+        QStringList step_args;
+        for (const std::string &arg : step.args)
+        {
+            step_args << QString::fromStdString(arg);
+        }
+        return shellJoin(QStringList() << "roslaunch" << buildRoslaunchArguments(launch_file, step_args));
+    }
+
+    QStringList buildQuickTerminalCommand(const QuickLaunchRuntime &runtime,
+                                          const QuickLaunchGroup &group) const
+    {
+        if (QStandardPaths::findExecutable("gnome-terminal").isEmpty())
+        {
+            return {};
+        }
+
+        QStringList command;
+        command << "gnome-terminal";
+
+        for (int i = 0; i < runtime.step_script_paths.size(); ++i)
+        {
+            const QString title = i < runtime.step_titles.size()
+                                      ? runtime.step_titles[i]
+                                      : QString("launch_%1").arg(i + 1);
+            command << (i == 0 ? "--window" : "--tab")
+                    << "--title" << title.left(28)
+                    << "--command" << QString("bash -lc %1").arg(shellQuote(runtime.step_script_paths[i]));
+        }
+        return command;
+    }
+
     void writeExternalWorkspaceEnvironment(std::ofstream &script) const
     {
+        const QStringList lines = buildExternalWorkspaceEnvironmentLines();
+        for (const QString &line : lines)
+        {
+            script << line.toStdString() << "\n";
+        }
+    }
+
+    QStringList buildExternalWorkspaceEnvironmentLines() const
+    {
+        QStringList lines;
         QStringList source_roots;
         QStringList devel_paths;
         for (const ExternalWorkspace &workspace : external_workspaces_)
@@ -1148,23 +1718,19 @@ private:
         devel_paths = uniquePathList(devel_paths);
         if (source_roots.isEmpty() && devel_paths.isEmpty())
         {
-            return;
+            return lines;
         }
 
         const QString ros_package_path = source_roots.join(":");
         if (!ros_package_path.isEmpty())
         {
-            script << "export ROS_PACKAGE_PATH="
-                   << shellEnvPrepend(source_roots, "ROS_PACKAGE_PATH").toStdString()
-                   << "\n";
+            lines << "export ROS_PACKAGE_PATH=" + shellEnvPrepend(source_roots, "ROS_PACKAGE_PATH");
         }
 
         const QString cmake_prefix_path = devel_paths.join(":");
         if (!cmake_prefix_path.isEmpty())
         {
-            script << "export CMAKE_PREFIX_PATH="
-                   << shellEnvPrepend(devel_paths, "CMAKE_PREFIX_PATH").toStdString()
-                   << "\n";
+            lines << "export CMAKE_PREFIX_PATH=" + shellEnvPrepend(devel_paths, "CMAKE_PREFIX_PATH");
 
             QStringList bin_paths;
             QStringList lib_paths;
@@ -1181,15 +1747,11 @@ private:
             }
             if (!bin_paths.isEmpty())
             {
-                script << "export PATH="
-                       << shellEnvPrepend(bin_paths, "PATH").toStdString()
-                       << "\n";
+                lines << "export PATH=" + shellEnvPrepend(bin_paths, "PATH");
             }
             if (!lib_paths.isEmpty())
             {
-                script << "export LD_LIBRARY_PATH="
-                       << shellEnvPrepend(lib_paths, "LD_LIBRARY_PATH").toStdString()
-                       << "\n";
+                lines << "export LD_LIBRARY_PATH=" + shellEnvPrepend(lib_paths, "LD_LIBRARY_PATH");
             }
 
             QStringList python_paths;
@@ -1208,13 +1770,12 @@ private:
             }
             if (!python_paths.isEmpty())
             {
-                script << "export PYTHONPATH="
-                       << shellEnvPrepend(python_paths, "PYTHONPATH").toStdString()
-                       << "\n";
+                lines << "export PYTHONPATH=" + shellEnvPrepend(python_paths, "PYTHONPATH");
             }
         }
 
-        script << "rospack profile >/dev/null 2>&1 || true\n";
+        lines << "rospack profile >/dev/null 2>&1 || true";
+        return lines;
     }
 
     QStringList buildTerminalCommand(LaunchRuntime &runtime) const
@@ -1325,6 +1886,30 @@ private:
         return pid_file_is_still_warming_up;
     }
 
+    bool isQuickLaunchRunning(const int idx) const
+    {
+        const auto it = quick_launch_runtimes_.find(idx);
+        if (it == quick_launch_runtimes_.end() || !it->second.running)
+        {
+            return false;
+        }
+
+        const std::vector<pid_t> pids = readPidListFile(it->second.terminal.pid_file);
+        for (const pid_t pid : pids)
+        {
+            if (isProcessAlive(pid))
+            {
+                return true;
+            }
+        }
+
+        const bool pid_file_is_still_warming_up =
+            pids.empty() &&
+            it->second.terminal.start_time.msecsTo(QDateTime::currentDateTime()) < kPidFileWarmupMsec &&
+            !QFileInfo::exists(it->second.terminal.done_file);
+        return pid_file_is_still_warming_up;
+    }
+
     void stopLaunch(const int idx)
     {
         const auto it = launch_runtimes_.find(idx);
@@ -1351,6 +1936,29 @@ private:
         }
     }
 
+    void stopQuickLaunch(const int idx)
+    {
+        const auto it = quick_launch_runtimes_.find(idx);
+        if (it == quick_launch_runtimes_.end())
+        {
+            return;
+        }
+
+        appendLog("停止快速场景: " + quick_launch_groups_[static_cast<size_t>(idx)].title);
+        const std::vector<pid_t> pids = readPidListFile(it->second.terminal.pid_file);
+        for (const pid_t pid : pids)
+        {
+            ::kill(-pid, SIGINT);
+            ::kill(pid, SIGINT);
+        }
+
+        const auto terminal_it = quick_terminal_processes_.find(idx);
+        if (terminal_it != quick_terminal_processes_.end() && terminal_it->second)
+        {
+            terminal_it->second->terminate();
+        }
+    }
+
     void stopAllLaunches()
     {
         std::vector<int> running;
@@ -1364,6 +1972,19 @@ private:
         for (const int idx : running)
         {
             stopLaunch(idx);
+        }
+
+        std::vector<int> quick_running;
+        for (const auto &entry : quick_launch_runtimes_)
+        {
+            if (isQuickLaunchRunning(entry.first))
+            {
+                quick_running.push_back(entry.first);
+            }
+        }
+        for (const int idx : quick_running)
+        {
+            stopQuickLaunch(idx);
         }
     }
 
@@ -1436,9 +2057,45 @@ private:
             }
         }
 
+        int quick_running_count = 0;
+        std::vector<int> finished_quick_launches;
+        for (auto &entry : quick_launch_runtimes_)
+        {
+            const int idx = entry.first;
+            if (!isQuickLaunchRunning(idx))
+            {
+                if (entry.second.running)
+                {
+                    const std::string exit_code = readFirstLine(entry.second.terminal.done_file);
+                    updateQuickLaunchStatus(idx, "未运行");
+                    markLinkedLaunchesRunning(entry.second, "未运行");
+                    appendLog("快速场景结束: " + quick_launch_groups_[static_cast<size_t>(idx)].title +
+                              (exit_code.empty() ? "" : " exit_code=" + exit_code));
+                    entry.second.running = false;
+                    entry.second.terminal.running = false;
+                    finished_quick_launches.push_back(idx);
+                }
+                continue;
+            }
+
+            ++quick_running_count;
+            const qint64 secs = entry.second.terminal.start_time.secsTo(QDateTime::currentDateTime());
+            updateQuickLaunchStatus(idx, QString("运行 %1s").arg(secs));
+            markLinkedLaunchesRunning(entry.second, "运行(快速)");
+        }
+        for (const int idx : finished_quick_launches)
+        {
+            const auto it = quick_launch_runtimes_.find(idx);
+            if (it != quick_launch_runtimes_.end())
+            {
+                cleanupRuntimeFiles(it->second.terminal);
+                quick_launch_runtimes_.erase(it);
+            }
+        }
+
         summary_label_->setText(QString("配置项: %1  运行中: %2")
                                     .arg(launch_items_.size())
-                                    .arg(running_count));
+                                    .arg(running_count + quick_running_count));
         updateGroupTabStatus();
         updateButtons();
 
@@ -1520,9 +2177,21 @@ private:
     {
         const int idx = selectedLaunchIndex();
         const bool valid = idx >= 0;
-        const bool running = valid && isRunning(idx);
+        const bool running = valid && isLaunchActive(idx);
         start_btn_->setEnabled(valid && !running);
         stop_btn_->setEnabled(running);
+
+        const int quick_idx = selectedQuickLaunchIndex();
+        const bool quick_valid = quick_idx >= 0;
+        const bool quick_running = quick_valid && isQuickLaunchRunning(quick_idx);
+        if (quick_start_btn_)
+        {
+            quick_start_btn_->setEnabled(quick_valid && !quick_running);
+        }
+        if (quick_stop_btn_)
+        {
+            quick_stop_btn_->setEnabled(quick_running);
+        }
     }
 
     void updateLaunchStatus(const int idx, const QString &status)
@@ -1542,12 +2211,29 @@ private:
         }
     }
 
+    void updateQuickLaunchStatus(const int idx, const QString &status)
+    {
+        const auto it = quick_item_by_index_.find(idx);
+        if (it != quick_item_by_index_.end() && it->second)
+        {
+            it->second->setText(1, status);
+            const bool running = status.startsWith("运行");
+            const QColor row_background = running ? QColor(124, 255, 117) : QColor(251, 252, 250);
+            const QColor row_foreground = running ? QColor(5, 55, 24) : QColor(23, 33, 28);
+            for (int column = 0; column < it->second->columnCount(); ++column)
+            {
+                it->second->setBackground(column, row_background);
+                it->second->setForeground(column, row_foreground);
+            }
+        }
+    }
+
     int runningCountForGroup(const LaunchGroup &group) const
     {
         int running_count = 0;
         for (const int idx : group.item_indices)
         {
-            if (isRunning(idx))
+            if (isLaunchActive(idx))
             {
                 ++running_count;
             }
@@ -1601,9 +2287,13 @@ private:
 
     std::vector<LaunchItem> launch_items_;
     std::vector<LaunchGroup> launch_groups_;
+    std::vector<QuickLaunchGroup> quick_launch_groups_;
     std::map<int, QTreeWidgetItem *> item_by_launch_index_;
+    std::map<int, QTreeWidgetItem *> quick_item_by_index_;
     std::map<int, QProcess *> terminal_processes_;
     std::map<int, LaunchRuntime> launch_runtimes_;
+    std::map<int, QProcess *> quick_terminal_processes_;
+    std::map<int, QuickLaunchRuntime> quick_launch_runtimes_;
 
     QTimer *refresh_timer_{nullptr};
     QDateTime last_monitor_refresh_;
@@ -1611,6 +2301,7 @@ private:
 
     LaunchTabWidget *launch_tabs_{nullptr};
     LaunchTabBar *launch_tab_bar_{nullptr};
+    QTreeWidget *quick_launch_tree_{nullptr};
     std::vector<QTreeWidget *> launch_trees_;
     QLabel *summary_label_{nullptr};
     QLabel *selected_title_{nullptr};
@@ -1624,6 +2315,8 @@ private:
     QTextEdit *ros_nodes_view_{nullptr};
     QPushButton *start_btn_{nullptr};
     QPushButton *stop_btn_{nullptr};
+    QPushButton *quick_start_btn_{nullptr};
+    QPushButton *quick_stop_btn_{nullptr};
 };
 
 int main(int argc, char **argv)

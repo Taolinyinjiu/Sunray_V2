@@ -34,6 +34,17 @@ tools/simulation_tools/config/sunray_launcher.yaml
 external_workspaces:
   - "~/pengyu_sim"
 
+quick_launch_groups:
+  - title: "6机无人机集群仿真"
+    description: "pengyu_sim + 定位 + 控制 + 集群控制 + 面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/集群无人机动力学仿真"
+        args:
+          - "swarm_num:=6"
+        delay_sec: 1.5
+      - ref: "定位融合模块/集群无人机定位融合"
+        delay_sec: 1.0
+
 launch_groups:
   - name: "定位融合模块"
     items:
@@ -52,6 +63,7 @@ launch_groups:
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
 | `external_workspaces` | 否 | 外部 catkin workspace 列表，支持 `~/xxx` 路径；启动器会扫描这些 workspace 的 ROS package 并在启动 terminal 时补充 ROS 环境变量 |
+| `quick_launch_groups` | 否 | 快速启动场景列表；每个场景可按顺序启动多个 launch |
 | `launch_groups` | 是 | 顶层数组，每一项对应界面上的一个模块标签页 |
 | `name` | 是 | 模块标签页名称 |
 | `items` | 是 | 当前模块下可启动的 launch 列表 |
@@ -88,17 +100,54 @@ roslaunch localization_fusion localization_fusion.launch source_id:=5 agent_name
 
 启动时，程序会解析命令中的 `package` 和 `launch`，并在内部转换为绝对 launch 文件路径执行。这样可以避免带子目录的 launch 文件在 terminal 中解析失败。
 
-## 4. 启动和停止机制
+## 4. 快速启动
+
+`快速启动` 位于模块列表上方，用来把一组常用 launch 编排成一个场景，例如单无人机控制联调、6机无人机集群仿真等。
+
+快速启动使用 Ubuntu 自带的 `gnome-terminal --tab` 打开一个 terminal 窗口，并让每个 launch 独占一个 terminal tab。这样不会把多个 launch 的输出混在一起，直接点击 terminal 顶部标签即可切换。启动器内部使用 `gnome-terminal --command` 为每个 tab 绑定独立脚本，避免多个 tab 复用同一条命令。
+
+快速启动配置示例：
+
+```yaml
+quick_launch_groups:
+  - title: "单无人机控制联调"
+    description: "pengyu_sim 单机 UAV 仿真 + 定位融合 + UAV 控制 + UAV 控制面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        delay_sec: 1.0
+      - ref: "定位融合模块/无人机定位融合"
+        delay_sec: 1.0
+      - package: "control_tools"
+        launch: "uav_control_panel.launch"
+```
+
+快速启动步骤字段：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `ref` | 否 | 引用已有模块启动项，格式为 `模块名/Launch标题`，例如 `定位融合模块/无人机定位融合` |
+| `package` | 否 | ROS package 名称；不使用 `ref` 时需要填写 |
+| `launch` | 否 | launch 文件名；不使用 `ref` 时需要填写 |
+| `title` | 否 | terminal tab 标题；不填时使用被引用的启动项标题或 package 名称 |
+| `args` | 否 | 当前快速启动步骤使用的 roslaunch 参数；填写后会覆盖被引用启动项的默认参数 |
+| `delay_sec` | 否 | 当前步骤启动后，到下一个步骤启动前等待的秒数；第一步立即启动，后续步骤按前面步骤的 `delay_sec` 累积延迟启动 |
+
+## 5. 启动和停止机制
 
 点击 `启动` 后，启动器会打开一个独立 terminal，并在其中执行对应 `roslaunch`。
 
 点击 `停止` 后，启动器会向对应 roslaunch wrapper 发送 `SIGINT`，wrapper 会继续转发给 roslaunch。
 
+点击快速启动的 `停止快速场景` 后，启动器会向该快速场景对应的 terminal tab 脚本发送 `SIGINT`，各 tab 中的 roslaunch 会收到中断请求。
+
 手动关闭 terminal 时，wrapper 会收到 `SIGHUP/TERM/INT` 并转发给 roslaunch，避免出现 terminal 已关闭但 ROS 节点仍残留的情况。
 
 roslaunch 结束后 terminal 会自动关闭，不需要手动按回车。
 
-## 5. 外部 Workspace 适配
+## 6. 外部 Workspace 适配
 
 `pengyu_sim仿真器模块` 中的 `px4_control_simulator` 和 `ugv_simulator` 是外部 ROS 包。启动器支持通过配置补充外部 workspace：
 
@@ -123,7 +172,7 @@ ls ~/pengyu_sim/devel
 ls ~/pengyu_sim/src
 ```
 
-## 6. 常见问题
+## 7. 常见问题
 
 ### 启动项显示未运行，但节点还在
 
@@ -161,7 +210,7 @@ ssh -X user@host
 
 如果只需要启动模块而不需要图形界面，建议直接使用对应模块的 `roslaunch` 命令。
 
-## 7. 相关文件
+## 8. 相关文件
 
 ```text
 tools/simulation_tools/
