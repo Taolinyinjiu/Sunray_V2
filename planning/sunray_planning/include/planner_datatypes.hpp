@@ -7,7 +7,8 @@
 
 #include <Eigen/Dense>
 #include <ros/ros.h>
-#include <sunray_msgs/UAVPlanningState.h>
+
+#include "../src/sunray_planning_common.hpp"
 
 enum class PlannerType : uint8_t {
     UNDEFINE = 0,
@@ -59,8 +60,8 @@ struct PlannerSnapshot {
 struct PlanningTarget {
     Eigen::Vector3d position{Eigen::Vector3d::Zero()};
     double yaw{0.0};
-    uint8_t planning_frame{sunray_msgs::UAVPlanningState::SUNRAY_LOCAL};
-    uint8_t cmd_source{sunray_msgs::UAVPlanningState::CONTROL_CMD};
+    uint8_t planning_frame{sunray_planning::PLANNING_FRAME_SUNRAY_LOCAL};
+    std::string cmd_source{"UNDEFINE"};
     uint32_t waypoint_count{1};
     uint32_t waypoint_index{0};
 };
@@ -130,32 +131,6 @@ inline std::string planner_exec_state_to_string(const PlannerExecState planner_s
     case PlannerExecState::UNDEFINE:
     default:
         return "UNDEFINE";
-    }
-}
-
-inline PlannerExecState planner_exec_state_from_msg(const uint8_t planner_state) {
-    switch (planner_state) {
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_INIT:
-        return PlannerExecState::INIT;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_WAIT_TARGET:
-        return PlannerExecState::WAIT_TARGET;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_GENERATE:
-        return PlannerExecState::GENERATE;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN:
-        return PlannerExecState::REPLAN;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_EXEC:
-        return PlannerExecState::EXEC;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_PAUSE:
-        return PlannerExecState::PAUSE;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS:
-        return PlannerExecState::SUCCESS;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_FAIL:
-        return PlannerExecState::FAIL;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP:
-        return PlannerExecState::EMERGENCY_STOP;
-    case sunray_msgs::UAVPlanningState::PLANNER_STATE_UNDEFINE:
-    default:
-        return PlannerExecState::UNDEFINE;
     }
 }
 

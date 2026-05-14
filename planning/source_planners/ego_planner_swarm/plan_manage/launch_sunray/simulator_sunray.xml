@@ -10,8 +10,8 @@
   <arg name="p_num"/>
   <arg name="min_dist"/>
   <arg name="odom_topic"/>
-  <arg name="uav_name"/>
-  <arg name="uav_id"/>
+  <arg name="agent_name"/>
+  <arg name="agent_id"/>
   <arg name="drone_id"/>
 
   <!-- There are two kinds of maps you can choose, just comment out the one you don’t need like the follow. Have a try. /-->
@@ -109,7 +109,7 @@
         <param name="init_x" value="$(arg init_x_)"/>
         <param name="init_y" value="$(arg init_y_)"/>
         <param name="init_z" value="$(arg init_z_)"/>
-        <remap from="~command" to="/$(arg uav_name)$(arg uav_id)/sunray/planning/ego_planner/position_cmd"/>
+        <remap from="~command" to="/$(arg agent_name)$(arg agent_id)/sunray/planning/ego_planner/position_cmd"/>
         <remap from="~odometry" to="drone_$(arg drone_id)_$(arg odom_topic)"/>
   </node>
  

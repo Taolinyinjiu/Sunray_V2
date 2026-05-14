@@ -2,180 +2,22 @@
 #include <plan_manage/uav_namespace_topic_utils.h>
 namespace ego_planner
 {
-  uint8_t EGOReplanFSM::toSunrayPlannerState(FSM_EXEC_STATE state) const
-  {
-    switch (state)
-    {
-    case INIT:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_INIT;
-    case WAIT_TARGET:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_WAIT_TARGET;
-    case GEN_NEW_TRAJ:
-    case SEQUENTIAL_START:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_GENERATE;
-    case REPLAN_TRAJ:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN;
-    case EXEC_TRAJ:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_EXEC;
-    case EMERGENCY_STOP:
-      return emergency_recoverable_ ? sunray_msgs::UAVPlanningState::PLANNER_STATE_REPLAN
-                                    : sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP;
-    default:
-      return sunray_msgs::UAVPlanningState::PLANNER_STATE_UNDEFINE;
-    }
-  }
-
-  std::string EGOReplanFSM::toSunrayPlannerStateString(FSM_EXEC_STATE state) const
-  {
-    switch (state)
-    {
-    case INIT:
-      return "INIT";
-    case WAIT_TARGET:
-      return "WAIT_TARGET";
-    case GEN_NEW_TRAJ:
-      return "GENERATE";
-    case REPLAN_TRAJ:
-      return "REPLAN";
-    case EXEC_TRAJ:
-      return "EXEC";
-    case EMERGENCY_STOP:
-      return emergency_recoverable_ ? "REPLAN" : "EMERGENCY_STOP";
-    case SEQUENTIAL_START:
-      return "GENERATE";
-    default:
-      return "UNDEFINE";
-    }
-  }
-
-  void EGOReplanFSM::fillPlanningStateCommonFields(sunray_msgs::UAVPlanningState &msg) const
-  {
-    msg.header.stamp = ros::Time::now();
-    msg.task_id = 0;
-    msg.planner_type = sunray_msgs::UAVPlanningState::PLANNER_EGO;
-    msg.planner_type_string = "EGO";
-
-    switch (exec_state_)
-    {
-    case INIT:
-      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::INIT;
-      msg.planning_fsm_state_string = "INIT";
-      break;
-    case WAIT_TARGET:
-      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::READY;
-      msg.planning_fsm_state_string = "READY";
-      break;
-    case GEN_NEW_TRAJ:
-    case REPLAN_TRAJ:
-    case SEQUENTIAL_START:
-      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::PLANNING;
-      msg.planning_fsm_state_string = "PLANNING";
-      break;
-    case EXEC_TRAJ:
-      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::MOVE;
-      msg.planning_fsm_state_string = "MOVE";
-      break;
-    case EMERGENCY_STOP:
-      if (enable_fail_safe_)
-      {
-        msg.planning_fsm_state = sunray_msgs::UAVPlanningState::PLANNING;
-        msg.planning_fsm_state_string = "PLANNING";
-      }
-      else
-      {
-        msg.planning_fsm_state = sunray_msgs::UAVPlanningState::EMERGENCY_KILL;
-        msg.planning_fsm_state_string = "EMERGENCY_KILL";
-      }
-      break;
-    default:
-      msg.planning_fsm_state = sunray_msgs::UAVPlanningState::UNDEFINE;
-      msg.planning_fsm_state_string = "UNDEFINE";
-      break;
-    }
-
-    msg.planning_frame = sunray_msgs::UAVPlanningState::SUNRAY_LOCAL;
-    msg.planning_frame_string = "SUNRAY_LOCAL";
-    msg.cmd_source = sunray_msgs::UAVPlanningState::CONTROL_CMD;
-    msg.cmd_source_string = "CONTROL_CMD";
-
-    const bool has_any_target = have_target_ || waypoint_num_ > 0;
-    const bool is_multi_waypoint = waypoint_num_ > 1;
-    msg.goal_type = has_any_target
-                        ? (is_multi_waypoint ? sunray_msgs::UAVPlanningState::GOAL_MULTI
-                                             : sunray_msgs::UAVPlanningState::GOAL_SINGLE)
-                        : 0;
-    msg.goal_type_string = has_any_target ? (is_multi_waypoint ? "GOAL_MULTI" : "GOAL_SINGLE")
-                                          : "UNDEFINE";
-
-    msg.waypoint_count = waypoint_num_ > 0 ? waypoint_num_ : (has_any_target ? 1 : 0);
-    msg.current_waypoint_index = wp_id_ >= 0 ? static_cast<uint32_t>(wp_id_) : 0;
-
-    const Eigen::Vector3d current_target = has_any_target ? end_pt_ : Eigen::Vector3d::Zero();
-    msg.current_target.position.x = current_target(0);
-    msg.current_target.position.y = current_target(1);
-    msg.current_target.position.z = current_target(2);
-    msg.current_target.yaw = 0.0f;
-    msg.current_target.hold_time = 0.0f;
-
-    Eigen::Vector3d final_target = current_target;
-    if (waypoint_num_ > 0)
-    {
-      const int final_index = std::max(0, waypoint_num_ - 1);
-      final_target = wps_.empty() ? Eigen::Vector3d(waypoints_[final_index][0],
-                                                    waypoints_[final_index][1],
-                                                    waypoints_[final_index][2])
-                                  : wps_[final_index];
-    }
-
-    msg.final_target.position.x = final_target(0);
-    msg.final_target.position.y = final_target(1);
-    msg.final_target.position.z = final_target(2);
-    msg.final_target.yaw = 0.0f;
-    msg.final_target.hold_time = 0.0f;
-  }
-
-  void EGOReplanFSM::publishPlanningState()
-  {
-    publishPlanningState(toSunrayPlannerState(exec_state_), toSunrayPlannerStateString(exec_state_));
-  }
-
-  void EGOReplanFSM::publishPlanningState(uint8_t planner_state, const std::string &planner_state_string)
-  {
-    sunray_msgs::UAVPlanningState planning_state_msg;
-    fillPlanningStateCommonFields(planning_state_msg);
-    planning_state_msg.planner_state = planner_state;
-    planning_state_msg.planner_state_string = planner_state_string;
-
-    if (planner_state == sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS)
-    {
-      planning_state_msg.planning_fsm_state = sunray_msgs::UAVPlanningState::ARRIVED;
-      planning_state_msg.planning_fsm_state_string = "ARRIVED";
-    }
-    else if (planner_state == sunray_msgs::UAVPlanningState::PLANNER_STATE_EMERGENCY_STOP)
-    {
-      planning_state_msg.planning_fsm_state = sunray_msgs::UAVPlanningState::EMERGENCY_KILL;
-      planning_state_msg.planning_fsm_state_string = "EMERGENCY_KILL";
-    }
-
-    planning_state_pub_.publish(planning_state_msg);
-  }
-
   void EGOReplanFSM::init(ros::NodeHandle &nh)
   {
     node_ = ros::NodeHandle();
     uav_ns_ = loadUavNamespaceOrThrow(node_, nh);
     planner_config_ = loadPlannerConfigOrThrow(nh, uav_ns_);
-    const int uav_id = loadRequiredGlobalIntParamOrThrow(node_, "/uav_id");
+    const std::string agent_name = loadAgentNameOrThrow(nh);
+    const int agent_id = loadAgentIdOrThrow(nh);
     const std::string planner_target_topic = makePlannerTopic("target_point", uav_ns_);
-    const std::string planner_state_topic = makePlannerTopic("state", uav_ns_);
     const std::string planner_trajectory_topic = makePlannerTopic("trajectory", uav_ns_);
     const std::string planner_data_display_topic = makePlannerTopic("data_display", uav_ns_);
     const std::string planner_broadcast_send_topic = makePlannerTopic("broadcast_bspline_from_planner", uav_ns_);
     const std::string planner_broadcast_recv_topic = makePlannerTopic("broadcast_bspline_to_planner", uav_ns_);
     const std::string planner_swarm_trajs_topic = makePlannerTopic("swarm_trajs", uav_ns_);
     const std::string planner_trigger_topic = makePlannerTopic("traj_start_trigger", uav_ns_);
-    const std::string prev_uav_ns = sunray_common::normalize_uav_ns(
-        loadRequiredGlobalStringParamOrThrow(node_, "/uav_name") + std::to_string(uav_id - 1));
+    const std::string prev_uav_ns =
+        agent_id > 1 ? makeAgentKeyOrThrow(agent_name, agent_id - 1) : std::string();
 
     current_wp_ = 0;
     waypoint_num_ = 0;
@@ -271,7 +113,6 @@ namespace ego_planner
 
     bspline_pub_ = nh.advertise<traj_utils::Bspline>(planner_trajectory_topic, 10);
     data_disp_pub_ = nh.advertise<traj_utils::DataDisp>(planner_data_display_topic, 100);
-    planning_state_pub_ = nh.advertise<sunray_msgs::UAVPlanningState>(planner_state_topic, 10);
 
     // 目标点输入模式
     if (target_type_ == TARGET_TYPE::EXTERNAL_TARGET)
@@ -307,8 +148,6 @@ namespace ego_planner
     {
         cout << RED << node_name << "Wrong target_type_ value! target_type_=" << target_type_<< TAIL << endl;
     }
-
-    publishPlanningState();
   }
 
   void EGOReplanFSM::readGivenWps()
@@ -611,7 +450,6 @@ namespace ego_planner
     exec_state_ = new_state;
 
     cout << WHITE_IN_BLUE << node_name << "[" + pos_call + "]: from " + state_str[pre_s] + " to " + state_str[int(new_state)]<< TAIL << endl;
-    publishPlanningState();
   }
 
   std::pair<int, EGOReplanFSM::FSM_EXEC_STATE> EGOReplanFSM::timesOfConsecutiveStateCalls()
@@ -757,7 +595,6 @@ namespace ego_planner
       {
         if (t_cur > info->duration_ - 1e-2)
         {
-          publishPlanningState(sunray_msgs::UAVPlanningState::PLANNER_STATE_SUCCESS, "SUCCESS");
           have_target_ = false;
           have_trigger_ = false;
 
@@ -803,8 +640,6 @@ namespace ego_planner
 
     data_disp_.header.stamp = ros::Time::now();
     data_disp_pub_.publish(data_disp_);
-    publishPlanningState();
-
   force_return:;
     exec_timer_.start();
   }

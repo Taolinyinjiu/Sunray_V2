@@ -1,4 +1,7 @@
 <launch>
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="use_private_agent_key" default="false"/>
   <!-- 地图尺寸与局部更新范围 -->
   <arg name="map_size_x" default="20"/>
   <arg name="map_size_y" default="20"/>
@@ -33,6 +36,9 @@
 
 
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)"/>
     <param name="planner_config/odom_topic" value="$(arg odom_topic)"/>
     <param name="planner_config/pose_topic" value="$(arg camera_pose_topic)"/>
     <param name="planner_config/depth_topic" value="$(arg depth_topic)"/>
@@ -123,6 +129,9 @@
   </node>
 
   <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)"/>
     <param name="planner_config/odom_topic" value="$(arg odom_topic)"/>
     <param name="planner_config/pose_topic" value="$(arg camera_pose_topic)"/>
     <param name="planner_config/depth_topic" value="$(arg depth_topic)"/>

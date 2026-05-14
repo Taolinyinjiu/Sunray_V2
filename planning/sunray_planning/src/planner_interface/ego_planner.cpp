@@ -3,7 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#include "string_uav_namespace_utils.hpp"
+#include "agent_key_helper.hpp"
 
 namespace {
 geometry_msgs::PoseStamped build_pose_goal(const PlanningTarget& target,
@@ -33,27 +33,17 @@ bool is_invalid_flag(const uint8_t trajectory_flag) {
 }  // namespace
 
 void EgoPlanner::init(ros::NodeHandle& private_nh) {
-    std::string uav_name;
-    int uav_id = 0;
-
-    if (!private_nh.getParam("uav_name", uav_name) || uav_name.empty()) {
-        throw std::runtime_error("EgoPlanner: missing or empty uav_name");
-    }
-    if (!private_nh.getParam("uav_id", uav_id) || uav_id <= 0) {
-        throw std::runtime_error("EgoPlanner: missing or invalid uav_id");
-    }
-
-    uav_ns_ = sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
+    bool use_private_agent_key = false;
+    private_nh.param("use_private_agent_key", use_private_agent_key, false);
+    uav_ns_ = use_private_agent_key ? sunray_common::get_agent_key_from_private()
+                                    : sunray_common::get_agent_key_from_global();
 
     const std::string goal_topic = uav_ns_ + "/sunray/planning/ego_planner/target_point";
     const std::string position_cmd_topic = uav_ns_ + "/sunray/planning/ego_planner/position_cmd";
-    const std::string planner_state_topic = uav_ns_ + "/sunray/planning/ego_planner/state";
 
     goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>(goal_topic, 1);
     position_cmd_sub_ =
         private_nh.subscribe(position_cmd_topic, 10, &EgoPlanner::position_cmd_callback, this);
-    unified_state_sub_ =
-        private_nh.subscribe(planner_state_topic, 10, &EgoPlanner::unified_state_callback, this);
 
     snapshot_.planner_type = PlannerType::EGO;
     snapshot_.planner_state = PlannerExecState::WAIT_TARGET;
@@ -153,43 +143,4 @@ void EgoPlanner::position_cmd_callback(const sunray_planner_msgs::EgoPositionCom
     snapshot_.planner_state_string = planner_exec_state_to_string(snapshot_.planner_state);
     snapshot_.last_state_stamp = stamp;
     snapshot_.goal_active = !is_success;
-}
-
-void EgoPlanner::unified_state_callback(const sunray_msgs::UAVPlanningState::ConstPtr& msg) {
-    if (!msg) {
-        return;
-    }
-
-    if (msg->planner_type != 0 && msg->planner_type != static_cast<uint8_t>(PlannerType::EGO)) {
-        return;
-    }
-
-    const ros::Time stamp = msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp;
-    snapshot_.planner_state = planner_exec_state_from_msg(msg->planner_state);
-    snapshot_.planner_state_string =
-        msg->planner_state_string.empty() ? planner_exec_state_to_string(snapshot_.planner_state)
-                                          : msg->planner_state_string;
-    snapshot_.current_waypoint_index = msg->current_waypoint_index;
-    snapshot_.last_state_stamp = stamp;
-
-    switch (snapshot_.planner_state) {
-    case PlannerExecState::GENERATE:
-    case PlannerExecState::REPLAN:
-    case PlannerExecState::EXEC:
-    case PlannerExecState::PAUSE:
-        snapshot_.goal_active = true;
-        break;
-    case PlannerExecState::SUCCESS:
-    case PlannerExecState::FAIL:
-    case PlannerExecState::EMERGENCY_STOP:
-    case PlannerExecState::INIT:
-    case PlannerExecState::WAIT_TARGET:
-    case PlannerExecState::UNDEFINE:
-    default:
-        snapshot_.goal_active = false;
-        if (snapshot_.planner_state != PlannerExecState::SUCCESS) {
-            snapshot_.has_valid_output = false;
-        }
-        break;
-    }
 }

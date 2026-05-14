@@ -9,7 +9,7 @@ class PlannerInterface {
   public:
     virtual ~PlannerInterface() = default;
 
-    // 初始化：从全局参数 /uav_name、/uav_id 读取并拼接 uav_ns，绑定话题
+    // 初始化：基于 agent_key 绑定 planner 相关话题
     virtual void init(ros::NodeHandle& private_nh) = 0;
 
     // 向 planner 发送目标点

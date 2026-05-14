@@ -3,53 +3,6 @@
 #include <stdexcept>
 #include <string>
 
-namespace {
-
-std::string loadRequiredGlobalStringParamOrThrow(ros::NodeHandle& nh,
-                                                 const std::string& param_name) {
-  std::string value;
-  if (!nh.getParam(param_name, value)) {
-    throw std::runtime_error("missing param " + param_name);
-  }
-  if (value.empty()) {
-    throw std::runtime_error(param_name + " cannot be empty");
-  }
-  return value;
-}
-
-int loadRequiredGlobalIntParamOrThrow(ros::NodeHandle& nh,
-                                      const std::string& param_name) {
-  int value = 0;
-  if (!nh.getParam(param_name, value)) {
-    throw std::runtime_error("missing param " + param_name);
-  }
-  return value;
-}
-
-std::string loadUavNamespaceOrThrow(ros::NodeHandle& nh) {
-  const std::string uav_name = loadRequiredGlobalStringParamOrThrow(nh, "/uav_name");
-  const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
-  if (uav_id <= 0) {
-    throw std::runtime_error("/uav_id cannot <= 0");
-  }
-  return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
-}
-
-std::string loadExpandedTopicParamOrThrow(ros::NodeHandle& nh,
-                                          const std::string& param_name,
-                                          const std::string& uav_ns) {
-  std::string raw_topic;
-  if (!nh.getParam(param_name, raw_topic)) {
-    throw std::runtime_error("missing param " + param_name);
-  }
-  if (raw_topic.empty()) {
-    throw std::runtime_error(param_name + " cannot be empty");
-  }
-  return sunray_common::replace_uav_ns(raw_topic, uav_ns);
-}
-
-}  // namespace
-
 namespace detect {
 
 DroneDetector::DroneDetector(ros::NodeHandle& nodeHandle)
@@ -95,7 +48,7 @@ DroneDetector::~DroneDetector()
 
 void DroneDetector::readParameters()
 {
-  const std::string uav_ns = loadUavNamespaceOrThrow(nh_);
+  const std::string uav_ns = ego_planner::loadUavNamespaceOrThrow(nh_);
   // camera params
   nh_.getParam("cam_width", img_width_);
   nh_.getParam("cam_height", img_height_);
@@ -112,10 +65,10 @@ void DroneDetector::readParameters()
   nh_.getParam("estimate/drone_height", drone_height_);
   nh_.getParam("estimate/max_pose_error", max_pose_error_);
 
-  my_odom_topic_ = loadExpandedTopicParamOrThrow(nh_, "my_odom_topic", uav_ns);
-  depth_topic_ = loadExpandedTopicParamOrThrow(nh_, "depth_topic", uav_ns);
-  others_odom_topic_ = loadExpandedTopicParamOrThrow(nh_, "others_odom_topic", uav_ns);
-  debug_info_topic_ = loadExpandedTopicParamOrThrow(nh_, "debug_info_topic", uav_ns);
+  my_odom_topic_ = ego_planner::loadExpandedTopicParamOrThrow(nh_, "my_odom_topic", uav_ns);
+  depth_topic_ = ego_planner::loadExpandedTopicParamOrThrow(nh_, "depth_topic", uav_ns);
+  others_odom_topic_ = ego_planner::loadExpandedTopicParamOrThrow(nh_, "others_odom_topic", uav_ns);
+  debug_info_topic_ = ego_planner::loadExpandedTopicParamOrThrow(nh_, "debug_info_topic", uav_ns);
 
   max_pose_error2_ = max_pose_error_*max_pose_error_;
 }

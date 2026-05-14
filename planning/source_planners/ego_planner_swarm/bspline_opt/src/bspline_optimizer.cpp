@@ -19,7 +19,7 @@ namespace ego_planner
     nh.param("optimization/max_acc", max_acc_, -1.0);
 
     nh.param("optimization/order", order_, 3);
-    const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
+    const int uav_id = loadAgentIdOrThrow(nh);
     const int id = uav_id - 1;
 
     node_name = "[BsplineOptimizer_uav" + std::to_string(id)+"] -- ";

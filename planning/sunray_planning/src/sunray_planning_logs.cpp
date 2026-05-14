@@ -212,7 +212,7 @@ void PlanningFSM::printf_terminal() {
     const std::string hover_hold_text = bool_to_cn(hover_hold_, "是", "否");
     const std::string trajectory_ack_text = bool_to_cn(control_fsm_trajectory_ack_, "已确认", "未确认");
     const std::string last_cmd_text = has_last_planning_cmd_
-                                          ? sunray_planning::planning_control_cmd_to_string(last_planning_cmd_.control_cmd)
+                                          ? sunray_planning::planning_cmd_to_string(last_planning_cmd_.plan_cmd)
                                           : "UNDEFINE";
     const std::string pending_cmd_text =
         passthrough_control_cmd_ == sunray_msgs::UAVControlCMD::UNDEFINE
@@ -221,16 +221,15 @@ void PlanningFSM::printf_terminal() {
     const std::string planning_frame_text =
         planning_context
             ? sunray_planning::planning_frame_to_string(
-                  sunray_planning::planning_cmd_to_frame(last_planning_cmd_.control_cmd))
+                  sunray_planning::planning_cmd_to_frame(last_planning_cmd_.plan_cmd))
             : "UNDEFINE";
     const std::string goal_type_text =
         planning_context
-            ? sunray_planning::goal_type_to_string(last_planning_cmd_.waypoints.size() > 1
-                                                       ? sunray_msgs::UAVPlanningState::GOAL_MULTI
-                                                       : sunray_msgs::UAVPlanningState::GOAL_SINGLE)
+            ? sunray_planning::goal_type_to_string(last_planning_cmd_.waypoints.size())
             : "UNDEFINE";
     const std::string cmd_source_text = planning_context
-                                            ? sunray_planning::cmd_source_to_string(last_planning_cmd_.cmd_source)
+                                            ? sunray_planning::cmd_source_to_string(
+                                                  last_planning_cmd_.plan_cmd_source)
                                             : "UNDEFINE";
     const uint32_t waypoint_count =
         planning_context ? static_cast<uint32_t>(last_planning_cmd_.waypoints.size()) : 0;
@@ -301,16 +300,16 @@ void PlanningFSM::printf_terminal() {
     console_body_oss << " 控制FSM状态: [ " << console_control_fsm_status << " ]\n";
     if (control_fsm_fresh) {
         body_oss << " 控制FSM当前状态: [ "
-                 << sunray_planning::control_fsm_state_to_string(last_control_fsm_state_.sunray_fsm_state)
+                 << sunray_planning::control_fsm_state_to_string(last_control_fsm_state_.control_state)
                  << " ]\n";
         console_body_oss
             << " 控制FSM当前状态: [ "
-            << sunray_planning::control_fsm_state_to_string(last_control_fsm_state_.sunray_fsm_state)
+            << sunray_planning::control_fsm_state_to_string(last_control_fsm_state_.control_state)
             << " ]\n";
         body_oss << " 控制FSM当前指令: [ "
-                 << uav_control_cmd_to_string(last_control_fsm_state_.control_cmd) << " ]\n";
+                 << uav_control_cmd_to_string(last_control_fsm_state_.last_cmd.control_cmd) << " ]\n";
         console_body_oss << " 控制FSM当前指令: [ "
-                         << uav_control_cmd_to_string(last_control_fsm_state_.control_cmd)
+                         << uav_control_cmd_to_string(last_control_fsm_state_.last_cmd.control_cmd)
                          << " ]\n";
         body_oss << " 控制FSM时间间隔: "
                  << format_stamp_age_s(now, last_control_fsm_state_stamp_) << " [s]\n";

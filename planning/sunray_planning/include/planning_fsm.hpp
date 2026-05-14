@@ -4,7 +4,7 @@
 
 #include <ros/ros.h>
 #include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlFSMState.h>
+#include <sunray_msgs/UAVControlState.h>
 #include <sunray_msgs/UAVPlanningCMD.h>
 #include <sunray_msgs/UAVPlanningState.h>
 
@@ -27,7 +27,7 @@ class PlanningFSM {
     void pub_planning_state();
     void pub_control_cmd();
     void planning_cmd_callback(const sunray_msgs::UAVPlanningCMD::ConstPtr& msg);
-    void control_fsm_state_callback(const sunray_msgs::UAVControlFSMState::ConstPtr& msg);
+    void control_fsm_state_callback(const sunray_msgs::UAVControlState::ConstPtr& msg);
     void process_timer_callback(const ros::TimerEvent& event);
     void planning_state_timer_callback(const ros::TimerEvent& event);
     std::string make_log_file_path() const;
@@ -40,7 +40,7 @@ class PlanningFSM {
     sunray_msgs::UAVControlCMD build_special_control_cmd(uint8_t control_cmd,
                                                          const PlannerSnapshot& snapshot,
                                                          uint8_t cmd_source =
-                                                             sunray_msgs::UAVControlCMD::CONTROL_CMD) const;
+                                                             sunray_msgs::UAVControlCMD::PLANNING) const;
 
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
@@ -78,7 +78,7 @@ class PlanningFSM {
 
     bool has_last_planning_cmd_{false};
     sunray_msgs::UAVPlanningCMD last_planning_cmd_;
-    sunray_msgs::UAVControlFSMState last_control_fsm_state_;
+    sunray_msgs::UAVControlState last_control_fsm_state_;
     PlanningTarget active_target_;
 
     ros::Time last_terminal_log_stamp_;

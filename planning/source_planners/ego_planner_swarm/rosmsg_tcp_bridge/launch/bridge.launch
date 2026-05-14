@@ -1,9 +1,15 @@
 <launch>
-  <arg name="my_odom_topic" value="${uav_ns}/sunray/localization/vins/imu_propagate"/>
-  <arg name="others_odom_topic" value="${uav_ns}/sunray/planning/ego_planner/others_odom"/>
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="use_private_agent_key" default="false"/>
+  <arg name="my_odom_topic" value="${agent_key}/sunray/localization/vins/imu_propagate"/>
+  <arg name="others_odom_topic" value="${agent_key}/sunray/planning/ego_planner/others_odom"/>
 
   <!-- <node pkg="rosmsg_tcp_bridge" name="bridge_node" type="bridge_node" output="screen" launch-prefix="valgrind" > -->
   <node pkg="rosmsg_tcp_bridge" name="bridge_node" type="bridge_node" output="screen" >
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)"/>
     <param name="my_odom_topic" value="$(arg my_odom_topic)"/>
     <param name="others_odom_topic" value="$(arg others_odom_topic)"/>
     <param name="next_drone_ip" value="127.0.0.1" type="string"/>

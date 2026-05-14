@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-#include "string_uav_namespace_utils.hpp"
+#include "agent_key_helper.hpp"
 
 namespace ego_planner {
 
@@ -17,8 +17,8 @@ struct Planner_Config_t_ {
   std::string extrinsic_topic;
 };
 
-inline std::string loadRequiredGlobalStringParamOrThrow(ros::NodeHandle& nh,
-                                                        const std::string& param_name) {
+inline std::string loadRequiredStringParamOrThrow(ros::NodeHandle& nh,
+                                                  const std::string& param_name) {
   std::string value;
   if (!nh.getParam(param_name, value)) {
     throw std::runtime_error("missing param " + param_name);
@@ -29,8 +29,8 @@ inline std::string loadRequiredGlobalStringParamOrThrow(ros::NodeHandle& nh,
   return value;
 }
 
-inline int loadRequiredGlobalIntParamOrThrow(ros::NodeHandle& nh,
-                                             const std::string& param_name) {
+inline int loadRequiredIntParamOrThrow(ros::NodeHandle& nh,
+                                       const std::string& param_name) {
   int value = 0;
   if (!nh.getParam(param_name, value)) {
     throw std::runtime_error("missing param " + param_name);
@@ -38,24 +38,58 @@ inline int loadRequiredGlobalIntParamOrThrow(ros::NodeHandle& nh,
   return value;
 }
 
-inline std::string loadUavNamespaceOrThrow(ros::NodeHandle& nh) {
-  const std::string uav_name = loadRequiredGlobalStringParamOrThrow(nh, "/uav_name");
-  const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
-  if (uav_id <= 0) {
-    throw std::runtime_error("/uav_id cannot <= 0");
-  }
-  return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
+inline bool usePrivateAgentKey(ros::NodeHandle& private_nh) {
+  bool use_private_agent_key = false;
+  private_nh.param("use_private_agent_key", use_private_agent_key, false);
+  return use_private_agent_key;
 }
 
-inline std::string loadUavNamespaceOrThrow(ros::NodeHandle& nh, ros::NodeHandle&) {
-  return loadUavNamespaceOrThrow(nh);
+inline std::string loadAgentNameOrThrow(ros::NodeHandle& private_nh) {
+  if (usePrivateAgentKey(private_nh)) {
+    return loadRequiredStringParamOrThrow(private_nh, "agent_name");
+  }
+
+  ros::NodeHandle global_nh;
+  return loadRequiredStringParamOrThrow(global_nh, "agent_name");
+}
+
+inline int loadAgentIdOrThrow(ros::NodeHandle& private_nh) {
+  if (usePrivateAgentKey(private_nh)) {
+    return loadRequiredIntParamOrThrow(private_nh, "agent_id");
+  }
+
+  ros::NodeHandle global_nh;
+  return loadRequiredIntParamOrThrow(global_nh, "agent_id");
+}
+
+inline std::string makeAgentKeyOrThrow(const std::string& agent_name, const int agent_id) {
+  if (agent_name.empty()) {
+    throw std::runtime_error("agent_name cannot be empty");
+  }
+  if (agent_id <= 0) {
+    throw std::runtime_error("agent_id cannot <= 0");
+  }
+  return sunray_common::normalize_agent_key(agent_name + std::to_string(agent_id));
+}
+
+inline std::string loadAgentKeyOrThrow(ros::NodeHandle& private_nh) {
+  return usePrivateAgentKey(private_nh) ? sunray_common::get_agent_key_from_private()
+                                        : sunray_common::get_agent_key_from_global();
+}
+
+inline std::string loadUavNamespaceOrThrow(ros::NodeHandle& nh) {
+  return loadAgentKeyOrThrow(nh);
+}
+
+inline std::string loadUavNamespaceOrThrow(ros::NodeHandle&, ros::NodeHandle& private_nh) {
+  return loadAgentKeyOrThrow(private_nh);
 }
 
 inline std::string expandUavTopic(const std::string& raw_topic, const std::string& uav_ns) {
   if (raw_topic.empty()) {
     return raw_topic;
   }
-  return sunray_common::replace_uav_ns(raw_topic, uav_ns);
+  return sunray_common::replace_agent_key(raw_topic, uav_ns);
 }
 
 inline std::string loadExpandedTopicParamOrThrow(ros::NodeHandle& nh,
@@ -88,7 +122,7 @@ inline Planner_Config_t_ loadPlannerConfigOrThrow(ros::NodeHandle& nh,
 }
 
 inline std::string makePlannerTopic(std::string suffix, const std::string& uav_ns) {
-  const std::string normalized_uav_ns = sunray_common::normalize_uav_ns(uav_ns);
+  const std::string normalized_uav_ns = sunray_common::normalize_agent_key(uav_ns);
   if (normalized_uav_ns.empty()) {
     return normalized_uav_ns;
   }

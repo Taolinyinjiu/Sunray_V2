@@ -25,7 +25,6 @@
 #include "mavros_helper/mavros_helper.hpp"
 #include "utils/arrival_helper.hpp"
 #include "utils/reference_limit_helper.hpp"
-#include "utils/yaw_curve.hpp"
 #include <ros/node_handle.h>
 #include <string>
 #include <atomic>
@@ -111,7 +110,6 @@ class PX4_OriginController : public Controller_Interface {
     MavrosHelper mavros_helper_;
     // ---------------------共享曲线辅助类-----------------
     curve::QuinticCurve motion_curve_;
-    curve::QuinticYawCurve yaw_curve_;
     MotionCurveOwner motion_curve_owner_{MotionCurveOwner::None};
     // --------------------px4状态-----------------------
     control_common::FlightMode px4_mode_ = control_common::FlightMode::Undefined;
