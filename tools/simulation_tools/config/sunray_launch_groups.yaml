@@ -82,7 +82,7 @@ launch_groups:
           - "agent_id:=1"
           - "enable_monitor:=true"
           - "enable_rviz_visualization:=true"
-          - "enable_rviz:=false"
+          - "enable_rviz:=true"
         description: "启动单车 sunray_ugv_control 控制节点、监控和 RViz marker 发布节点。"
 
       - title: "集群无人车控制"

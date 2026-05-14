@@ -8,8 +8,12 @@
 #include <sunray_msgs/UAVControlState.h>
 #include "controller/px4_origin_controller.hpp"
 #include "controller/geometric_controller.hpp"
+#include <mavros_msgs/AttitudeTarget.h>
+#include <mavros_msgs/PositionTarget.h>
 #include <sunray_msgs/OdomState.h>
 #include "utils/orientation_utils.hpp"
+#include <algorithm>
+#include <cctype>
 
 // Sunray_FSM更新路径
 //
@@ -32,6 +36,31 @@ geometry_msgs::Vector3 toVector3Msg(const Eigen::Vector3d& value) {
     msg.y = value.y();
     msg.z = value.z();
     return msg;
+}
+
+void split_agent_key(const std::string& agent_key, std::string& agent_name, int& agent_id) {
+    std::string key = agent_key;
+    if (!key.empty() && key.front() == '/') {
+        key.erase(key.begin());
+    }
+
+    std::size_t digit_pos = key.size();
+    while (digit_pos > 0 && std::isdigit(static_cast<unsigned char>(key[digit_pos - 1]))) {
+        --digit_pos;
+    }
+
+    if (digit_pos == key.size()) {
+        agent_name = key;
+        agent_id = 0;
+        return;
+    }
+
+    agent_name = key.substr(0, digit_pos);
+    try {
+        agent_id = std::stoi(key.substr(digit_pos));
+    } catch (const std::exception&) {
+        agent_id = 0;
+    }
 }
 
 void update_input_rate(double& averaged_rate_hz,
@@ -75,6 +104,7 @@ Sunray_FSM::Sunray_FSM(ros::NodeHandle& nh) {
     uav_ns_ = use_private_agent_key
                   ? sunray_common::get_agent_key_from_private()
                   : sunray_common::get_agent_key_from_global();
+    split_agent_key(uav_ns_, agent_name_, agent_id_);
 }
 // 析构函数
 Sunray_FSM::~Sunray_FSM() {
@@ -231,6 +261,8 @@ void Sunray_FSM::local_odom_callback(const nav_msgs::Odometry& msg) {
     {
         std::lock_guard<std::mutex> lk(odom_mutex_);
         last_raw_odometry_ = odom_sample;
+        last_self_odom_msg_ = msg;
+        has_self_odom_msg_ = true;
         update_input_rate(odom_frequency_hz_, odom_rate_samples_s_, receive_time.toSec());
         last_raw_odom_receive_time_ = receive_time;
         odom_meets_rate_target_ = odom_frequency_hz_ >= 100.0;
@@ -325,8 +357,9 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     // 打一份快照
     sunray_fsm::SunrayState fsm_state_snapshot;
     control_common::UavControlCmd last_cmd_snapshot;
-    control_common::UAVStateEstimate odom_snapshot;
+    nav_msgs::Odometry self_odom_snapshot;
     bool has_valid_odometry_snapshot = false;
+    bool has_self_odom_msg_snapshot = false;
     ros::Time last_valid_odom_receive_time_snapshot{0.0};
     {
         std::lock_guard<std::mutex> lk1(state_mutex_);
@@ -338,14 +371,18 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     }
     {
         std::lock_guard<std::mutex> lk3(odom_mutex_);
-        odom_snapshot = last_odometry_;
+        self_odom_snapshot = last_self_odom_msg_;
         has_valid_odometry_snapshot = has_valid_odometry_;
+        has_self_odom_msg_snapshot = has_self_odom_msg_;
         last_valid_odom_receive_time_snapshot = last_valid_odom_receive_time_;
     }
     // 构建要发布的消息
     sunray_msgs::UAVControlState fsm_state_msg;
     // 首先填充话题头
     fsm_state_msg.header.stamp = ros::Time::now();
+    fsm_state_msg.agent_name = agent_name_;
+    fsm_state_msg.agent_id = static_cast<uint8_t>(std::clamp(agent_id_, 0, 255));
+    fsm_state_msg.controller_types = fsm_config_.basic_param.controller_types;
     // 当前起飞参数
     fsm_state_msg.takeoff_relative_height = fsm_config_.takeoff_land_param.takeoff_relative_height;
     fsm_state_msg.takeoff_max_velocity = fsm_config_.takeoff_land_param.takeoff_max_velocity;
@@ -375,6 +412,20 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     fsm_state_msg.last_cmd.desired_yaw_rate = last_cmd_snapshot.yaw_rate;
     // 状态机状态
     fsm_state_msg.control_state = static_cast<uint8_t>(fsm_state_snapshot);
+    if (has_self_odom_msg_snapshot) {
+        fsm_state_msg.self_odom = self_odom_snapshot;
+    }
+    mavros_msgs::PositionTarget position_target;
+    mavros_msgs::AttitudeTarget attitude_target;
+    if (sunray_controller_ && sunray_controller_->get_last_position_target(position_target)) {
+        fsm_state_msg.controller_output_type = sunray_msgs::UAVControlState::OUTPUT_POSITION_TARGET;
+        fsm_state_msg.position_target = position_target;
+    } else if (sunray_controller_ && sunray_controller_->get_last_attitude_target(attitude_target)) {
+        fsm_state_msg.controller_output_type = sunray_msgs::UAVControlState::OUTPUT_ATTITUDE_TARGET;
+        fsm_state_msg.attitude_target = attitude_target;
+    } else {
+        fsm_state_msg.controller_output_type = sunray_msgs::UAVControlState::OUTPUT_NONE;
+    }
     // 与已有消息定义保持兼容：仅暴露关键的里程计健康状态
     fsm_state_msg.odometry_lost = !last_valid_odom_receive_time_snapshot.isZero() &&
                                   (ros::Time::now() - last_valid_odom_receive_time_snapshot).toSec() >

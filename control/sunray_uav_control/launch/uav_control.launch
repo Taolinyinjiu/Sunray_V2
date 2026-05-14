@@ -31,4 +31,22 @@
     <param name="agent_id" value="$(arg agent_id)" />
     <param name="agent_num" value="1" />
   </node>
+
+  <arg name="enable_rviz_visualization" default="true" />
+  <arg name="rviz_frame_id" default="world" />
+  <arg name="rviz_mesh_resource" default="package://sunray_swarm_control/utils/meshes/uav.dae" />
+  <arg name="uav_control_state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/uav_control/control_state" />
+  <arg name="uav_control_marker_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/uav_control/rviz_markers" />
+  <node if="$(arg enable_rviz_visualization)"
+        pkg="sunray_uav_control"
+        type="rviz_visualization_uav_control_node"
+        name="$(arg agent_name)$(arg agent_id)_uav_control_rviz_visualization"
+        output="screen">
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+    <param name="frame_id" value="$(arg rviz_frame_id)" />
+    <param name="mesh_resource" value="$(arg rviz_mesh_resource)" />
+    <param name="state_topic" value="$(arg uav_control_state_topic)" />
+    <param name="marker_topic" value="$(arg uav_control_marker_topic)" />
+  </node>
 </launch>

@@ -28,6 +28,7 @@
 #include <ros/node_handle.h>
 #include <string>
 #include <atomic>
+#include <mutex>
 #include "utils/quintic_curve.hpp"
 
 class PX4_OriginController : public Controller_Interface {
@@ -68,6 +69,7 @@ class PX4_OriginController : public Controller_Interface {
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
     bool is_point_complete() override;
+    bool get_last_position_target(mavros_msgs::PositionTarget& msg) const override;
   private:
     enum class MotionCurveOwner {
         None = 0,
@@ -141,6 +143,7 @@ class PX4_OriginController : public Controller_Interface {
     bool body_point_target_initialized_{false};
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointLocal last_setpoint_{};
+    mutable std::mutex last_setpoint_mutex_;
     controller_data_types::TargetPoint_t last_point_;
     controller_data_types::TargetBodyPoint_t last_point_body_;
     Eigen::Vector3d hover_point_{Eigen::Vector3d::Zero()};  // hover 悬停点（与 linear 对齐）

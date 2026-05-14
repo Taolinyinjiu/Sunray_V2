@@ -9,8 +9,8 @@
  * 2. relocalization_topic 表示 base_link 在 sunray_global 下的位姿输入，可为空
  * 3. local_odom 在 odometry_callback 中完成外参变换后立即发布，保持与输入同频
  * 4. global_odom / TF / OdomState 统一由 health_timer_ 周期发布
- * 5. localization_fusion 不再关心 world 系
- * 6. TF 树固定为 sunray_global -> {agent}/sunray_local -> {agent}/base_link
+ * 5. TF 树固定为 world -> {agent}/sunray_global -> {agent}/sunray_local -> {agent}/base_link
+ * 6. world -> {agent}/sunray_global 是固定零变换；是否广播到 /tf_static 由 tf_world_global 控制
  */
 
 #pragma once
@@ -114,6 +114,7 @@ class LocalizationFusion {
     double odometry_update_hz{0.0};
     std::deque<double> hz_stamps_;
 
+    geometry_msgs::TransformStamped world_to_global_tf_;
     geometry_msgs::TransformStamped global_to_local_tf_;
     geometry_msgs::TransformStamped local_to_base_tf_;
 };

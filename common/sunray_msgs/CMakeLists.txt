@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   geographic_msgs
   geometry_msgs
+  mavros_msgs
   message_generation
   nav_msgs
   sensor_msgs
@@ -45,6 +46,7 @@ generate_messages(
   actionlib_msgs
   geographic_msgs
   geometry_msgs
+  mavros_msgs
   nav_msgs
   sensor_msgs
   std_msgs
@@ -55,6 +57,7 @@ catkin_package(
     actionlib_msgs
     geographic_msgs
     geometry_msgs
+    mavros_msgs
     message_runtime
     nav_msgs
     sensor_msgs

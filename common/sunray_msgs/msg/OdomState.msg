@@ -32,6 +32,13 @@ string base_frame_name              # 当前机体系名称
 # local_odom.header.stamp 或 global_odom.header.stamp 为 0 时，表示对应 odom 尚未输出有效数据
 nav_msgs/Odometry local_odom         # 当前发布到 sunray/localization/local_odom 的局部里程计
 nav_msgs/Odometry global_odom        # 当前发布到 sunray/localization/global_odom 的全局里程计
+
+# -------------output tf-------------
+# localization_fusion 当前维护的 TF 快照，仅透传当前内部缓存，不额外改写时间戳
+geometry_msgs/TransformStamped world_to_global_tf   # world -> {agent}/sunray_global
+geometry_msgs/TransformStamped global_to_local_tf   # {agent}/sunray_global -> {agent}/sunray_local
+geometry_msgs/TransformStamped local_to_base_tf     # {agent}/sunray_local -> {agent}/base_link
+
 nav_msgs/Odometry recive_relocalization_msg # 当前接受到的重定位消息
 # 由于localization模块只负责聚合，转发，不对里程计数据进行分析，因此这里的有效性判断为对超时的判断，
 # 里程计超过0.2秒没有收到新数据，会判定为无效

@@ -3,9 +3,9 @@
 /*
 最新执行模型（2026-05-14）：
 
-1. localization_fusion 不再关心 world 系
-2. TF 树固定为：
-       sunray_global -> {agent}/sunray_local -> {agent}/base_link
+1. TF 树固定为：
+       world -> {agent}/sunray_global -> {agent}/sunray_local -> {agent}/base_link
+2. world -> {agent}/sunray_global 是固定零变换；是否广播到 /tf_static 由 tf_world_global 控制
 3. odometry_topic 输入永远表示 local 主里程计输入
 4. odometry_callback 中完成外参变换后立即发布 local_odom
 5. relocalization_topic 输入是 base_link 在 sunray_global 下的位姿
@@ -134,7 +134,8 @@ LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
 
     const std::string agent_frame_prefix = strip_leading_slash(agent_key_);
     private_nh.param("world_frame_id", world_frame_id_, std::string("world"));
-    private_nh.param("global_frame_id", global_frame_id_, std::string("sunray_global"));
+    private_nh.param("global_frame_id", global_frame_id_,
+                     agent_frame_prefix + "/sunray_global");
     private_nh.param("local_frame_id", local_frame_id_,
                      agent_frame_prefix + "/sunray_local");
     private_nh.param("base_frame_id", base_frame_id_, agent_frame_prefix + "/base_link");
@@ -194,6 +195,8 @@ bool LocalizationFusion::Init() {
     health_timer_ = nh_.createTimer(
         ros::Duration(1.0 / health_rate_hz_), &LocalizationFusion::healthtimer_callback, this);
 
+    world_to_global_tf_ = make_identity_transform(world_frame_id_, global_frame_id_);
+
     global_to_local_tf_.header.frame_id = global_frame_id_;
     global_to_local_tf_.child_frame_id = local_frame_id_;
     global_to_local_tf_.transform.translation.x = 0.0;
@@ -208,8 +211,7 @@ bool LocalizationFusion::Init() {
     relocalization_valid_ = false;
 
     if (tf_world_global_) {
-        static_tf_broadcaster_.sendTransform(
-            make_identity_transform(world_frame_id_, global_frame_id_));
+        static_tf_broadcaster_.sendTransform(world_to_global_tf_);
     }
     if (tf_local_world_) {
         static_tf_broadcaster_.sendTransform(
@@ -396,6 +398,7 @@ void LocalizationFusion::healthtimer_callback(const ros::TimerEvent& e) {
 
     global_to_local_tf_.header.stamp = now;
     tf_broadcaster_.sendTransform(global_to_local_tf_);
+    world_to_global_tf_.header.stamp = now;
 
     sunray_msgs::OdomState state_msgs;
     state_msgs.header.stamp = now;
@@ -414,6 +417,9 @@ void LocalizationFusion::healthtimer_callback(const ros::TimerEvent& e) {
     if (has_relocalization_odom_) {
         state_msgs.recive_relocalization_msg = latest_relocalization_odom_;
     }
+    state_msgs.world_to_global_tf = world_to_global_tf_;
+    state_msgs.global_to_local_tf = global_to_local_tf_;
+    state_msgs.local_to_base_tf = local_to_base_tf_;
     odom_state_pub_.publish(state_msgs);
 }
 

@@ -110,6 +110,20 @@ target_link_libraries(uav_control_monitor_node
     ${catkin_LIBRARIES}
 )
 
+add_executable(rviz_visualization_uav_control_node
+  src/tools/rviz_visualization_uav_control_node.cpp
+)
+add_dependencies(rviz_visualization_uav_control_node ${catkin_EXPORTED_TARGETS})
+target_include_directories(rviz_visualization_uav_control_node
+  PRIVATE
+    ${catkin_INCLUDE_DIRS}
+)
+
+target_link_libraries(rviz_visualization_uav_control_node
+  PRIVATE
+    ${catkin_LIBRARIES}
+)
+
 # -----------------------------
 # Runtime test/demo executables
 # -----------------------------

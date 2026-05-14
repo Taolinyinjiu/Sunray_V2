@@ -61,6 +61,41 @@ desired_state_from_local_setpoint(const control_common::Mavros_SetpointLocal& se
     return desired;
 }
 
+mavros_msgs::PositionTarget to_position_target_msg(
+    const control_common::Mavros_SetpointLocal& setpoint) {
+    mavros_msgs::PositionTarget msg;
+    msg.header.stamp = setpoint.timestamp.isZero() ? ros::Time::now() : setpoint.timestamp;
+
+    switch (setpoint.frame) {
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned:
+        msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+        break;
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Offset_Ned:
+        msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_OFFSET_NED;
+        break;
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Body_Ned:
+        msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_BODY_NED;
+        break;
+    case control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Body_Offset_Ned:
+        msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_BODY_OFFSET_NED;
+        break;
+    }
+
+    msg.type_mask = setpoint.mask;
+    msg.position.x = setpoint.position.x();
+    msg.position.y = setpoint.position.y();
+    msg.position.z = setpoint.position.z();
+    msg.velocity.x = setpoint.velocity.x();
+    msg.velocity.y = setpoint.velocity.y();
+    msg.velocity.z = setpoint.velocity.z();
+    msg.acceleration_or_force.x = setpoint.accel_or_force.x();
+    msg.acceleration_or_force.y = setpoint.accel_or_force.y();
+    msg.acceleration_or_force.z = setpoint.accel_or_force.z();
+    msg.yaw = setpoint.yaw;
+    msg.yaw_rate = setpoint.yaw_rate;
+    return msg;
+}
+
 }  // namespace
 
 // 构造函数，读取参数
@@ -132,10 +167,20 @@ void PX4_OriginController::set_current_odom(const control_common::UAVStateEstima
 
 void PX4_OriginController::cache_local_setpoint(
     const control_common::Mavros_SetpointLocal& setpoint) {
+    std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
     last_setpoint_ = setpoint;
     last_setpoint_.timestamp = ros::Time::now();
     last_setpoint_.valid = true;
     desired_state_ = desired_state_from_local_setpoint(setpoint, uav_odometry_);
+}
+
+bool PX4_OriginController::get_last_position_target(mavros_msgs::PositionTarget& msg) const {
+    std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
+    if (!last_setpoint_.valid) {
+        return false;
+    }
+    msg = to_position_target_msg(last_setpoint_);
+    return true;
 }
 
 // -------------运动相关接口------------
@@ -177,6 +222,7 @@ void PX4_OriginController::reset_point_motion_context() {
 }
 
 void PX4_OriginController::clear_cached_setpoint() {
+    std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
     last_setpoint_ = control_common::Mavros_SetpointLocal{};
     desired_state_ = has_uav_odometry_.load(std::memory_order_relaxed)
                          ? make_hold_desired_state(uav_odometry_)

@@ -1,5 +1,4 @@
 fixed_frame: "world"
-marker_topic: "/sunray/monitor/markers"
 status_timeout: 1.0
 refresh_hz: 5.0
 
@@ -10,6 +9,32 @@ uav_swarm_cmd_topic: "/sunray/swarm/uav_swarm_cmd"
 ugv_swarm_cmd_topic: "/sunray/swarm/ugv_swarm_cmd"
 uav_swarm_state_topic: "/sunray/swarm/uav_swarm_state"
 ugv_swarm_state_topic: "/sunray/swarm/ugv_swarm_state"
+
+rviz_displays:
+  - name: "UAV集群"
+    type: "MarkerArray"
+    topic: "/sunray/swarm/uav_rviz_markers"
+    enabled: true
+  - name: "定位融合-uav1"
+    type: "MarkerArray"
+    topic: "/uav1/sunray/localization/rviz_markers"
+    enabled: true
+  - name: "UAV控制-uav1"
+    type: "MarkerArray"
+    topic: "/uav1/sunray/uav_control/rviz_markers"
+    enabled: true
+  - name: "UGV集群"
+    type: "MarkerArray"
+    topic: "/sunray/swarm/ugv_rviz_markers"
+    enabled: true
+  - name: "定位融合-ugv1"
+    type: "MarkerArray"
+    topic: "/ugv1/sunray/localization/rviz_markers"
+    enabled: true
+  - name: "UGV控制-ugv1"
+    type: "MarkerArray"
+    topic: "/ugv1/sunray/ugv_control/rviz_markers"
+    enabled: false
 
 uav_agents:
   - id: 1

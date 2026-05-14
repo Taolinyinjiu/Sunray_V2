@@ -1,12 +1,13 @@
 /*
 本程序功能：
     1. 读取 agent_name、agent_id 和 agent_num，自动生成 /{agent_name}{id}
-    2. 订阅每个智能体的 uav_control/control_state 和 localization/local_odom
+    2. 订阅每个智能体的 uav_control/control_state
     3. 以终端状态面板形式集中显示单机或集群所有智能体的 UAV 控制状态
     4. 让 uav_control_node 本体只负责控制逻辑，不负责打印
 */
 #include <ros/ros.h>
-#include <nav_msgs/Odometry.h>
+#include <mavros_msgs/AttitudeTarget.h>
+#include <mavros_msgs/PositionTarget.h>
 #include <sunray_msgs/UAVControlCMD.h>
 #include <sunray_msgs/UAVControlState.h>
 
@@ -36,16 +37,13 @@ const char *kAnsiValue = "\033[1;37m";
 struct CachedState
 {
     sunray_msgs::UAVControlState state{};
-    nav_msgs::Odometry local_odom{};
     bool has_state{false};
-    bool has_local_odom{false};
     ros::Time receive_time{0.0};
 };
 
 struct AgentTopics
 {
     std::string control_state_topic;
-    std::string local_odom_topic;
     std::string control_cmd_topic;
 };
 
@@ -79,6 +77,15 @@ std::string okText(const bool ok)
 std::string topicValueText(const std::string &topic)
 {
     return colorText(topic.empty() ? "-" : topic, kAnsiValue);
+}
+
+std::string stampText(const ros::Time &stamp)
+{
+    if (stamp.isZero())
+    {
+        return "-";
+    }
+    return formatDouble(stamp.toSec(), 3) + " s";
 }
 
 double yawFromOdom(const nav_msgs::Odometry &odom)
@@ -192,6 +199,51 @@ std::string landTypeName(const uint8_t land_type)
     }
 }
 
+std::string controllerTypeName(const uint8_t controller_type)
+{
+    switch (controller_type)
+    {
+    case 0:
+        return "PX4_ORIGIN";
+    case 1:
+        return "GEOMETRIC";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+std::string outputTypeName(const uint8_t output_type)
+{
+    switch (output_type)
+    {
+    case sunray_msgs::UAVControlState::OUTPUT_NONE:
+        return "OUTPUT_NONE";
+    case sunray_msgs::UAVControlState::OUTPUT_POSITION_TARGET:
+        return "POSITION_TARGET";
+    case sunray_msgs::UAVControlState::OUTPUT_ATTITUDE_TARGET:
+        return "ATTITUDE_TARGET";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+std::string positionTargetFrameName(const uint8_t frame)
+{
+    switch (frame)
+    {
+    case mavros_msgs::PositionTarget::FRAME_LOCAL_NED:
+        return "LOCAL_NED";
+    case mavros_msgs::PositionTarget::FRAME_LOCAL_OFFSET_NED:
+        return "LOCAL_OFFSET_NED";
+    case mavros_msgs::PositionTarget::FRAME_BODY_NED:
+        return "BODY_NED";
+    case mavros_msgs::PositionTarget::FRAME_BODY_OFFSET_NED:
+        return "BODY_OFFSET_NED";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 std::string coloredFsmName(const uint8_t state)
 {
     switch (state)
@@ -240,7 +292,6 @@ AgentTopics buildAgentTopics(const std::string &agent_key)
 {
     AgentTopics topics;
     topics.control_state_topic = agent_key + "/sunray/uav_control/control_state";
-    topics.local_odom_topic = agent_key + "/sunray/localization/local_odom";
     topics.control_cmd_topic = agent_key + "/sunray/uav_control/control_cmd";
     return topics;
 }
@@ -285,6 +336,82 @@ std::string odomVelText(const nav_msgs::Odometry &odom)
        << "  vy = " << std::setw(6) << v.y << " m/s"
        << "  vz = " << std::setw(6) << v.z << " m/s"
        << "  wz = " << std::setw(6) << w.z * kRadToDeg << " deg/s";
+    return ss.str();
+}
+
+double rollFromQuat(const geometry_msgs::Quaternion &q)
+{
+    return std::atan2(2.0 * (q.w * q.x + q.y * q.z), 1.0 - 2.0 * (q.x * q.x + q.y * q.y));
+}
+
+double pitchFromQuat(const geometry_msgs::Quaternion &q)
+{
+    const double value = 2.0 * (q.w * q.y - q.z * q.x);
+    return std::asin(std::clamp(value, -1.0, 1.0));
+}
+
+double yawFromQuat(const geometry_msgs::Quaternion &q)
+{
+    return std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+}
+
+std::string positionTargetText(const mavros_msgs::PositionTarget &target)
+{
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2);
+    ss << "frame = " << positionTargetFrameName(target.coordinate_frame)
+       << "  mask = " << target.type_mask
+       << "  stamp = " << stampText(target.header.stamp);
+    ss << "\n          "
+       << "pos = (" << target.position.x << ", " << target.position.y << ", "
+       << target.position.z << ") m"
+       << "  vel = (" << target.velocity.x << ", " << target.velocity.y << ", "
+       << target.velocity.z << ") m/s";
+    ss << "\n          "
+       << "acc/force = (" << target.acceleration_or_force.x << ", "
+       << target.acceleration_or_force.y << ", " << target.acceleration_or_force.z << ")"
+       << "  yaw = " << target.yaw * kRadToDeg << " deg"
+       << "  yaw_rate = " << target.yaw_rate * kRadToDeg << " deg/s";
+    return ss.str();
+}
+
+std::string attitudeTargetText(const mavros_msgs::AttitudeTarget &target)
+{
+    const double roll = rollFromQuat(target.orientation);
+    const double pitch = pitchFromQuat(target.orientation);
+    const double yaw = yawFromQuat(target.orientation);
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2);
+    ss << "mask = " << static_cast<int>(target.type_mask)
+       << "  thrust = " << target.thrust
+       << "  stamp = " << stampText(target.header.stamp);
+    ss << "\n          "
+       << "att = (roll " << roll * kRadToDeg << ", pitch " << pitch * kRadToDeg
+       << ", yaw " << yaw * kRadToDeg << ") deg";
+    ss << "\n          "
+       << "body_rate = (" << target.body_rate.x * kRadToDeg << ", "
+       << target.body_rate.y * kRadToDeg << ", " << target.body_rate.z * kRadToDeg
+       << ") deg/s";
+    return ss.str();
+}
+
+std::string controllerOutputText(const sunray_msgs::UAVControlState &state)
+{
+    std::ostringstream ss;
+    ss << "输出类型 = " << colorText(outputTypeName(state.controller_output_type), kAnsiValue);
+    switch (state.controller_output_type)
+    {
+    case sunray_msgs::UAVControlState::OUTPUT_POSITION_TARGET:
+        ss << "  " << positionTargetText(state.position_target);
+        break;
+    case sunray_msgs::UAVControlState::OUTPUT_ATTITUDE_TARGET:
+        ss << "  " << attitudeTargetText(state.attitude_target);
+        break;
+    default:
+        ss << "  暂无底层setpoint输出";
+        break;
+    }
     return ss.str();
 }
 
@@ -363,8 +490,7 @@ std::string buildPanel(const AgentMonitor &agent, const CachedState &cached)
            << "状态话题（发布） -> " << topicValueText(agent.topics.control_state_topic) << "\n";
         ss << "          " << colorText("等待 UAVControlState...", kAnsiWarn) << "\n";
         ss << colorText(" 本机位姿 ", kAnsiLabel)
-           << "位姿话题（订阅） -> " << topicValueText(agent.topics.local_odom_topic) << "\n";
-        ss << "          " << colorText("等待 local_odom...", kAnsiWarn) << "\n";
+           << "位姿来源 -> " << colorText("UAVControlState.self_odom", kAnsiValue) << "\n";
         ss << colorText(" 控制输入 ", kAnsiLabel)
            << "指令话题（订阅） -> " << topicValueText(agent.topics.control_cmd_topic) << "\n";
         return ss.str();
@@ -376,7 +502,12 @@ std::string buildPanel(const AgentMonitor &agent, const CachedState &cached)
     ss << colorText(" 基本状态 ", kAnsiLabel)
        << "状态话题（发布） -> " << topicValueText(agent.topics.control_state_topic) << "\n";
     ss << "          "
-       << "FSM = " << coloredFsmName(state.control_state)
+       << "Name = " << colorText(state.agent_name.empty() ? "-" : state.agent_name, kAnsiValue)
+       << "  ID = " << static_cast<int>(state.agent_id)
+       << "  控制器 = " << colorText(controllerTypeName(state.controller_types), kAnsiValue)
+       << "  FSM = " << coloredFsmName(state.control_state)
+       << "  状态时间 = " << stampText(state.header.stamp) << "\n";
+    ss << "          "
        << "  里程计有效 = " << okText(state.odometry_valid)
        << "  里程计超时 = " << okText(!state.odometry_lost) << "\n";
 
@@ -389,15 +520,20 @@ std::string buildPanel(const AgentMonitor &agent, const CachedState &cached)
        << "home -> " << homePointText(state) << "\n";
 
     ss << colorText(" 本机位姿 ", kAnsiLabel)
-       << "位姿话题（订阅） -> " << topicValueText(agent.topics.local_odom_topic) << "\n";
-    if (cached.has_local_odom)
+       << "位姿来源 -> " << colorText("UAVControlState.self_odom", kAnsiValue) << "\n";
+    if (!state.self_odom.header.stamp.isZero())
     {
-        ss << "          " << odomPoseText(cached.local_odom) << "\n";
-        ss << "          " << odomVelText(cached.local_odom) << "\n";
+        ss << "          "
+           << "frame_id = " << colorText(state.self_odom.header.frame_id, kAnsiValue)
+           << "  child_frame_id = " << colorText(state.self_odom.child_frame_id, kAnsiValue)
+           << "  stamp = " << stampText(state.self_odom.header.stamp)
+           << "\n";
+        ss << "          " << odomPoseText(state.self_odom) << "\n";
+        ss << "          " << odomVelText(state.self_odom) << "\n";
     }
     else
     {
-        ss << "          " << colorText("等待 local_odom...", kAnsiWarn) << "\n";
+        ss << "          " << colorText("等待 self_odom...", kAnsiWarn) << "\n";
     }
 
     ss << colorText(" 控制输入 ", kAnsiLabel)
@@ -405,8 +541,12 @@ std::string buildPanel(const AgentMonitor &agent, const CachedState &cached)
     ss << "          "
        << "来源 = " << colorText(sourceName(cmd.cmd_source), kAnsiValue)
        << "  控制指令 = " << coloredCmdName(cmd.control_cmd)
-       << "  Yaw模式 = " << colorText(yawModeName(cmd.yaw_mode), kAnsiValue) << "\n";
+       << "  Yaw模式 = " << colorText(yawModeName(cmd.yaw_mode), kAnsiValue)
+       << "  指令时间 = " << stampText(cmd.header.stamp) << "\n";
     ss << "          " << "原始输入 -> " << rawControlInputText(cmd) << "\n";
+
+    ss << colorText(" 控制输出 ", kAnsiLabel)
+       << controllerOutputText(state) << "\n";
 
     return ss.str();
 }
@@ -418,14 +558,6 @@ void stateCallback(const sunray_msgs::UAVControlState::ConstPtr &msg, const int 
     cached.state = *msg;
     cached.has_state = true;
     cached.receive_time = ros::Time::now();
-}
-
-void odomCallback(const nav_msgs::Odometry::ConstPtr &msg, const int agent_id)
-{
-    std::lock_guard<std::mutex> lock(g_mutex);
-    CachedState &cached = g_states[agent_id];
-    cached.local_odom = *msg;
-    cached.has_local_odom = true;
 }
 
 void printPanel(const ros::TimerEvent &,
@@ -486,7 +618,7 @@ int main(int argc, char **argv)
     std::vector<AgentMonitor> agents;
     std::vector<ros::Subscriber> subs;
     agents.reserve(static_cast<size_t>(num));
-    subs.reserve(static_cast<size_t>(num * 2));
+    subs.reserve(static_cast<size_t>(num));
 
     for (int i = 1; i <= num; ++i)
     {
@@ -505,14 +637,7 @@ int main(int argc, char **argv)
                 stateCallback(msg, current_agent_id);
             }));
 
-        subs.push_back(nh.subscribe<nav_msgs::Odometry>(
-            agent.topics.local_odom_topic, 10,
-            [current_agent_id](const nav_msgs::Odometry::ConstPtr &msg) {
-                odomCallback(msg, current_agent_id);
-            }));
-
         ROS_INFO("uav_control_monitor subscribe: %s", agent.topics.control_state_topic.c_str());
-        ROS_INFO("uav_control_monitor subscribe: %s", agent.topics.local_odom_topic.c_str());
     }
 
     ros::Timer print_timer = nh.createTimer(

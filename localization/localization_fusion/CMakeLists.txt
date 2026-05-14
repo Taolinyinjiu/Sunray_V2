@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   nav_msgs
   geometry_msgs
+  visualization_msgs
   sunray_common
   sunray_msgs
   tf2
@@ -33,6 +34,7 @@ catkin_package(
     sensor_msgs
     nav_msgs
     geometry_msgs
+    visualization_msgs
     sunray_common
     sunray_msgs
     tf2
@@ -89,7 +91,23 @@ add_dependencies(localization_fusion_monitor_node
   ${catkin_EXPORTED_TARGETS}
 )
 
-install(TARGETS localization_fusion_core localization_fusion_node localization_fusion_monitor_node
+# RViz marker node: visualize OdomState without subscribing extra odom topics
+add_executable(rviz_visualization_localization_fusion_node
+  src/tools/rviz_visualization_localization_fusion_node.cpp
+)
+target_link_libraries(rviz_visualization_localization_fusion_node
+  ${catkin_LIBRARIES}
+)
+add_dependencies(rviz_visualization_localization_fusion_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+install(TARGETS
+  localization_fusion_core
+  localization_fusion_node
+  localization_fusion_monitor_node
+  rviz_visualization_localization_fusion_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

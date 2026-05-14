@@ -11,6 +11,7 @@
 #include <ros/time.h>
 #include <string>
 #include <atomic>
+#include <mutex>
 #include <Eigen/Dense>
 
 /**
@@ -71,6 +72,7 @@ class Geometric_Controller : public Controller_Interface {
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
     bool is_point_complete() override;
+    bool get_last_attitude_target(mavros_msgs::AttitudeTarget& msg) const override;
 
   private:
     enum class AttitudeCommandMode : uint8_t {
@@ -124,6 +126,7 @@ class Geometric_Controller : public Controller_Interface {
     void warn_if_trajectory_exceeds_limits(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
     void reset_stage_thrust_filters();
+    void cache_attitude_setpoint(const control_common::Mavros_SetpointAttitude& setpoint);
     bool
     publish_trajectory_setpoint(const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
                                 ThrustCommandPolicy thrust_policy =
@@ -172,6 +175,7 @@ class Geometric_Controller : public Controller_Interface {
 
     // -----------------缓存状态----------------
     control_common::Mavros_SetpointAttitude last_setpoint_;
+    mutable std::mutex last_setpoint_mutex_;
     controller_data_types::TargetPoint_t last_point_;           // move_point 上次目标
     controller_data_types::TargetBodyPoint_t last_point_body_;  // move_point_body 上次目标
     Eigen::Vector3d hover_point{Eigen::Vector3d::Zero()};       // hover 悬停点（与 linear 对齐）

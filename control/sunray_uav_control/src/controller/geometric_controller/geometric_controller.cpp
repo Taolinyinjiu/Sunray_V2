@@ -6,6 +6,26 @@
 #include <cmath>
 #include <algorithm>
 
+namespace {
+
+mavros_msgs::AttitudeTarget to_attitude_target_msg(
+    const control_common::Mavros_SetpointAttitude& setpoint) {
+    mavros_msgs::AttitudeTarget msg;
+    msg.header.stamp = setpoint.timestamp.isZero() ? ros::Time::now() : setpoint.timestamp;
+    msg.type_mask = setpoint.mask;
+    msg.orientation.x = setpoint.orientation.x();
+    msg.orientation.y = setpoint.orientation.y();
+    msg.orientation.z = setpoint.orientation.z();
+    msg.orientation.w = setpoint.orientation.w();
+    msg.body_rate.x = setpoint.body_rate.x();
+    msg.body_rate.y = setpoint.body_rate.y();
+    msg.body_rate.z = setpoint.body_rate.z();
+    msg.thrust = setpoint.thrust;
+    return msg;
+}
+
+}  // namespace
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 构造函数
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,6 +109,23 @@ void Geometric_Controller::set_current_odom(const control_common::UAVStateEstima
         can_fuse_.store(true, std::memory_order_relaxed);
     }
     has_imu_.store(has_valid_imu_data(), std::memory_order_relaxed);
+}
+
+bool Geometric_Controller::get_last_attitude_target(mavros_msgs::AttitudeTarget& msg) const {
+    std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
+    if (!last_setpoint_.valid) {
+        return false;
+    }
+    msg = to_attitude_target_msg(last_setpoint_);
+    return true;
+}
+
+void Geometric_Controller::cache_attitude_setpoint(
+    const control_common::Mavros_SetpointAttitude& setpoint) {
+    std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
+    last_setpoint_ = setpoint;
+    last_setpoint_.timestamp = ros::Time::now();
+    last_setpoint_.valid = true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,6 +398,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         }
         setpoint_cmd.thrust = 0.0;
         mavros_helper_.pub_attitude_setpoint(setpoint_cmd);
+        cache_attitude_setpoint(setpoint_cmd);
 
         if (start_checkout_offboard_time_ == ros::Time(0)) {
             start_checkout_offboard_time_ = now;
@@ -439,7 +477,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         setpoint.thrust = update_rc_thrust_filter(
             takeoff_state_.thrust_filter, target_thrust, takeoff_tuning_.thrust_tau, now);
         mavros_helper_.pub_attitude_setpoint(setpoint);
-        last_setpoint_ = setpoint;
+        cache_attitude_setpoint(setpoint);
         return false;
     }
 
@@ -477,7 +515,7 @@ bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_ta
         }
         setpoint.thrust = output.thrust;
         mavros_helper_.pub_attitude_setpoint(setpoint);
-        last_setpoint_ = setpoint;
+        cache_attitude_setpoint(setpoint);
 
         const double pos_err = (uav_odometry_.position - motion_curve_.get_end_position()).norm();
         const double vel_err = uav_odometry_.velocity.norm();
@@ -660,7 +698,7 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     }
 
     mavros_helper_.pub_attitude_setpoint(setpoint);
-    last_setpoint_ = setpoint;
+    cache_attitude_setpoint(setpoint);
 
     if (landing_state_.fast_release_started) {
         const double fast_release_elapsed = (now - landing_state_.fast_release_start_time).toSec();
@@ -715,7 +753,7 @@ bool Geometric_Controller::hover() {
     }
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
-    last_setpoint_ = setpoint;
+    cache_attitude_setpoint(setpoint);
     if (has_valid_imu_data()) {
         thrust_estimator::Input_t estimator_input;
         estimator_input.stamp = mavros_helper_.get_imu_data().stamp;
@@ -775,7 +813,7 @@ bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t
     }
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
-    last_setpoint_ = setpoint;
+    cache_attitude_setpoint(setpoint);
     desired_state_.position = uav_odometry_.position;
     if (fixed_height_active) {
         desired_state_.position.z() = velocity.fixed_height;
@@ -886,7 +924,7 @@ bool Geometric_Controller::publish_trajectory_setpoint(
     }
     setpoint.thrust = output.thrust;
     mavros_helper_.pub_attitude_setpoint(setpoint);
-    last_setpoint_ = setpoint;
+    cache_attitude_setpoint(setpoint);
     return true;
 }
 

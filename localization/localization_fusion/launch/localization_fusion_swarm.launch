@@ -11,6 +11,7 @@
   <arg name="tf_world_global" default="false" />
   <arg name="tf_local_world" default="false" />
   <arg name="enable_monitor" default="false" />
+  <arg name="enable_rviz_visualization" default="false" />
 
   <include file="$(find localization_fusion)/launch/localization_fusion.launch">
     <arg name="source_id"            value="$(arg source_id)" />
@@ -23,6 +24,7 @@
     <arg name="tf_world_global"      value="$(arg tf_world_global)" />
     <arg name="tf_local_world"       value="$(arg tf_local_world)" />
     <arg name="enable_monitor"       value="false" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
   </include>
 
   <include file="$(find localization_fusion)/launch/localization_fusion_swarm.launch"
@@ -38,6 +40,7 @@
     <arg name="tf_world_global"      value="$(arg tf_world_global)" />
     <arg name="tf_local_world"       value="$(arg tf_local_world)" />
     <arg name="enable_monitor"       value="$(arg enable_monitor)" />
+    <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
   </include>
 
   <!-- 定位模块输出状态监听节点 -->

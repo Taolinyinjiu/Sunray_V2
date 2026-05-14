@@ -107,6 +107,8 @@ class Sunray_FSM {
     // ------------------------- 变量 ---------------------------
     // 无人机相关信息
     std::string uav_ns_;
+    std::string agent_name_{"uav"};
+    int agent_id_{1};
     // ROS句柄
     ros::NodeHandle nh_;
     // ROS订阅者
@@ -122,10 +124,12 @@ class Sunray_FSM {
     // 里程计缓存
     control_common::UAVStateEstimate last_raw_odometry_;
     control_common::UAVStateEstimate last_odometry_;
+    nav_msgs::Odometry last_self_odom_msg_;
     ros::Time last_raw_odom_receive_time_{ros::Time(0)};
     ros::Time last_valid_odom_receive_time_{ros::Time(0)};
     double odom_frequency_hz_{0.0};
     bool odom_meets_rate_target_{false};
+    bool has_self_odom_msg_{false};
     bool has_valid_odometry_{false};
     // 最新的控制指令
     control_common::UavControlCmd last_control_cmd_;

@@ -4,6 +4,8 @@
 #include "control_data_types/controller_desired_types.hpp"
 #include <cstdint>
 #include <geographic_msgs/GeoPoint.h>
+#include <mavros_msgs/AttitudeTarget.h>
+#include <mavros_msgs/PositionTarget.h>
 
 class Controller_Interface {
   public:
@@ -42,5 +44,14 @@ class Controller_Interface {
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_land_complete() = 0;
     virtual bool is_point_complete() = 0;
+    // ---------------------底层控制输出查询接口-----------------------
+    virtual bool get_last_position_target(mavros_msgs::PositionTarget& msg) const {
+        (void)msg;
+        return false;
+    }
+    virtual bool get_last_attitude_target(mavros_msgs::AttitudeTarget& msg) const {
+        (void)msg;
+        return false;
+    }
   protected:
 };
