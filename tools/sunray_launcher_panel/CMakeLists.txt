@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(simulation_tools)
+project(sunray_launcher_panel)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

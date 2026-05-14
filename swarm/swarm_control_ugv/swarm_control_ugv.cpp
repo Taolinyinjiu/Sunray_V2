@@ -330,6 +330,9 @@ void Swarm_Control_UGV::swarmCmdCallback(const sunray_msgs::UGVSwarmCMD::ConstPt
 
     case sunray_msgs::UGVSwarmCMD::SWARM_FORMATION:
     {
+        // UGV 阵型只在 XY 平面执行，共用 Formation 消息时忽略 UAV 使用的 leader 高度。
+        received_cmd.formation_cmd.leader_pos.z = 0.0;
+
         if (received_cmd.formation_cmd.formation_type == sunray_msgs::Formation::STATIC_KEEP_FORMATION)
         {
             std::vector<double> current_pos_x(static_cast<size_t>(params_.swarm_num), 0.0);

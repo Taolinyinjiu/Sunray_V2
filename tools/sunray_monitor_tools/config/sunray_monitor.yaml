@@ -9,96 +9,13 @@ uav_swarm_cmd_topic: "/sunray/swarm/uav_swarm_cmd"
 ugv_swarm_cmd_topic: "/sunray/swarm/ugv_swarm_cmd"
 uav_swarm_state_topic: "/sunray/swarm/uav_swarm_state"
 ugv_swarm_state_topic: "/sunray/swarm/ugv_swarm_state"
+uav_swarm_rviz_topic: "/sunray/swarm/uav_rviz_markers"
+ugv_swarm_rviz_topic: "/sunray/swarm/ugv_rviz_markers"
 
-rviz_displays:
-  - name: "UAV集群"
-    type: "MarkerArray"
-    topic: "/sunray/swarm/uav_rviz_markers"
-    enabled: true
-  - name: "定位融合-uav1"
-    type: "MarkerArray"
-    topic: "/uav1/sunray/localization/rviz_markers"
-    enabled: true
-  - name: "UAV控制-uav1"
-    type: "MarkerArray"
-    topic: "/uav1/sunray/uav_control/rviz_markers"
-    enabled: true
-  - name: "UGV集群"
-    type: "MarkerArray"
-    topic: "/sunray/swarm/ugv_rviz_markers"
-    enabled: true
-  - name: "定位融合-ugv1"
-    type: "MarkerArray"
-    topic: "/ugv1/sunray/localization/rviz_markers"
-    enabled: true
-  - name: "UGV控制-ugv1"
-    type: "MarkerArray"
-    topic: "/ugv1/sunray/ugv_control/rviz_markers"
-    enabled: false
-
-uav_agents:
-  - id: 1
-    name: "uav1"
-    namespace: "/uav1"
-    control_state_topic: "/uav1/sunray/uav_control/control_state"
-    control_cmd_topic: "/uav1/sunray/uav_control/control_cmd"
-    odom_state_topic: "/uav1/sunray/localization/odom_state"
-    planning_state_topic: "/uav1/sunray/planning/planning_state"
-
-ugv_agents:
-  - id: 1
-    name: "ugv1"
-    namespace: "/ugv1"
-    control_state_topic: "/ugv1/sunray/ugv_control/control_state"
-    control_cmd_topic: "/ugv1/sunray/ugv_control/control_cmd"
-    odom_state_topic: "/ugv1/sunray/localization/odom_state"
-
-state_topics:
-  - name: "UAV控制-uav1"
-    module: "UAV_CONTROL"
-    agent_type: "UAV"
-    agent_name: "uav"
-    agent_id: 1
-    topic: "/uav1/sunray/uav_control/control_state"
-
-  - name: "UAV定位-uav1"
-    module: "LOCALIZATION"
-    agent_type: "UAV"
-    agent_name: "uav"
-    agent_id: 1
-    topic: "/uav1/sunray/localization/odom_state"
-
-  - name: "UAV规划-uav1"
-    module: "UAV_PLANNING"
-    agent_type: "UAV"
-    agent_name: "uav"
-    agent_id: 1
-    topic: "/uav1/sunray/planning/planning_state"
-
-  - name: "UGV控制-ugv1"
-    module: "UGV_CONTROL"
-    agent_type: "UGV"
-    agent_name: "ugv"
-    agent_id: 1
-    topic: "/ugv1/sunray/ugv_control/control_state"
-
-  - name: "UGV定位-ugv1"
-    module: "LOCALIZATION"
-    agent_type: "UGV"
-    agent_name: "ugv"
-    agent_id: 1
-    topic: "/ugv1/sunray/localization/odom_state"
-
-  - name: "UAV集群"
-    module: "UAV_SWARM"
-    agent_type: "SWARM"
-    agent_name: "uav"
-    agent_id: 0
-    topic: "/sunray/swarm/uav_swarm_state"
-
-  - name: "UGV集群"
-    module: "UGV_SWARM"
-    agent_type: "SWARM"
-    agent_name: "ugv"
-    agent_id: 0
-    topic: "/sunray/swarm/ugv_swarm_state"
+agents:
+  uav:
+    prefix: "uav"
+    ids: [1,2]
+  ugv:
+    prefix: "ugv"
+    ids: [1,2]

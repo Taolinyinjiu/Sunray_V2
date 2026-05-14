@@ -1,10 +1,10 @@
 <launch>
   <arg name="launch_groups_config"
-       default="$(find simulation_tools)/config/sunray_launch_groups.yaml" />
+       default="$(find sunray_launcher_panel)/config/sunray_launch_groups.yaml" />
   <arg name="quick_launch_groups_config"
-       default="$(find simulation_tools)/config/sunray_quick_launch_groups.yaml" />
+       default="$(find sunray_launcher_panel)/config/sunray_quick_launch_groups.yaml" />
 
-  <node pkg="simulation_tools"
+  <node pkg="sunray_launcher_panel"
         type="sunray_launcher_node"
         name="sunray_launcher_node"
         output="screen">

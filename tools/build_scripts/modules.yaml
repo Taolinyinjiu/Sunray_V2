@@ -19,10 +19,10 @@ modules:
     source_path: "control/control_tools"
     build_path: "build/control_tools"
     dependencies: []
-  simulation_tools:
+  sunray_launcher_panel:
     description: "Sunray 仿真和模块启动器工具"
-    source_path: "tools/simulation_tools"
-    build_path: "build/simulation_tools"
+    source_path: "tools/sunray_launcher_panel"
+    build_path: "build/sunray_launcher_panel"
     dependencies: []
   sunray_monitor_tools:
     description: "Sunray 状态监控与三维可视化工具"
@@ -202,7 +202,7 @@ groups:
   # 仿真
   Simulation:
     description: "仿真功能包"
-    modules: ["sunray_simulator", "simulation_tools"]
+    modules: ["sunray_simulator", "sunray_launcher_panel"]
 
   # 机型分类
   S-150-Basic:

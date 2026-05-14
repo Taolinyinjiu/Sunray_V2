@@ -11,7 +11,7 @@ vins_logs/
 *.avi
 *.jpg
 *.png
-!tools/simulation_tools/logo/*.png
+!tools/sunray_launcher_panel/logo/*.png
 *.svj
 *.gif
 

@@ -17,10 +17,10 @@ roslaunch sunray_monitor_tools sunray_monitor_panel.launch \
   monitor_config:=/home/amov/Sunray_v2/tools/sunray_monitor_tools/config/sunray_monitor.yaml
 ```
 
-也可以从 `simulation_tools` 的 Sunray 启动器中启动：
+也可以从 `sunray_launcher_panel` 的 Sunray 启动器中启动：
 
 ```bash
-roslaunch simulation_tools sunray_launcher_panel.launch
+roslaunch sunray_launcher_panel sunray_launcher_panel.launch
 ```
 
 ## 界面能力

@@ -15,6 +15,7 @@
 #include <QHeaderView>
 #include <QIcon>
 #include <QLabel>
+#include <QFrame>
 #include <QPainter>
 #include <QPixmap>
 #include <QColor>
@@ -23,11 +24,15 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QStringList>
+#include <QRegularExpression>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTabBar>
+#include <QStyledItemDelegate>
+#include <QStyleOptionViewItem>
 #include <QTextCursor>
 #include <QTextEdit>
+#include <QTextOption>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTabWidget>
@@ -54,7 +59,16 @@ namespace
 
 constexpr int kLaunchIndexRole = Qt::UserRole + 1;
 constexpr int kQuickLaunchIndexRole = Qt::UserRole + 2;
+constexpr int kOriginalTitleRole = Qt::UserRole + 3;
+constexpr int kBadgeStateRole = Qt::UserRole + 4;
 constexpr int kPidFileWarmupMsec = 3000;
+
+enum class BadgeState
+{
+    Idle = 0,
+    Preview = 1,
+    Running = 2,
+};
 
 struct LaunchItem
 {
@@ -86,6 +100,7 @@ struct QuickLaunchStep
 struct QuickLaunchGroup
 {
     std::string title;
+    std::string category{"pengyu_sim"};
     std::string description;
     std::vector<QuickLaunchStep> steps;
 };
@@ -116,6 +131,8 @@ struct QuickLaunchRuntime
     LaunchRuntime terminal;
     QStringList step_script_paths;
     QStringList step_titles;
+    QStringList step_commands;
+    QStringList step_display_commands;
     std::vector<int> linked_launch_indices;
     bool running{false};
 };
@@ -133,6 +150,15 @@ struct LaunchCommand
     std::string launch_file;
     QStringList args;
 };
+
+const QColor kSunrayRunningBg(96, 244, 109);
+const QColor kSunrayRunningFg(6, 68, 31);
+const QColor kSunrayPreviewBg(255, 232, 173);
+const QColor kSunrayPreviewFg(102, 68, 10);
+const QColor kSunraySelectedBg(224, 229, 226);
+const QColor kSunraySelectedFg(22, 53, 45);
+const QColor kSunrayNormalBg(251, 252, 250);
+const QColor kSunrayNormalFg(23, 33, 28);
 
 class LaunchTabBar : public QTabBar
 {
@@ -152,6 +178,15 @@ public:
     }
 
 protected:
+    QSize tabSizeHint(const int index) const override
+    {
+        QFont tab_font = font();
+        tab_font.setBold(true);
+        QFontMetrics metrics(tab_font);
+        const QSize text_size = metrics.size(Qt::TextSingleLine, tabText(index));
+        return QSize(text_size.width() + 36, std::max(text_size.height() + 18, 36));
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
@@ -159,21 +194,21 @@ protected:
 
         for (int i = 0; i < count(); ++i)
         {
-            const QRect rect = tabRect(i).adjusted(1, 1, -1, 0);
+            const QRect rect = tabRect(i).adjusted(1, 2, -1, -2);
             const bool selected = (i == currentIndex());
             const int running_count = running_counts_.count(i) > 0 ? running_counts_.at(i) : 0;
             const int preview_count = preview_counts_.count(i) > 0 ? preview_counts_.at(i) : 0;
 
             const QColor background = running_count > 0
-                                          ? QColor(124, 255, 117)
+                                          ? kSunrayRunningBg
                                           : (preview_count > 0
-                                                 ? QColor(255, 224, 138)
-                                                 : (selected ? QColor(244, 245, 244) : QColor(221, 231, 224)));
+                                                 ? kSunrayPreviewBg
+                                                 : (selected ? kSunraySelectedBg : QColor(221, 231, 224)));
             const QColor text_color = running_count > 0
-                                          ? QColor(5, 55, 24)
+                                          ? kSunrayRunningFg
                                           : (preview_count > 0
-                                                 ? QColor(95, 63, 11)
-                                                 : (selected ? QColor(22, 53, 45) : QColor(49, 88, 77)));
+                                                 ? kSunrayPreviewFg
+                                                 : (selected ? kSunraySelectedFg : QColor(49, 88, 77)));
 
             painter.setPen(QPen(QColor(185, 199, 190), 1));
             painter.setBrush(background);
@@ -183,7 +218,7 @@ protected:
             tab_font.setBold(true);
             painter.setFont(tab_font);
             painter.setPen(text_color);
-            painter.drawText(rect.adjusted(12, 0, -12, 0), Qt::AlignCenter, tabText(i));
+            painter.drawText(rect.adjusted(16, 3, -16, -4), Qt::AlignCenter | Qt::TextSingleLine, tabText(i));
         }
     }
 
@@ -225,6 +260,86 @@ protected:
             return;
         }
         QTreeWidget::mousePressEvent(event);
+    }
+};
+
+class StatusBadgeDelegate : public QStyledItemDelegate
+{
+public:
+    explicit StatusBadgeDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        if (index.column() != 1)
+        {
+            return QStyledItemDelegate::sizeHint(option, index);
+        }
+
+        const QString text = index.data(Qt::DisplayRole).toString();
+        QFont font = option.font;
+        font.setBold(false);
+        QFontMetrics metrics(font);
+        const QSize base = metrics.size(Qt::TextSingleLine, text);
+        return QSize(base.width() + 20, std::max(base.height() + 8, 22));
+    }
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        if (index.column() != 1)
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        const QString text = index.data(Qt::DisplayRole).toString();
+        const int state = index.data(kBadgeStateRole).toInt();
+
+        QColor background = kSunrayNormalBg;
+        QColor foreground = kSunrayNormalFg;
+        QColor border = QColor(190, 199, 194);
+        switch (static_cast<BadgeState>(state))
+        {
+        case BadgeState::Running:
+            background = kSunrayRunningBg;
+            foreground = kSunrayRunningFg;
+            border = QColor(86, 210, 99);
+            break;
+        case BadgeState::Preview:
+            background = kSunrayPreviewBg;
+            foreground = kSunrayPreviewFg;
+            border = QColor(228, 190, 90);
+            break;
+        case BadgeState::Idle:
+        default:
+            background = QColor(232, 236, 233);
+            foreground = QColor(47, 69, 60);
+            border = QColor(197, 206, 201);
+            break;
+        }
+
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->fillRect(option.rect, Qt::transparent);
+
+        QFont font = option.font;
+        font.setBold(false);
+        painter->setFont(font);
+        QFontMetrics metrics(font);
+        const QSize text_size = metrics.size(Qt::TextSingleLine, text);
+        const int padding_x = 10;
+        const int padding_y = 4;
+        const int badge_height = std::max(text_size.height() + padding_y, 20);
+        const int badge_width = std::min(option.rect.width() - 8, text_size.width() + padding_x * 2);
+        QRect badge_rect(0, 0, std::max(badge_width, 44), badge_height);
+        badge_rect.moveCenter(option.rect.center());
+
+        painter->setPen(QPen(border, 1));
+        painter->setBrush(background);
+        painter->drawRoundedRect(badge_rect, badge_rect.height() / 2.0, badge_rect.height() / 2.0);
+
+        painter->setPen(foreground);
+        painter->drawText(badge_rect.adjusted(8, 0, -8, 0), Qt::AlignCenter, text);
+        painter->restore();
     }
 };
 
@@ -299,6 +414,26 @@ QString shellEnvPrepend(const QStringList &paths, const QString &env_name)
     return shellQuote(prefix) + "${" + env_name + ":+:${" + env_name + "}}";
 }
 
+QString formatRosNodeNameForDisplay(const std::string &node)
+{
+    const QString text = QString::fromStdString(node);
+    const QStringList parts = text.split('/', QString::SkipEmptyParts);
+    QString display = text;
+    if (parts.size() > 2 && text.size() > 28)
+    {
+        const QString first_line = "/" + parts[0] + "/" + parts[1];
+        const QString rest = parts.mid(2).join("/");
+        display = rest.isEmpty() ? first_line : first_line + "\n  " + rest;
+    }
+
+    if (display.startsWith('/'))
+    {
+        // Prevent Qt from breaking the line immediately after the leading slash.
+        display.insert(1, QChar(0x2060));
+    }
+    return display;
+}
+
 QString expandUserPath(const std::string &path)
 {
     QString expanded = QString::fromStdString(path).trimmed();
@@ -311,6 +446,33 @@ QString expandUserPath(const std::string &path)
         return QDir::homePath() + expanded.mid(1);
     }
     return expanded;
+}
+
+void writeTerminalTitleKeeper(std::ofstream &script, const QString &title)
+{
+    // GNOME Terminal may refresh the tab title from the active child process.
+    // Keep a lightweight OSC 0 refresher running so quick-launch tabs show the configured Sunray title.
+    script << "sunray_terminal_title=" << shellQuote(title).toStdString() << "\n";
+    script << "sunray_title_keeper_pid=\"\"\n";
+    script << "set_sunray_terminal_title() {\n";
+    script << "  printf '\\033]0;%s\\007' \"$sunray_terminal_title\"\n";
+    script << "}\n";
+    script << "start_sunray_title_keeper() {\n";
+    script << "  while true; do\n";
+    script << "    set_sunray_terminal_title\n";
+    script << "    sleep 1\n";
+    script << "  done &\n";
+    script << "  sunray_title_keeper_pid=$!\n";
+    script << "}\n";
+    script << "stop_sunray_title_keeper() {\n";
+    script << "  if [ -n \"${sunray_title_keeper_pid:-}\" ]; then\n";
+    script << "    kill \"$sunray_title_keeper_pid\" 2>/dev/null\n";
+    script << "    wait \"$sunray_title_keeper_pid\" 2>/dev/null\n";
+    script << "    sunray_title_keeper_pid=\"\"\n";
+    script << "  fi\n";
+    script << "}\n";
+    script << "set_sunray_terminal_title\n";
+    script << "start_sunray_title_keeper\n";
 }
 
 std::string trimCopy(const std::string &text)
@@ -584,7 +746,7 @@ private:
             workspace.root_path = QDir(expandUserPath(configured_path)).absolutePath();
             if (!QDir(workspace.root_path).exists())
             {
-                ROS_WARN("simulation_tools: ignore missing external workspace: %s",
+                ROS_WARN("sunray_launcher_panel: ignore missing external workspace: %s",
                          configured_path.c_str());
                 continue;
             }
@@ -599,7 +761,7 @@ private:
             scanExternalWorkspacePackages(workspace);
             external_workspaces_.push_back(workspace);
 
-            ROS_INFO("simulation_tools: external workspace %s loaded, source_roots=%d",
+            ROS_INFO("sunray_launcher_panel: external workspace %s loaded, source_roots=%d",
                      workspace.configured_path.toStdString().c_str(),
                      workspace.source_roots.size());
         }
@@ -663,7 +825,7 @@ private:
         if (!private_nh_.getParam("launch_groups", groups) ||
             groups.getType() != XmlRpc::XmlRpcValue::TypeArray)
         {
-            ROS_WARN("simulation_tools: no valid ~launch_groups, launcher panel will start empty.");
+            ROS_WARN("sunray_launcher_panel: no valid ~launch_groups, launcher panel will start empty.");
             return;
         }
 
@@ -727,71 +889,130 @@ private:
 
         for (int i = 0; i < groups.size(); ++i)
         {
-            XmlRpc::XmlRpcValue group_value = groups[i];
-            if (group_value.getType() != XmlRpc::XmlRpcValue::TypeStruct ||
-                !group_value.hasMember("title") ||
-                !group_value.hasMember("items"))
+            XmlRpc::XmlRpcValue category_value = groups[i];
+            if (category_value.getType() != XmlRpc::XmlRpcValue::TypeStruct)
             {
                 continue;
             }
 
-            QuickLaunchGroup group;
-            group.title = xmlRpcToString(group_value["title"]);
-            if (group_value.hasMember("description"))
+            if (category_value.hasMember("category") && category_value.hasMember("scripts"))
             {
-                group.description = xmlRpcToString(group_value["description"]);
-            }
+                std::string category = trimCopy(xmlRpcToString(category_value["category"], "pengyu_sim"));
+                if (category.empty())
+                {
+                    category = "pengyu_sim";
+                }
 
-            XmlRpc::XmlRpcValue items = group_value["items"];
-            if (items.getType() != XmlRpc::XmlRpcValue::TypeArray)
-            {
-                continue;
-            }
-
-            for (int j = 0; j < items.size(); ++j)
-            {
-                XmlRpc::XmlRpcValue item_value = items[j];
-                if (item_value.getType() != XmlRpc::XmlRpcValue::TypeStruct)
+                XmlRpc::XmlRpcValue scripts = category_value["scripts"];
+                if (scripts.getType() != XmlRpc::XmlRpcValue::TypeArray)
                 {
                     continue;
                 }
 
-                QuickLaunchStep step;
-                if (item_value.hasMember("ref"))
+                for (int j = 0; j < scripts.size(); ++j)
                 {
-                    step.ref = xmlRpcToString(item_value["ref"]);
+                    QuickLaunchGroup group;
+                    if (parseQuickLaunchGroup(scripts[j], category, group))
+                    {
+                        addQuickLaunchGroup(group);
+                    }
                 }
-                if (item_value.hasMember("title"))
-                {
-                    step.title = xmlRpcToString(item_value["title"]);
-                }
-                if (item_value.hasMember("package"))
-                {
-                    step.package = xmlRpcToString(item_value["package"]);
-                }
-                if (item_value.hasMember("launch"))
-                {
-                    step.launch = xmlRpcToString(item_value["launch"]);
-                }
-                if (item_value.hasMember("delay_sec") &&
-                    (item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeDouble ||
-                     item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeInt))
-                {
-                    step.delay_sec = static_cast<double>(item_value["delay_sec"]);
-                }
-
-                resolveQuickLaunchStep(step);
-                if (!step.package.empty() && !step.launch.empty())
-                {
-                    group.steps.push_back(step);
-                }
+                continue;
             }
 
-            if (!group.title.empty() && !group.steps.empty())
+            // Backward compatibility for the old flat list format.
+            QuickLaunchGroup group;
+            if (parseQuickLaunchGroup(category_value, "pengyu_sim", group))
             {
-                quick_launch_groups_.push_back(group);
+                addQuickLaunchGroup(group);
             }
         }
+    }
+
+    bool parseQuickLaunchGroup(XmlRpc::XmlRpcValue group_value,
+                               const std::string &category_fallback,
+                               QuickLaunchGroup &group)
+    {
+        if (group_value.getType() != XmlRpc::XmlRpcValue::TypeStruct ||
+            !group_value.hasMember("title") ||
+            !group_value.hasMember("items"))
+        {
+            return false;
+        }
+
+        group = QuickLaunchGroup{};
+        group.category = category_fallback.empty() ? "pengyu_sim" : category_fallback;
+        group.title = xmlRpcToString(group_value["title"]);
+        if (group_value.hasMember("category"))
+        {
+            group.category = trimCopy(xmlRpcToString(group_value["category"], group.category));
+        }
+        if (group.category.empty())
+        {
+            group.category = "pengyu_sim";
+        }
+        if (group_value.hasMember("description"))
+        {
+            group.description = xmlRpcToString(group_value["description"]);
+        }
+
+        XmlRpc::XmlRpcValue items = group_value["items"];
+        if (items.getType() != XmlRpc::XmlRpcValue::TypeArray)
+        {
+            return false;
+        }
+
+        for (int j = 0; j < items.size(); ++j)
+        {
+            XmlRpc::XmlRpcValue item_value = items[j];
+            if (item_value.getType() != XmlRpc::XmlRpcValue::TypeStruct)
+            {
+                continue;
+            }
+
+            QuickLaunchStep step;
+            if (item_value.hasMember("ref"))
+            {
+                step.ref = xmlRpcToString(item_value["ref"]);
+            }
+            if (item_value.hasMember("title"))
+            {
+                step.title = xmlRpcToString(item_value["title"]);
+            }
+            if (item_value.hasMember("package"))
+            {
+                step.package = xmlRpcToString(item_value["package"]);
+            }
+            if (item_value.hasMember("launch"))
+            {
+                step.launch = xmlRpcToString(item_value["launch"]);
+            }
+            if (item_value.hasMember("delay_sec") &&
+                (item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeDouble ||
+                 item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeInt))
+            {
+                step.delay_sec = static_cast<double>(item_value["delay_sec"]);
+            }
+
+            resolveQuickLaunchStep(step);
+            if (!step.package.empty() && !step.launch.empty())
+            {
+                group.steps.push_back(step);
+            }
+        }
+
+        return !group.title.empty() && !group.steps.empty();
+    }
+
+    void addQuickLaunchGroup(const QuickLaunchGroup &group)
+    {
+        if (std::find(quick_launch_categories_.begin(),
+                      quick_launch_categories_.end(),
+                      group.category) == quick_launch_categories_.end())
+        {
+            quick_launch_categories_.push_back(group.category);
+        }
+        quick_launch_groups_.push_back(group);
     }
 
     void resolveQuickLaunchStep(QuickLaunchStep &step) const
@@ -804,7 +1025,7 @@ private:
         const int idx = findLaunchItemByRef(step.ref);
         if (idx < 0)
         {
-            ROS_WARN("simulation_tools: quick launch ref not found: %s", step.ref.c_str());
+            ROS_WARN("sunray_launcher_panel: quick launch ref not found: %s", step.ref.c_str());
             return;
         }
 
@@ -852,30 +1073,27 @@ private:
     void buildUi()
     {
         setWindowTitle("Sunray Launcher");
-        const QString package_dir = QString::fromStdString(ros::package::getPath("simulation_tools"));
+        const QString package_dir = QString::fromStdString(ros::package::getPath("sunray_launcher_panel"));
         const QString logo_path = package_dir + "/logo/yundrone_logo.png";
         const QString icon_path = package_dir + "/logo/yundrone_small_logo.jpeg";
         if (QFileInfo::exists(icon_path))
         {
             setWindowIcon(QIcon(icon_path));
         }
-        setMinimumSize(1280, 760);
+        setMinimumSize(1360, 800);
         resize(1600, 920);
 
         auto *root = new QVBoxLayout(this);
-        root->setContentsMargins(14, 14, 14, 14);
-        root->setSpacing(10);
-
-        auto *main_splitter = new QSplitter(Qt::Horizontal);
-        auto *left_panel = new QWidget();
-        auto *left_layout = new QVBoxLayout(left_panel);
-        left_layout->setContentsMargins(0, 0, 0, 0);
-        left_layout->setSpacing(10);
+        root->setContentsMargins(16, 16, 16, 16);
+        root->setSpacing(12);
 
         auto *header = new QWidget();
         auto *header_layout = new QHBoxLayout(header);
         header_layout->setContentsMargins(0, 0, 0, 0);
-        header_layout->setSpacing(14);
+        header_layout->setSpacing(16);
+
+        auto *title = new QLabel("Sunray启动器");
+        title->setObjectName("titleLabel");
 
         auto *logo = new QLabel();
         logo->setObjectName("logoLabel");
@@ -883,15 +1101,19 @@ private:
         {
             logo->setPixmap(QPixmap(logo_path).scaledToHeight(56, Qt::SmoothTransformation));
         }
-        logo->setMinimumWidth(210);
-        logo->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        logo->setMinimumWidth(230);
+        logo->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-        auto *title = new QLabel("Sunray启动器");
-        title->setObjectName("titleLabel");
-        header_layout->addWidget(logo);
         header_layout->addWidget(title);
         header_layout->addStretch();
-        left_layout->addWidget(header);
+        header_layout->addWidget(logo);
+        root->addWidget(header);
+
+        auto *main_splitter = new QSplitter(Qt::Horizontal);
+        auto *left_panel = new QWidget();
+        auto *left_layout = new QVBoxLayout(left_panel);
+        left_layout->setContentsMargins(0, 0, 0, 0);
+        left_layout->setSpacing(12);
 
         auto *splitter = new QSplitter(Qt::Vertical);
         splitter->addWidget(buildLaunchArea());
@@ -900,7 +1122,7 @@ private:
         splitter->setCollapsible(1, false);
         splitter->setStretchFactor(0, 7);
         splitter->setStretchFactor(1, 2);
-        splitter->setSizes({650, 245});
+        splitter->setSizes({700, 280});
         left_layout->addWidget(splitter, 1);
 
         QWidget *monitor_panel = buildSystemMonitorPanel();
@@ -908,9 +1130,9 @@ private:
         main_splitter->addWidget(monitor_panel);
         main_splitter->setCollapsible(0, false);
         main_splitter->setCollapsible(1, false);
-        main_splitter->setStretchFactor(0, 7);
+        main_splitter->setStretchFactor(0, 8);
         main_splitter->setStretchFactor(1, 3);
-        main_splitter->setSizes({1160, 400});
+        main_splitter->setSizes({1260, 380});
         root->addWidget(main_splitter, 1);
 
         setStyleSheet(R"(
@@ -921,7 +1143,7 @@ private:
             QTabWidget::pane { border: 1px solid #b9c7be; border-radius: 10px; background: #fbfcfa; top: -1px; }
             QTreeWidget { background: #fbfcfa; border: 0px; border-radius: 10px; outline: 0; }
             QTreeWidget::item { padding: 7px; }
-            QTreeWidget::item:selected { background: #e6e8e7; color: #111815; }
+            QTreeWidget::item:selected { background: #dfe4e1; color: #111815; }
             QTextEdit { background: #111815; color: #d8f3df; border-radius: 10px; border: 1px solid #23342d; font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; }
             QTextEdit#commandEdit { background: #111815; color: #f3fff6; border: 1px solid #23342d; border-radius: 8px; padding: 4px 8px; }
             QPushButton { background: #1f7a5b; color: white; border: 0px; border-radius: 8px; padding: 8px 14px; font-weight: 700; }
@@ -945,51 +1167,77 @@ private:
         auto *layout = new QVBoxLayout(container);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(8);
-        layout->addWidget(buildQuickLaunchPanel());
+        layout->addWidget(buildQuickLaunchPanel(), 1);
         layout->addWidget(buildLaunchTree(), 1);
         return container;
     }
 
     QWidget *buildQuickLaunchPanel()
     {
-        auto *box = new QGroupBox("快速启动");
+        auto *box = new QGroupBox("一键启动脚本");
         auto *layout = new QVBoxLayout(box);
 
-        quick_launch_tree_ = new ClearableTreeWidget();
-        quick_launch_tree_->setColumnCount(3);
-        quick_launch_tree_->setHeaderLabels(QStringList() << "场景" << "状态" << "说明");
-        quick_launch_tree_->setRootIsDecorated(false);
-        quick_launch_tree_->setIndentation(0);
-        quick_launch_tree_->setItemsExpandable(false);
-        quick_launch_tree_->setExpandsOnDoubleClick(false);
-        quick_launch_tree_->setAllColumnsShowFocus(true);
-        quick_launch_tree_->setMinimumHeight(118);
-        quick_launch_tree_->setMaximumHeight(165);
-        quick_launch_tree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        quick_launch_tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        quick_launch_tree_->header()->setSectionResizeMode(2, QHeaderView::Stretch);
+        quick_launch_tabs_ = new LaunchTabWidget();
+        quick_launch_tab_bar_ = new LaunchTabBar(quick_launch_tabs_);
+        quick_launch_tabs_->useLaunchTabBar(quick_launch_tab_bar_);
 
-        for (int i = 0; i < static_cast<int>(quick_launch_groups_.size()); ++i)
+        for (const std::string &category : quick_launch_categories_)
         {
-            const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(i)];
-            auto *item = new QTreeWidgetItem(quick_launch_tree_);
-            item->setText(0, QString::fromStdString(group.title));
-            item->setText(1, "未运行");
-            item->setText(2, QString::fromStdString(group.description));
-            item->setData(0, kQuickLaunchIndexRole, i);
-            quick_item_by_index_[i] = item;
+            auto *tree = new ClearableTreeWidget();
+            tree->setColumnCount(3);
+            tree->setHeaderLabels(QStringList() << "标题" << "状态" << "功能描述");
+            tree->setRootIsDecorated(false);
+            tree->setIndentation(0);
+            tree->setItemsExpandable(false);
+            tree->setExpandsOnDoubleClick(false);
+            tree->setAllColumnsShowFocus(true);
+            tree->setItemDelegateForColumn(1, new StatusBadgeDelegate(tree));
+            tree->setMinimumHeight(118);
+            tree->header()->setMinimumSectionSize(88);
+            tree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+            tree->header()->setSectionResizeMode(1, QHeaderView::Fixed);
+            tree->setColumnWidth(1, 96);
+            tree->header()->setSectionResizeMode(2, QHeaderView::Stretch);
+
+            for (int i = 0; i < static_cast<int>(quick_launch_groups_.size()); ++i)
+            {
+                const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(i)];
+                if (group.category != category)
+                {
+                    continue;
+                }
+                auto *item = new QTreeWidgetItem(tree);
+                item->setText(0, QString::fromStdString(group.title));
+                item->setText(1, "未运行");
+                item->setText(2, QString::fromStdString(group.description));
+                item->setData(0, kQuickLaunchIndexRole, i);
+                item->setData(0, kOriginalTitleRole, QString::fromStdString(group.title));
+                quick_item_by_index_[i] = item;
+            }
+
+            connect(tree, &QTreeWidget::currentItemChanged, this,
+                    [this](QTreeWidgetItem *, QTreeWidgetItem *) {
+                        updateLaunchPreviewHighlight();
+                        updateGroupTabStatus();
+                        updateQuickLaunchTabStatus();
+                        updateButtons();
+                    });
+
+            quick_launch_trees_.push_back(tree);
+            quick_launch_tabs_->addTab(tree, QString::fromStdString(category));
         }
 
-        connect(quick_launch_tree_, &QTreeWidget::currentItemChanged, this,
-                [this](QTreeWidgetItem *, QTreeWidgetItem *) {
+        connect(quick_launch_tabs_, &QTabWidget::currentChanged, this,
+                [this](int) {
                     updateLaunchPreviewHighlight();
                     updateGroupTabStatus();
+                    updateQuickLaunchTabStatus();
                     updateButtons();
                 });
 
         auto *button_row = new QHBoxLayout();
-        quick_start_btn_ = new QPushButton("启动快速场景");
-        quick_stop_btn_ = new QPushButton("停止快速场景");
+        quick_start_btn_ = new QPushButton("一键启动");
+        quick_stop_btn_ = new QPushButton("一键停止");
         quick_stop_btn_->setObjectName("stopButton");
         auto *hint = new QLabel("使用 Ubuntu Terminal 多标签启动：每个 launch 一个 tab，按配置顺序延时启动");
         hint->setObjectName("mutedLabel");
@@ -1000,14 +1248,14 @@ private:
         connect(quick_start_btn_, &QPushButton::clicked, this, [this]() { startSelectedQuickLaunch(); });
         connect(quick_stop_btn_, &QPushButton::clicked, this, [this]() { stopSelectedQuickLaunch(); });
 
-        layout->addWidget(quick_launch_tree_);
+        layout->addWidget(quick_launch_tabs_);
         layout->addLayout(button_row);
         return box;
     }
 
     QWidget *buildLaunchTree()
     {
-        auto *box = new QGroupBox("模块列表");
+        auto *box = new QGroupBox("启动文件列表");
         auto *layout = new QVBoxLayout(box);
 
         launch_tabs_ = new LaunchTabWidget();
@@ -1017,14 +1265,18 @@ private:
         {
             auto *tree = new ClearableTreeWidget();
             tree->setColumnCount(5);
-            tree->setHeaderLabels(QStringList() << "Launch" << "状态" << "Package" << "文件" << "描述");
+            tree->setHeaderLabels(QStringList() << "标题" << "状态" << "ROS Package" << "launch文件名" << "功能描述");
             tree->setRootIsDecorated(false);
             tree->setIndentation(0);
             tree->setItemsExpandable(false);
             tree->setExpandsOnDoubleClick(false);
             tree->setAllColumnsShowFocus(true);
-            tree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-            tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+            tree->setItemDelegateForColumn(1, new StatusBadgeDelegate(tree));
+            tree->header()->setMinimumSectionSize(88);
+            tree->header()->setSectionResizeMode(0, QHeaderView::Interactive);
+            tree->setColumnWidth(0, 180);
+            tree->header()->setSectionResizeMode(1, QHeaderView::Fixed);
+            tree->setColumnWidth(1, 96);
             tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
             tree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
             tree->header()->setSectionResizeMode(4, QHeaderView::Stretch);
@@ -1043,6 +1295,7 @@ private:
                 tree_item->setText(3, QString::fromStdString(item.launch));
                 tree_item->setText(4, QString::fromStdString(item.description));
                 tree_item->setData(0, kLaunchIndexRole, idx);
+                tree_item->setData(0, kOriginalTitleRole, QString::fromStdString(item.title));
                 item_by_launch_index_[idx] = tree_item;
             }
 
@@ -1093,11 +1346,16 @@ private:
 
     QWidget *buildInfoPanel()
     {
-        auto *box = new QGroupBox("INFO");
+        auto *box = new QGroupBox("操作日志");
         auto *layout = new QVBoxLayout(box);
+
+        auto *caption = new QLabel("启动 / 停止 / 预览 / 退出码");
+        caption->setObjectName("mutedLabel");
+        layout->addWidget(caption);
 
         log_view_ = new QTextEdit();
         log_view_->setReadOnly(true);
+        log_view_->setFont(QFont("JetBrains Mono", 10));
         layout->addWidget(log_view_);
         return box;
     }
@@ -1105,15 +1363,19 @@ private:
     QWidget *buildSystemMonitorPanel()
     {
         auto *box = new QGroupBox("系统状态监控");
-        auto *layout = new QGridLayout(box);
-        box->setMinimumWidth(380);
+        auto *layout = new QVBoxLayout(box);
+        box->setMinimumWidth(320);
         box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
         layout->setContentsMargins(12, 18, 12, 12);
-        layout->setVerticalSpacing(8);
+        layout->setSpacing(10);
+
+        auto *resource_box = new QGroupBox("资源监控");
+        auto *resource_layout = new QGridLayout(resource_box);
+        resource_layout->setContentsMargins(10, 14, 10, 10);
+        resource_layout->setVerticalSpacing(8);
 
         cpu_label_ = new QLabel("CPU: --");
         memory_label_ = new QLabel("内存: --");
-        ros_node_count_label_ = new QLabel("ROS nodes: --");
 
         cpu_bar_ = new QProgressBar();
         cpu_bar_->setRange(0, 100);
@@ -1122,37 +1384,54 @@ private:
         memory_bar_->setRange(0, 100);
         memory_bar_->setTextVisible(false);
 
+        resource_layout->addWidget(cpu_label_, 0, 0);
+        resource_layout->addWidget(cpu_bar_, 0, 1);
+        resource_layout->addWidget(memory_label_, 1, 0);
+        resource_layout->addWidget(memory_bar_, 1, 1);
+        resource_layout->setColumnStretch(1, 1);
+
+        auto *ros_box = new QGroupBox("ROS 节点");
+        auto *ros_layout = new QVBoxLayout(ros_box);
+        ros_layout->setContentsMargins(10, 14, 10, 10);
+        ros_layout->setSpacing(8);
+
+        auto *ros_state_row = new QHBoxLayout();
+        ros_state_marker_ = new QFrame();
+        ros_state_marker_->setFixedSize(12, 12);
+        ros_state_marker_->setFrameShape(QFrame::StyledPanel);
+        ros_state_marker_->setFrameShadow(QFrame::Plain);
+        ros_state_marker_->setStyleSheet("background: #8f9d95; border-radius: 6px;");
+        ros_node_count_label_ = new QLabel("ROS nodes: --");
+        ros_state_text_ = new QLabel("状态: 未知");
+        ros_state_text_->setObjectName("mutedLabel");
+        ros_state_row->addWidget(ros_state_marker_, 0, Qt::AlignVCenter);
+        ros_state_row->addWidget(ros_node_count_label_, 0);
+        ros_state_row->addStretch(1);
+        ros_state_row->addWidget(ros_state_text_, 0);
+
         ros_nodes_view_ = new QTextEdit();
         ros_nodes_view_->setReadOnly(true);
-        ros_nodes_view_->setMinimumWidth(350);
-        ros_nodes_view_->setMinimumHeight(640);
+        ros_nodes_view_->setMinimumWidth(290);
+        ros_nodes_view_->setMinimumHeight(260);
         ros_nodes_view_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        ros_nodes_view_->setLineWrapMode(QTextEdit::WidgetWidth);
+        ros_nodes_view_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        ros_nodes_view_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        ros_nodes_view_->setFont(QFont("JetBrains Mono", 10));
+        ros_layout->addLayout(ros_state_row);
+        ros_layout->addWidget(ros_nodes_view_, 1);
 
         auto *button_row = new QHBoxLayout();
         auto *stop_all_btn = new QPushButton("停止全部 Launch");
         stop_all_btn->setObjectName("stopButton");
-        auto *clear_log_btn = new QPushButton("清空日志");
-        clear_log_btn->setObjectName("secondaryButton");
         button_row->addWidget(stop_all_btn);
-        button_row->addWidget(clear_log_btn);
+        button_row->addStretch(1);
 
         connect(stop_all_btn, &QPushButton::clicked, this, [this]() { stopAllLaunches(); });
-        connect(clear_log_btn, &QPushButton::clicked, this, [this]() {
-            if (log_view_)
-            {
-                log_view_->clear();
-            }
-        });
 
-        layout->addWidget(cpu_label_, 0, 0);
-        layout->addWidget(cpu_bar_, 0, 1);
-        layout->addWidget(memory_label_, 1, 0);
-        layout->addWidget(memory_bar_, 1, 1);
-        layout->addWidget(ros_node_count_label_, 2, 0, 1, 2);
-        layout->addWidget(ros_nodes_view_, 3, 0, 1, 2);
-        layout->addLayout(button_row, 4, 0, 1, 2);
-        layout->setColumnStretch(1, 1);
-        layout->setRowStretch(4, 1);
+        layout->addWidget(resource_box);
+        layout->addWidget(ros_box, 1);
+        layout->addLayout(button_row);
         return box;
     }
 
@@ -1175,10 +1454,18 @@ private:
 
     void clearInitialSelection()
     {
-        if (quick_launch_tree_)
+        for (QTreeWidget *tree : quick_launch_trees_)
         {
-            quick_launch_tree_->clearSelection();
-            quick_launch_tree_->setCurrentItem(nullptr);
+            if (tree)
+            {
+                tree->clearSelection();
+                tree->setCurrentItem(nullptr);
+            }
+        }
+
+        if (quick_launch_tabs_)
+        {
+            quick_launch_tabs_->setCurrentIndex(0);
         }
 
         for (QTreeWidget *tree : launch_trees_)
@@ -1197,6 +1484,7 @@ private:
         onSelectionChanged(nullptr);
         updateLaunchPreviewHighlight();
         updateGroupTabStatus();
+        updateQuickLaunchTabStatus();
         updateButtons();
     }
 
@@ -1227,11 +1515,18 @@ private:
 
     int selectedQuickLaunchIndex() const
     {
-        if (!quick_launch_tree_ || !quick_launch_tree_->currentItem())
+        if (!quick_launch_tabs_ || quick_launch_tabs_->currentIndex() < 0 ||
+            quick_launch_tabs_->currentIndex() >= static_cast<int>(quick_launch_trees_.size()))
         {
             return -1;
         }
-        const QVariant value = quick_launch_tree_->currentItem()->data(0, kQuickLaunchIndexRole);
+
+        QTreeWidget *tree = quick_launch_trees_[static_cast<size_t>(quick_launch_tabs_->currentIndex())];
+        if (!tree || !tree->currentItem())
+        {
+            return -1;
+        }
+        const QVariant value = tree->currentItem()->data(0, kQuickLaunchIndexRole);
         return value.isValid() ? value.toInt() : -1;
     }
 
@@ -1262,7 +1557,7 @@ private:
         }
         if (isQuickLaunchRunning(idx))
         {
-            appendLog("快速启动场景已在运行: " + quick_launch_groups_[static_cast<size_t>(idx)].title);
+            appendLog("[Sunray] 一键启动脚本已在运行: " + quick_launch_groups_[static_cast<size_t>(idx)].title);
             return;
         }
         const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(idx)];
@@ -1272,7 +1567,7 @@ private:
 
         if (!prepareQuickLaunchRuntime(idx, group, runtime))
         {
-            appendLog("快速启动失败: 无法创建 terminal wrapper。");
+            appendLog("[Sunray] 一键启动失败: 无法创建 terminal wrapper。");
             updateQuickLaunchStatus(idx, "未运行");
             updateButtons();
             return;
@@ -1282,7 +1577,7 @@ private:
         const QStringList terminal_command = buildQuickTerminalCommand(runtime, group);
         if (terminal_command.isEmpty())
         {
-            appendLog("快速启动失败: 没有找到 gnome-terminal，无法使用 Ubuntu Terminal 多标签。");
+            appendLog("[Sunray] 一键启动失败: 没有找到 gnome-terminal，无法使用 Ubuntu Terminal 多标签。");
             cleanupRuntimeFiles(runtime.terminal);
             updateQuickLaunchStatus(idx, "未运行");
             updateButtons();
@@ -1297,7 +1592,7 @@ private:
                 [this, process, idx](int exit_code, QProcess::ExitStatus exit_status) {
                     if (exit_code != 0 || exit_status != QProcess::NormalExit)
                     {
-                        appendLog("快速启动 terminal 异常退出: " +
+                        appendLog("[Sunray] 一键启动 terminal 异常退出: " +
                                   quick_launch_groups_[static_cast<size_t>(idx)].title +
                                   " exit_code=" + std::to_string(exit_code) +
                                   " status=" + (exit_status == QProcess::NormalExit ? "normal" : "crashed"));
@@ -1312,7 +1607,7 @@ private:
         process->start();
         if (!process->waitForStarted(1500))
         {
-            appendLog("快速启动失败: " + group.title + "  error=" + process->errorString().toStdString());
+            appendLog("[Sunray] 一键启动失败: " + group.title + "  error=" + process->errorString().toStdString());
             quick_terminal_processes_.erase(idx);
             process->deleteLater();
             cleanupRuntimeFiles(runtime.terminal);
@@ -1326,7 +1621,7 @@ private:
         quick_launch_runtimes_[idx].running = true;
         updateQuickLaunchStatus(idx, "运行 0s");
         markLinkedLaunchesRunning(quick_launch_runtimes_[idx], "运行(快速)");
-        appendLog("已使用 Ubuntu Terminal 多标签启动快速场景: " + group.title);
+        appendQuickLaunchStartLog(group, quick_launch_runtimes_[idx]);
         updateButtons();
     }
 
@@ -1409,7 +1704,7 @@ private:
         }
         if (isRunning(idx))
         {
-            appendLog("Launch 已在运行: " + launch_items_[static_cast<size_t>(idx)].title);
+            appendLog("[Sunray] Launch 已在运行: " + launch_items_[static_cast<size_t>(idx)].title);
             return;
         }
 
@@ -1417,7 +1712,7 @@ private:
         LaunchCommand command;
         if (!parseEditedCommand(command))
         {
-            appendLog("启动失败: 启动命令格式错误，应为 roslaunch <package> <launch> [args...]");
+            appendLog("[Sunray] 启动失败: 启动命令格式错误，应为 roslaunch <package> <launch> [args...]");
             updateLaunchStatus(idx, "未运行");
             updateGroupTabStatus();
             updateButtons();
@@ -1427,7 +1722,7 @@ private:
         const std::string launch_file = resolveLaunchFilePath(command.package_name, command.launch_file);
         if (!QFileInfo::exists(QString::fromStdString(launch_file)))
         {
-            appendLog("启动失败: 找不到 launch 文件 " + launch_file);
+            appendLog("[Sunray] 启动失败: 找不到 launch 文件 " + launch_file);
             updateLaunchStatus(idx, "未运行");
             updateGroupTabStatus();
             updateButtons();
@@ -1441,7 +1736,7 @@ private:
         runtime.start_time = QDateTime::currentDateTime();
         if (!prepareTerminalRuntime(idx, QString::fromStdString(item.title), runtime))
         {
-            appendLog("启动失败: 无法创建 terminal wrapper。");
+            appendLog("[Sunray] 启动失败: 无法创建 terminal wrapper。");
             updateLaunchStatus(idx, "未运行");
             updateGroupTabStatus();
             updateButtons();
@@ -1452,7 +1747,7 @@ private:
         const QStringList terminal_command = buildTerminalCommand(runtime);
         if (terminal_command.isEmpty())
         {
-            appendLog("启动失败: 没有找到可用终端，请安装 gnome-terminal、konsole 或 xterm。");
+            appendLog("[Sunray] 启动失败: 没有找到可用终端，请安装 gnome-terminal、konsole 或 xterm。");
             cleanupRuntimeFiles(runtime);
             updateLaunchStatus(idx, "未运行");
             updateGroupTabStatus();
@@ -1468,7 +1763,7 @@ private:
                 [this, process, idx](int exit_code, QProcess::ExitStatus exit_status) {
                     if (exit_code != 0 || exit_status != QProcess::NormalExit)
                     {
-                        appendLog("终端启动器异常退出: " + launch_items_[static_cast<size_t>(idx)].title +
+                        appendLog("[Sunray] 终端启动器异常退出: " + launch_items_[static_cast<size_t>(idx)].title +
                                   " exit_code=" + std::to_string(exit_code) +
                                   " status=" + (exit_status == QProcess::NormalExit ? "normal" : "crashed"));
                     }
@@ -1482,7 +1777,7 @@ private:
         process->start();
         if (!process->waitForStarted(1500))
         {
-            appendLog("启动失败: " + item.title + "  error=" + process->errorString().toStdString());
+            appendLog("[Sunray] 启动失败: " + item.title + "  error=" + process->errorString().toStdString());
             terminal_processes_.erase(idx);
             process->deleteLater();
             cleanupRuntimeFiles(runtime);
@@ -1496,7 +1791,8 @@ private:
         launch_runtimes_[idx].running = true;
         updateLaunchStatus(idx, "运行 0s");
         updateGroupTabStatus();
-        appendLog("已在 terminal 中启动: " + display_command.toStdString());
+        appendLog("[Sunray] Launch: " + item.title);
+        appendLog("[Sunray] Command: " + display_command.toStdString());
         updateButtons();
     }
 
@@ -1623,6 +1919,7 @@ private:
         {
             const QuickLaunchStep &step = group.steps[i];
             const QString command = buildQuickStepRoslaunchCommand(step);
+            const QString display_command = buildQuickStepDisplayCommand(step);
             if (command.isEmpty())
             {
                 continue;
@@ -1633,6 +1930,7 @@ private:
                                       group,
                                       step,
                                       command,
+                                      display_command.isEmpty() ? command : display_command,
                                       valid_step_index,
                                       group.steps.size(),
                                       start_delay_sec))
@@ -1641,6 +1939,8 @@ private:
             }
             runtime.step_script_paths << step_script_path;
             runtime.step_titles << QString::fromStdString(step.title.empty() ? step.package : step.title);
+            runtime.step_commands << command;
+            runtime.step_display_commands << (display_command.isEmpty() ? command : display_command);
             has_valid_step = true;
             ++valid_step_index;
             start_delay_sec += std::max(0.0, step.delay_sec);
@@ -1653,6 +1953,27 @@ private:
         return true;
     }
 
+    void appendQuickLaunchStartLog(const QuickLaunchGroup &group,
+                                   const QuickLaunchRuntime &runtime)
+    {
+        appendLog("[Sunray] 一键启动脚本: " + group.title);
+        for (int i = 0; i < runtime.step_titles.size(); ++i)
+        {
+            appendLog(QString("[Sunray] 当前 Terminal Tab %1/%2: %3")
+                          .arg(i + 1)
+                          .arg(runtime.step_titles.size())
+                          .arg(runtime.step_titles[i])
+                          .toStdString());
+            if (i < runtime.step_commands.size() && !runtime.step_commands[i].isEmpty())
+            {
+                const QString command = i < runtime.step_display_commands.size()
+                                            ? runtime.step_display_commands[i]
+                                            : runtime.step_commands[i];
+                appendLog("[Sunray] Command: " + command.toStdString());
+            }
+        }
+    }
+
     QString quickStepScriptPath(const QuickLaunchRuntime &runtime, const int step_index) const
     {
         return QString("%1_step_%2.sh").arg(runtime.terminal.script_path).arg(step_index);
@@ -1662,6 +1983,7 @@ private:
                               const QuickLaunchGroup &group,
                               const QuickLaunchStep &step,
                               const QString &command,
+                              const QString &display_command,
                               const int step_index,
                               const size_t step_count,
                               const double start_delay_sec) const
@@ -1675,6 +1997,7 @@ private:
         const QString step_title = QString::fromStdString(step.title.empty() ? step.package : step.title);
         script << "#!/usr/bin/env bash\n";
         script << "set +e\n";
+        writeTerminalTitleKeeper(script, step_title);
         if (step_index == 0)
         {
             script << "rm -f " << shellQuote(path.section("_step_", 0, 0) + ".pid").toStdString() << " "
@@ -1691,19 +2014,21 @@ private:
         }
         script << "clear\n";
         script << "echo " << shellQuote("============================================================").toStdString() << "\n";
-        script << "echo " << shellQuote(QString("[Sunray] 快速启动场景: %1").arg(QString::fromStdString(group.title))).toStdString() << "\n";
+        script << "echo " << shellQuote(QString("[Sunray] 一键启动脚本: %1").arg(QString::fromStdString(group.title))).toStdString() << "\n";
         script << "echo " << shellQuote(QString("[Sunray] 当前 Terminal Tab %1/%2: %3")
                                             .arg(step_index + 1)
                                             .arg(step_count)
                                             .arg(step_title))
                                       .toStdString()
                << "\n";
-        script << "echo " << shellQuote("[Sunray] Command: " + command).toStdString() << "\n";
-        script << "echo " << shellQuote("[Sunray] 停止整组: 使用启动器的“停止快速场景”按钮").toStdString() << "\n";
+        script << "echo " << shellQuote("[Sunray] Command: " + display_command).toStdString() << "\n";
+        script << "echo " << shellQuote("[Sunray] 停止整组: 使用启动器的“一键停止”按钮").toStdString() << "\n";
         script << "echo " << shellQuote("============================================================").toStdString() << "\n";
-        script << "trap 'exit 130' INT TERM HUP\n";
+        script << "trap 'stop_sunray_title_keeper; exit 130' INT TERM HUP\n";
         script << command.toStdString() << "\n";
         script << "exit_code=$?\n";
+        script << "stop_sunray_title_keeper\n";
+        script << "set_sunray_terminal_title\n";
         script << "trap - INT TERM HUP\n";
         script << "echo \"$exit_code\" >> " << shellQuote(path.section("_step_", 0, 0) + ".done").toStdString() << "\n";
         script << "echo \"[Sunray] roslaunch exited with code ${exit_code}. Press Enter to keep/close this tab.\"\n";
@@ -1743,6 +2068,28 @@ private:
         return buildRoslaunchCommand(step);
     }
 
+    QString buildQuickStepDisplayCommand(const QuickLaunchStep &step) const
+    {
+        if (step.linked_launch_index >= 0)
+        {
+            const auto edited_it = edited_launch_commands_.find(step.linked_launch_index);
+            if (edited_it != edited_launch_commands_.end() && !edited_it->second.trimmed().isEmpty())
+            {
+                return edited_it->second.simplified();
+            }
+        }
+
+        QStringList args;
+        args << "roslaunch"
+             << QString::fromStdString(step.package)
+             << QString::fromStdString(step.launch);
+        for (const std::string &arg : step.args)
+        {
+            args << QString::fromStdString(arg);
+        }
+        return args.join(" ");
+    }
+
     QString buildExecutableRoslaunchCommand(const QString &display_command) const
     {
         const QStringList tokens = splitCommandLine(display_command.simplified());
@@ -1779,7 +2126,7 @@ private:
                                       ? runtime.step_titles[i]
                                       : QString("launch_%1").arg(i + 1);
             command << (i == 0 ? "--window" : "--tab")
-                    << "--title" << title.left(28)
+                    << "--title" << title
                     << "--command" << QString("bash -lc %1").arg(shellQuote(runtime.step_script_paths[i]));
         }
         return command;
@@ -2038,7 +2385,7 @@ private:
             return;
         }
 
-        appendLog("停止快速场景: " + quick_launch_groups_[static_cast<size_t>(idx)].title);
+        appendLog("[Sunray] 一键停止脚本: " + quick_launch_groups_[static_cast<size_t>(idx)].title);
         const std::vector<pid_t> pids = readPidListFile(it->second.terminal.pid_file);
         for (const pid_t pid : pids)
         {
@@ -2166,7 +2513,7 @@ private:
                     const std::string exit_code = readFirstLine(entry.second.terminal.done_file);
                     updateQuickLaunchStatus(idx, "未运行");
                     markLinkedLaunchesRunning(entry.second, "未运行");
-                    appendLog("快速场景结束: " + quick_launch_groups_[static_cast<size_t>(idx)].title +
+                    appendLog("[Sunray] 一键启动脚本结束: " + quick_launch_groups_[static_cast<size_t>(idx)].title +
                               (exit_code.empty() ? "" : " exit_code=" + exit_code));
                     entry.second.running = false;
                     entry.second.terminal.running = false;
@@ -2249,6 +2596,21 @@ private:
                                                ? QString("ROS nodes: %1 个正在运行").arg(running_nodes.size())
                                                : "ROS nodes: 无法连接 ROS master");
         }
+        if (ros_state_marker_)
+        {
+            if (got_nodes)
+            {
+                ros_state_marker_->setStyleSheet("background: #60f46d; border-radius: 6px;");
+            }
+            else
+            {
+                ros_state_marker_->setStyleSheet("background: #9caaa3; border-radius: 6px;");
+            }
+        }
+        if (ros_state_text_)
+        {
+            ros_state_text_->setText(got_nodes ? "状态: 在线" : "状态: 离线");
+        }
         if (ros_nodes_view_)
         {
             QStringList lines;
@@ -2256,7 +2618,7 @@ private:
             {
                 for (const std::string &node : running_nodes)
                 {
-                    lines << QString::fromStdString(node);
+                    lines << formatRosNodeNameForDisplay(node);
                 }
             }
             else
@@ -2304,12 +2666,36 @@ private:
         return std::find(preview_indices.begin(), preview_indices.end(), idx) != preview_indices.end();
     }
 
+    bool isLaunchSelected(const int idx) const
+    {
+        return current_selected_launch_index_ == idx;
+    }
+
+    QString originalTitleOf(const QTreeWidgetItem *item) const
+    {
+        if (!item)
+        {
+            return "";
+        }
+        const QVariant value = item->data(0, kOriginalTitleRole);
+        if (value.isValid())
+        {
+            return value.toString();
+        }
+        return item->text(0).trimmed().remove(QRegularExpression("^[▌▎\\s]+"));
+    }
+
     void updateLaunchStatus(const int idx, const QString &status)
     {
         const auto it = item_by_launch_index_.find(idx);
         if (it != item_by_launch_index_.end() && it->second)
         {
-            it->second->setText(1, status);
+            const bool running = status.startsWith("运行");
+            const bool preview = status.startsWith("预览");
+            it->second->setData(1, kBadgeStateRole, running ? static_cast<int>(BadgeState::Running)
+                                                            : (preview ? static_cast<int>(BadgeState::Preview)
+                                                                       : static_cast<int>(BadgeState::Idle)));
+            it->second->setText(1, running ? "运行" : (preview ? "预览" : "未运行"));
             applyLaunchRowStyle(idx);
         }
     }
@@ -2325,24 +2711,54 @@ private:
         const QString status = it->second->text(1);
         const bool running = status.startsWith("运行");
         const bool preview = !running && isLaunchInSelectedQuickPreview(idx);
+        const bool selected = isLaunchSelected(idx);
         const QColor row_background = running
-                                          ? QColor(124, 255, 117)
-                                          : (preview ? QColor(255, 239, 194) : QColor(251, 252, 250));
+                                          ? kSunrayRunningBg
+                                          : (preview ? kSunrayPreviewBg : (selected ? kSunraySelectedBg : kSunrayNormalBg));
         const QColor row_foreground = running
-                                          ? QColor(5, 55, 24)
-                                          : (preview ? QColor(95, 63, 11) : QColor(23, 33, 28));
+                                          ? kSunrayRunningFg
+                                          : (preview ? kSunrayPreviewFg : (selected ? kSunraySelectedFg : kSunrayNormalFg));
         for (int column = 0; column < it->second->columnCount(); ++column)
         {
             it->second->setBackground(column, row_background);
             it->second->setForeground(column, row_foreground);
+            QFont font = it->second->font(column);
+            font.setBold(selected || running);
+            it->second->setFont(column, font);
         }
+        const QString title = originalTitleOf(it->second);
+        const QString marker = running ? "▌" : (preview ? "▎" : (selected ? "▌" : " "));
+        it->second->setText(0, QString("%1 %2").arg(marker, title));
     }
 
     void updateLaunchPreviewHighlight()
     {
+        const int quick_idx = selectedQuickLaunchIndex();
         for (const auto &entry : item_by_launch_index_)
         {
             applyLaunchRowStyle(entry.first);
+        }
+        for (const auto &entry : quick_item_by_index_)
+        {
+            if (!entry.second)
+            {
+                continue;
+            }
+            const bool selected = quick_idx == entry.first;
+            const bool running = entry.second->text(1).startsWith("运行");
+            const QColor background = running ? kSunrayRunningBg : (selected ? kSunraySelectedBg : kSunrayNormalBg);
+            const QColor foreground = running ? kSunrayRunningFg : (selected ? kSunraySelectedFg : kSunrayNormalFg);
+            for (int column = 0; column < entry.second->columnCount(); ++column)
+            {
+                entry.second->setBackground(column, background);
+                entry.second->setForeground(column, foreground);
+                QFont font = entry.second->font(column);
+                font.setBold(selected || running);
+                entry.second->setFont(column, font);
+            }
+            const QString title = originalTitleOf(entry.second);
+            const QString marker = running ? "▌" : (selected ? "▌" : " ");
+            entry.second->setText(0, QString("%1 %2").arg(marker, title));
         }
     }
 
@@ -2351,14 +2767,68 @@ private:
         const auto it = quick_item_by_index_.find(idx);
         if (it != quick_item_by_index_.end() && it->second)
         {
-            it->second->setText(1, status);
             const bool running = status.startsWith("运行");
-            const QColor row_background = running ? QColor(124, 255, 117) : QColor(251, 252, 250);
-            const QColor row_foreground = running ? QColor(5, 55, 24) : QColor(23, 33, 28);
+            const bool preview = status.startsWith("预览");
+            it->second->setData(1, kBadgeStateRole, running ? static_cast<int>(BadgeState::Running)
+                                                            : (preview ? static_cast<int>(BadgeState::Preview)
+                                                                       : static_cast<int>(BadgeState::Idle)));
+            it->second->setText(1, running ? "运行" : (preview ? "预览" : "未运行"));
+            const QColor row_background = running ? kSunrayRunningBg : QColor(251, 252, 250);
+            const QColor row_foreground = running ? kSunrayRunningFg : QColor(23, 33, 28);
             for (int column = 0; column < it->second->columnCount(); ++column)
             {
                 it->second->setBackground(column, row_background);
                 it->second->setForeground(column, row_foreground);
+            }
+            updateLaunchPreviewHighlight();
+            updateQuickLaunchTabStatus();
+        }
+    }
+
+    int runningCountForQuickCategory(const std::string &category) const
+    {
+        int running_count = 0;
+        for (int i = 0; i < static_cast<int>(quick_launch_groups_.size()); ++i)
+        {
+            const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(i)];
+            if (group.category == category && isQuickLaunchRunning(i))
+            {
+                ++running_count;
+            }
+        }
+        return running_count;
+    }
+
+    int previewCountForQuickCategory(const std::string &category) const
+    {
+        const int selected_idx = selectedQuickLaunchIndex();
+        if (selected_idx < 0 || selected_idx >= static_cast<int>(quick_launch_groups_.size()))
+        {
+            return 0;
+        }
+
+        const QuickLaunchGroup &group = quick_launch_groups_[static_cast<size_t>(selected_idx)];
+        return group.category == category && !isQuickLaunchRunning(selected_idx) ? 1 : 0;
+    }
+
+    void updateQuickLaunchTabStatus()
+    {
+        if (!quick_launch_tabs_)
+        {
+            return;
+        }
+
+        for (int i = 0; i < static_cast<int>(quick_launch_categories_.size()) && i < quick_launch_tabs_->count(); ++i)
+        {
+            const std::string &category = quick_launch_categories_[static_cast<size_t>(i)];
+            const int running_count = runningCountForQuickCategory(category);
+            const int preview_count = previewCountForQuickCategory(category);
+            QString tab_text = QString::fromStdString(category);
+            quick_launch_tabs_->setTabText(i, tab_text);
+            if (quick_launch_tab_bar_)
+            {
+                quick_launch_tab_bar_->setRunningCount(i, running_count);
+                quick_launch_tab_bar_->setPreviewCount(i, preview_count);
             }
         }
     }
@@ -2445,6 +2915,7 @@ private:
     std::vector<LaunchItem> launch_items_;
     std::vector<LaunchGroup> launch_groups_;
     std::vector<QuickLaunchGroup> quick_launch_groups_;
+    std::vector<std::string> quick_launch_categories_;
     std::map<int, QTreeWidgetItem *> item_by_launch_index_;
     std::map<int, QTreeWidgetItem *> quick_item_by_index_;
     std::map<int, QProcess *> terminal_processes_;
@@ -2460,13 +2931,17 @@ private:
 
     LaunchTabWidget *launch_tabs_{nullptr};
     LaunchTabBar *launch_tab_bar_{nullptr};
-    QTreeWidget *quick_launch_tree_{nullptr};
+    LaunchTabWidget *quick_launch_tabs_{nullptr};
+    LaunchTabBar *quick_launch_tab_bar_{nullptr};
     std::vector<QTreeWidget *> launch_trees_;
+    std::vector<QTreeWidget *> quick_launch_trees_;
     QTextEdit *selected_command_{nullptr};
     QTextEdit *log_view_{nullptr};
     QLabel *cpu_label_{nullptr};
     QLabel *memory_label_{nullptr};
     QLabel *ros_node_count_label_{nullptr};
+    QFrame *ros_state_marker_{nullptr};
+    QLabel *ros_state_text_{nullptr};
     QProgressBar *cpu_bar_{nullptr};
     QProgressBar *memory_bar_{nullptr};
     QTextEdit *ros_nodes_view_{nullptr};

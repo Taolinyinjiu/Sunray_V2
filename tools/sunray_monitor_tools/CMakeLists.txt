@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   roslib
   std_msgs
   geometry_msgs
+  mavros_msgs
   nav_msgs
   visualization_msgs
   topic_tools

@@ -1,0 +1,71 @@
+quick_launch_groups:
+  - category: "pengyu_sim"
+    scripts:
+      - title: "单无人机控制验证（pengyu_sim）"
+        description: "pengyu_sim无人机仿真节点 + 定位融合节点 + 无人机控制节点"
+        items:
+          - ref: "pengyu_sim仿真器/无人机动力学仿真"
+            delay_sec: 2.0
+          - ref: "定位融合/无人机定位融合"
+            delay_sec: 2.0
+          - ref: "无人机控制/单机无人机控制"
+
+      - title: "单无人机规划验证（pengyu_sim）"
+        description: "pengyu_sim地图/局部点云 + pengyu_sim无人机仿真节点 + 定位融合节点 + 无人机控制节点 + diff 规划节点"
+        items:
+          - ref: "pengyu_sim仿真器/全局点云发布"
+            delay_sec: 0.5
+          - ref: "pengyu_sim仿真器/局部点云渲染"
+            delay_sec: 0.5
+          - ref: "pengyu_sim仿真器/无人机动力学仿真"
+            delay_sec: 1.0
+          - ref: "定位融合/无人机定位融合"
+            delay_sec: 1.0
+          - ref: "无人机控制/单机无人机控制"
+            delay_sec: 1.0
+          - ref: "路径规划/Sunray Planning Diff"
+
+      - title: "单无人车控制验证（pengyu_sim）"
+        description: "pengyu_sim无人车仿真节点 + 定位融合节点 + 无人车控制节点"
+        items:
+          - ref: "pengyu_sim仿真器/无人车动力学仿真"
+            delay_sec: 1.0
+          - ref: "定位融合/无人车定位融合"
+            delay_sec: 1.0
+          - ref: "无人车控制/单车无人车控制"
+
+      - title: "6机无人机集群仿真（pengyu_sim）"
+        description: "pengyu_sim无人机仿真节点*6 + 定位融合节点*6 + 无人机控制节点*6 + 无人机集群控制节点*6"
+        items:
+          - ref: "pengyu_sim仿真器/集群无人机动力学仿真"
+            delay_sec: 1.5
+          - ref: "定位融合/集群无人机定位融合"
+            delay_sec: 1.0
+          - ref: "无人机控制/集群无人机控制"
+            delay_sec: 1.0
+          - ref: "无人机集群控制/无人机集群控制仿真"
+
+      - title: "6车无人车集群仿真（pengyu_sim）"
+        description: "pengyu_sim无人车仿真节点*6 + 定位融合节点*6 + 无人车控制节点*6 + 无人车集群控制节点*6"
+        items:
+          - ref: "pengyu_sim仿真器/集群无人车动力学仿真"
+            delay_sec: 1.5
+          - ref: "定位融合/集群无人车定位融合"
+            delay_sec: 1.0
+          - ref: "无人车控制/集群无人车控制"
+            delay_sec: 1.0
+          - ref: "无人车集群控制/无人车集群控制仿真"
+
+  - category: "Gazebo"
+    scripts:
+      - title: "Gazebo 单无人机仿真占位"
+        description: "占位脚本：后续用于接入 Gazebo 仿真链路"
+        items:
+          - ref: "Gazebo仿真器/Gazebo 单无人机"
+
+  - category: "真机"
+    scripts:
+      - title: "真机单无人机联调占位"
+        description: "占位脚本：后续用于接入真机联调链路"
+        items:
+          - ref: "Sunray简易地面站/Sunray简易地面站"

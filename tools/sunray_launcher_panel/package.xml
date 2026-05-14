@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>simulation_tools</name>
+  <name>sunray_launcher_panel</name>
   <version>0.0.0</version>
   <description>Sunray simulation and module launcher tools.</description>
 
