@@ -69,7 +69,7 @@ UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh) {
 
   // 初始化订阅器
   sub_odom_ = nh_.subscribe(agent_prefix_ + "/sunray/localization/local_odom", 10, &UGVControlFSM::odom_callback, this);
-  sub_odom_status_ = nh_.subscribe(agent_prefix_ + "/sunray/localization/odom_status", 10, &UGVControlFSM::odom_status_callback, this);
+  sub_odom_state_ = nh_.subscribe(agent_prefix_ + "/sunray/localization/odom_state", 10, &UGVControlFSM::odom_state_callback, this);
   sub_control_cmd_ = nh_.subscribe(agent_prefix_ + "/sunray/ugv_control/control_cmd", 10, &UGVControlFSM::control_cmd_callback, this);
 
   // 初始化发布器
@@ -107,7 +107,7 @@ void UGVControlFSM::odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
   controller_->set_current_state(pos, vel, yaw);
 }
 
-void UGVControlFSM::odom_status_callback(const sunray_msgs::OdomStatus::ConstPtr& msg) {
+void UGVControlFSM::odom_state_callback(const sunray_msgs::OdomState::ConstPtr& msg) {
   // 处理里程计状态信息
   // 这里可以根据需要添加逻辑
 }

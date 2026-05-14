@@ -137,7 +137,7 @@ Subscribed Topics：
 | 话题 | 类型 | 说明 |
 | --- | --- | --- |
 | `/{agent_name}{agent_id}/sunray/localization/local_odom` | `nav_msgs/Odometry` | 本机局部里程计，来自 `localization_fusion` |
-| `/{agent_name}{agent_id}/sunray/fsm/state` | `sunray_msgs/UAVControlFSMState` | 本机 UAV 控制状态机状态，来自 `sunray_uav_control` |
+| `/{agent_name}{agent_id}/sunray/uav_control/control_state` | `sunray_msgs/UAVControlState` | 本机 UAV 控制状态机状态，来自 `sunray_uav_control` |
 | `/{agent_name}{peer_id}/sunray/localization/local_odom` | `nav_msgs/Odometry` | 邻居里程计，`peer_id` 范围为 `[1, swarm_num]` 且不等于本机 ID |
 | `/sunray/swarm/uav_swarm_cmd` | `sunray_msgs/UAVSwarmCMD` | UAV 集群控制指令 |
 
@@ -874,7 +874,7 @@ INIT
   -> TAKEOFF
 
 TAKEOFF
-  等待 UAVControlFSMState::FSM_HOVER
+  等待 UAVControlState::HOVER
   记录返航点
   -> ARRIVED
 

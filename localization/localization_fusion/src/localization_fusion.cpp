@@ -384,7 +384,7 @@ void LocalizationFusion::healthtimer_callback(const ros::TimerEvent& e) {
     // 1. 检查Localization_Fusion各变量状态
     // 2. 当使用aruco进行重定位时，在这里持续发送动态tf树
     // 3，检查通信链路是否超时，只检查odometry,不检查relocalization
-    // 4. 填充sunray_msgs::OdomStatus消息并发布
+    // 4. 填充sunray_msgs::OdomState消息并发布
 
     if (selected_source_.localization_mode == LocalizationMode::LOCAL_WITH_ARUCO) {
         // 默认值为原点重合

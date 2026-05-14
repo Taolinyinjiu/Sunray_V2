@@ -5,7 +5,7 @@
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
 #include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/OdomStatus.h>
+#include <sunray_msgs/OdomState.h>
 #include <sunray_msgs/UGVControlFSMState.h>
 #include <memory>
 #include <Eigen/Eigen>
@@ -36,7 +36,7 @@ private:
   int drive_type_;
   std::string drive_type_name_;
   ros::Subscriber sub_odom_;
-  ros::Subscriber sub_odom_status_;
+  ros::Subscriber sub_odom_state_;
   ros::Subscriber sub_control_cmd_;
   ros::Publisher pub_cmd_vel_;
   ros::Publisher pub_fsm_state_;
@@ -83,7 +83,7 @@ private:
 
   // 回调函数
   void odom_callback(const nav_msgs::Odometry::ConstPtr& msg);
-  void odom_status_callback(const sunray_msgs::OdomStatus::ConstPtr& msg);
+  void odom_state_callback(const sunray_msgs::OdomState::ConstPtr& msg);
   void control_cmd_callback(const sunray_msgs::UGVControlCMD::ConstPtr& msg);
   void control_timer_callback(const ros::TimerEvent& event);
   void geo_fence_timer_callback(const ros::TimerEvent& event);
