@@ -10,6 +10,8 @@ vins_logs/
 *.mp4
 *.avi
 *.jpg
+*.png
+!tools/simulation_tools/logo/*.png
 *.svj
 *.gif
 
