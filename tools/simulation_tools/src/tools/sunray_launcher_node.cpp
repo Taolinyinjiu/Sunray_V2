@@ -33,6 +33,7 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QMouseEvent>
 
 #include <algorithm>
 #include <cerrno>
@@ -144,6 +145,12 @@ public:
         update();
     }
 
+    void setPreviewCount(const int index, const int preview_count)
+    {
+        preview_counts_[index] = preview_count;
+        update();
+    }
+
 protected:
     void paintEvent(QPaintEvent *) override
     {
@@ -155,11 +162,18 @@ protected:
             const QRect rect = tabRect(i).adjusted(1, 1, -1, 0);
             const bool selected = (i == currentIndex());
             const int running_count = running_counts_.count(i) > 0 ? running_counts_.at(i) : 0;
+            const int preview_count = preview_counts_.count(i) > 0 ? preview_counts_.at(i) : 0;
 
             const QColor background = running_count > 0
                                           ? QColor(124, 255, 117)
-                                          : (selected ? QColor(244, 245, 244) : QColor(221, 231, 224));
-            const QColor text_color = selected ? QColor(22, 53, 45) : QColor(49, 88, 77);
+                                          : (preview_count > 0
+                                                 ? QColor(255, 224, 138)
+                                                 : (selected ? QColor(244, 245, 244) : QColor(221, 231, 224)));
+            const QColor text_color = running_count > 0
+                                          ? QColor(5, 55, 24)
+                                          : (preview_count > 0
+                                                 ? QColor(95, 63, 11)
+                                                 : (selected ? QColor(22, 53, 45) : QColor(49, 88, 77)));
 
             painter.setPen(QPen(QColor(185, 199, 190), 1));
             painter.setBrush(background);
@@ -175,6 +189,7 @@ protected:
 
 private:
     std::map<int, int> running_counts_;
+    std::map<int, int> preview_counts_;
 };
 
 class LaunchTabWidget : public QTabWidget
@@ -185,6 +200,31 @@ public:
     void useLaunchTabBar(QTabBar *tab_bar)
     {
         setTabBar(tab_bar);
+    }
+};
+
+class ClearableTreeWidget : public QTreeWidget
+{
+public:
+    explicit ClearableTreeWidget(QWidget *parent = nullptr) : QTreeWidget(parent) {}
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        QTreeWidgetItem *pressed_item = itemAt(event->pos());
+        if (pressed_item && pressed_item == currentItem())
+        {
+            clearSelection();
+            setCurrentItem(nullptr);
+            return;
+        }
+        if (!pressed_item)
+        {
+            clearSelection();
+            setCurrentItem(nullptr);
+            return;
+        }
+        QTreeWidget::mousePressEvent(event);
     }
 };
 
@@ -506,7 +546,8 @@ public:
     SunrayLauncherPanel(ros::NodeHandle private_nh, QWidget *parent = nullptr)
         : QWidget(parent), private_nh_(private_nh)
     {
-        private_nh_.param("launcher_config", launcher_config_path_, std::string(""));
+        private_nh_.param("launch_groups_config", launch_groups_config_path_, std::string(""));
+        private_nh_.param("quick_launch_groups_config", quick_launch_groups_config_path_, std::string(""));
 
         loadExternalWorkspacesFromRosParam();
         loadLaunchItemsFromRosParam();
@@ -732,10 +773,6 @@ private:
                 {
                     step.launch = xmlRpcToString(item_value["launch"]);
                 }
-                if (item_value.hasMember("args"))
-                {
-                    step.args = xmlRpcToStringList(item_value["args"]);
-                }
                 if (item_value.hasMember("delay_sec") &&
                     (item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeDouble ||
                      item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeInt))
@@ -822,7 +859,8 @@ private:
         {
             setWindowIcon(QIcon(icon_path));
         }
-        resize(1380, 820);
+        setMinimumSize(1280, 760);
+        resize(1600, 920);
 
         auto *root = new QVBoxLayout(this);
         root->setContentsMargins(14, 14, 14, 14);
@@ -857,20 +895,22 @@ private:
 
         auto *splitter = new QSplitter(Qt::Vertical);
         splitter->addWidget(buildLaunchArea());
-        splitter->addWidget(buildDetailPanel());
         splitter->addWidget(buildInfoPanel());
-        splitter->setStretchFactor(0, 5);
-        splitter->setStretchFactor(1, 1);
-        splitter->setStretchFactor(2, 2);
-        splitter->setSizes({470, 150, 220});
+        splitter->setCollapsible(0, false);
+        splitter->setCollapsible(1, false);
+        splitter->setStretchFactor(0, 7);
+        splitter->setStretchFactor(1, 2);
+        splitter->setSizes({650, 245});
         left_layout->addWidget(splitter, 1);
 
         QWidget *monitor_panel = buildSystemMonitorPanel();
         main_splitter->addWidget(left_panel);
         main_splitter->addWidget(monitor_panel);
-        main_splitter->setStretchFactor(0, 5);
-        main_splitter->setStretchFactor(1, 2);
-        main_splitter->setSizes({940, 360});
+        main_splitter->setCollapsible(0, false);
+        main_splitter->setCollapsible(1, false);
+        main_splitter->setStretchFactor(0, 7);
+        main_splitter->setStretchFactor(1, 3);
+        main_splitter->setSizes({1160, 400});
         root->addWidget(main_splitter, 1);
 
         setStyleSheet(R"(
@@ -883,6 +923,7 @@ private:
             QTreeWidget::item { padding: 7px; }
             QTreeWidget::item:selected { background: #e6e8e7; color: #111815; }
             QTextEdit { background: #111815; color: #d8f3df; border-radius: 10px; border: 1px solid #23342d; font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; }
+            QTextEdit#commandEdit { background: #111815; color: #f3fff6; border: 1px solid #23342d; border-radius: 8px; padding: 4px 8px; }
             QPushButton { background: #1f7a5b; color: white; border: 0px; border-radius: 8px; padding: 8px 14px; font-weight: 700; }
             QPushButton:hover { background: #28916c; }
             QPushButton:disabled { background: #9caaa3; color: #edf1ee; }
@@ -892,9 +933,10 @@ private:
             QPushButton#secondaryButton:hover { background: #5c7a6f; }
             QLabel#stateLabel { color: #16352d; font-weight: 700; }
             QLabel#mutedLabel { color: #63736b; }
+            QLabel#commandPrompt { color: #1f7a5b; font-size: 20px; font-weight: 900; font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; padding: 0px 2px 2px 2px; }
         )");
 
-        selectFirstLaunchItem();
+        clearInitialSelection();
     }
 
     QWidget *buildLaunchArea()
@@ -913,20 +955,19 @@ private:
         auto *box = new QGroupBox("快速启动");
         auto *layout = new QVBoxLayout(box);
 
-        quick_launch_tree_ = new QTreeWidget();
-        quick_launch_tree_->setColumnCount(4);
-        quick_launch_tree_->setHeaderLabels(QStringList() << "场景" << "状态" << "步骤" << "说明");
+        quick_launch_tree_ = new ClearableTreeWidget();
+        quick_launch_tree_->setColumnCount(3);
+        quick_launch_tree_->setHeaderLabels(QStringList() << "场景" << "状态" << "说明");
         quick_launch_tree_->setRootIsDecorated(false);
         quick_launch_tree_->setIndentation(0);
         quick_launch_tree_->setItemsExpandable(false);
         quick_launch_tree_->setExpandsOnDoubleClick(false);
         quick_launch_tree_->setAllColumnsShowFocus(true);
-        quick_launch_tree_->setMinimumHeight(130);
-        quick_launch_tree_->setMaximumHeight(190);
+        quick_launch_tree_->setMinimumHeight(118);
+        quick_launch_tree_->setMaximumHeight(165);
         quick_launch_tree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
         quick_launch_tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        quick_launch_tree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        quick_launch_tree_->header()->setSectionResizeMode(3, QHeaderView::Stretch);
+        quick_launch_tree_->header()->setSectionResizeMode(2, QHeaderView::Stretch);
 
         for (int i = 0; i < static_cast<int>(quick_launch_groups_.size()); ++i)
         {
@@ -934,14 +975,17 @@ private:
             auto *item = new QTreeWidgetItem(quick_launch_tree_);
             item->setText(0, QString::fromStdString(group.title));
             item->setText(1, "未运行");
-            item->setText(2, QString("%1 个 launch").arg(group.steps.size()));
-            item->setText(3, QString::fromStdString(group.description));
+            item->setText(2, QString::fromStdString(group.description));
             item->setData(0, kQuickLaunchIndexRole, i);
             quick_item_by_index_[i] = item;
         }
 
         connect(quick_launch_tree_, &QTreeWidget::currentItemChanged, this,
-                [this](QTreeWidgetItem *, QTreeWidgetItem *) { updateButtons(); });
+                [this](QTreeWidgetItem *, QTreeWidgetItem *) {
+                    updateLaunchPreviewHighlight();
+                    updateGroupTabStatus();
+                    updateButtons();
+                });
 
         auto *button_row = new QHBoxLayout();
         quick_start_btn_ = new QPushButton("启动快速场景");
@@ -971,9 +1015,9 @@ private:
         launch_tabs_->useLaunchTabBar(launch_tab_bar_);
         for (const LaunchGroup &group : launch_groups_)
         {
-            auto *tree = new QTreeWidget();
-            tree->setColumnCount(4);
-            tree->setHeaderLabels(QStringList() << "Launch" << "状态" << "Package" << "文件");
+            auto *tree = new ClearableTreeWidget();
+            tree->setColumnCount(5);
+            tree->setHeaderLabels(QStringList() << "Launch" << "状态" << "Package" << "文件" << "描述");
             tree->setRootIsDecorated(false);
             tree->setIndentation(0);
             tree->setItemsExpandable(false);
@@ -982,7 +1026,8 @@ private:
             tree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
             tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
             tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-            tree->header()->setSectionResizeMode(3, QHeaderView::Stretch);
+            tree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+            tree->header()->setSectionResizeMode(4, QHeaderView::Stretch);
 
             for (const int idx : group.item_indices)
             {
@@ -996,6 +1041,7 @@ private:
                 tree_item->setText(1, "未运行");
                 tree_item->setText(2, QString::fromStdString(item.package));
                 tree_item->setText(3, QString::fromStdString(item.launch));
+                tree_item->setText(4, QString::fromStdString(item.description));
                 tree_item->setData(0, kLaunchIndexRole, idx);
                 item_by_launch_index_[idx] = tree_item;
             }
@@ -1014,45 +1060,33 @@ private:
                 return;
             }
             QTreeWidget *tree = launch_trees_[static_cast<size_t>(tab_index)];
-            if (tree && tree->topLevelItemCount() > 0 && !tree->currentItem())
-            {
-                tree->setCurrentItem(tree->topLevelItem(0));
-                return;
-            }
             onSelectionChanged(tree ? tree->currentItem() : nullptr);
         });
 
-        layout->addWidget(launch_tabs_);
-        return box;
-    }
-
-    QWidget *buildDetailPanel()
-    {
-        auto *box = new QGroupBox("启动控制");
-        auto *layout = new QVBoxLayout(box);
-
-        selected_title_ = new QLabel("未选择 Launch");
-        selected_title_->setObjectName("stateLabel");
-        selected_title_->setWordWrap(false);
         selected_command_ = new QTextEdit();
         selected_command_->setPlaceholderText("roslaunch localization_fusion localization_fusion.launch source_id:=5 agent_name:=uav agent_id:=1");
-        selected_command_->setMinimumHeight(38);
-        selected_command_->setMaximumHeight(46);
+        selected_command_->setMinimumHeight(34);
+        selected_command_->setMaximumHeight(40);
+        selected_command_->setObjectName("commandEdit");
+        selected_command_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-        auto *top_row = new QHBoxLayout();
+        auto *control_row = new QHBoxLayout();
+        control_row->setSpacing(8);
+        auto *command_prompt = new QLabel(">");
+        command_prompt->setObjectName("commandPrompt");
         start_btn_ = new QPushButton("启动");
         stop_btn_ = new QPushButton("停止");
         stop_btn_->setObjectName("stopButton");
-        top_row->addWidget(selected_title_, 1);
-        top_row->addWidget(start_btn_);
-        top_row->addWidget(stop_btn_);
+        control_row->addWidget(command_prompt);
+        control_row->addWidget(selected_command_, 1);
+        control_row->addWidget(start_btn_);
+        control_row->addWidget(stop_btn_);
 
         connect(start_btn_, &QPushButton::clicked, this, [this]() { startSelectedLaunch(); });
         connect(stop_btn_, &QPushButton::clicked, this, [this]() { stopSelectedLaunch(); });
 
-        layout->addLayout(top_row);
-        layout->addWidget(new QLabel("启动命令（可编辑，最终执行此命令）"));
-        layout->addWidget(selected_command_);
+        layout->addWidget(launch_tabs_, 1);
+        layout->addLayout(control_row);
         updateButtons();
         return box;
     }
@@ -1072,13 +1106,11 @@ private:
     {
         auto *box = new QGroupBox("系统状态监控");
         auto *layout = new QGridLayout(box);
-        box->setMinimumWidth(340);
+        box->setMinimumWidth(380);
         box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
         layout->setContentsMargins(12, 18, 12, 12);
         layout->setVerticalSpacing(8);
 
-        summary_label_ = new QLabel("配置项: --  运行中: --");
-        summary_label_->setObjectName("stateLabel");
         cpu_label_ = new QLabel("CPU: --");
         memory_label_ = new QLabel("内存: --");
         ros_node_count_label_ = new QLabel("ROS nodes: --");
@@ -1092,8 +1124,8 @@ private:
 
         ros_nodes_view_ = new QTextEdit();
         ros_nodes_view_->setReadOnly(true);
-        ros_nodes_view_->setMinimumWidth(310);
-        ros_nodes_view_->setMinimumHeight(560);
+        ros_nodes_view_->setMinimumWidth(350);
+        ros_nodes_view_->setMinimumHeight(640);
         ros_nodes_view_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
         auto *button_row = new QHBoxLayout();
@@ -1112,14 +1144,13 @@ private:
             }
         });
 
-        layout->addWidget(summary_label_, 0, 0, 1, 2);
-        layout->addWidget(cpu_label_, 1, 0);
-        layout->addWidget(cpu_bar_, 1, 1);
-        layout->addWidget(memory_label_, 2, 0);
-        layout->addWidget(memory_bar_, 2, 1);
-        layout->addWidget(ros_node_count_label_, 3, 0, 1, 2);
-        layout->addWidget(ros_nodes_view_, 4, 0, 1, 2);
-        layout->addLayout(button_row, 5, 0, 1, 2);
+        layout->addWidget(cpu_label_, 0, 0);
+        layout->addWidget(cpu_bar_, 0, 1);
+        layout->addWidget(memory_label_, 1, 0);
+        layout->addWidget(memory_bar_, 1, 1);
+        layout->addWidget(ros_node_count_label_, 2, 0, 1, 2);
+        layout->addWidget(ros_nodes_view_, 3, 0, 1, 2);
+        layout->addLayout(button_row, 4, 0, 1, 2);
         layout->setColumnStretch(1, 1);
         layout->setRowStretch(4, 1);
         return box;
@@ -1142,28 +1173,36 @@ private:
         return value.isValid() ? value.toInt() : -1;
     }
 
-    void selectFirstLaunchItem()
+    void clearInitialSelection()
     {
-        if (!launch_tabs_ || launch_trees_.empty())
+        if (quick_launch_tree_)
         {
-            onSelectionChanged(nullptr);
-            return;
+            quick_launch_tree_->clearSelection();
+            quick_launch_tree_->setCurrentItem(nullptr);
         }
 
-        launch_tabs_->setCurrentIndex(0);
-        QTreeWidget *tree = launch_trees_.front();
-        if (tree && tree->topLevelItemCount() > 0)
+        for (QTreeWidget *tree : launch_trees_)
         {
-            tree->setCurrentItem(tree->topLevelItem(0));
+            if (tree)
+            {
+                tree->clearSelection();
+                tree->setCurrentItem(nullptr);
+            }
         }
-        else
+
+        if (launch_tabs_)
         {
-            onSelectionChanged(nullptr);
+            launch_tabs_->setCurrentIndex(0);
         }
+        onSelectionChanged(nullptr);
+        updateLaunchPreviewHighlight();
+        updateGroupTabStatus();
+        updateButtons();
     }
 
     void startSelectedLaunch()
     {
+        cacheSelectedLaunchCommand();
         const int idx = selectedLaunchIndex();
         if (idx >= 0)
         {
@@ -1198,6 +1237,7 @@ private:
 
     void startSelectedQuickLaunch()
     {
+        cacheSelectedLaunchCommand();
         const int idx = selectedQuickLaunchIndex();
         if (idx >= 0)
         {
@@ -1288,6 +1328,27 @@ private:
         markLinkedLaunchesRunning(quick_launch_runtimes_[idx], "运行(快速)");
         appendLog("已使用 Ubuntu Terminal 多标签启动快速场景: " + group.title);
         updateButtons();
+    }
+
+    void cacheSelectedLaunchCommand()
+    {
+        cacheLaunchCommand(current_selected_launch_index_);
+    }
+
+    void cacheLaunchCommand(const int idx)
+    {
+        if (!selected_command_ ||
+            idx < 0 ||
+            idx >= static_cast<int>(launch_items_.size()))
+        {
+            return;
+        }
+
+        const QString command = selected_command_->toPlainText().simplified();
+        if (!command.isEmpty() && command != "-")
+        {
+            edited_launch_commands_[idx] = command;
+        }
     }
 
     std::vector<int> collectLinkedLaunchIndices(const QuickLaunchGroup &group) const
@@ -1561,7 +1622,7 @@ private:
         for (size_t i = 0; i < group.steps.size(); ++i)
         {
             const QuickLaunchStep &step = group.steps[i];
-            const QString command = buildRoslaunchCommand(step);
+            const QString command = buildQuickStepRoslaunchCommand(step);
             if (command.isEmpty())
             {
                 continue;
@@ -1666,6 +1727,39 @@ private:
             step_args << QString::fromStdString(arg);
         }
         return shellJoin(QStringList() << "roslaunch" << buildRoslaunchArguments(launch_file, step_args));
+    }
+
+    QString buildQuickStepRoslaunchCommand(const QuickLaunchStep &step) const
+    {
+        if (step.linked_launch_index >= 0)
+        {
+            const auto edited_it = edited_launch_commands_.find(step.linked_launch_index);
+            if (edited_it != edited_launch_commands_.end() && !edited_it->second.trimmed().isEmpty())
+            {
+                return buildExecutableRoslaunchCommand(edited_it->second);
+            }
+        }
+
+        return buildRoslaunchCommand(step);
+    }
+
+    QString buildExecutableRoslaunchCommand(const QString &display_command) const
+    {
+        const QStringList tokens = splitCommandLine(display_command.simplified());
+        if (tokens.size() < 3 || tokens[0] != "roslaunch")
+        {
+            return "";
+        }
+
+        const std::string package_name = tokens[1].toStdString();
+        const std::string launch_file_name = tokens[2].toStdString();
+        const std::string launch_file = resolveLaunchFilePath(package_name, launch_file_name);
+        if (!QFileInfo::exists(QString::fromStdString(launch_file)))
+        {
+            return "";
+        }
+
+        return shellJoin(QStringList() << "roslaunch" << buildRoslaunchArguments(launch_file, tokens.mid(3)));
     }
 
     QStringList buildQuickTerminalCommand(const QuickLaunchRuntime &runtime,
@@ -1997,6 +2091,8 @@ private:
 
     void onSelectionChanged(QTreeWidgetItem *current)
     {
+        cacheLaunchCommand(current_selected_launch_index_);
+
         int idx = -1;
         if (current)
         {
@@ -2006,17 +2102,18 @@ private:
                 idx = value.toInt();
             }
         }
+        current_selected_launch_index_ = idx;
+
         if (idx >= 0 && idx < static_cast<int>(launch_items_.size()))
         {
             const LaunchItem &item = launch_items_[static_cast<size_t>(idx)];
-            selected_title_->setText(QString("%1 | %2")
-                                         .arg(QString::fromStdString(item.title))
-                                         .arg(QString::fromStdString(item.description)));
-            selected_command_->setPlainText(buildDisplayCommand(item));
+            const auto edited_it = edited_launch_commands_.find(idx);
+            selected_command_->setPlainText(edited_it != edited_launch_commands_.end()
+                                                ? edited_it->second
+                                                : buildDisplayCommand(item));
         }
         else
         {
-            selected_title_->setText("未选择 Launch");
             selected_command_->setPlainText("-");
         }
         updateButtons();
@@ -2093,9 +2190,6 @@ private:
             }
         }
 
-        summary_label_->setText(QString("配置项: %1  运行中: %2")
-                                    .arg(launch_items_.size())
-                                    .arg(running_count + quick_running_count));
         updateGroupTabStatus();
         updateButtons();
 
@@ -2194,20 +2288,61 @@ private:
         }
     }
 
+    std::vector<int> selectedQuickLaunchPreviewIndices() const
+    {
+        const int quick_idx = selectedQuickLaunchIndex();
+        if (quick_idx < 0 || quick_idx >= static_cast<int>(quick_launch_groups_.size()))
+        {
+            return {};
+        }
+        return collectLinkedLaunchIndices(quick_launch_groups_[static_cast<size_t>(quick_idx)]);
+    }
+
+    bool isLaunchInSelectedQuickPreview(const int idx) const
+    {
+        const std::vector<int> preview_indices = selectedQuickLaunchPreviewIndices();
+        return std::find(preview_indices.begin(), preview_indices.end(), idx) != preview_indices.end();
+    }
+
     void updateLaunchStatus(const int idx, const QString &status)
     {
         const auto it = item_by_launch_index_.find(idx);
         if (it != item_by_launch_index_.end() && it->second)
         {
             it->second->setText(1, status);
-            const bool running = status.startsWith("运行");
-            const QColor row_background = running ? QColor(124, 255, 117) : QColor(251, 252, 250);
-            const QColor row_foreground = running ? QColor(5, 55, 24) : QColor(23, 33, 28);
-            for (int column = 0; column < it->second->columnCount(); ++column)
-            {
-                it->second->setBackground(column, row_background);
-                it->second->setForeground(column, row_foreground);
-            }
+            applyLaunchRowStyle(idx);
+        }
+    }
+
+    void applyLaunchRowStyle(const int idx)
+    {
+        const auto it = item_by_launch_index_.find(idx);
+        if (it == item_by_launch_index_.end() || !it->second)
+        {
+            return;
+        }
+
+        const QString status = it->second->text(1);
+        const bool running = status.startsWith("运行");
+        const bool preview = !running && isLaunchInSelectedQuickPreview(idx);
+        const QColor row_background = running
+                                          ? QColor(124, 255, 117)
+                                          : (preview ? QColor(255, 239, 194) : QColor(251, 252, 250));
+        const QColor row_foreground = running
+                                          ? QColor(5, 55, 24)
+                                          : (preview ? QColor(95, 63, 11) : QColor(23, 33, 28));
+        for (int column = 0; column < it->second->columnCount(); ++column)
+        {
+            it->second->setBackground(column, row_background);
+            it->second->setForeground(column, row_foreground);
+        }
+    }
+
+    void updateLaunchPreviewHighlight()
+    {
+        for (const auto &entry : item_by_launch_index_)
+        {
+            applyLaunchRowStyle(entry.first);
         }
     }
 
@@ -2241,6 +2376,21 @@ private:
         return running_count;
     }
 
+    int previewCountForGroup(const LaunchGroup &group) const
+    {
+        const std::vector<int> preview_indices = selectedQuickLaunchPreviewIndices();
+        int preview_count = 0;
+        for (const int idx : group.item_indices)
+        {
+            if (std::find(preview_indices.begin(), preview_indices.end(), idx) != preview_indices.end() &&
+                !isLaunchActive(idx))
+            {
+                ++preview_count;
+            }
+        }
+        return preview_count;
+    }
+
     void updateGroupTabStatus()
     {
         if (!launch_tabs_)
@@ -2252,15 +2402,21 @@ private:
         {
             const LaunchGroup &group = launch_groups_[static_cast<size_t>(i)];
             const int running_count = runningCountForGroup(group);
+            const int preview_count = previewCountForGroup(group);
             QString tab_text = QString::fromStdString(group.name);
             if (running_count > 0)
             {
                 tab_text += QString("-%1").arg(running_count);
             }
+            else if (preview_count > 0)
+            {
+                tab_text += QString("-%1").arg(preview_count);
+            }
             launch_tabs_->setTabText(i, tab_text);
             if (launch_tab_bar_)
             {
                 launch_tab_bar_->setRunningCount(i, running_count);
+                launch_tab_bar_->setPreviewCount(i, preview_count);
             }
         }
     }
@@ -2280,7 +2436,8 @@ private:
 
     ros::NodeHandle private_nh_;
 
-    std::string launcher_config_path_;
+    std::string launch_groups_config_path_;
+    std::string quick_launch_groups_config_path_;
 
     std::vector<ExternalWorkspace> external_workspaces_;
     std::map<std::string, std::string> external_package_paths_;
@@ -2294,6 +2451,8 @@ private:
     std::map<int, LaunchRuntime> launch_runtimes_;
     std::map<int, QProcess *> quick_terminal_processes_;
     std::map<int, QuickLaunchRuntime> quick_launch_runtimes_;
+    std::map<int, QString> edited_launch_commands_;
+    int current_selected_launch_index_{-1};
 
     QTimer *refresh_timer_{nullptr};
     QDateTime last_monitor_refresh_;
@@ -2303,8 +2462,6 @@ private:
     LaunchTabBar *launch_tab_bar_{nullptr};
     QTreeWidget *quick_launch_tree_{nullptr};
     std::vector<QTreeWidget *> launch_trees_;
-    QLabel *summary_label_{nullptr};
-    QLabel *selected_title_{nullptr};
     QTextEdit *selected_command_{nullptr};
     QTextEdit *log_view_{nullptr};
     QLabel *cpu_label_{nullptr};

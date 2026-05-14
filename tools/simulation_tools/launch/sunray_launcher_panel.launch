@@ -1,12 +1,16 @@
 <launch>
-  <arg name="launcher_config"
-       default="$(find simulation_tools)/config/sunray_launcher.yaml" />
+  <arg name="launch_groups_config"
+       default="$(find simulation_tools)/config/sunray_launch_groups.yaml" />
+  <arg name="quick_launch_groups_config"
+       default="$(find simulation_tools)/config/sunray_quick_launch_groups.yaml" />
 
   <node pkg="simulation_tools"
         type="sunray_launcher_node"
         name="sunray_launcher_node"
         output="screen">
-    <param name="launcher_config" value="$(arg launcher_config)" />
-    <rosparam file="$(arg launcher_config)" command="load" />
+    <param name="launch_groups_config" value="$(arg launch_groups_config)" />
+    <param name="quick_launch_groups_config" value="$(arg quick_launch_groups_config)" />
+    <rosparam file="$(arg launch_groups_config)" command="load" />
+    <rosparam file="$(arg quick_launch_groups_config)" command="load" />
   </node>
 </launch>

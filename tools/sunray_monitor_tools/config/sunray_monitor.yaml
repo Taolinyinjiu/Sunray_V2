@@ -1,6 +1,32 @@
 fixed_frame: "world"
+marker_topic: "/sunray/monitor/markers"
 status_timeout: 1.0
 refresh_hz: 5.0
+
+uav_name_prefix: "uav"
+ugv_name_prefix: "ugv"
+
+uav_swarm_cmd_topic: "/sunray/swarm/uav_swarm_cmd"
+ugv_swarm_cmd_topic: "/sunray/swarm/ugv_swarm_cmd"
+uav_swarm_state_topic: "/sunray/swarm/uav_swarm_state"
+ugv_swarm_state_topic: "/sunray/swarm/ugv_swarm_state"
+
+uav_agents:
+  - id: 1
+    name: "uav1"
+    namespace: "/uav1"
+    control_state_topic: "/uav1/sunray/uav_control/control_state"
+    control_cmd_topic: "/uav1/sunray/uav_control/control_cmd"
+    odom_state_topic: "/uav1/sunray/localization/odom_state"
+    planning_state_topic: "/uav1/sunray/planning/planning_state"
+
+ugv_agents:
+  - id: 1
+    name: "ugv1"
+    namespace: "/ugv1"
+    control_state_topic: "/ugv1/sunray/ugv_control/control_state"
+    control_cmd_topic: "/ugv1/sunray/ugv_control/control_cmd"
+    odom_state_topic: "/ugv1/sunray/localization/odom_state"
 
 state_topics:
   - name: "UAV控制-uav1"
@@ -9,6 +35,13 @@ state_topics:
     agent_name: "uav"
     agent_id: 1
     topic: "/uav1/sunray/uav_control/control_state"
+
+  - name: "UAV定位-uav1"
+    module: "LOCALIZATION"
+    agent_type: "UAV"
+    agent_name: "uav"
+    agent_id: 1
+    topic: "/uav1/sunray/localization/odom_state"
 
   - name: "UAV规划-uav1"
     module: "UAV_PLANNING"
@@ -23,6 +56,13 @@ state_topics:
     agent_name: "ugv"
     agent_id: 1
     topic: "/ugv1/sunray/ugv_control/control_state"
+
+  - name: "UGV定位-ugv1"
+    module: "LOCALIZATION"
+    agent_type: "UGV"
+    agent_name: "ugv"
+    agent_id: 1
+    topic: "/ugv1/sunray/localization/odom_state"
 
   - name: "UAV集群"
     module: "UAV_SWARM"

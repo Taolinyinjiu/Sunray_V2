@@ -1,161 +1,6 @@
 external_workspaces:
   - "~/pengyu_sim"
 
-quick_launch_groups:
-  - title: "单无人机控制联调"
-    description: "pengyu_sim 单机 UAV 仿真 + 定位融合 + UAV 控制 + UAV 控制面板"
-    items:
-      - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
-        args:
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "launch_rviz:=false"
-        delay_sec: 2.0
-      - ref: "定位融合模块/无人机定位融合"
-        args:
-          - "source_id:=5"
-          - "agent_name:=uav"
-          - "agent_id:=1"
-        delay_sec: 2.0
-      - ref: "无人机控制模块/单机无人机控制"
-        args:
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "enable_single_monitor:=true"
-          - "enable_rviz:=true"
-        delay_sec: 2.0
-      - ref: "无人机控制模块/无人机控制面板"
-
-  - title: "单无人机规划验证"
-    description: "地图/局部点云 + 单机 UAV 仿真 + 定位 + 控制 + diff 规划"
-    items:
-      - title: "全局点云发布"
-        package: "map_generator"
-        launch: "map_publisher.launch"
-        args:
-          - "launch_rviz:=false"
-        delay_sec: 0.5
-      - title: "局部点云渲染"
-        package: "local_sensing"
-        launch: "local_sensing_mid360.launch"
-        delay_sec: 0.5
-      - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
-        args:
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "launch_rviz:=false"
-        delay_sec: 1.0
-      - ref: "定位融合模块/无人机定位融合"
-        args:
-          - "source_id:=5"
-          - "agent_name:=uav"
-          - "agent_id:=1"
-        delay_sec: 1.0
-      - ref: "无人机控制模块/单机无人机控制"
-        args:
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "enable_single_monitor:=true"
-          - "enable_rviz:=true"
-        delay_sec: 1.0
-      - ref: "规划模块/Sunray Planning Diff"
-        args:
-          - "planner_type:=diff"
-          - "uav_name:=uav"
-          - "uav_id:=1"
-          - "enable_rviz:=false"
-          - "enable_rviz_bridge:=true"
-
-  - title: "6机无人机集群仿真"
-    description: "pengyu_sim 6机 UAV 仿真 + 集群定位 + 集群控制 + UAV swarm 控制 + 集群面板"
-    items:
-      - ref: "pengyu_sim仿真器模块/集群无人机动力学仿真"
-        args:
-          - "agent_name:=uav"
-          - "swarm_num:=6"
-          - "launch_rviz:=false"
-          - "enable_status_print:=true"
-        delay_sec: 1.5
-      - ref: "定位融合模块/集群无人机定位融合"
-        args:
-          - "source_id:=5"
-          - "agent_name:=uav"
-          - "agent_num:=6"
-        delay_sec: 1.0
-      - ref: "无人机控制模块/集群无人机控制"
-        args:
-          - "agent_name:=uav"
-          - "agent_num:=6"
-          - "enable_monitor:=true"
-        delay_sec: 1.0
-      - ref: "无人机集群控制模块/无人机集群控制仿真"
-        args:
-          - "agent_name:=uav"
-          - "swarm_num:=6"
-          - "enable_monitor:=true"
-          - "enable_rviz:=true"
-        delay_sec: 1.0
-      - ref: "无人机集群控制模块/集群控制面板"
-
-  - title: "单无人车控制联调"
-    description: "pengyu_sim 单车 UGV 仿真 + 定位融合 + UGV 控制 + UGV 控制面板"
-    items:
-      - ref: "pengyu_sim仿真器模块/无人车动力学仿真"
-        args:
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-          - "swarm_num:=1"
-          - "drive_type:=mecanum"
-        delay_sec: 1.0
-      - ref: "定位融合模块/无人车定位融合"
-        args:
-          - "source_id:=5"
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-        delay_sec: 1.0
-      - ref: "无人车控制模块/单车无人车控制"
-        args:
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-          - "enable_monitor:=true"
-          - "enable_rviz_visualization:=true"
-          - "enable_rviz:=true"
-        delay_sec: 1.0
-      - ref: "无人车控制模块/无人车控制面板"
-
-  - title: "6车无人车集群仿真"
-    description: "pengyu_sim 6车 UGV 仿真 + 集群定位 + 集群控制 + UGV swarm 控制 + 集群面板"
-    items:
-      - ref: "pengyu_sim仿真器模块/集群无人车动力学仿真"
-        args:
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-          - "swarm_num:=6"
-          - "drive_type:=mecanum"
-        delay_sec: 1.5
-      - ref: "定位融合模块/集群无人车定位融合"
-        args:
-          - "source_id:=5"
-          - "agent_name:=ugv"
-          - "agent_num:=6"
-        delay_sec: 1.0
-      - ref: "无人车控制模块/集群无人车控制"
-        args:
-          - "agent_name:=ugv"
-          - "swarm_num:=6"
-          - "enable_monitor:=true"
-          - "enable_rviz_visualization:=false"
-          - "enable_rviz:=false"
-        delay_sec: 1.0
-      - ref: "无人车集群控制模块/无人车集群控制仿真"
-        args:
-          - "agent_name:=ugv"
-          - "swarm_num:=6"
-          - "enable_monitor:=true"
-          - "enable_rviz:=true"
-        delay_sec: 1.0
-      - ref: "无人车集群控制模块/集群控制面板"
-
 launch_groups:
   - name: "状态监控"
     items:
@@ -256,6 +101,78 @@ launch_groups:
         launch: "ugv_control_panel.launch"
         description: "启动 UGV Control Panel，用于下发 UGVControlCMD 并查看控制状态。"
 
+  - name: "无人机控制示例"
+    items:
+      - title: "起飞降落"
+        package: "sunray_uav_control_example"
+        launch: "basic/takeoff_land.launch"
+        description: "示例：发布 UAVControlCMD，完成起飞和降落流程。"
+
+      - title: "MOVE_POINT 单点"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_POINT/move_point.launch"
+        description: "示例：惯性系位置控制，飞向单个目标点。"
+
+      - title: "MOVE_POINT 多点"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_POINT/move_multipoint.launch"
+        description: "示例：惯性系位置控制，按序飞向多个目标点。"
+
+      - title: "MOVE_POINT 并返航"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_POINT/move_point_and_return.launch"
+        description: "示例：飞向目标点后执行返航流程。"
+
+      - title: "MOVE_POINT_BODY"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_POINT_BODY/move_point_body.launch"
+        description: "示例：机体系位置增量控制。"
+
+      - title: "MOVE_POINT_WGS84"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_POINT_WGS84/move_point_wgs84.launch"
+        description: "示例：WGS84 经纬高目标点控制。"
+
+      - title: "MOVE_VELOCITY"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_VELOCITY/move_velocity.launch"
+        description: "示例：惯性系速度控制。"
+
+      - title: "MOVE_VELOCITY 固定高度"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_VELOCITY/move_velocity_fixed_height.launch"
+        description: "示例：惯性系速度控制，并使用 fixed_height 锁定高度。"
+
+      - title: "MOVE_VELOCITY 圆轨迹"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_VELOCITY/circle_velocity.launch"
+        description: "示例：通过速度指令跟踪圆形运动。"
+
+      - title: "MOVE_VELOCITY 8字轨迹"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_VELOCITY/lemniscate_velocity.launch"
+        description: "示例：通过速度指令跟踪 8 字运动。"
+
+      - title: "MOVE_VELOCITY_BODY"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_VELOCITY_BODY/move_velocity_body.launch"
+        description: "示例：机体系速度控制。"
+
+      - title: "MOVE_TRAJECTORY"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_TRAJECTORY/move_trajectory.launch"
+        description: "示例：轨迹点序列控制。"
+
+      - title: "MOVE_TRAJECTORY 圆轨迹"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_TRAJECTORY/circle_trajectory.launch"
+        description: "示例：轨迹接口生成圆形运动。"
+
+      - title: "MOVE_TRAJECTORY 8字轨迹"
+        package: "sunray_uav_control_example"
+        launch: "MOVE_TRAJECTORY/lemniscate_trajectory.launch"
+        description: "示例：轨迹接口生成 8 字运动。"
+
   - name: "规划模块"
     items:
       - title: "Sunray Planning Ego"
@@ -341,23 +258,32 @@ launch_groups:
 
   - name: "pengyu_sim仿真器模块"
     items:
+      - title: "全局点云发布"
+        package: "map_generator"
+        launch: "map_publisher.launch"
+        args:
+          - "launch_rviz:=false"
+        description: "外部 pengyu_sim 包：发布全局点云地图，常用于单无人机规划验证。"
+
+      - title: "局部点云渲染"
+        package: "local_sensing"
+        launch: "local_sensing_mid360.launch"
+        description: "外部 pengyu_sim 包：根据全局地图和机器人位姿渲染局部点云。"
+
       - title: "无人机动力学仿真"
         package: "px4_control_simulator"
         launch: "px4_uav_simulator.launch"
         args:
           - "agent_name:=uav"
           - "agent_id:=1"
-          - "launch_rviz:=true"
+          - "launch_rviz:=false"
         description: "外部 pengyu_sim 包：启动单架无人机动力学、PX4 控制模拟和 fake mavros bridge。"
 
       - title: "集群无人机动力学仿真"
         package: "px4_control_simulator"
         launch: "px4_uav_simulator_swarm.launch"
         args:
-          - "agent_name:=uav"
           - "swarm_num:=6"
-          - "launch_rviz:=false"
-          - "enable_status_print:=true"
         description: "外部 pengyu_sim 包：启动多架无人机仿真。需要先 source pengyu_sim 工作空间。"
 
       - title: "无人车动力学仿真"
@@ -366,7 +292,6 @@ launch_groups:
         args:
           - "agent_name:=ugv"
           - "agent_id:=1"
-          - "swarm_num:=1"
           - "drive_type:=mecanum"
         description: "外部 pengyu_sim 包：启动无人车动力学仿真"
 

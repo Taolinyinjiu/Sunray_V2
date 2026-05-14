@@ -5,9 +5,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
   std_msgs
+  geometry_msgs
+  nav_msgs
+  visualization_msgs
   topic_tools
   rviz
+  sunray_msgs
 )
 find_package(Qt5 REQUIRED COMPONENTS Widgets)
 

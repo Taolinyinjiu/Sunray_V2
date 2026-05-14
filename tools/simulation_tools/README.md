@@ -22,28 +22,18 @@ roslaunch simulation_tools sunray_launcher_panel.launch
 
 ## 2. 配置文件
 
-默认配置文件：
+默认配置文件拆成两类：
 
 ```text
-tools/simulation_tools/config/sunray_launcher.yaml
+tools/simulation_tools/config/sunray_launch_groups.yaml
+tools/simulation_tools/config/sunray_quick_launch_groups.yaml
 ```
 
-配置结构如下：
+`sunray_launch_groups.yaml` 配置模块列表、默认启动命令和外部 workspace：
 
 ```yaml
 external_workspaces:
   - "~/pengyu_sim"
-
-quick_launch_groups:
-  - title: "6机无人机集群仿真"
-    description: "pengyu_sim + 定位 + 控制 + 集群控制 + 面板"
-    items:
-      - ref: "pengyu_sim仿真器模块/集群无人机动力学仿真"
-        args:
-          - "swarm_num:=6"
-        delay_sec: 1.5
-      - ref: "定位融合模块/集群无人机定位融合"
-        delay_sec: 1.0
 
 launch_groups:
   - name: "定位融合模块"
@@ -56,6 +46,19 @@ launch_groups:
           - "agent_name:=uav"
           - "agent_id:=1"
         description: "启动单架无人机 localization_fusion。"
+```
+
+`sunray_quick_launch_groups.yaml` 配置快速启动场景，只引用 `launch_groups` 中已有启动项：
+
+```yaml
+quick_launch_groups:
+  - title: "6机无人机集群仿真"
+    description: "pengyu_sim + 定位 + 控制 + 集群控制 + 面板"
+    items:
+      - ref: "pengyu_sim仿真器模块/集群无人机动力学仿真"
+        delay_sec: 1.5
+      - ref: "定位融合模块/集群无人机定位融合"
+        delay_sec: 1.0
 ```
 
 字段说明：
@@ -71,7 +74,7 @@ launch_groups:
 | `package` | 是 | ROS package 名称，等价于 `roslaunch <package> ...` |
 | `launch` | 是 | launch 文件名；支持 package 的 `launch/` 子目录路径，例如 `launch_uav_demo/sunray_sim_1uav.launch` |
 | `args` | 否 | 默认 roslaunch 参数，格式为 `name:=value` |
-| `description` | 否 | 启动控制区显示的说明文字 |
+| `description` | 否 | 模块列表“描述”列显示的说明文字 |
 
 新增启动项时，只需要在对应模块的 `items` 下面追加一项。启动器会自动生成默认命令：
 
@@ -85,12 +88,14 @@ roslaunch <package> <launch> <args...>
 
 | 区域 | 作用 |
 | --- | --- |
-| `模块列表` | 按模块标签页分类显示可启动的 launch。状态列只显示 `未运行` 或 `运行 Ns`，正在运行的 launch 行会显示绿色背景。 |
-| `启动控制` | 显示当前选中项的标题和描述；下方命令行可直接编辑，最终执行的就是这条命令。 |
+| `快速启动` | 显示常用联调场景，一键在同一个 Ubuntu Terminal 窗口中打开多个 tab，每个 tab 启动一个 launch。 |
+| `模块列表` | 按模块标签页分类显示可启动的 launch，表格包含 `Launch / 状态 / Package / 文件 / 描述`。选中快速启动场景时，即将被启动的 launch 行和对应模块 tab 会显示浅橙色；实际运行中的 launch 行和模块 tab 会显示绿色。选中某一项后，面板底部会以 `>` 开头显示可编辑启动命令，并在右侧提供启动/停止按钮。 |
 | `INFO` | 显示启动器内部日志，例如完整启动命令、停止请求、退出码等。 |
 | `系统状态监控` | 显示 CPU、内存、当前 ROS node 列表，并提供 `停止全部 Launch` 和 `清空日志` 按钮。 |
 
 启动器默认允许同时启动多个不同 launch。每个启动项只限制自己不能重复启动。
+
+启动器打开后默认不选中任何快速启动场景或模块 launch。点击某一行会选中，再次点击同一行或点击列表空白区域会取消选中。
 
 启动命令编辑框支持直接修改参数，例如：
 
@@ -114,26 +119,20 @@ quick_launch_groups:
     description: "pengyu_sim 单机 UAV 仿真 + 定位融合 + UAV 控制 + UAV 控制面板"
     items:
       - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
-        args:
-          - "agent_name:=uav"
-          - "agent_id:=1"
         delay_sec: 1.0
       - ref: "定位融合模块/无人机定位融合"
         delay_sec: 1.0
-      - package: "control_tools"
-        launch: "uav_control_panel.launch"
+      - ref: "无人机控制模块/无人机控制面板"
 ```
 
 快速启动步骤字段：
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
-| `ref` | 否 | 引用已有模块启动项，格式为 `模块名/Launch标题`，例如 `定位融合模块/无人机定位融合` |
-| `package` | 否 | ROS package 名称；不使用 `ref` 时需要填写 |
-| `launch` | 否 | launch 文件名；不使用 `ref` 时需要填写 |
-| `title` | 否 | terminal tab 标题；不填时使用被引用的启动项标题或 package 名称 |
-| `args` | 否 | 当前快速启动步骤使用的 roslaunch 参数；填写后会覆盖被引用启动项的默认参数 |
+| `ref` | 是 | 引用已有模块启动项，格式为 `模块名/Launch标题`，例如 `定位融合模块/无人机定位融合` |
 | `delay_sec` | 否 | 当前步骤启动后，到下一个步骤启动前等待的秒数；第一步立即启动，后续步骤按前面步骤的 `delay_sec` 累积延迟启动 |
+
+快速启动默认使用被引用启动项在 `sunray_launch_groups.yaml` 中配置的参数。如果需要临时修改某一步参数，先在模块列表中选中对应 launch，编辑底部启动命令，再启动快速场景；启动器会优先使用你刚编辑过的命令。
 
 ## 5. 启动和停止机制
 
@@ -214,7 +213,8 @@ ssh -X user@host
 
 ```text
 tools/simulation_tools/
-├── config/sunray_launcher.yaml          # 启动项配置
+├── config/sunray_launch_groups.yaml     # 模块列表和默认 launch 命令
+├── config/sunray_quick_launch_groups.yaml # 快速启动场景
 ├── launch/sunray_launcher_panel.launch  # 启动器 launch
 ├── logo/                                # 界面 logo 和窗口图标
 ├── src/tools/sunray_launcher_node.cpp
