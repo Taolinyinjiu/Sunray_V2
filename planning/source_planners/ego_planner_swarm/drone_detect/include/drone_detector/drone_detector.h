@@ -22,7 +22,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <cv_bridge/cv_bridge.h>
-#include <string_uav_namespace_utils.hpp>
+#include <plan_manage/uav_namespace_topic_utils.h>
 
 namespace detect {
 

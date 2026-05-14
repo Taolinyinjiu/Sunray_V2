@@ -1,7 +1,13 @@
 <launch>
   <arg name="rviz_goal_topic" default="/move_base_simple/goal" />
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="use_private_agent_key" default="false" />
 
   <node name="rviz_goal_bridge" pkg="sunray_planner_tools" type="rviz_goal_bridge" output="screen">
     <param name="rviz_goal_topic" value="$(arg rviz_goal_topic)" />
+    <param name="agent_name" type="str" value="$(arg agent_name)" />
+    <param name="agent_id" type="int" value="$(arg agent_id)" />
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
   </node>
 </launch>

@@ -23,6 +23,7 @@ catkin_package(
 
 include_directories(
   SYSTEM
+  ../plan_manage/include
   ${catkin_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/include
   ${EIGEN3_INCLUDE_DIR}
 )
@@ -33,5 +34,3 @@ add_executable(bridge_node
 target_link_libraries(bridge_node 
   ${catkin_LIBRARIES}
   )
-
-

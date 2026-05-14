@@ -10,67 +10,9 @@
 #include <traj_utils/Bspline.h>
 #include <nav_msgs/Odometry.h>
 #include <std_msgs/Empty.h>
-#include <string_uav_namespace_utils.hpp>
+#include <plan_manage/uav_namespace_topic_utils.h>
 
 namespace {
-
-std::string loadRequiredGlobalStringParamOrThrow(ros::NodeHandle& nh,
-                                                 const std::string& param_name) {
-  std::string value;
-  if (!nh.getParam(param_name, value)) {
-    throw std::runtime_error("missing param " + param_name);
-  }
-  if (value.empty()) {
-    throw std::runtime_error(param_name + " cannot be empty");
-  }
-  return value;
-}
-
-int loadRequiredGlobalIntParamOrThrow(ros::NodeHandle& nh,
-                                      const std::string& param_name) {
-  int value = 0;
-  if (!nh.getParam(param_name, value)) {
-    throw std::runtime_error("missing param " + param_name);
-  }
-  return value;
-}
-
-std::string loadUavNamespaceOrThrow(ros::NodeHandle& nh) {
-  const std::string uav_name = loadRequiredGlobalStringParamOrThrow(nh, "/uav_name");
-  const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
-  if (uav_id <= 0) {
-    throw std::runtime_error("/uav_id cannot <= 0");
-  }
-  return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
-}
-
-std::string loadExpandedTopicParamOrThrow(ros::NodeHandle& nh,
-                                          const std::string& param_name,
-                                          const std::string& uav_ns) {
-  std::string raw_topic;
-  if (!nh.getParam(param_name, raw_topic)) {
-    throw std::runtime_error("missing param " + param_name);
-  }
-  if (raw_topic.empty()) {
-    throw std::runtime_error(param_name + " cannot be empty");
-  }
-  return sunray_common::replace_uav_ns(raw_topic, uav_ns);
-}
-
-std::string makePlannerTopic(std::string suffix, const std::string& uav_ns) {
-  const std::string normalized_uav_ns = sunray_common::normalize_uav_ns(uav_ns);
-  if (normalized_uav_ns.empty()) {
-    return normalized_uav_ns;
-  }
-  if (!suffix.empty() && suffix.front() == '/') {
-    suffix.erase(0, 1);
-  }
-  const std::string planner_topic_prefix = normalized_uav_ns + "/sunray/planning/ego_planner";
-  if (suffix.empty()) {
-    return planner_topic_prefix;
-  }
-  return planner_topic_prefix + "/" + suffix;
-}
 
 }  // namespace
 
@@ -842,17 +784,17 @@ int main(int argc, char **argv)
   nh.param("broadcast_ip", udp_ip_, string("127.0.0.255"));
   nh.param("odom_max_freq", odom_broadcast_freq_, 1000.0);
 
-  uav_ns_ = loadUavNamespaceOrThrow(nh);
-  const int uav_id = loadRequiredGlobalIntParamOrThrow(nh, "/uav_id");
+  uav_ns_ = ego_planner::loadUavNamespaceOrThrow(nh);
+  const std::string agent_name = ego_planner::loadAgentNameOrThrow(nh);
+  const int uav_id = ego_planner::loadAgentIdOrThrow(nh);
   drone_id_ = uav_id - 1;
-  my_odom_topic_ = loadExpandedTopicParamOrThrow(nh, "my_odom_topic", uav_ns_);
-  others_odom_topic_ = loadExpandedTopicParamOrThrow(nh, "others_odom_topic", uav_ns_);
-  broadcast_bspline_send_topic_ = makePlannerTopic("broadcast_bspline_from_planner", uav_ns_);
-  broadcast_bspline_recv_topic_ = makePlannerTopic("broadcast_bspline_to_planner", uav_ns_);
+  my_odom_topic_ = ego_planner::loadExpandedTopicParamOrThrow(nh, "my_odom_topic", uav_ns_);
+  others_odom_topic_ = ego_planner::loadExpandedTopicParamOrThrow(nh, "others_odom_topic", uav_ns_);
+  broadcast_bspline_send_topic_ = ego_planner::makePlannerTopic("broadcast_bspline_from_planner", uav_ns_);
+  broadcast_bspline_recv_topic_ = ego_planner::makePlannerTopic("broadcast_bspline_to_planner", uav_ns_);
   if (uav_id > 1)
   {
-    const std::string uav_name = loadRequiredGlobalStringParamOrThrow(nh, "/uav_name");
-    prev_uav_ns_ = sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id - 1));
+    prev_uav_ns_ = ego_planner::makeAgentKeyOrThrow(agent_name, uav_id - 1);
   }
 
   bsplines_msg_.reset(new traj_utils::MultiBsplines);
@@ -860,12 +802,12 @@ int main(int argc, char **argv)
   stop_msg_.reset(new std_msgs::Empty);
   bspline_msg_.reset(new traj_utils::Bspline);
 
-  const std::string planner_swarm_trajs_topic = makePlannerTopic("swarm_trajs", uav_ns_);
+  const std::string planner_swarm_trajs_topic = ego_planner::makePlannerTopic("swarm_trajs", uav_ns_);
   swarm_trajs_sub_ = nh.subscribe(planner_swarm_trajs_topic.c_str(), 10, multitraj_sub_tcp_cb, ros::TransportHints().tcpNoDelay());
 
   if (drone_id_ >= 1)
   {
-    const std::string prev_planner_swarm_trajs_topic = makePlannerTopic("swarm_trajs", prev_uav_ns_);
+    const std::string prev_planner_swarm_trajs_topic = ego_planner::makePlannerTopic("swarm_trajs", prev_uav_ns_);
     swarm_trajs_pub_ = nh.advertise<traj_utils::MultiBsplines>(prev_planner_swarm_trajs_topic.c_str(), 10);
   }
 

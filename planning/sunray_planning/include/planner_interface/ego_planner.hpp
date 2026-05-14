@@ -1,8 +1,7 @@
 #pragma once
 
-#include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <sunray_msgs/UAVPlanningState.h>
+#include <ros/ros.h>
 #include <sunray_planner_msgs/EgoPositionCommand.h>
 
 #include "planner_interface.hpp"
@@ -17,11 +16,9 @@ class EgoPlanner : public PlannerInterface {
 
   private:
     void position_cmd_callback(const sunray_planner_msgs::EgoPositionCommand::ConstPtr& msg);
-    void unified_state_callback(const sunray_msgs::UAVPlanningState::ConstPtr& msg);
 
     ros::Publisher goal_pub_;
     ros::Subscriber position_cmd_sub_;
-    ros::Subscriber unified_state_sub_;
 
     std::string uav_ns_;
     double cmd_timeout_sec_{0.3};

@@ -3,7 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 
-#include "string_uav_namespace_utils.hpp"
+#include "agent_key_helper.hpp"
 
 namespace {
 geometry_msgs::PoseStamped build_pose_goal(const PlanningTarget& target,
@@ -33,17 +33,10 @@ bool is_invalid_flag(const uint8_t trajectory_flag) {
 }  // namespace
 
 void DiffPlanner::init(ros::NodeHandle& private_nh) {
-    std::string uav_name;
-    int uav_id = 0;
-
-    if (!private_nh.getParam("uav_name", uav_name) || uav_name.empty()) {
-        throw std::runtime_error("DiffPlanner: missing or empty uav_name");
-    }
-    if (!private_nh.getParam("uav_id", uav_id) || uav_id <= 0) {
-        throw std::runtime_error("DiffPlanner: missing or invalid uav_id");
-    }
-
-    uav_ns_ = sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
+    bool use_private_agent_key = false;
+    private_nh.param("use_private_agent_key", use_private_agent_key, false);
+    uav_ns_ = use_private_agent_key ? sunray_common::get_agent_key_from_private()
+                                    : sunray_common::get_agent_key_from_global();
 
     const std::string goal_topic = uav_ns_ + "/sunray/planning/diff_planner/target_point";
     const std::string position_cmd_topic = uav_ns_ + "/sunray/planning/diff_planner/position_cmd";

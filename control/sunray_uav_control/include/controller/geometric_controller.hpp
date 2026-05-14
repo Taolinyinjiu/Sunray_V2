@@ -7,7 +7,6 @@
 #include "utils/arrival_helper.hpp"
 #include "utils/reference_limit_helper.hpp"
 #include "utils/quintic_curve.hpp"
-#include "utils/yaw_curve.hpp"
 #include <ros/node_handle.h>
 #include <ros/time.h>
 #include <string>
@@ -160,7 +159,6 @@ class Geometric_Controller : public Controller_Interface {
     // 共享轨迹曲线：takeoff/move_point 轮流占用，通过 owner 显式管理生命周期。
     curve::QuinticCurve motion_curve_;
     MotionCurveOwner motion_curve_owner_{MotionCurveOwner::None};
-    curve::QuinticYawCurve yaw_curve_;
 
     // 降落阶段相关状态
     takeoff_land::LandingTuning landing_tuning_{};

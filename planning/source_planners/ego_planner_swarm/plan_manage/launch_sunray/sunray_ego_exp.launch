@@ -1,6 +1,7 @@
 <launch>
-  <arg name="uav_name" default="uav" />
-  <arg name="uav_id" default="1" />
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="use_private_agent_key" default="false" />
 
   <arg name="map_size_x" default="40.0" />
   <arg name="map_size_y" default="40.0" />
@@ -26,6 +27,9 @@
   <arg name="obj_num" default="0" />
 
   <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
+    <arg name="agent_name" value="$(arg agent_name)"/>
+    <arg name="agent_id" value="$(arg agent_id)"/>
+    <arg name="use_private_agent_key" value="$(arg use_private_agent_key)"/>
     <arg name="odom_topic" value="$(arg odom_topic)"/>
     <arg name="cloud_topic" value="$(arg global_pointcloud_topic)"/>
     <arg name="camera_pose_topic" value="$(arg camera_pose_topic)" />

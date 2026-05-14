@@ -1,13 +1,19 @@
 <!-- EGO-Planner 实验版本 - 使用 LIO 里程计 -->
 <launch>
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="use_private_agent_key" default="false" />
   <!-- 里程计话题名 -->
-  <arg name="odom_topic" default="${uav_ns}/sunray/localization/local_odom" />
+  <arg name="odom_topic" default="${agent_key}/sunray/localization/local_odom" />
   <!-- 全局点云 -->
-  <arg name="cloud_topic" default="${uav_ns}/sunray/localization/global_points" />
+  <arg name="cloud_topic" default="${agent_key}/sunray/localization/global_points" />
 
   <arg name="enable_rviz" default="true" />
 
   <include file="$(find ego_planner)/launch/include/advanced_param_exp.xml">
+    <arg name="agent_name" value="$(arg agent_name)"/>
+    <arg name="agent_id" value="$(arg agent_id)"/>
+    <arg name="use_private_agent_key" value="$(arg use_private_agent_key)"/>
     <arg name="odom_topic" value="$(arg odom_topic)"/>
     <arg name="cloud_topic" value="$(arg cloud_topic)"/>
   </include>

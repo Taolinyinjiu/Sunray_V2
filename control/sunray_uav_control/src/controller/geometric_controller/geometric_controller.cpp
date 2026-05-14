@@ -102,7 +102,6 @@ void Geometric_Controller::set_position_mode() {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     control_common::Mavros_State state = mavros_helper_.get_state();
     if (state.flight_mode != control_common::FlightMode::Posctl) {
         mavros_helper_.set_px4_mode(control_common::FlightMode::Posctl);
@@ -202,19 +201,8 @@ void Geometric_Controller::reset_point_motion_context() {
 }
 
 double Geometric_Controller::update_limited_yaw_target(double target_yaw, const ros::Time& now) {
-    constexpr double kYawTargetEps = 1e-4;
-    const double current_yaw = uav_odometry_.get_yaw();
-    const double current_yaw_rate = uav_odometry_.bodyrate.z();
-    const double normalized_target = normalize_angle_rad(target_yaw);
-
-    if (!yaw_curve_.is_ready() || !yaw_curve_.matches_target(normalized_target, kYawTargetEps)) {
-        yaw_curve_.set_start_yawpoint(current_yaw, current_yaw_rate);
-        yaw_curve_.set_end_yawpoint(normalized_target, 0.0);
-        yaw_curve_.set_curve_avgvel(max_yaw_rate_rad_s_);
-    }
-
-    const curve::YawCurveState current_ref = yaw_curve_.get_result(now);
-    return current_ref.valid ? current_ref.yaw : current_yaw;
+    return reference_limit_helper::update_slewed_yaw_target(
+        yaw_reference_state_, target_yaw, uav_odometry_.get_yaw(), max_yaw_rate_rad_s_, now);
 }
 
 double Geometric_Controller::integrate_limited_yaw_rate(double yaw_rate_cmd, const ros::Time& now) {
@@ -312,7 +300,6 @@ void Geometric_Controller::reset_stage_thrust_filters() {
 bool Geometric_Controller::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     // 如果本轮之前已经降落，清除降落标志
     if (land_complete_.load(std::memory_order_relaxed)) {
         land_complete_.store(false, std::memory_order_relaxed);
@@ -520,7 +507,6 @@ bool Geometric_Controller::land(bool land_type, double max_land_velocity) {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     takeoff_state_.thrust_filter = takeoff_land::RCThrustFilterState{};
     // 进入降落流程时重置积分，防止下降阶段因残留积分产生额外推力
     if (landing_state_.start_time == ros::Time(0)) {
@@ -697,7 +683,6 @@ bool Geometric_Controller::set_hover_point(control_common::UAVStateEstimate curr
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     update_hover_reference(current_odom.position, current_odom.get_yaw(), "set_hover_point");
     return true;
 }
@@ -706,7 +691,6 @@ bool Geometric_Controller::hover() {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     controller_data_types::TargetTrajectoryPoint_t des_state;
     des_state.position = hover_point;
     des_state.velocity = Eigen::Vector3d::Zero();
@@ -748,7 +732,6 @@ bool Geometric_Controller::emergency_kill() {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     return mavros_helper_.emergency_kill();
 }
 
@@ -759,7 +742,6 @@ bool Geometric_Controller::move_point(controller_data_types::TargetPoint_t point
 bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t velocity) {
     clear_motion_curve();
     reset_point_motion_context();
-    yaw_curve_.clear();
     const bool fixed_height_active = velocity.fixed_height > 0.0;
     const ros::Time now = velocity.stamp.isZero() ? ros::Time::now() : velocity.stamp;
     velocity.velocity =
@@ -768,7 +750,6 @@ bool Geometric_Controller::move_velocity(controller_data_types::TargetVelocity_t
         velocity.velocity.z() = 0.0;
     }
     if (std::abs(velocity.yaw_rate) > 1e-6) {
-        yaw_curve_.clear();
         velocity.yaw_rate =
             reference_limit_helper::clamp_yaw_rate(velocity.yaw_rate, max_yaw_rate_rad_s_);
         velocity.yaw = integrate_limited_yaw_rate(velocity.yaw_rate, now);
@@ -812,7 +793,6 @@ bool Geometric_Controller::move_trajectory(
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     warn_if_trajectory_exceeds_limits(trajpoint);
     // 几何控制器的核心运动接口。
     // 将完整的轨迹点（位置 / 速度 / 加速度 / 加加速度 / yaw）直接送入核心算法，
@@ -864,7 +844,6 @@ bool Geometric_Controller::move_point_wgs84(geographic_msgs::GeoPoint point) {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     return false;
 }
 

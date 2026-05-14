@@ -1,12 +1,12 @@
 #include <traj_utils/planning_visualization.h>
 
-#include <string_uav_namespace_utils.hpp>
+#include <agent_key_helper.hpp>
 
 using std::cout;
 using std::endl;
 namespace {
 std::string makePlannerTopic(const std::string &suffix, const std::string &uav_ns) {
-  const std::string normalized_uav_ns = sunray_common::normalize_uav_ns(uav_ns);
+  const std::string normalized_uav_ns = sunray_common::normalize_agent_key(uav_ns);
   if (normalized_uav_ns.empty()) {
     return normalized_uav_ns;
   }

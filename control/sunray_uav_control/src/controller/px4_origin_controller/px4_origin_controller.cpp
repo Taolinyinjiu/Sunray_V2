@@ -147,7 +147,6 @@ void PX4_OriginController::set_position_mode() {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     clear_cached_setpoint();
     control_common::Mavros_State state = mavros_helper_.get_state();
     if (state.flight_mode != control_common::FlightMode::Posctl) {
@@ -221,7 +220,6 @@ void PX4_OriginController::reset_after_landing_success() {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     start_land_time_ = ros::Time(0);
     land_near_ground_ = false;
     land_touchground_time_ = ros::Time(0);
@@ -239,19 +237,8 @@ void PX4_OriginController::reset_after_landing_success() {
 }
 
 double PX4_OriginController::update_limited_yaw_target(double target_yaw, const ros::Time& now) {
-    constexpr double kYawTargetEps = 1e-4;
-    const double current_yaw = uav_odometry_.get_yaw();
-    const double current_yaw_rate = uav_odometry_.bodyrate.z();
-    const double normalized_target = normalize_angle_rad(target_yaw);
-
-    if (!yaw_curve_.is_ready() || !yaw_curve_.matches_target(normalized_target, kYawTargetEps)) {
-        yaw_curve_.set_start_yawpoint(current_yaw, current_yaw_rate);
-        yaw_curve_.set_end_yawpoint(normalized_target, 0.0);
-        yaw_curve_.set_curve_avgvel(max_yaw_rate_rad_s_);
-    }
-
-    const curve::YawCurveState current_ref = yaw_curve_.get_result(now);
-    return current_ref.valid ? current_ref.yaw : current_yaw;
+    return reference_limit_helper::update_slewed_yaw_target(
+        yaw_reference_state_, target_yaw, uav_odometry_.get_yaw(), max_yaw_rate_rad_s_, now);
 }
 
 void PX4_OriginController::warn_if_trajectory_exceeds_limits(
@@ -351,7 +338,6 @@ bool PX4_OriginController::move_point_impl(controller_data_types::TargetPoint_t 
 bool PX4_OriginController::takeoff(double relative_takeoff_height, double max_takeoff_velocity) {
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     // 如何设计呢？起始这里的问题是，我们如何触发？
     // 实现思路为这样，我们不断的触发这个函数直到达到预设的起飞高度，也就是这样
     // ------sunray_fsm--------
@@ -498,7 +484,6 @@ bool PX4_OriginController::is_point_complete() {
 bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     if (land_type == 1) {
         clear_motion_curve();
         // 切换为px4的auto land模式
@@ -556,7 +541,6 @@ bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
 bool PX4_OriginController::land(bool land_type, double max_land_velocity) {
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     if (land_type == 1) {
         clear_motion_curve();
         // 切换为px4的auto land模式
@@ -678,7 +662,6 @@ bool PX4_OriginController::set_hover_point(control_common::UAVStateEstimate curr
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     hover_point_ = current_odom.position;
     hover_yaw_ = current_odom.get_yaw();
     publish_hold_setpoint(hover_point_, hover_yaw_);
@@ -694,7 +677,6 @@ bool PX4_OriginController::emergency_kill() {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     return mavros_helper_.emergency_kill();
 }
 
@@ -705,7 +687,6 @@ bool PX4_OriginController::move_point(controller_data_types::TargetPoint_t point
 bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t velocity) {
     clear_motion_curve();
     reset_point_motion_context();
-    yaw_curve_.clear();
     // 请注意，velocity是一个比较危险的接口，我们会默认返回true
     const bool fixed_height_active = velocity.fixed_height > 0.0;
     velocity.velocity =
@@ -739,7 +720,6 @@ bool PX4_OriginController::move_velocity(controller_data_types::TargetVelocity_t
     }
     if (std::abs(velocity.yaw_rate) > 1e-6) {
         yaw_reference_state_.reset();
-        yaw_curve_.clear();
         velocity_setpoint.yaw = uav_odometry_.get_yaw();
         velocity_setpoint.yaw_rate =
             reference_limit_helper::clamp_yaw_rate(velocity.yaw_rate, max_yaw_rate_rad_s_);
@@ -758,7 +738,6 @@ bool PX4_OriginController::move_trajectory(
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     warn_if_trajectory_exceeds_limits(trajpoint);
 
     control_common::Mavros_SetpointLocal trajpoint_setpoint;
@@ -823,7 +802,6 @@ bool PX4_OriginController::move_velocity_body(
     velocity_setpoint.velocity.z() = limited_velocity.z();
     if (std::abs(velocity.yaw_rate) > 1e-6) {
         yaw_reference_state_.reset();
-        yaw_curve_.clear();
         velocity_setpoint.yaw = mavros_helper_.get_yaw_rad();
         velocity_setpoint.yaw_rate =
             reference_limit_helper::clamp_yaw_rate(world_velocity.yaw_rate, max_yaw_rate_rad_s_);
@@ -840,7 +818,6 @@ bool PX4_OriginController::move_point_wgs84(geographic_msgs::GeoPoint point) {
     clear_motion_curve();
     reset_point_motion_context();
     yaw_reference_state_.reset();
-    yaw_curve_.clear();
     return false;
 }
 // -------------起降状态查询接口------------

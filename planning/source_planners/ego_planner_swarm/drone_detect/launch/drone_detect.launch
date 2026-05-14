@@ -1,12 +1,18 @@
 <launch>
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="use_private_agent_key" default="false"/>
   <arg name="my_id" value="1"/>
-  <arg name="my_odom_topic" value="${uav_ns}/sunray/localization/vins/imu_propagate"/>
+  <arg name="my_odom_topic" value="${agent_key}/sunray/localization/vins/imu_propagate"/>
   <arg name="depth_topic" value="/camera/depth/image_rect_raw"/>
-  <arg name="others_odom_topic" value="${uav_ns}/sunray/planning/ego_planner/others_odom"/>
-  <arg name="debug_info_topic" value="${uav_ns}/sunray/planning/ego_planner/debug_info"/>
+  <arg name="others_odom_topic" value="${agent_key}/sunray/planning/ego_planner/others_odom"/>
+  <arg name="debug_info_topic" value="${agent_key}/sunray/planning/ego_planner/debug_info"/>
 
   <!-- Launch ROS Package Template Node -->
   <node pkg="drone_detect" type="drone_detect" name="test_drone_detect" output="screen">
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+    <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
     <rosparam command="load" file="$(find drone_detect)/config/camera.yaml" />
     <rosparam command="load" file="$(find drone_detect)/config/default.yaml"/>
     <param name="my_id" value="$(arg my_id)" />

@@ -1,7 +1,8 @@
 <launch>
-  <arg name="uav_name" default="uav"/>
-  <arg name="uav_id" default="1"/>
-  <arg name="drone_id" default="$(eval int(arg('uav_id')) - 1)"/>
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="use_private_agent_key" default="false"/>
+  <arg name="drone_id" default="$(eval int(arg('agent_id')) - 1)"/>
   <arg name="map_size_x" default="42.0"/>
   <arg name="map_size_y" default="30.0"/>
   <arg name="map_size_z" default="5.0"/>
@@ -38,8 +39,9 @@
   </node>
 
   <include file="$(find ego_planner)/launch_sunray/run_in_sim.launch">
-    <arg name="uav_name" value="$(arg uav_name)"/>
-    <arg name="uav_id" value="$(arg uav_id)"/>
+    <arg name="agent_name" value="$(arg agent_name)"/>
+    <arg name="agent_id" value="$(arg agent_id)"/>
+    <arg name="use_private_agent_key" value="$(arg use_private_agent_key)"/>
     <arg name="drone_id" value="$(arg drone_id)"/>
 
     <arg name="init_x" value="-20.0"/>

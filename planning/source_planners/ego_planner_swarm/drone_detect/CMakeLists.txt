@@ -60,6 +60,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
   include
+  ../plan_manage/include
   ${catkin_INCLUDE_DIRS}
   # Set manually because Eigen sets a non standard INCLUDE DIR
   ${EIGEN3_INCLUDE_DIR}

@@ -109,6 +109,9 @@ velocity_param:
         y_vel: 1.0
         z_vel: 1.0
     # 在进行yaw(偏航)角调整时允许的最大角速度，单位为 deg/s
+    # 含义：所有指定 yaw 角度的控制指令（move_point / move_velocity 等）都会
+    # 通过斜率限速器逼近目标 yaw，逼近速率上限即此值；yaw_rate 控制指令同样
+    # 会被钳位到 ±yaw_rate 范围内。该参数仅作为速度上限，不是平均速度。
     yaw_rate: 30
 # ------------------- Sunray Controller Param -----------
 sunray_controller_param:

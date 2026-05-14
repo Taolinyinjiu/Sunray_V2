@@ -12,18 +12,11 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include "string_uav_namespace_utils.hpp"
+#include "agent_key_helper.hpp"
+#include "eigen_helper.hpp"
 #include "sunray_log.hpp"
 
 namespace {
-
-double quaternion_to_yaw(const geometry_msgs::Quaternion& orientation) {
-    const double siny_cosp =
-        2.0 * (orientation.w * orientation.z + orientation.x * orientation.y);
-    const double cosy_cosp =
-        1.0 - 2.0 * (orientation.y * orientation.y + orientation.z * orientation.z);
-    return std::atan2(siny_cosp, cosy_cosp);
-}
 
 bool is_supported_frame(const std::string& frame_id,
                         const std::string& local_frame_id,
@@ -33,38 +26,8 @@ bool is_supported_frame(const std::string& frame_id,
            frame_id == global_frame_id;
 }
 
-std::string load_required_global_string_param_or_throw(ros::NodeHandle& nh,
-                                                       const std::string& param_name) {
-    std::string value;
-    if (!nh.getParam(param_name, value)) {
-        throw std::runtime_error("missing param " + param_name);
-    }
-    if (value.empty()) {
-        throw std::runtime_error(param_name + " cannot be empty");
-    }
-    return value;
-}
-
-int load_required_global_int_param_or_throw(ros::NodeHandle& nh,
-                                            const std::string& param_name) {
-    int value = 0;
-    if (!nh.getParam(param_name, value)) {
-        throw std::runtime_error("missing param " + param_name);
-    }
-    return value;
-}
-
-std::string load_uav_namespace_or_throw(ros::NodeHandle& nh) {
-    const std::string uav_name = load_required_global_string_param_or_throw(nh, "/uav_name");
-    const int uav_id = load_required_global_int_param_or_throw(nh, "/uav_id");
-    if (uav_id <= 0) {
-        throw std::runtime_error("/uav_id cannot <= 0");
-    }
-    return sunray_common::normalize_uav_ns(uav_name + std::to_string(uav_id));
-}
-
-std::string make_planning_cmd_topic(const std::string& uav_ns) {
-    return uav_ns + "/sunray/planning_cmd";
+std::string make_planning_cmd_topic(const std::string& agent_key) {
+    return agent_key + "/sunray/uav_planning/planning_cmd";
 }
 
 struct BridgeConfig {
@@ -79,8 +42,8 @@ struct BridgeConfig {
     double default_hold_time{0.0};
     double default_yaw{0.0};
     bool use_goal_yaw{true};
-    uint8_t control_cmd{sunray_msgs::UAVPlanningCMD::PLANNING_LOCAL};
-    uint8_t cmd_source{sunray_msgs::UAVPlanningCMD::SUNRAY_STATION};
+    uint8_t plan_cmd{sunray_msgs::UAVPlanningCMD::PLAN_LOCAL_GOAL};
+    std::string plan_cmd_source{"RVIZ"};
 };
 
 struct BridgeContext {
@@ -167,14 +130,18 @@ void handle_goal(const geometry_msgs::PoseStamped::ConstPtr& msg, BridgeContext*
     if (planning_cmd_msg.header.stamp.isZero()) {
         planning_cmd_msg.header.stamp = ros::Time::now();
     }
-    planning_cmd_msg.control_cmd = context->config.control_cmd;
-    planning_cmd_msg.cmd_source = context->config.cmd_source;
+    planning_cmd_msg.plan_cmd = context->config.plan_cmd;
+    planning_cmd_msg.plan_cmd_source = context->config.plan_cmd_source;
 
     sunray_msgs::PlanningWaypoint waypoint;
     waypoint.position = transformed_goal.pose.position;
     waypoint.position.z = context->config.goal_height;
+    const Eigen::Quaterniond goal_orientation(transformed_goal.pose.orientation.w,
+                                              transformed_goal.pose.orientation.x,
+                                              transformed_goal.pose.orientation.y,
+                                              transformed_goal.pose.orientation.z);
     waypoint.yaw = context->config.use_goal_yaw
-                       ? quaternion_to_yaw(transformed_goal.pose.orientation)
+                       ? eigen_helper::get_yaw_from_orientation(goal_orientation)
                        : context->config.default_yaw;
     waypoint.hold_time = static_cast<float>(context->config.default_hold_time);
 
@@ -202,8 +169,12 @@ int main(int argc, char** argv) {
         BridgeContext context;
         private_nh.getParam("rviz_goal_topic", context.config.rviz_goal_topic);
 
-        const std::string uav_ns = load_uav_namespace_or_throw(nh);
-        context.planning_cmd_topic = make_planning_cmd_topic(uav_ns);
+        bool use_private_agent_key = false;
+        private_nh.param("use_private_agent_key", use_private_agent_key, false);
+        const std::string agent_key = use_private_agent_key
+                                          ? sunray_common::get_agent_key_from_private()
+                                          : sunray_common::get_agent_key_from_global();
+        context.planning_cmd_topic = make_planning_cmd_topic(agent_key);
         context.tf_listener.reset(new tf2_ros::TransformListener(context.tf_buffer));
         context.planning_cmd_pub =
             nh.advertise<sunray_msgs::UAVPlanningCMD>(context.planning_cmd_topic, 10);
