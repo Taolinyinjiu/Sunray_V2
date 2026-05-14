@@ -31,6 +31,9 @@ tools/simulation_tools/config/sunray_launcher.yaml
 配置结构如下：
 
 ```yaml
+external_workspaces:
+  - "~/pengyu_sim"
+
 launch_groups:
   - name: "定位融合模块"
     items:
@@ -48,6 +51,7 @@ launch_groups:
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
+| `external_workspaces` | 否 | 外部 catkin workspace 列表，支持 `~/xxx` 路径；启动器会扫描这些 workspace 的 ROS package 并在启动 terminal 时补充 ROS 环境变量 |
 | `launch_groups` | 是 | 顶层数组，每一项对应界面上的一个模块标签页 |
 | `name` | 是 | 模块标签页名称 |
 | `items` | 是 | 当前模块下可启动的 launch 列表 |
@@ -94,16 +98,30 @@ roslaunch localization_fusion localization_fusion.launch source_id:=5 agent_name
 
 roslaunch 结束后 terminal 会自动关闭，不需要手动按回车。
 
-## 5. 外部包注意事项
+## 5. 外部 Workspace 适配
 
-`pengyu_sim仿真器模块` 中的 `px4_control_simulator` 和 `ugv_simulator` 是外部 ROS 包。使用这些启动项前，需要先 source 外部工作空间，例如：
+`pengyu_sim仿真器模块` 中的 `px4_control_simulator` 和 `ugv_simulator` 是外部 ROS 包。启动器支持通过配置补充外部 workspace：
 
-```bash
-source /home/amov/pengyu_sim/devel/setup.bash
-source /home/amov/Sunray_v2/devel/setup.bash
+```yaml
+external_workspaces:
+  - "~/pengyu_sim"
 ```
 
-如果 `rospack find px4_control_simulator` 或 `rospack find ugv_simulator` 找不到包，启动器会提示找不到 launch 文件。
+启动器会做两件事：
+
+| 动作 | 说明 |
+| --- | --- |
+| 启动器内部解析 | 扫描 `~/pengyu_sim` 下的 `package.xml`，即使当前终端只 source 了 `~/Sunray_v2/devel/setup.bash`，也能找到外部包的 launch 文件。 |
+| terminal 环境补充 | 打开独立 terminal 后，自动给 `ROS_PACKAGE_PATH`、`CMAKE_PREFIX_PATH`、`PATH`、`LD_LIBRARY_PATH`、`PYTHONPATH` 补充外部 workspace 的路径。 |
+
+这个机制用于兼容外部独立 workspace。更标准的 ROS 做法仍然是把 `~/Sunray_v2` 编译成 `~/pengyu_sim` 的 overlay，但启动器不强制要求这样做。
+
+如果外部包仍然启动失败，先检查路径是否存在：
+
+```bash
+ls ~/pengyu_sim/devel
+ls ~/pengyu_sim/src
+```
 
 ## 6. 常见问题
 

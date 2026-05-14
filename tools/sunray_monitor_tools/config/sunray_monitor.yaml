@@ -1,0 +1,39 @@
+fixed_frame: "world"
+status_timeout: 1.0
+refresh_hz: 5.0
+
+state_topics:
+  - name: "UAV控制-uav1"
+    module: "UAV_CONTROL"
+    agent_type: "UAV"
+    agent_name: "uav"
+    agent_id: 1
+    topic: "/uav1/sunray/uav_control/control_state"
+
+  - name: "UAV规划-uav1"
+    module: "UAV_PLANNING"
+    agent_type: "UAV"
+    agent_name: "uav"
+    agent_id: 1
+    topic: "/uav1/sunray/planning/planning_state"
+
+  - name: "UGV控制-ugv1"
+    module: "UGV_CONTROL"
+    agent_type: "UGV"
+    agent_name: "ugv"
+    agent_id: 1
+    topic: "/ugv1/sunray/ugv_control/ugv_control_fsm_state"
+
+  - name: "UAV集群"
+    module: "UAV_SWARM"
+    agent_type: "SWARM"
+    agent_name: "uav"
+    agent_id: 0
+    topic: "/sunray/swarm/uav_swarm_state"
+
+  - name: "UGV集群"
+    module: "UGV_SWARM"
+    agent_type: "SWARM"
+    agent_name: "ugv"
+    agent_id: 0
+    topic: "/sunray/swarm/ugv_swarm_state"

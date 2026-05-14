@@ -1,0 +1,12 @@
+<launch>
+  <arg name="monitor_config"
+       default="$(find sunray_monitor_tools)/config/sunray_monitor.yaml" />
+
+  <node pkg="sunray_monitor_tools"
+        type="sunray_monitor_panel_node"
+        name="sunray_monitor_panel_node"
+        output="screen">
+    <param name="monitor_config" value="$(arg monitor_config)" />
+    <rosparam file="$(arg monitor_config)" command="load" />
+  </node>
+</launch>

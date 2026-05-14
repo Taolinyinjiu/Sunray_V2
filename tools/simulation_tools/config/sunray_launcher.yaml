@@ -1,4 +1,14 @@
+external_workspaces:
+  - "~/pengyu_sim"
+
 launch_groups:
+  - name: "状态监控"
+    items:
+      - title: "Sunray状态监控面板"
+        package: "sunray_monitor_tools"
+        launch: "sunray_monitor_panel.launch"
+        description: "启动状态话题聚合监控和嵌入式 RViz 三维视图。"
+
   - name: "定位融合模块"
     items:
       - title: "无人机定位融合"

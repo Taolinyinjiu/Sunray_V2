@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QGridLayout>
@@ -14,6 +15,7 @@
 #include <QHeaderView>
 #include <QIcon>
 #include <QLabel>
+#include <QPainter>
 #include <QPixmap>
 #include <QColor>
 #include <QProcess>
@@ -23,6 +25,7 @@
 #include <QStringList>
 #include <QSplitter>
 #include <QStandardPaths>
+#include <QTabBar>
 #include <QTextCursor>
 #include <QTextEdit>
 #include <QTimer>
@@ -33,6 +36,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <csignal>
 #include <fstream>
@@ -66,6 +70,14 @@ struct LaunchGroup
     std::vector<int> item_indices;
 };
 
+struct ExternalWorkspace
+{
+    QString configured_path;
+    QString root_path;
+    QString devel_path;
+    QStringList source_roots;
+};
+
 struct LaunchRuntime
 {
     QString script_path;
@@ -91,6 +103,61 @@ struct LaunchCommand
     std::string package_name;
     std::string launch_file;
     QStringList args;
+};
+
+class LaunchTabBar : public QTabBar
+{
+public:
+    explicit LaunchTabBar(QWidget *parent = nullptr) : QTabBar(parent) {}
+
+    void setRunningCount(const int index, const int running_count)
+    {
+        running_counts_[index] = running_count;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        for (int i = 0; i < count(); ++i)
+        {
+            const QRect rect = tabRect(i).adjusted(1, 1, -1, 0);
+            const bool selected = (i == currentIndex());
+            const int running_count = running_counts_.count(i) > 0 ? running_counts_.at(i) : 0;
+
+            const QColor background = running_count > 0
+                                          ? QColor(124, 255, 117)
+                                          : (selected ? QColor(244, 245, 244) : QColor(221, 231, 224));
+            const QColor text_color = selected ? QColor(22, 53, 45) : QColor(49, 88, 77);
+
+            painter.setPen(QPen(QColor(185, 199, 190), 1));
+            painter.setBrush(background);
+            painter.drawRoundedRect(rect, 8, 8);
+
+            QFont tab_font = font();
+            tab_font.setBold(true);
+            painter.setFont(tab_font);
+            painter.setPen(text_color);
+            painter.drawText(rect.adjusted(12, 0, -12, 0), Qt::AlignCenter, tabText(i));
+        }
+    }
+
+private:
+    std::map<int, int> running_counts_;
+};
+
+class LaunchTabWidget : public QTabWidget
+{
+public:
+    explicit LaunchTabWidget(QWidget *parent = nullptr) : QTabWidget(parent) {}
+
+    void useLaunchTabBar(QTabBar *tab_bar)
+    {
+        setTabBar(tab_bar);
+    }
 };
 
 std::string xmlRpcToString(const XmlRpc::XmlRpcValue &value, const std::string &fallback = "")
@@ -138,6 +205,60 @@ QString shellJoin(const QStringList &arguments)
         quoted_arguments << shellQuote(argument);
     }
     return quoted_arguments.join(" ");
+}
+
+QStringList uniquePathList(const QStringList &paths)
+{
+    QStringList unique_paths;
+    for (const QString &path : paths)
+    {
+        const QString clean_path = QDir(path).absolutePath();
+        if (QDir(clean_path).exists() && !unique_paths.contains(clean_path))
+        {
+            unique_paths << clean_path;
+        }
+    }
+    return unique_paths;
+}
+
+QString shellEnvPrepend(const QStringList &paths, const QString &env_name)
+{
+    const QString prefix = uniquePathList(paths).join(":");
+    if (prefix.isEmpty())
+    {
+        return "";
+    }
+    return shellQuote(prefix) + "${" + env_name + ":+:${" + env_name + "}}";
+}
+
+QString expandUserPath(const std::string &path)
+{
+    QString expanded = QString::fromStdString(path).trimmed();
+    if (expanded == "~")
+    {
+        return QDir::homePath();
+    }
+    if (expanded.startsWith("~/"))
+    {
+        return QDir::homePath() + expanded.mid(1);
+    }
+    return expanded;
+}
+
+std::string trimCopy(const std::string &text)
+{
+    size_t begin = 0;
+    while (begin < text.size() && std::isspace(static_cast<unsigned char>(text[begin])))
+    {
+        ++begin;
+    }
+
+    size_t end = text.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(text[end - 1])))
+    {
+        --end;
+    }
+    return text.substr(begin, end - begin);
 }
 
 QStringList splitCommandLine(const QString &command)
@@ -307,6 +428,33 @@ QString sanitizeFileToken(QString text)
     return text;
 }
 
+std::string readPackageNameFromPackageXml(const QString &package_xml_path)
+{
+    std::ifstream file(package_xml_path.toStdString());
+    if (!file)
+    {
+        return "";
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string content = buffer.str();
+    const std::string begin_tag = "<name>";
+    const std::string end_tag = "</name>";
+    const size_t begin = content.find(begin_tag);
+    if (begin == std::string::npos)
+    {
+        return "";
+    }
+    const size_t name_begin = begin + begin_tag.size();
+    const size_t end = content.find(end_tag, name_begin);
+    if (end == std::string::npos || end <= name_begin)
+    {
+        return "";
+    }
+    return trimCopy(content.substr(name_begin, end - name_begin));
+}
+
 } // namespace
 
 class SunrayLauncherPanel : public QWidget
@@ -317,6 +465,7 @@ public:
     {
         private_nh_.param("launcher_config", launcher_config_path_, std::string(""));
 
+        loadExternalWorkspacesFromRosParam();
         loadLaunchItemsFromRosParam();
         buildUi();
 
@@ -334,6 +483,95 @@ public:
     }
 
 private:
+    void loadExternalWorkspacesFromRosParam()
+    {
+        XmlRpc::XmlRpcValue workspaces;
+        if (!private_nh_.getParam("external_workspaces", workspaces))
+        {
+            return;
+        }
+
+        const std::vector<std::string> workspace_paths = xmlRpcToStringList(workspaces);
+        for (const std::string &configured_path : workspace_paths)
+        {
+            ExternalWorkspace workspace;
+            workspace.configured_path = QString::fromStdString(configured_path);
+            workspace.root_path = QDir(expandUserPath(configured_path)).absolutePath();
+            if (!QDir(workspace.root_path).exists())
+            {
+                ROS_WARN("simulation_tools: ignore missing external workspace: %s",
+                         configured_path.c_str());
+                continue;
+            }
+
+            const QString devel_path = workspace.root_path + "/devel";
+            if (QDir(devel_path).exists())
+            {
+                workspace.devel_path = QDir(devel_path).absolutePath();
+            }
+
+            workspace.source_roots = findExternalWorkspaceSourceRoots(workspace);
+            scanExternalWorkspacePackages(workspace);
+            external_workspaces_.push_back(workspace);
+
+            ROS_INFO("simulation_tools: external workspace %s loaded, source_roots=%d",
+                     workspace.configured_path.toStdString().c_str(),
+                     workspace.source_roots.size());
+        }
+    }
+
+    QStringList findExternalWorkspaceSourceRoots(const ExternalWorkspace &workspace) const
+    {
+        QStringList source_roots;
+        const QString catkin_file = workspace.root_path + "/devel/.catkin";
+        std::ifstream file(catkin_file.toStdString());
+        if (file)
+        {
+            std::string root;
+            while (std::getline(file, root, ';'))
+            {
+                const std::string clean_root = trimCopy(root);
+                if (!clean_root.empty())
+                {
+                    source_roots << QString::fromStdString(clean_root);
+                }
+            }
+        }
+
+        const QString standard_src = workspace.root_path + "/src";
+        if (QDir(standard_src).exists())
+        {
+            source_roots << standard_src;
+        }
+        return uniquePathList(source_roots);
+    }
+
+    void scanExternalWorkspacePackages(const ExternalWorkspace &workspace)
+    {
+        for (const QString &source_root : workspace.source_roots)
+        {
+            QDirIterator it(source_root,
+                            QStringList() << "package.xml",
+                            QDir::Files | QDir::NoSymLinks,
+                            QDirIterator::Subdirectories);
+            while (it.hasNext())
+            {
+                const QString package_xml_path = it.next();
+                const std::string package_name = readPackageNameFromPackageXml(package_xml_path);
+                if (package_name.empty())
+                {
+                    continue;
+                }
+
+                const QString package_path = QFileInfo(package_xml_path).absoluteDir().absolutePath();
+                if (external_package_paths_.find(package_name) == external_package_paths_.end())
+                {
+                    external_package_paths_[package_name] = package_path.toStdString();
+                }
+            }
+        }
+    }
+
     void loadLaunchItemsFromRosParam()
     {
         XmlRpc::XmlRpcValue groups;
@@ -460,12 +698,9 @@ private:
             QGroupBox { border: 1px solid #bac7bf; border-radius: 10px; margin-top: 12px; background: #f8faf7; font-weight: 700; }
             QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0px 6px; color: #31584d; }
             QTabWidget::pane { border: 1px solid #b9c7be; border-radius: 10px; background: #fbfcfa; top: -1px; }
-            QTabBar::tab { background: #dde7e0; color: #31584d; border: 1px solid #b9c7be; border-bottom: 0px; padding: 8px 12px; margin-right: 2px; border-top-left-radius: 8px; border-top-right-radius: 8px; font-weight: 700; }
-            QTabBar::tab:selected { background: #fbfcfa; color: #16352d; }
-            QTabBar::tab:hover { background: #e9f1ec; }
             QTreeWidget { background: #fbfcfa; border: 0px; border-radius: 10px; outline: 0; }
             QTreeWidget::item { padding: 7px; }
-            QTreeWidget::item:selected { background: #cfe7db; color: #11241e; }
+            QTreeWidget::item:selected { background: #e6e8e7; color: #111815; }
             QTextEdit { background: #111815; color: #d8f3df; border-radius: 10px; border: 1px solid #23342d; font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; }
             QPushButton { background: #1f7a5b; color: white; border: 0px; border-radius: 8px; padding: 8px 14px; font-weight: 700; }
             QPushButton:hover { background: #28916c; }
@@ -486,12 +721,19 @@ private:
         auto *box = new QGroupBox("模块列表");
         auto *layout = new QVBoxLayout(box);
 
-        launch_tabs_ = new QTabWidget();
+        launch_tabs_ = new LaunchTabWidget();
+        launch_tab_bar_ = new LaunchTabBar(launch_tabs_);
+        launch_tabs_->useLaunchTabBar(launch_tab_bar_);
         for (const LaunchGroup &group : launch_groups_)
         {
             auto *tree = new QTreeWidget();
             tree->setColumnCount(4);
             tree->setHeaderLabels(QStringList() << "Launch" << "状态" << "Package" << "文件");
+            tree->setRootIsDecorated(false);
+            tree->setIndentation(0);
+            tree->setItemsExpandable(false);
+            tree->setExpandsOnDoubleClick(false);
+            tree->setAllColumnsShowFocus(true);
             tree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
             tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
             tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -711,6 +953,7 @@ private:
         {
             appendLog("启动失败: 启动命令格式错误，应为 roslaunch <package> <launch> [args...]");
             updateLaunchStatus(idx, "未运行");
+            updateGroupTabStatus();
             updateButtons();
             return;
         }
@@ -720,6 +963,7 @@ private:
         {
             appendLog("启动失败: 找不到 launch 文件 " + launch_file);
             updateLaunchStatus(idx, "未运行");
+            updateGroupTabStatus();
             updateButtons();
             return;
         }
@@ -733,6 +977,7 @@ private:
         {
             appendLog("启动失败: 无法创建 terminal wrapper。");
             updateLaunchStatus(idx, "未运行");
+            updateGroupTabStatus();
             updateButtons();
             return;
         }
@@ -744,6 +989,7 @@ private:
             appendLog("启动失败: 没有找到可用终端，请安装 gnome-terminal、konsole 或 xterm。");
             cleanupRuntimeFiles(runtime);
             updateLaunchStatus(idx, "未运行");
+            updateGroupTabStatus();
             updateButtons();
             return;
         }
@@ -775,6 +1021,7 @@ private:
             process->deleteLater();
             cleanupRuntimeFiles(runtime);
             updateLaunchStatus(idx, "未运行");
+            updateGroupTabStatus();
             updateButtons();
             return;
         }
@@ -782,6 +1029,7 @@ private:
         launch_runtimes_[idx].terminal_pid = process->processId();
         launch_runtimes_[idx].running = true;
         updateLaunchStatus(idx, "运行 0s");
+        updateGroupTabStatus();
         appendLog("已在 terminal 中启动: " + display_command.toStdString());
         updateButtons();
     }
@@ -858,6 +1106,7 @@ private:
         script << "echo \"[Sunray] Launch: " << title.toStdString() << "\"\n";
         script << "echo \"[Sunray] Command: " << runtime.command.toStdString() << "\"\n";
         script << "echo\n";
+        writeExternalWorkspaceEnvironment(script);
         script << "echo \"$$\" > " << shellQuote(runtime.pid_file).toStdString() << "\n";
         script << "roslaunch_pid=\"\"\n";
         script << "cleanup() {\n";
@@ -880,6 +1129,92 @@ private:
             return false;
         }
         return true;
+    }
+
+    void writeExternalWorkspaceEnvironment(std::ofstream &script) const
+    {
+        QStringList source_roots;
+        QStringList devel_paths;
+        for (const ExternalWorkspace &workspace : external_workspaces_)
+        {
+            source_roots << workspace.source_roots;
+            if (!workspace.devel_path.isEmpty())
+            {
+                devel_paths << workspace.devel_path;
+            }
+        }
+
+        source_roots = uniquePathList(source_roots);
+        devel_paths = uniquePathList(devel_paths);
+        if (source_roots.isEmpty() && devel_paths.isEmpty())
+        {
+            return;
+        }
+
+        const QString ros_package_path = source_roots.join(":");
+        if (!ros_package_path.isEmpty())
+        {
+            script << "export ROS_PACKAGE_PATH="
+                   << shellEnvPrepend(source_roots, "ROS_PACKAGE_PATH").toStdString()
+                   << "\n";
+        }
+
+        const QString cmake_prefix_path = devel_paths.join(":");
+        if (!cmake_prefix_path.isEmpty())
+        {
+            script << "export CMAKE_PREFIX_PATH="
+                   << shellEnvPrepend(devel_paths, "CMAKE_PREFIX_PATH").toStdString()
+                   << "\n";
+
+            QStringList bin_paths;
+            QStringList lib_paths;
+            for (const QString &devel_path : devel_paths)
+            {
+                if (QDir(devel_path + "/bin").exists())
+                {
+                    bin_paths << devel_path + "/bin";
+                }
+                if (QDir(devel_path + "/lib").exists())
+                {
+                    lib_paths << devel_path + "/lib";
+                }
+            }
+            if (!bin_paths.isEmpty())
+            {
+                script << "export PATH="
+                       << shellEnvPrepend(bin_paths, "PATH").toStdString()
+                       << "\n";
+            }
+            if (!lib_paths.isEmpty())
+            {
+                script << "export LD_LIBRARY_PATH="
+                       << shellEnvPrepend(lib_paths, "LD_LIBRARY_PATH").toStdString()
+                       << "\n";
+            }
+
+            QStringList python_paths;
+            for (const QString &devel_path : devel_paths)
+            {
+                const QString python3_path = devel_path + "/lib/python3/dist-packages";
+                const QString python2_path = devel_path + "/lib/python2.7/dist-packages";
+                if (QDir(python3_path).exists())
+                {
+                    python_paths << python3_path;
+                }
+                if (QDir(python2_path).exists())
+                {
+                    python_paths << python2_path;
+                }
+            }
+            if (!python_paths.isEmpty())
+            {
+                script << "export PYTHONPATH="
+                       << shellEnvPrepend(python_paths, "PYTHONPATH").toStdString()
+                       << "\n";
+            }
+        }
+
+        script << "rospack profile >/dev/null 2>&1 || true\n";
     }
 
     QStringList buildTerminalCommand(LaunchRuntime &runtime) const
@@ -927,7 +1262,7 @@ private:
             return launch_info.absoluteFilePath().toStdString();
         }
 
-        const std::string package_path = ros::package::getPath(package_name);
+        const std::string package_path = resolvePackagePath(package_name);
         if (package_path.empty())
         {
             return launch_file;
@@ -943,6 +1278,22 @@ private:
         return QFileInfo(package_dir + "/" + QString::fromStdString(launch_file))
             .absoluteFilePath()
             .toStdString();
+    }
+
+    std::string resolvePackagePath(const std::string &package_name) const
+    {
+        const std::string package_path = ros::package::getPath(package_name);
+        if (!package_path.empty())
+        {
+            return package_path;
+        }
+
+        const auto it = external_package_paths_.find(package_name);
+        if (it != external_package_paths_.end())
+        {
+            return it->second;
+        }
+        return "";
     }
 
     bool isRunning(const int idx) const
@@ -1088,6 +1439,7 @@ private:
         summary_label_->setText(QString("配置项: %1  运行中: %2")
                                     .arg(launch_items_.size())
                                     .arg(running_count));
+        updateGroupTabStatus();
         updateButtons();
 
         const QDateTime now = QDateTime::currentDateTime();
@@ -1180,12 +1532,49 @@ private:
         {
             it->second->setText(1, status);
             const bool running = status.startsWith("运行");
-            const QColor row_background = running ? QColor(198, 235, 211) : QColor(251, 252, 250);
-            const QColor row_foreground = running ? QColor(20, 84, 50) : QColor(23, 33, 28);
+            const QColor row_background = running ? QColor(124, 255, 117) : QColor(251, 252, 250);
+            const QColor row_foreground = running ? QColor(5, 55, 24) : QColor(23, 33, 28);
             for (int column = 0; column < it->second->columnCount(); ++column)
             {
                 it->second->setBackground(column, row_background);
                 it->second->setForeground(column, row_foreground);
+            }
+        }
+    }
+
+    int runningCountForGroup(const LaunchGroup &group) const
+    {
+        int running_count = 0;
+        for (const int idx : group.item_indices)
+        {
+            if (isRunning(idx))
+            {
+                ++running_count;
+            }
+        }
+        return running_count;
+    }
+
+    void updateGroupTabStatus()
+    {
+        if (!launch_tabs_)
+        {
+            return;
+        }
+
+        for (int i = 0; i < static_cast<int>(launch_groups_.size()) && i < launch_tabs_->count(); ++i)
+        {
+            const LaunchGroup &group = launch_groups_[static_cast<size_t>(i)];
+            const int running_count = runningCountForGroup(group);
+            QString tab_text = QString::fromStdString(group.name);
+            if (running_count > 0)
+            {
+                tab_text += QString("-%1").arg(running_count);
+            }
+            launch_tabs_->setTabText(i, tab_text);
+            if (launch_tab_bar_)
+            {
+                launch_tab_bar_->setRunningCount(i, running_count);
             }
         }
     }
@@ -1207,6 +1596,9 @@ private:
 
     std::string launcher_config_path_;
 
+    std::vector<ExternalWorkspace> external_workspaces_;
+    std::map<std::string, std::string> external_package_paths_;
+
     std::vector<LaunchItem> launch_items_;
     std::vector<LaunchGroup> launch_groups_;
     std::map<int, QTreeWidgetItem *> item_by_launch_index_;
@@ -1217,7 +1609,8 @@ private:
     QDateTime last_monitor_refresh_;
     CpuSample last_cpu_sample_;
 
-    QTabWidget *launch_tabs_{nullptr};
+    LaunchTabWidget *launch_tabs_{nullptr};
+    LaunchTabBar *launch_tab_bar_{nullptr};
     std::vector<QTreeWidget *> launch_trees_;
     QLabel *summary_label_{nullptr};
     QLabel *selected_title_{nullptr};

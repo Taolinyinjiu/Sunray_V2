@@ -24,6 +24,11 @@ modules:
     source_path: "tools/simulation_tools"
     build_path: "build/simulation_tools"
     dependencies: []
+  sunray_monitor_tools:
+    description: "Sunray 状态监控与三维可视化工具"
+    source_path: "tools/sunray_monitor_tools"
+    build_path: "build/sunray_monitor_tools"
+    dependencies: [sunray_msgs]
 
   # uav_control_example
   sunray_uav_control_example:
