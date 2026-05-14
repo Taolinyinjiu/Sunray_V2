@@ -22,7 +22,7 @@ state_topics:
     agent_type: "UGV"
     agent_name: "ugv"
     agent_id: 1
-    topic: "/ugv1/sunray/ugv_control/ugv_control_fsm_state"
+    topic: "/ugv1/sunray/ugv_control/control_state"
 
   - name: "UAV集群"
     module: "UAV_SWARM"

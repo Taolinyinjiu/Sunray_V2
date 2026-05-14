@@ -6,7 +6,7 @@ add_compile_options(-std=c++11)
 # ------------------------------------------------------------------------------
 # 依赖
 # - roscpp: ROS C++ 节点
-# - sunray_msgs: UGVControlCMD / UGVControlFSMState 等消息
+# - sunray_msgs: UGVControlCMD / UGVControlState 等消息
 # - geometry_msgs / nav_msgs / std_msgs: 控制指令、里程计和基础消息
 # - visualization_msgs: RViz marker 可视化
 # - Eigen3: 控制器内部向量计算
@@ -79,9 +79,9 @@ target_link_libraries(${PROJECT_NAME}_node
 
 # ------------------------------------------------------------------------------
 # 工具节点
-# - ugv_control_monitor_node: 订阅 UGVControlFSMState 并在终端打印状态面板
-# - rviz_visualization_ugv_control_node: 订阅 UGVControlFSMState 并发布 RViz marker
-# - ugv_control_panel_node: Qt 控制面板，发布 UGVControlCMD 并显示 UGVControlFSMState
+# - ugv_control_monitor_node: 订阅 UGVControlState 并在终端打印状态面板
+# - rviz_visualization_ugv_control_node: 订阅 UGVControlState 并发布 RViz marker
+# - ugv_control_panel_node: Qt 控制面板，发布 UGVControlCMD 并显示 UGVControlState
 # ------------------------------------------------------------------------------
 add_executable(ugv_control_monitor_node
   src/tools/ugv_control_monitor_node.cpp

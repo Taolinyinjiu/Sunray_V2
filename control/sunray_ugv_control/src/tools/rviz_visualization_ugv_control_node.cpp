@@ -1,11 +1,11 @@
 /*
 本程序功能：
-    1、订阅 UGVControlFSMState
+    1、订阅 UGVControlState
     2、发布 RViz MarkerArray，显示无人车、速度、ID/FSM、目标点和地理围栏
 */
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
-#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVControlState.h>
 #include <visualization_msgs/MarkerArray.h>
 
 #include <algorithm>
@@ -42,20 +42,20 @@ std::string fsmName(const uint8_t state)
 {
     switch (state)
     {
-    case sunray_msgs::UGVControlFSMState::FSM_INIT:
+    case sunray_msgs::UGVControlState::FSM_INIT:
         return "INIT";
-    case sunray_msgs::UGVControlFSMState::FSM_HOLD:
+    case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlFSMState::FSM_RETURN:
+    case sunray_msgs::UGVControlState::FSM_RETURN:
         return "RETURN";
-    case sunray_msgs::UGVControlFSMState::FSM_MOVE:
+    case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
         return "UNKNOWN";
     }
 }
 
-visualization_msgs::Marker makeBaseMarker(const sunray_msgs::UGVControlFSMState &state,
+visualization_msgs::Marker makeBaseMarker(const sunray_msgs::UGVControlState &state,
                                           const int id,
                                           const std::string &ns,
                                           const int type)
@@ -181,7 +181,7 @@ void appendWorldMarkers(visualization_msgs::MarkerArray &markers)
     markers.markers.push_back(y_text);
 }
 
-void stateCallback(const sunray_msgs::UGVControlFSMState::ConstPtr &msg)
+void stateCallback(const sunray_msgs::UGVControlState::ConstPtr &msg)
 {
     visualization_msgs::MarkerArray markers;
 
@@ -386,7 +386,7 @@ int main(int argc, char **argv)
     nh.param("world_axis_length", g_world_axis_length, g_world_axis_length);
     nh.param("world_axis_text_height", g_world_axis_text_height, g_world_axis_text_height);
     nh.param("state_topic", state_topic,
-             "/" + agent_name + std::to_string(agent_id) + "/sunray/ugv_control/ugv_control_fsm_state");
+             "/" + agent_name + std::to_string(agent_id) + "/sunray/ugv_control/control_state");
     nh.param("marker_topic", marker_topic,
              "/" + agent_name + std::to_string(agent_id) + "/sunray/ugv_control/rviz_markers");
 

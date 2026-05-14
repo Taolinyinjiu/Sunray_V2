@@ -1,13 +1,13 @@
 /*
 本程序功能：
-    1、订阅 UGVControlFSMState
+    1、订阅 UGVControlState
     2、以终端状态面板形式显示 sunray_ugv_control 的核心输入、状态和输出
     3、让 ugv_control_fsm 本体只负责控制逻辑，不负责打印
 */
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
 #include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVControlState.h>
 
 #include <algorithm>
 #include <cmath>
@@ -32,7 +32,7 @@ const char *kAnsiValue = "\033[1;37m";
 
 struct CachedState
 {
-    sunray_msgs::UGVControlFSMState state{};
+    sunray_msgs::UGVControlState state{};
     ros::Time receive_time{0.0};
 };
 
@@ -66,9 +66,9 @@ std::string driveTypeName(const uint8_t drive_type)
 {
     switch (drive_type)
     {
-    case sunray_msgs::UGVControlFSMState::DRIVE_MECANUM:
+    case sunray_msgs::UGVControlState::DRIVE_MECANUM:
         return "麦克纳姆";
-    case sunray_msgs::UGVControlFSMState::DRIVE_DIFFERENTIAL:
+    case sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL:
         return "差速";
     default:
         return "未知";
@@ -79,13 +79,13 @@ std::string fsmName(const uint8_t state)
 {
     switch (state)
     {
-    case sunray_msgs::UGVControlFSMState::FSM_INIT:
+    case sunray_msgs::UGVControlState::FSM_INIT:
         return "INIT";
-    case sunray_msgs::UGVControlFSMState::FSM_HOLD:
+    case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlFSMState::FSM_RETURN:
+    case sunray_msgs::UGVControlState::FSM_RETURN:
         return "RETURN";
-    case sunray_msgs::UGVControlFSMState::FSM_MOVE:
+    case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
         return "UNKNOWN";
@@ -140,12 +140,12 @@ std::string coloredFsmName(const uint8_t state)
 {
     switch (state)
     {
-    case sunray_msgs::UGVControlFSMState::FSM_HOLD:
+    case sunray_msgs::UGVControlState::FSM_HOLD:
         return colorText("HOLD", kAnsiGood);
-    case sunray_msgs::UGVControlFSMState::FSM_RETURN:
-    case sunray_msgs::UGVControlFSMState::FSM_MOVE:
+    case sunray_msgs::UGVControlState::FSM_RETURN:
+    case sunray_msgs::UGVControlState::FSM_MOVE:
         return colorText(fsmName(state), kAnsiWarn);
-    case sunray_msgs::UGVControlFSMState::FSM_INIT:
+    case sunray_msgs::UGVControlState::FSM_INIT:
     default:
         return colorText(fsmName(state), kAnsiValue);
     }
@@ -167,7 +167,7 @@ std::string coloredCmdName(const uint8_t cmd)
     }
 }
 
-std::string currentTargetText(const sunray_msgs::UGVControlFSMState &state)
+std::string currentTargetText(const sunray_msgs::UGVControlState &state)
 {
     if (!state.target_valid)
     {
@@ -215,35 +215,35 @@ std::string rawControlInputText(const sunray_msgs::UGVControlCMD &cmd)
     }
 }
 
-std::string odomTopicText(const sunray_msgs::UGVControlFSMState &state)
+std::string odomTopicText(const sunray_msgs::UGVControlState &state)
 {
     const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
     const std::string odom_topic = agent_prefix + "/sunray/localization/local_odom";
     return colorText(odom_topic, kAnsiValue);
 }
 
-std::string cmdTopicText(const sunray_msgs::UGVControlFSMState &state)
+std::string cmdTopicText(const sunray_msgs::UGVControlState &state)
 {
     const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
     const std::string cmd_topic = agent_prefix + "/sunray/ugv_control/control_cmd";
     return colorText(cmd_topic, kAnsiValue);
 }
 
-std::string cmdVelTopicText(const sunray_msgs::UGVControlFSMState &state)
+std::string cmdVelTopicText(const sunray_msgs::UGVControlState &state)
 {
     const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
     const std::string cmd_vel_topic = agent_prefix + "/sunray/ugv_control/cmd_vel";
     return colorText(cmd_vel_topic, kAnsiValue);
 }
 
-std::string fsmStateTopicText(const sunray_msgs::UGVControlFSMState &state)
+std::string fsmStateTopicText(const sunray_msgs::UGVControlState &state)
 {
     const std::string agent_prefix = "/" + state.agent_name + std::to_string(static_cast<int>(state.agent_id));
-    const std::string state_topic = agent_prefix + "/sunray/ugv_control/ugv_control_fsm_state";
+    const std::string state_topic = agent_prefix + "/sunray/ugv_control/control_state";
     return colorText(state_topic, kAnsiValue);
 }
 
-std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
+std::string buildPanel(const sunray_msgs::UGVControlState &state)
 {
     const geometry_msgs::Point &pos = state.self_odom.pose.pose.position;
     const double yaw = yawFromOdom(state.self_odom);
@@ -301,7 +301,7 @@ std::string buildPanel(const sunray_msgs::UGVControlFSMState &state)
     return ss.str();
 }
 
-void stateCallback(const sunray_msgs::UGVControlFSMState::ConstPtr &msg)
+void stateCallback(const sunray_msgs::UGVControlState::ConstPtr &msg)
 {
     if (msg->agent_id == 0)
     {
@@ -326,7 +326,7 @@ void printPanel(const ros::TimerEvent &, const double stale_timeout)
     if (states.empty())
     {
         std::cout << colorText("UGV 控制状态面板", kAnsiTitle) << "\n";
-        std::cout << "等待 UGVControlFSMState...\n";
+        std::cout << "等待 UGVControlState...\n";
         return;
     }
 
@@ -363,7 +363,7 @@ int main(int argc, char **argv)
     for (int agent_id = 1; agent_id <= std::max(1, agent_num); ++agent_id)
     {
         const std::string state_topic =
-            "/" + agent_name + std::to_string(agent_id) + "/sunray/ugv_control/ugv_control_fsm_state";
+            "/" + agent_name + std::to_string(agent_id) + "/sunray/ugv_control/control_state";
         state_subs.push_back(nh.subscribe(state_topic, 20, stateCallback));
         ROS_INFO("ugv_control_monitor_node subscribe: %s", state_topic.c_str());
     }

@@ -188,7 +188,7 @@ Subscribed Topics：
 | 话题 | 类型 | 说明 |
 | --- | --- | --- |
 | `/{agent_name}{agent_id}/sunray/localization/local_odom` | `nav_msgs/Odometry` | 本机局部里程计，来自 `localization_fusion` |
-| `/{agent_name}{agent_id}/sunray/ugv_control/ugv_control_fsm_state` | `sunray_msgs/UGVControlFSMState` | 本机 UGV 控制状态机状态 |
+| `/{agent_name}{agent_id}/sunray/ugv_control/control_state` | `sunray_msgs/UGVControlState` | 本机 UGV 控制状态机状态 |
 | `/{agent_name}{peer_id}/sunray/localization/local_odom` | `nav_msgs/Odometry` | 邻居里程计，`peer_id` 范围为 `[1, swarm_num]` 且不等于本机 ID |
 | `/sunray/swarm/ugv_swarm_cmd` | `sunray_msgs/UGVSwarmCMD` | UGV 集群控制指令 |
 

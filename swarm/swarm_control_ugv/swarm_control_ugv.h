@@ -13,7 +13,7 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVControlState.h>
 #include <sunray_msgs/UGVSwarmCMD.h>
 #include <sunray_msgs/UGVSwarmState.h>
 
@@ -84,7 +84,7 @@ class Swarm_Control_UGV
     };
 
     void localOdomCallback(const nav_msgs::Odometry::ConstPtr &msg);
-    void ugvFsmStateCallback(const sunray_msgs::UGVControlFSMState::ConstPtr &msg);
+    void ugvFsmStateCallback(const sunray_msgs::UGVControlState::ConstPtr &msg);
     void peerOdomCallback(const nav_msgs::Odometry::ConstPtr &msg, int agent_id);
     void swarmCmdCallback(const sunray_msgs::UGVSwarmCMD::ConstPtr &msg);
     void swarm_control_main_loop(const ros::TimerEvent &event);
@@ -123,7 +123,7 @@ class Swarm_Control_UGV
 
     sunray_msgs::UGVControlCMD ugv_control_cmd_{};
     std::vector<OdomCache> odom_caches_{}; // 下标直接使用 agent_id，0 号位保留不用
-    sunray_msgs::UGVControlFSMState ugv_control_fsm_state_{};
+    sunray_msgs::UGVControlState ugv_control_state_{};
     bool has_ugv_fsm_state_{false};
     sunray_msgs::UGVSwarmCMD ugv_swarm_cmd_{};
     sunray_msgs::UGVSwarmState ugv_swarm_state_{};

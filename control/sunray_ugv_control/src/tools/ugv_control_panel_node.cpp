@@ -2,12 +2,12 @@
 本程序功能：
     1、Qt 无人车控制面板
     2、发布 UGVControlCMD
-    3、订阅 UGVControlFSMState 并显示无人车控制状态
+    3、订阅 UGVControlState 并显示无人车控制状态
 */
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
 #include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVControlState.h>
 
 #include <QApplication>
 #include <QColor>
@@ -51,13 +51,13 @@ QString fsmName(const uint8_t state)
 {
     switch (state)
     {
-    case sunray_msgs::UGVControlFSMState::FSM_INIT:
+    case sunray_msgs::UGVControlState::FSM_INIT:
         return "INIT";
-    case sunray_msgs::UGVControlFSMState::FSM_HOLD:
+    case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlFSMState::FSM_RETURN:
+    case sunray_msgs::UGVControlState::FSM_RETURN:
         return "RETURN";
-    case sunray_msgs::UGVControlFSMState::FSM_MOVE:
+    case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
         return "UNKNOWN";
@@ -124,9 +124,9 @@ QString driveTypeName(const uint8_t drive_type)
 {
     switch (drive_type)
     {
-    case sunray_msgs::UGVControlFSMState::DRIVE_MECANUM:
+    case sunray_msgs::UGVControlState::DRIVE_MECANUM:
         return "mecanum";
-    case sunray_msgs::UGVControlFSMState::DRIVE_DIFFERENTIAL:
+    case sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL:
         return "differential";
     default:
         return "unknown";
@@ -159,7 +159,7 @@ class UGVControlPanel : public QMainWindow
         nh_.param("agent_id", agent_id_, 1);
         const std::string prefix = "/" + agent_name_ + std::to_string(agent_id_);
         nh_.param("cmd_topic", cmd_topic_, prefix + "/sunray/ugv_control/control_cmd");
-        nh_.param("state_topic", state_topic_, prefix + "/sunray/ugv_control/ugv_control_fsm_state");
+        nh_.param("state_topic", state_topic_, prefix + "/sunray/ugv_control/control_state");
     }
 
     void setupRos()
@@ -374,7 +374,7 @@ class UGVControlPanel : public QMainWindow
                                        .arg(text));
     }
 
-    void stateCallback(const sunray_msgs::UGVControlFSMState::ConstPtr &msg)
+    void stateCallback(const sunray_msgs::UGVControlState::ConstPtr &msg)
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         state_ = *msg;
@@ -383,7 +383,7 @@ class UGVControlPanel : public QMainWindow
 
     void refreshState()
     {
-        sunray_msgs::UGVControlFSMState state;
+        sunray_msgs::UGVControlState state;
         bool has_state = false;
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
@@ -464,7 +464,7 @@ class UGVControlPanel : public QMainWindow
     QTimer *refresh_timer_{nullptr};
 
     std::mutex state_mutex_;
-    sunray_msgs::UGVControlFSMState state_;
+    sunray_msgs::UGVControlState state_;
     bool has_state_{false};
 };
 } // namespace

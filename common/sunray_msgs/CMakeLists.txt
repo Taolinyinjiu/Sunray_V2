@@ -17,8 +17,6 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   OdomState.msg
-  OrcaCmd.msg
-  OrcaSetup.msg
   Px4State.msg
   PlanningWaypoint.msg
   UAVControlCMD.msg
@@ -28,7 +26,7 @@ add_message_files(
   UAVSwarmCMD.msg
   UAVSwarmState.msg
   UGVControlCMD.msg
-  UGVControlFSMState.msg
+  UGVControlState.msg
   UGVSwarmCMD.msg
   UGVSwarmState.msg
   Vector2.msg

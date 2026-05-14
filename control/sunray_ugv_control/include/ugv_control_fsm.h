@@ -6,7 +6,7 @@
 #include <nav_msgs/Odometry.h>
 #include <sunray_msgs/UGVControlCMD.h>
 #include <sunray_msgs/OdomState.h>
-#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVControlState.h>
 #include <memory>
 #include <Eigen/Eigen>
 #include <string>

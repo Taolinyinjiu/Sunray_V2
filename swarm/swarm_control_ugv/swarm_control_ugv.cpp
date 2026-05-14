@@ -101,7 +101,7 @@ Swarm_Control_UGV::Swarm_Control_UGV(ros::NodeHandle &nh)
 
     const std::string self_ns = "/" + params_.agent_name + std::to_string(params_.agent_id);
     const std::string local_odom_topic = self_ns + "/sunray/localization/local_odom";
-    const std::string ugv_fsm_state_topic = self_ns + "/sunray/ugv_control/ugv_control_fsm_state";
+    const std::string ugv_fsm_state_topic = self_ns + "/sunray/ugv_control/control_state";
     const std::string control_cmd_topic = self_ns + "/sunray/ugv_control/control_cmd";
     const std::string swarm_cmd_topic = "/sunray/swarm/ugv_swarm_cmd";
     const std::string swarm_state_topic = "/sunray/swarm/ugv_swarm_state";
@@ -275,9 +275,9 @@ void Swarm_Control_UGV::localOdomCallback(const nav_msgs::Odometry::ConstPtr &ms
     }
 }
 
-void Swarm_Control_UGV::ugvFsmStateCallback(const sunray_msgs::UGVControlFSMState::ConstPtr &msg)
+void Swarm_Control_UGV::ugvFsmStateCallback(const sunray_msgs::UGVControlState::ConstPtr &msg)
 {
-    ugv_control_fsm_state_ = *msg;
+    ugv_control_state_ = *msg;
     has_ugv_fsm_state_ = true;
 }
 

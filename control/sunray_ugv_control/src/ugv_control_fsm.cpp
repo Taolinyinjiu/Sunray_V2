@@ -74,7 +74,7 @@ UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh) {
 
   // 初始化发布器
   pub_cmd_vel_ = nh_.advertise<geometry_msgs::Twist>(agent_prefix_ + "/sunray/ugv_control/cmd_vel", 10);
-  pub_fsm_state_ = nh_.advertise<sunray_msgs::UGVControlFSMState>(agent_prefix_ + "/sunray/ugv_control/ugv_control_fsm_state", 10);
+  pub_fsm_state_ = nh_.advertise<sunray_msgs::UGVControlState>(agent_prefix_ + "/sunray/ugv_control/control_state", 10);
   pub_debug_ = nh_.advertise<sunray_msgs::UGVControlCMD>(agent_prefix_ + "/sunray/ugv_control_debug", 10);
 
   // 启动定时器
@@ -295,29 +295,29 @@ void UGVControlFSM::switch_to_hold() {
 }
 
 void UGVControlFSM::publish_fsm_state() {
-  sunray_msgs::UGVControlFSMState state_msg;
+  sunray_msgs::UGVControlState state_msg;
   state_msg.header.stamp = ros::Time::now();
 
   state_msg.agent_name = agent_name_;
   state_msg.agent_id = static_cast<uint8_t>(agent_id_);
-  state_msg.drive_type = (drive_type_ == 1) ? sunray_msgs::UGVControlFSMState::DRIVE_MECANUM
-                                            : sunray_msgs::UGVControlFSMState::DRIVE_DIFFERENTIAL;
+  state_msg.drive_type = (drive_type_ == 1) ? sunray_msgs::UGVControlState::DRIVE_MECANUM
+                                            : sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL;
 
   switch (current_state_) {
     case INIT:
-      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::FSM_INIT;
+      state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_INIT;
       break;
     case HOLD:
-      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::FSM_HOLD;
+      state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_HOLD;
       break;
     case RETURN:
-      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::FSM_RETURN;
+      state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_RETURN;
       break;
     case MOVE:
-      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::FSM_MOVE;
+      state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_MOVE;
       break;
     default:
-      state_msg.fsm_state = sunray_msgs::UGVControlFSMState::FSM_INIT;
+      state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_INIT;
       break;
   }
 

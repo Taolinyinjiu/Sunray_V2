@@ -36,8 +36,6 @@
 // sunray_msgs
 #include <sunray_msgs/Formation.h>
 #include <sunray_msgs/OdomState.h>
-#include <sunray_msgs/OrcaCmd.h>
-#include <sunray_msgs/OrcaSetup.h>
 #include <sunray_msgs/PlanningWaypoint.h>
 #include <sunray_msgs/Px4State.h>
 #include <sunray_msgs/UAVControlCMD.h>
@@ -47,7 +45,7 @@
 #include <sunray_msgs/UAVSwarmCMD.h>
 #include <sunray_msgs/UAVSwarmState.h>
 #include <sunray_msgs/UGVControlCMD.h>
-#include <sunray_msgs/UGVControlFSMState.h>
+#include <sunray_msgs/UGVControlState.h>
 #include <sunray_msgs/UGVSwarmCMD.h>
 #include <sunray_msgs/UGVSwarmState.h>
 #include <sunray_msgs/Vector2.h>

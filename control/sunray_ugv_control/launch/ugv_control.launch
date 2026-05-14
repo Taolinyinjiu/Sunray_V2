@@ -11,7 +11,7 @@
   <arg name="monitor_stale_timeout" default="1.0" />
   <arg name="rviz_frame_id" default="world" />
   <arg name="rviz_config" default="$(find sunray_ugv_control)/rviz/ugv_control.rviz" />
-  <arg name="ugv_control_state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/ugv_control_fsm_state" />
+  <arg name="ugv_control_state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/control_state" />
   <arg name="ugv_control_marker_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/rviz_markers" />
 
   <!--
@@ -27,7 +27,7 @@
     <!-- 启动UGV控制节点 -->
     <node pkg="sunray_ugv_control" type="node" name="$(arg node_name)" output="screen" />
 
-    <!-- 可选：终端状态面板，订阅 UGVControlFSMState 打印控制状态 -->
+    <!-- 可选：终端状态面板，订阅 UGVControlState 打印控制状态 -->
     <node if="$(arg enable_single_monitor)"
           pkg="sunray_ugv_control"
           type="ugv_control_monitor_node"
@@ -39,7 +39,7 @@
       <param name="stale_timeout" value="$(arg monitor_stale_timeout)" />
     </node>
 
-    <!-- 可选：发布 UGVControlFSMState 对应的 RViz Marker -->
+    <!-- 可选：发布 UGVControlState 对应的 RViz Marker -->
     <node if="$(arg enable_rviz_visualization)"
           pkg="sunray_ugv_control"
           type="rviz_visualization_ugv_control_node"

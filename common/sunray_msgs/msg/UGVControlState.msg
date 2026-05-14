@@ -1,9 +1,9 @@
 std_msgs/Header header
 
-# UGVControlFSMState 是 sunray_ugv_control 对外发布的完整运行状态。
+# UGVControlState 是 sunray_ugv_control 对外发布的完整运行状态。
 # 推荐外部 UI / monitor / RViz 只订阅本消息，不直接侵入 ugv_control_fsm 内部逻辑。
 # 典型话题：
-#   /ugv1/sunray/ugv_control/ugv_control_fsm_state
+#   /ugv1/sunray/ugv_control/control_state
 
 # ---------- robot identity ----------
 string agent_name                 # 机器人名称前缀，例如 ugv

@@ -6,7 +6,7 @@
 - 右侧嵌入 RViz 三维视图，默认显示 Grid、TF 和 `/sunray/monitor/markers`。
 - 配置文件驱动，可同时覆盖 UAV、UGV、Planning、Swarm 等模块。
 
-当前版本先做“状态话题聚合 + 三维视图框架”。后续可以在此基础上继续解析 `UAVControlState.msg`、`UAVPlanningState.msg`、`UGVControlFSMState.msg` 等具体字段。
+当前版本先做“状态话题聚合 + 三维视图框架”。后续可以在此基础上继续解析 `UAVControlState.msg`、`UAVPlanningState.msg`、`UGVControlState.msg` 等具体字段。
 
 ## 启动方式
 
@@ -86,7 +86,7 @@ state_topics:
 
 第一阶段：
 
-- 针对 `UAVControlState`、`UGVControlFSMState`、`UAVPlanningState` 增加强类型订阅和字段解析。
+- 针对 `UAVControlState`、`UGVControlState`、`UAVPlanningState` 增加强类型订阅和字段解析。
 - 表格增加 FSM 状态、目标点、当前命令、odom 健康状态等列。
 
 第二阶段：

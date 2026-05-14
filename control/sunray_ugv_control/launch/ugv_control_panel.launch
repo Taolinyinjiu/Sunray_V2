@@ -2,7 +2,7 @@
   <arg name="agent_name" default="ugv" />
   <arg name="agent_id" default="1" />
   <arg name="cmd_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/control_cmd" />
-  <arg name="state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/ugv_control_fsm_state" />
+  <arg name="state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/ugv_control/control_state" />
 
   <node pkg="sunray_ugv_control"
         type="ugv_control_panel_node"
