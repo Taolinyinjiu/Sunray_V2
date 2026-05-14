@@ -1,73 +1,35 @@
 #include "localization_fusion.hpp"
 
 /*
-TF 约定与发布逻辑
+最新执行模型（2026-05-14）：
 
-1. 每个智能体必须拥有独立 TF 子树，避免多机在同一 ROS master 下抢占相同 frame。
-   默认 frame 由 agent_name + agent_id 自动推导：
-
-       world
-       ├── ugv1/sunray_global
-       │   └── ugv1/sunray_local
-       │       └── ugv1/base_link
-       ├── ugv2/sunray_global
-       │   └── ugv2/sunray_local
-       │       └── ugv2/base_link
-       └── uav1/sunray_global
-           └── uav1/sunray_local
-               └── uav1/base_link
-
-   例如 agent_name=ugv, agent_id=1 时：
-       global_frame_id = ugv1/sunray_global
-       local_frame_id  = ugv1/sunray_local
-       base_frame_id   = ugv1/base_link
-       world_frame_id  = world
-
-   如果 launch 显式传入 world_frame_id/global_frame_id/local_frame_id/base_frame_id，
-   则使用 launch 参数覆盖默认推导结果。
-
-2. TF 发布方向固定为标准树方向：
-       world -> {agent}/sunray_global -> {agent}/sunray_local -> {agent}/base_link
-
-   不再发布旧方向 {agent}/sunray_global -> world，否则多机时 world 会成为多个父节点
-   的 child frame，破坏 TF 树唯一父节点约束。
-
-3. LOCAL / GLOBAL 模式没有外部重定位输入：
-       world -> global      静态单位 TF
-       global -> local      静态单位 TF
-       local  -> base_link  随 local_odom 动态发布
-
-   这两个模式下，local 与 global 默认重合。
-
-4. LOCAL_AND_GLOBAL 模式有持续的外部 global odom 输入：
-       relocalization_callback 收到 base_link 在 global 下的位姿 T_global_base；
-       odometry_callback 缓存 base_link 在 local 下的位姿 T_local_base；
-       由 T_global_local = T_global_base * inverse(T_local_base) 反推 global -> local；
-       global -> local 作为动态 TF 发布。
-
-5. LOCAL_WITH_ARUCO 模式有间歇的外部重定位输入：
-       relocalization_callback 更新 global -> local；
-       healthtimer_callback 周期性发布 global -> local，保证 TF 连续存在；
-       global_odom 由 global -> local 与 local_odom 组合得到。
+1. localization_fusion 不再关心 world 系
+2. TF 树固定为：
+       sunray_global -> {agent}/sunray_local -> {agent}/base_link
+3. odometry_topic 输入永远表示 local 主里程计输入
+4. odometry_callback 中完成外参变换后立即发布 local_odom
+5. relocalization_topic 输入是 base_link 在 sunray_global 下的位姿
+6. relocalization_callback 只更新 T_global_local
+7. health_timer_ 统一负责：
+   - 计算并发布 global_odom
+   - 发布 global_to_local_tf_
+   - 发布 local_to_base_tf_
+   - 检查超时
+   - 发布 OdomState
 */
 
 #include <cmath>
 #include <deque>
-#include <Eigen/Dense>
 #include <stdexcept>
+
+#include <Eigen/Dense>
 #include <sunray_msgs/OdomState.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
 #include "agent_key_helper.hpp"
 
-// clang-format off
-
 namespace {
-
-bool needs_relocalization(LocalizationMode mode) {
-    return mode == LocalizationMode::LOCAL_AND_GLOBAL ||
-           mode == LocalizationMode::LOCAL_WITH_ARUCO;
-}
 
 void update_input_rate(double& averaged_rate_hz,
                        std::deque<double>& sample_times_s,
@@ -96,7 +58,6 @@ void update_input_rate(double& averaged_rate_hz,
     const double duration_s = sample_times_s.back() - sample_times_s.front();
     if (duration_s > 1e-4) {
         const double raw_hz = static_cast<double>(sample_times_s.size() - 1) / duration_s;
-        // EMA 平滑，alpha 越小越平滑，0.1 对应约 10 帧的平滑响应
         constexpr double alpha = 0.1;
         averaged_rate_hz = (averaged_rate_hz < 1e-6)
                                ? raw_hz
@@ -111,50 +72,76 @@ std::string strip_leading_slash(std::string value) {
     return value;
 }
 
+bool is_unit_quaternion(const Eigen::Quaterniond& q) {
+    return std::isfinite(q.x()) && std::isfinite(q.y()) && std::isfinite(q.z()) &&
+           std::isfinite(q.w()) &&
+           std::abs(q.x() * q.x() + q.y() * q.y() + q.z() * q.z() + q.w() * q.w() - 1.0) <
+               1e-2;
+}
+
+geometry_msgs::Pose transform_to_pose_msg(const tf2::Transform& transform) {
+    geometry_msgs::Pose pose_msg;
+    pose_msg.position.x = transform.getOrigin().x();
+    pose_msg.position.y = transform.getOrigin().y();
+    pose_msg.position.z = transform.getOrigin().z();
+    pose_msg.orientation = tf2::toMsg(transform.getRotation());
+    return pose_msg;
+}
+
+geometry_msgs::TransformStamped make_identity_transform(const std::string& parent_frame,
+                                                        const std::string& child_frame) {
+    geometry_msgs::TransformStamped transform_msg;
+    transform_msg.header.stamp = ros::Time::now();
+    transform_msg.header.frame_id = parent_frame;
+    transform_msg.child_frame_id = child_frame;
+    transform_msg.transform.translation.x = 0.0;
+    transform_msg.transform.translation.y = 0.0;
+    transform_msg.transform.translation.z = 0.0;
+    transform_msg.transform.rotation.x = 0.0;
+    transform_msg.transform.rotation.y = 0.0;
+    transform_msg.transform.rotation.z = 0.0;
+    transform_msg.transform.rotation.w = 1.0;
+    return transform_msg;
+}
+
 }  // namespace
 
-// 由于我们在launch文件中将传入的参数设置为了节点私有参数，因此需要在这里构造私有句柄
 LocalizationFusion::LocalizationFusion(ros::NodeHandle& nh) {
-    // 缓存全局句柄
     nh_ = nh;
-    // 读取节点名
-    std::string node_name = ros::this_node::getName();
-    // 构造私有节点句柄，用于读取节点私有参数
+
+    const std::string node_name = ros::this_node::getName();
     ros::NodeHandle private_nh("~");
-    // 读取节点参数
+
     if (!private_nh.getParam("source_id", selected_source_id_)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param" + node_name + "/source_id");
+        throw std::runtime_error("missing param " + node_name + "/source_id");
     }
     if (!private_nh.getParam("config_yamlfile_path", config_yamlfile_path_)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param" + node_name + "/config_yamlfile_path");
+        throw std::runtime_error("missing param " + node_name + "/config_yamlfile_path");
     }
     if (!private_nh.getParam("health_rate_hz", health_rate_hz_)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param" + node_name + "/health_rate_hz");
+        throw std::runtime_error("missing param " + node_name + "/health_rate_hz");
     }
     if (!private_nh.getParam("use_receive_time", use_receive_time_)) {
-        // 读取失败，抛出异常
-        throw std::runtime_error("missing param" + node_name + "/use_receive_time");
+        throw std::runtime_error("missing param " + node_name + "/use_receive_time");
     }
+    private_nh.param("tf_world_global", tf_world_global_, false);
+    private_nh.param("tf_local_world", tf_local_world_, false);
+
     bool use_private_agent_key = false;
     private_nh.param("use_private_agent_key", use_private_agent_key, false);
-    agent_key_ = use_private_agent_key
-        ? sunray_common::get_agent_key_from_private()
-        : sunray_common::get_agent_key_from_global();
+    agent_key_ = use_private_agent_key ? sunray_common::get_agent_key_from_private()
+                                       : sunray_common::get_agent_key_from_global();
 
     const std::string agent_frame_prefix = strip_leading_slash(agent_key_);
     private_nh.param("world_frame_id", world_frame_id_, std::string("world"));
-    private_nh.param("global_frame_id", global_frame_id_, agent_frame_prefix + "/sunray_global");
-    private_nh.param("local_frame_id", local_frame_id_, agent_frame_prefix + "/sunray_local");
+    private_nh.param("global_frame_id", global_frame_id_, std::string("sunray_global"));
+    private_nh.param("local_frame_id", local_frame_id_,
+                     agent_frame_prefix + "/sunray_local");
     private_nh.param("base_frame_id", base_frame_id_, agent_frame_prefix + "/base_link");
 }
 
 bool LocalizationFusion::load_param() {
-    // 读取参数
     selected_source_ = load_config_from_yaml(config_yamlfile_path_, selected_source_id_);
-    // 只要不是默认值，就说明被覆盖过值，字段名都经过校验，内容由localization_sources.yaml填充
     if (selected_source_.source_id != -1) {
         has_selected_source_ = true;
         return true;
@@ -163,75 +150,49 @@ bool LocalizationFusion::load_param() {
 }
 
 bool LocalizationFusion::Init() {
-    // 首先调用load_param()函数读取参数配置
     if (!load_param()) {
         return false;
     }
-    // 加载参数成功，假设参数都正常
-    // 首先将输入输出的字符串中含有 "${agent_key}"的部分进行转译
 
-    // 输入话题
+    if (tf_world_global_ && tf_local_world_) {
+        throw std::runtime_error(
+            "tf_world_global and tf_local_world cannot both be true at the same time");
+    }
+
     selected_source_.odometry_topic =
         sunray_common::replace_agent_key(selected_source_.odometry_topic, agent_key_);
-    // 检查，输入里程计话题不能为空
     if (selected_source_.odometry_topic.empty()) {
         throw std::runtime_error("selected source config the odometry topic missing value");
     }
-    // 如果模式要求有重定位的输入，就转换一下
-    if (selected_source_.localization_mode != LocalizationMode::LOCAL &&
-        selected_source_.localization_mode != LocalizationMode::GLOBAL) {
-        selected_source_.relocalization_topic =
-            sunray_common::replace_agent_key(selected_source_.relocalization_topic, agent_key_);
-        if (selected_source_.relocalization_topic.empty()) {
-            throw std::runtime_error(
-                "selected source config the relocalizaiton topic missing value");
-        }
-    }
 
-    // 输出话题
+    selected_source_.relocalization_topic =
+        sunray_common::replace_agent_key(selected_source_.relocalization_topic, agent_key_);
+    has_relocalization_input_ = !selected_source_.relocalization_topic.empty();
+
     global_odometry_topic_ = sunray_common::replace_agent_key(global_odometry_topic_, agent_key_);
     local_odometry_topic_ = sunray_common::replace_agent_key(local_odometry_topic_, agent_key_);
     odom_state_topic_ = sunray_common::replace_agent_key(odom_state_topic_, agent_key_);
-    // 检查，输出话题不能为空
     if (global_odometry_topic_.empty() || local_odometry_topic_.empty() ||
         odom_state_topic_.empty()) {
         throw std::runtime_error("localization fusion config has empty topic");
     }
 
-    // 注册订阅者
     odometry_sub_ = nh_.subscribe(
         selected_source_.odometry_topic, 50, &LocalizationFusion::odometry_callback, this);
-    if (selected_source_.localization_mode != LocalizationMode::LOCAL &&
-        selected_source_.localization_mode != LocalizationMode::GLOBAL) {
+    if (has_relocalization_input_) {
         relocalization_sub_ = nh_.subscribe(selected_source_.relocalization_topic,
                                             50,
                                             &LocalizationFusion::relocalization_callback,
                                             this);
     }
 
-    // 注册发布者
     local_odom_pub_ = nh_.advertise<nav_msgs::Odometry>(local_odometry_topic_, 10);
     global_odom_pub_ = nh_.advertise<nav_msgs::Odometry>(global_odometry_topic_, 10);
     odom_state_pub_ = nh_.advertise<sunray_msgs::OdomState>(odom_state_topic_, 10);
 
-    // 注册定时器
-    // 考虑到在构造函数读取参数时没有进行检查，这里构造之前检查一下，要求频率至少在1Hz
     health_rate_hz_ = std::max(1.0, health_rate_hz_);
     health_timer_ = nh_.createTimer(
         ros::Duration(1.0 / health_rate_hz_), &LocalizationFusion::healthtimer_callback, this);
-
-    // 初始化tf数据：world -> {agent}/sunray_global -> {agent}/sunray_local -> {agent}/base_link
-    // world = {agent}/sunray_global 这是一个静态TF
-    world_to_global_tf_.header.frame_id = world_frame_id_;
-    world_to_global_tf_.child_frame_id = global_frame_id_;
-    world_to_global_tf_.transform.translation.x = 0.0;
-    world_to_global_tf_.transform.translation.y = 0.0;
-    world_to_global_tf_.transform.translation.z = 0.0;
-    world_to_global_tf_.transform.rotation.x = 0.0;
-    world_to_global_tf_.transform.rotation.y = 0.0;
-    world_to_global_tf_.transform.rotation.z = 0.0;
-    world_to_global_tf_.transform.rotation.w = 1.0;
-    tf_static_broadcaster_.sendTransform(world_to_global_tf_);
 
     global_to_local_tf_.header.frame_id = global_frame_id_;
     global_to_local_tf_.child_frame_id = local_frame_id_;
@@ -242,209 +203,218 @@ bool LocalizationFusion::Init() {
     global_to_local_tf_.transform.rotation.y = 0.0;
     global_to_local_tf_.transform.rotation.z = 0.0;
     global_to_local_tf_.transform.rotation.w = 1.0;
+    global_local_tf_valid_ = false;
+    odometry_valid_ = false;
+    relocalization_valid_ = false;
 
-    // local和global模式不需要重定位，global->local 只需要一次静态单位tf。
-    if (selected_source_.localization_mode == LocalizationMode::LOCAL ||
-        selected_source_.localization_mode == LocalizationMode::GLOBAL) {
-        tf_static_broadcaster_.sendTransform(global_to_local_tf_);
+    if (tf_world_global_) {
+        static_tf_broadcaster_.sendTransform(
+            make_identity_transform(world_frame_id_, global_frame_id_));
+    }
+    if (tf_local_world_) {
+        static_tf_broadcaster_.sendTransform(
+            make_identity_transform(local_frame_id_, world_frame_id_));
     }
 
-    // 返回初始化状态
     return true;
 }
 
-void LocalizationFusion::odometry_callback(const nav_msgs::OdometryConstPtr& msg) {
-    // 将里程计转换为sunray_local系下的数据进行发送
-    nav_msgs::Odometry temp_msg = *msg;  // 首先解引用，拿到里程计的值
-    // 改时间戳
-    if (use_receive_time_) {
-        temp_msg.header.stamp = ros::Time::now();
-    }
-    // 改frame
-    temp_msg.header.frame_id = local_frame_id_;
-    temp_msg.child_frame_id = base_frame_id_;
-    // 发布
-    local_odom_pub_.publish(temp_msg);
-    if (selected_source_.localization_mode != LocalizationMode::LOCAL_AND_GLOBAL) {
-        publish_global_odom_from_local(temp_msg);  // 根据tf构造输出
-    }
-    // 发布完了记录一下时间戳
-    odometry_received_stamp_ = temp_msg.header.stamp;
-    last_odometry_data_ = temp_msg;
-    // 更新输入频率估计
-    update_input_rate(odometry_update_hz, hz_stamps_, odometry_received_stamp_.toSec());
-    // 同步发送TF
-    broadcast_local_to_base_tf(temp_msg);
+nav_msgs::Odometry
+LocalizationFusion::transform_source_odom_to_local(const nav_msgs::Odometry& msg) const {
+    nav_msgs::Odometry local_msg = msg;
+
+    tf2::Transform T_source_pose;
+    tf2::fromMsg(msg.pose.pose, T_source_pose);
+
+    tf2::Transform T_source_base;
+    const Eigen::Matrix4d& T = selected_source_.source_frame_to_base;
+    tf2::Matrix3x3 rotation(
+        T(0, 0), T(0, 1), T(0, 2), T(1, 0), T(1, 1), T(1, 2), T(2, 0), T(2, 1), T(2, 2));
+    T_source_base.setBasis(rotation);
+    T_source_base.setOrigin(tf2::Vector3(T(0, 3), T(1, 3), T(2, 3)));
+
+    const tf2::Transform T_local_base = T_source_pose * T_source_base;
+    local_msg.pose.pose = transform_to_pose_msg(T_local_base);
+
+    const tf2::Matrix3x3 R = T_source_base.getBasis();
+    const tf2::Vector3 linear_src(msg.twist.twist.linear.x,
+                                  msg.twist.twist.linear.y,
+                                  msg.twist.twist.linear.z);
+    const tf2::Vector3 angular_src(msg.twist.twist.angular.x,
+                                   msg.twist.twist.angular.y,
+                                   msg.twist.twist.angular.z);
+    const tf2::Vector3 linear_dst = R * linear_src;
+    const tf2::Vector3 angular_dst = R * angular_src;
+    local_msg.twist.twist.linear.x = linear_dst.x();
+    local_msg.twist.twist.linear.y = linear_dst.y();
+    local_msg.twist.twist.linear.z = linear_dst.z();
+    local_msg.twist.twist.angular.x = angular_dst.x();
+    local_msg.twist.twist.angular.y = angular_dst.y();
+    local_msg.twist.twist.angular.z = angular_dst.z();
+
+    local_msg.header.frame_id = local_frame_id_;
+    local_msg.child_frame_id = base_frame_id_;
+    return local_msg;
 }
 
-void LocalizationFusion::publish_global_odom_from_local(const nav_msgs::Odometry& msg) {
-    nav_msgs::Odometry global_msg = msg;
-    global_msg.header.frame_id = global_frame_id_;
-    global_msg.child_frame_id = base_frame_id_;
-    global_msg.header.stamp = msg.header.stamp;
-    if (selected_source_.localization_mode != LocalizationMode::LOCAL_WITH_ARUCO) {
-        // 直接发送，然后退出
-        global_odom_pub_.publish(global_msg);
-        last_global_odometry_data_ = global_msg;
-        return;
-    }
-    // 如果是aruco辅助的话，需要考虑当前的global->local变换是否已经被重定位修改。
+bool LocalizationFusion::build_global_odom_from_local(const nav_msgs::Odometry& local_msg,
+                                                      nav_msgs::Odometry& global_msg) const {
     tf2::Transform T_global_local;
     tf2::Transform T_local_base;
-
-    // {agent}/sunray_global -> {agent}/sunray_local
     tf2::fromMsg(global_to_local_tf_.transform, T_global_local);
-    // {agent}/sunray_local -> {agent}/base_link
-    tf2::fromMsg(msg.pose.pose, T_local_base);
-    // {agent}/sunray_global -> {agent}/base_link
+    tf2::fromMsg(local_msg.pose.pose, T_local_base);
+
     const tf2::Transform T_global_base = T_global_local * T_local_base;
-    tf2::toMsg(T_global_base, global_msg.pose.pose);
+    global_msg = local_msg;
+    global_msg.header.frame_id = global_frame_id_;
+    global_msg.child_frame_id = base_frame_id_;
+    global_msg.pose.pose = transform_to_pose_msg(T_global_base);
 
-    // TODO: 这里对速度的处理需要考虑
-    global_msg.twist = msg.twist;
+    const tf2::Quaternion q_global_local = T_global_local.getRotation();
+    const tf2::Matrix3x3 R_global_local(q_global_local);
+    const tf2::Vector3 linear_local(local_msg.twist.twist.linear.x,
+                                    local_msg.twist.twist.linear.y,
+                                    local_msg.twist.twist.linear.z);
+    const tf2::Vector3 angular_local(local_msg.twist.twist.angular.x,
+                                     local_msg.twist.twist.angular.y,
+                                     local_msg.twist.twist.angular.z);
+    const tf2::Vector3 linear_global = R_global_local * linear_local;
+    const tf2::Vector3 angular_global = R_global_local * angular_local;
+    global_msg.twist.twist.linear.x = linear_global.x();
+    global_msg.twist.twist.linear.y = linear_global.y();
+    global_msg.twist.twist.linear.z = linear_global.z();
+    global_msg.twist.twist.angular.x = angular_global.x();
+    global_msg.twist.twist.angular.y = angular_global.y();
+    global_msg.twist.twist.angular.z = angular_global.z();
+    return true;
+}
 
-    global_odom_pub_.publish(global_msg);
-    last_global_odometry_data_ = global_msg;
+void LocalizationFusion::update_local_to_base_tf_from_odom(const nav_msgs::Odometry& local_odom) {
+    local_to_base_tf_.header.stamp = local_odom.header.stamp;
+    local_to_base_tf_.header.frame_id = local_frame_id_;
+    local_to_base_tf_.child_frame_id = base_frame_id_;
+    local_to_base_tf_.transform.translation.x = local_odom.pose.pose.position.x;
+    local_to_base_tf_.transform.translation.y = local_odom.pose.pose.position.y;
+    local_to_base_tf_.transform.translation.z = local_odom.pose.pose.position.z;
+    local_to_base_tf_.transform.rotation = local_odom.pose.pose.orientation;
+}
+
+void LocalizationFusion::odometry_callback(const nav_msgs::OdometryConstPtr& msg) {
+    nav_msgs::Odometry local_msg = transform_source_odom_to_local(*msg);
+    const ros::Time receive_time = ros::Time::now();
+    if (use_receive_time_) {
+        local_msg.header.stamp = receive_time;
+    }
+
+    local_odom_pub_.publish(local_msg);
+
+    latest_local_odom_ = local_msg;
+    last_published_local_odom_ = local_msg;
+    odometry_received_stamp_ = local_msg.header.stamp;
+    odometry_last_receive_time_ = receive_time;
+    has_local_odom_ = true;
+    odometry_valid_ = true;
+    update_input_rate(odometry_update_hz, hz_stamps_, receive_time.toSec());
+    update_local_to_base_tf_from_odom(local_msg);
 }
 
 void LocalizationFusion::relocalization_callback(const nav_msgs::OdometryConstPtr& msg) {
-    // 输出global系下的里程计，并根据差值重构tf
     nav_msgs::Odometry global_msg = *msg;
-    // 首先要进行输入保护，由于tf是严格的计算过程，因此我们要先保证输入的数据是正常的
-    // 1. 有界性：xyz不能是无限值
-    // 2. 单位性：odometry使用四元数表示姿态，四元数需要是单位四元数
-    // 提取位置与姿态
-    Eigen::Vector3d position(global_msg.pose.pose.position.x,
-                             global_msg.pose.pose.position.y,
-                             global_msg.pose.pose.position.z);
-    Eigen::Quaterniond quad(global_msg.pose.pose.orientation.w,
-                            global_msg.pose.pose.orientation.x,
-                            global_msg.pose.pose.orientation.y,
-                            global_msg.pose.pose.orientation.z);
-    // 判断有界性
-    bool odometry_finite =
-        std::isfinite(position.x()) && std::isfinite(position.y()) && std::isfinite(position.z());
-    if (!odometry_finite) {
-        relocalization_valid_ = false;
-        return;
-    }
-    // 判断四元数为单位四元数
-    bool odometry_quad_safe = std::isfinite(quad.x()) && std::isfinite(quad.y()) &&
-                              std::isfinite(quad.z()) && std::isfinite(quad.w()) &&
-                              std::abs(quad.x() * quad.x() + quad.y() * quad.y() +
-                                       quad.z() * quad.z() + quad.w() * quad.w() - 1.0) < 1e-2;
-    if (!odometry_quad_safe) {
-        relocalization_valid_ = false;
-        return;
-    }
-    // 本来我是想处理完如果输入有问题抛出异常的，但是考虑到飞行过程总如果出现问题抛出异常，会导致local数据中断发送，因此这里我选择的是置标志位，然后return
-    relocalization_valid_ = true;
-    last_relocalization_data_ = *msg;
-    relocalization_received_stamp_= msg->header.stamp;
+    const ros::Time receive_time = ros::Time::now();
 
-    if (selected_source_.localization_mode == LocalizationMode::LOCAL_AND_GLOBAL) {
-        global_msg.header.frame_id = global_frame_id_;
-        global_msg.child_frame_id = base_frame_id_;
-        global_msg.header.stamp = msg->header.stamp;
-        // 发布
-        global_odom_pub_.publish(global_msg);
-        last_global_odometry_data_ = global_msg;
-    }
-    // 重构tf树
-    // 先确认已经有 local odom，否则没法反推出 global -> local
-    if (odometry_received_stamp_.isZero()) {
+    const Eigen::Vector3d position(global_msg.pose.pose.position.x,
+                                   global_msg.pose.pose.position.y,
+                                   global_msg.pose.pose.position.z);
+    const Eigen::Quaterniond quat(global_msg.pose.pose.orientation.w,
+                                  global_msg.pose.pose.orientation.x,
+                                  global_msg.pose.pose.orientation.y,
+                                  global_msg.pose.pose.orientation.z);
+
+    const bool odometry_finite =
+        std::isfinite(position.x()) && std::isfinite(position.y()) && std::isfinite(position.z());
+    if (!odometry_finite || !is_unit_quaternion(quat)) {
+        relocalization_valid_ = false;
         return;
     }
+
+    relocalization_valid_ = true;
+    latest_relocalization_odom_ = *msg;
+    relocalization_received_stamp_ = msg->header.stamp;
+    relocalization_last_receive_time_ = receive_time;
+    has_relocalization_odom_ = true;
+
+    if (!has_local_odom_) {
+        return;
+    }
+
+    if (odometry_last_receive_time_.isZero() ||
+        (receive_time - odometry_last_receive_time_).toSec() > selected_source_.timeout_s) {
+        return;
+    }
+
     tf2::Transform T_global_base;
     tf2::Transform T_local_base;
-    // base_link in sunray_global
     tf2::fromMsg(global_msg.pose.pose, T_global_base);
+    tf2::fromMsg(latest_local_odom_.pose.pose, T_local_base);
 
-    // base_link in sunray_local
-    tf2::fromMsg(last_odometry_data_.pose.pose, T_local_base);
-
-    // 根据 global->base 和 local->base 反推出 global->local
     const tf2::Transform T_global_local = T_global_base * T_local_base.inverse();
-
     global_to_local_tf_.header.stamp = global_msg.header.stamp;
     global_to_local_tf_.header.frame_id = global_frame_id_;
     global_to_local_tf_.child_frame_id = local_frame_id_;
     global_to_local_tf_.transform = tf2::toMsg(T_global_local);
-
-    // 动态广播 global -> local
-    if (selected_source_.localization_mode == LocalizationMode::LOCAL_AND_GLOBAL) {
-        // 只有在lidar的高频里程计时，才选择在这里发布tf，因为aruco的频率不定，转移到healthtimer_callback更好
-        tf_broadcaster_.sendTransform(global_to_local_tf_);
-    }
+    global_local_tf_valid_ = true;
 }
 
-// healthtimer update freq: 10Hz
 void LocalizationFusion::healthtimer_callback(const ros::TimerEvent& e) {
-    // 本函数主要负责
-    // 1. 检查Localization_Fusion各变量状态
-    // 2. 当使用aruco进行重定位时，在这里持续发送动态tf树
-    // 3，检查通信链路是否超时，只检查odometry,不检查relocalization
-    // 4. 填充sunray_msgs::OdomState消息并发布
+    (void)e;
+    const ros::Time now = ros::Time::now();
 
-    if (selected_source_.localization_mode == LocalizationMode::LOCAL_WITH_ARUCO) {
-        // 默认值为原点重合
-        global_to_local_tf_.header.stamp = ros::Time::now();
-        tf_broadcaster_.sendTransform(global_to_local_tf_);
+    if (has_local_odom_) {
+        odometry_valid_ = !odometry_last_receive_time_.isZero() &&
+                          (now - odometry_last_receive_time_).toSec() <=
+                              selected_source_.timeout_s;
+    } else {
+        odometry_valid_ = false;
     }
-    // 对odometry通信链路的检查需要先接受到数据
-    if (!odometry_received_stamp_.isZero()) {
-        // 在拥有数据的基础上，用当前时间和最新接收时间做差，如果大于配置结构体中的默认参数，则判断为超时
-        if ((ros::Time::now() - odometry_received_stamp_).toSec() > selected_source_.timeout_s) {
-            odometry_valid_ = false;
-        } else {
-            odometry_valid_ = true;
+
+    relocalization_valid_ = has_relocalization_input_ && relocalization_valid_ &&
+                            has_relocalization_odom_;
+
+    if (odometry_valid_) {
+        nav_msgs::Odometry global_msg;
+        if (build_global_odom_from_local(latest_local_odom_, global_msg)) {
+            global_msg.header.stamp = latest_local_odom_.header.stamp;
+            global_odom_pub_.publish(global_msg);
+            last_published_global_odom_ = global_msg;
         }
     }
-    // 构建sunray_msgs::OdomState消息
-    sunray_msgs::OdomState state_msgs;
-    state_msgs.header.stamp = ros::Time::now();
-    state_msgs.external_source = selected_source_id_;
 
-    switch (selected_source_.localization_mode) {
-    case LocalizationMode::LOCAL:
-        state_msgs.localization_mode = sunray_msgs::OdomState::LOCAL;
-        break;
-    case LocalizationMode::GLOBAL:
-        state_msgs.localization_mode = sunray_msgs::OdomState::GLOBAL;
-        break;
-    case LocalizationMode::LOCAL_AND_GLOBAL:
-        state_msgs.localization_mode = sunray_msgs::OdomState::LOCAL_AND_GLOBAL;
-        break;
-    case LocalizationMode::LOCAL_WITH_ARUCO:
-        state_msgs.localization_mode = sunray_msgs::OdomState::LOCAL_WITH_ARUCO;
-        break;
+    if (odometry_valid_) {
+        local_to_base_tf_.header.stamp = latest_local_odom_.header.stamp;
+        tf_broadcaster_.sendTransform(local_to_base_tf_);
     }
 
+    global_to_local_tf_.header.stamp = now;
+    tf_broadcaster_.sendTransform(global_to_local_tf_);
+
+    sunray_msgs::OdomState state_msgs;
+    state_msgs.header.stamp = now;
+    state_msgs.external_source = selected_source_id_;
     state_msgs.odometry_valid = odometry_valid_;
     state_msgs.relocalization_valid = relocalization_valid_;
     state_msgs.odometry_received_stamp = odometry_received_stamp_;
     state_msgs.relocalization_received_stamp = relocalization_received_stamp_;
+    state_msgs.has_config_relocalization = has_relocalization_input_;
     state_msgs.odometry_update_hz = odometry_update_hz;
-    state_msgs.local_odom = last_odometry_data_;
-    state_msgs.global_odom = last_global_odometry_data_;
-    // 向外发布
+    state_msgs.global_frame_name = global_frame_id_;
+    state_msgs.local_frame_name = local_frame_id_;
+    state_msgs.base_frame_name = base_frame_id_;
+    state_msgs.local_odom = last_published_local_odom_;
+    state_msgs.global_odom = last_published_global_odom_;
+    if (has_relocalization_odom_) {
+        state_msgs.recive_relocalization_msg = latest_relocalization_odom_;
+    }
     odom_state_pub_.publish(state_msgs);
-
-}
-
-void LocalizationFusion::broadcast_local_to_base_tf(const nav_msgs::Odometry& local_odom) {
-    // 填充帧头
-    local_to_base_tf_.header.stamp = local_odom.header.stamp;
-    local_to_base_tf_.header.frame_id = local_frame_id_;
-    local_to_base_tf_.child_frame_id = base_frame_id_;
-    // 填充xyz数据
-    local_to_base_tf_.transform.translation.x = local_odom.pose.pose.position.x;
-    local_to_base_tf_.transform.translation.y = local_odom.pose.pose.position.y;
-    local_to_base_tf_.transform.translation.z = local_odom.pose.pose.position.z;
-    // 填充姿态数据
-    local_to_base_tf_.transform.rotation = local_odom.pose.pose.orientation;
-    // 发布
-    tf_broadcaster_.sendTransform(local_to_base_tf_);
 }
 
 void LocalizationFusion::Spin() {

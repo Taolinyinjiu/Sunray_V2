@@ -43,23 +43,6 @@ SourceConfig load_config_from_yaml(const std::string& yaml_path,
         // 如果定位源对应的字段中，source_id 与传入的id一致，则认为是我们需要的
         // 首先检查字段存在，再判断值相等,这样不会导致异常
         if (source_node["source_id"] && source_node["source_id"].as<int>() == source_id) {
-            if (source_node["localization_mode"])  // 定位模式，分别有local,global,local_and_global,local_with_aruco，使用字符串判断
-            {
-                // 将yaml字段内容填充到temp_string
-                std::string temp_string = source_node["localization_mode"].as<std::string>();
-                if (temp_string == "local") {
-                    result_config.localization_mode = LocalizationMode::LOCAL;
-                } else if (temp_string == "global") {
-                    result_config.localization_mode = LocalizationMode::GLOBAL;
-                } else if (temp_string == "local_and_global") {
-                    result_config.localization_mode = LocalizationMode::LOCAL_AND_GLOBAL;
-                } else if (temp_string == "local_with_aruco") {
-                    result_config.localization_mode = LocalizationMode::LOCAL_WITH_ARUCO;
-                } else {
-                    // 运行到这里，说明一个都没匹配上，抛出异常
-                    throw std::runtime_error("localization_mode in localization_sources.yaml need check");
-                }
-            }
             // 里程计对应话题
             if (source_node["odometry_topic"]) {
                 std::string temp_string = source_node["odometry_topic"].as<std::string>();
@@ -69,16 +52,36 @@ SourceConfig load_config_from_yaml(const std::string& yaml_path,
                     throw std::runtime_error("the odometry_topic in localization_sources.yaml missing value");
                 }
             }
-            // 重定位对应话题,只有在启用了重定位的时候才需要读取
-            if ((result_config.localization_mode == LocalizationMode::LOCAL_AND_GLOBAL ||
-                 result_config.localization_mode == LocalizationMode::LOCAL_WITH_ARUCO) 
-                 && source_node["relocalization_topic"]) {
-                std::string temp_string = source_node["relocalization_topic"].as<std::string>();
-                if (!temp_string.empty()) {
-                    result_config.relocalization_topic = temp_string;
-                } else {
-                    throw std::runtime_error("the relocalization_topic in localization_sources.yaml missing value");
+            // 重定位对应话题，允许为空字符串，表示当前source未接入重定位输入
+            if (source_node["relocalization_topic"]) {
+                result_config.relocalization_topic =
+                    source_node["relocalization_topic"].as<std::string>();
+            }
+            // 通信超时参数
+            if (source_node["timeout_s"]) {
+                result_config.timeout_s = source_node["timeout_s"].as<double>();
+                if (result_config.timeout_s <= 0.0) {
+                    throw std::runtime_error("the timeout_s in localization_sources.yaml must > 0");
                 }
+            }
+            // 传感器坐标系到机体系的外参矩阵
+            if (source_node["source_frame_to_base"]) {
+                const YAML::Node tf_node = source_node["source_frame_to_base"];
+                if (!tf_node.IsSequence() || tf_node.size() != 4) {
+                    throw std::runtime_error("source_frame_to_base must be a 4x4 matrix");
+                }
+                Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
+                for (std::size_t row = 0; row < 4; ++row) {
+                    const YAML::Node row_node = tf_node[row];
+                    if (!row_node.IsSequence() || row_node.size() != 4) {
+                        throw std::runtime_error("source_frame_to_base must be a 4x4 matrix");
+                    }
+                    for (std::size_t col = 0; col < 4; ++col) {
+                        T(static_cast<Eigen::Index>(row), static_cast<Eigen::Index>(col)) =
+                            row_node[col].as<double>();
+                    }
+                }
+                result_config.source_frame_to_base = T;
             }
             // 最后填充名字与序号
             result_config.source_name = source_name;

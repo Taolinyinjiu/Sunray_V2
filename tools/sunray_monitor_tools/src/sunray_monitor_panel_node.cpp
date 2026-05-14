@@ -1860,11 +1860,11 @@ class SunrayMonitorPanel : public QMainWindow
             return "no OdomState";
         }
         const sunray_msgs::OdomState &state = agent.odom_state;
-        QString text = QString("valid=%1 hz=%2 source=%3 mode=%4")
+        QString text = QString("valid=%1 hz=%2 source=%3 relocal=%4")
                            .arg(boolText(state.odometry_valid))
                            .arg(formatDouble(state.odometry_update_hz, 1))
                            .arg(state.external_source)
-                           .arg(state.localization_mode);
+                           .arg(boolText(state.relocalization_valid));
         if (!state.local_odom.header.stamp.isZero())
         {
             text += QString(" local=[%1]").arg(poseText(state.local_odom));
@@ -1873,6 +1873,10 @@ class SunrayMonitorPanel : public QMainWindow
         {
             text += QString(" global=[%1]").arg(poseText(state.global_odom));
         }
+        text += QString(" frame=(%1,%2,%3)")
+                    .arg(QString::fromStdString(state.global_frame_name))
+                    .arg(QString::fromStdString(state.local_frame_name))
+                    .arg(QString::fromStdString(state.base_frame_name));
         return text;
     }
 

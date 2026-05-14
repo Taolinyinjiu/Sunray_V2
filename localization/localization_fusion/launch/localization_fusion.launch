@@ -13,6 +13,10 @@
     <arg name="agent_id" default="1" />
     <!-- 当下面的use_private_agent_key为true时，节点使用上面定义的agent_name与agent_id -->
     <arg name="use_private_agent_key" default="true" />
+    <!-- 是否发布静态TF: world -> sunray_global -->
+    <arg name="tf_world_global" default="false" />
+    <!-- 是否发布静态TF: ${agent}/sunray_local -> world -->
+    <arg name="tf_local_world" default="false" />
     <!-- 是否启动定位状态监视器，集群场景建议关闭并改用 swarm_monitor -->
     <arg name="enable_monitor" default="true" />
 
@@ -53,6 +57,8 @@
         <param name="agent_name" value="$(arg agent_name)" />
         <param name="agent_id" value="$(arg agent_id)" />
         <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+        <param name="tf_world_global" value="$(arg tf_world_global)" />
+        <param name="tf_local_world" value="$(arg tf_local_world)" />
     </node>
 
     <!-- 定位模块输出状态监听节点 -->

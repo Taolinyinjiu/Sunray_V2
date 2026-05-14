@@ -22,8 +22,7 @@
 #include "agent_key_helper.hpp"
 #include "localization_fusion_types.hpp"
 
-namespace
-{
+namespace {
 
 const char *kAnsiReset = "\033[0m";
 const char *kAnsiTitle = "\033[1;36m";
@@ -71,6 +70,23 @@ std::string okText(const bool ok)
     return ok ? colorText("正常", kAnsiGood) : colorText("异常", kAnsiBad);
 }
 
+std::string relocalizationStatusText(const sunray_msgs::OdomState &state)
+{
+    if (!state.has_config_relocalization)
+    {
+        return colorText("当前定位源未配置重定位功能", kAnsiWarn);
+    }
+    if (state.relocalization_received_stamp.isZero())
+    {
+        return colorText("当前未接收重定位数据", kAnsiWarn);
+    }
+    if (!state.relocalization_valid)
+    {
+        return colorText("重定位数据异常", kAnsiBad);
+    }
+    return colorText("重定位数据有效", kAnsiGood);
+}
+
 std::string sourceName(const uint8_t source)
 {
     switch (source)
@@ -83,51 +99,6 @@ std::string sourceName(const uint8_t source)
     case sunray_msgs::OdomState::PENGYU_SIM:   return "PENGYU_SIM";
     case sunray_msgs::OdomState::FASTLIO_EFK:  return "FASTLIO_EKF";
     default:                                   return "UNKNOWN";
-    }
-}
-
-std::string modeName(const uint8_t mode)
-{
-    switch (mode)
-    {
-    case sunray_msgs::OdomState::LOCAL:            return "LOCAL";
-    case sunray_msgs::OdomState::GLOBAL:           return "GLOBAL";
-    case sunray_msgs::OdomState::LOCAL_AND_GLOBAL: return "LOCAL_AND_GLOBAL";
-    case sunray_msgs::OdomState::LOCAL_WITH_ARUCO: return "LOCAL_WITH_ARUCO";
-    default:                                       return "UNKNOWN";
-    }
-}
-
-std::string modeDescription(const uint8_t mode)
-{
-    switch (mode)
-    {
-    case sunray_msgs::OdomState::LOCAL:
-        return "局部odom=全局odom";
-    case sunray_msgs::OdomState::GLOBAL:
-        return "局部odom=全局odom";
-    case sunray_msgs::OdomState::LOCAL_AND_GLOBAL:
-        return "局部odom和全局odom分别来自外部输入";
-    case sunray_msgs::OdomState::LOCAL_WITH_ARUCO:
-        return "局部odom连续输出，全局odom由重定位TF推算";
-    default:
-        return "未知模式";
-    }
-}
-
-std::string coloredModeName(const uint8_t mode)
-{
-    const std::string text = modeName(mode) + "(" + modeDescription(mode) + ")";
-    switch (mode)
-    {
-    case sunray_msgs::OdomState::LOCAL:
-    case sunray_msgs::OdomState::GLOBAL:
-        return colorText(text, kAnsiGood);
-    case sunray_msgs::OdomState::LOCAL_AND_GLOBAL:
-    case sunray_msgs::OdomState::LOCAL_WITH_ARUCO:
-        return colorText(text, kAnsiWarn);
-    default:
-        return colorText(text, kAnsiBad);
     }
 }
 
@@ -163,39 +134,6 @@ AgentTopics buildAgentTopics(const std::string &agent_key,
     topics.global_odom_topic = globalOdomTopicFromAgentKey(agent_key);
     topics.odom_state_topic = odomStateTopicFromAgentKey(agent_key);
     return topics;
-}
-
-bool shouldPrintLocalOdom(const uint8_t mode)
-{
-    return mode == sunray_msgs::OdomState::LOCAL ||
-           mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL ||
-           mode == sunray_msgs::OdomState::LOCAL_WITH_ARUCO;
-}
-
-bool shouldPrintGlobalOdom(const uint8_t mode)
-{
-    return mode == sunray_msgs::OdomState::GLOBAL ||
-           mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL;
-}
-
-bool externalOdomIsGlobal(const uint8_t mode)
-{
-    return mode == sunray_msgs::OdomState::GLOBAL;
-}
-
-bool shouldPrintRelocalizationTopic(const uint8_t mode)
-{
-    return mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL ||
-           mode == sunray_msgs::OdomState::LOCAL_WITH_ARUCO;
-}
-
-std::string stampText(const ros::Time &stamp)
-{
-    if (stamp.isZero())
-        return colorText("未收到", kAnsiBad);
-    std::ostringstream ss;
-    ss << std::fixed << std::setprecision(3) << stamp.toSec() << " s";
-    return colorText(ss.str(), kAnsiValue);
 }
 
 EulerAngle eulerFromOdom(const nav_msgs::Odometry &odom)
@@ -262,6 +200,25 @@ std::string odomAttitudeText(const nav_msgs::Odometry &odom)
     return colorText(ss.str(), kAnsiValue);
 }
 
+std::string relocalizationMsgText(const sunray_msgs::OdomState &state)
+{
+    if (!state.has_config_relocalization || state.relocalization_received_stamp.isZero())
+    {
+        return "";
+    }
+
+    std::ostringstream ss;
+    ss << colorText(" 重定位消息 ", kAnsiLabel);
+    if (!state.recive_relocalization_msg.header.stamp.isZero())
+    {
+        ss << "frame: " << odomFrameText(state.recive_relocalization_msg) << "\n";
+        ss << "           位置 : " << odomPositionText(state.recive_relocalization_msg) << "\n";
+        ss << "           速度 : " << odomVelText(state.recive_relocalization_msg) << "\n";
+        ss << "           姿态 : " << odomAttitudeText(state.recive_relocalization_msg) << "\n";
+    }
+    return ss.str();
+}
+
 std::string buildPanel(const std::string &agent_key,
                        const AgentTopics &topics,
                        const CachedState &cached)
@@ -269,86 +226,78 @@ std::string buildPanel(const std::string &agent_key,
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
 
-    ss << colorText("============== Localization Fusion 状态面板 | " + agent_key + " ==============", kAnsiTitle) << "\n";
+    ss << colorText("============== Localization Fusion 状态面板 | " + agent_key + " ==============",
+                    kAnsiTitle)
+       << "\n";
 
     if (!cached.has_state)
     {
         ss << colorText(" 订阅话题  ", kAnsiLabel)
            << "odom状态话题: " << topicValueText(topics.odom_state_topic) << "\n";
-        ss << colorText(" 基本信息  ", kAnsiLabel) << colorText("等待 OdomState...", kAnsiWarn) << "\n";
-        ss << colorText(" 局部odom  ", kAnsiLabel);
-        ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
+        ss << colorText(" 基本信息  ", kAnsiLabel) << colorText("等待 OdomState...", kAnsiWarn)
+           << "\n";
         return ss.str();
     }
 
     const sunray_msgs::OdomState &state = cached.state;
 
     ss << colorText(" 订阅话题  ", kAnsiLabel)
-       << (externalOdomIsGlobal(state.localization_mode) ? "外部定位源（全局）话题: " : "外部定位源（局部）话题: ")
-       << topicValueText(topics.external_odom_topic) << "\n";
-    if (shouldPrintRelocalizationTopic(state.localization_mode))
-    {
-        ss << "           "
-           << (state.localization_mode == sunray_msgs::OdomState::LOCAL_AND_GLOBAL
-                   ? "外部定位源（全局）话题: "
-                   : "外部定位源（重定位）话题: ")
-           << topicValueText(topics.relocalization_topic) << "\n";
-    }
-
-    bool has_printed_publish_title = false;
-    if (shouldPrintLocalOdom(state.localization_mode))
-    {
-        ss << colorText(" 发布话题  ", kAnsiLabel)
-           << "局部odom话题: " << topicValueText(topics.local_odom_topic) << "\n";
-        has_printed_publish_title = true;
-    }
-    if (shouldPrintGlobalOdom(state.localization_mode))
-    {
-        ss << (has_printed_publish_title ? "           " : colorText(" 发布话题  ", kAnsiLabel))
-           << "全局odom话题: " << topicValueText(topics.global_odom_topic) << "\n";
-    }
+       << "外部定位源（局部）话题: " << topicValueText(topics.external_odom_topic) << "\n";
+    ss << "           "
+       << "外部定位源（重定位）话题: " << topicValueText(topics.relocalization_topic) << "\n";
+    ss << colorText(" 发布话题  ", kAnsiLabel)
+       << "局部odom话题: " << topicValueText(topics.local_odom_topic) << "\n";
+    ss << "           "
+       << "全局odom话题: " << topicValueText(topics.global_odom_topic) << "\n";
 
     ss << colorText(" 基本信息  ", kAnsiLabel)
        << "外部定位源 = " << colorText(sourceName(state.external_source), kAnsiValue)
-       << "  状态 = " << okText(state.odometry_valid)
-       << "  频率 = " << colorText(std::to_string(static_cast<int>(state.odometry_update_hz + 0.5f)) + " Hz", kAnsiValue)
+       << "  odom状态 = " << okText(state.odometry_valid)
+       << "  频率 = "
+       << colorText(std::to_string(static_cast<int>(state.odometry_update_hz + 0.5f)) + " Hz",
+                    kAnsiValue)
        << "\n";
 
     ss << "           "
-       << "定位模式 = " << coloredModeName(state.localization_mode)
-       << "  重定位状态 = " << okText(state.relocalization_valid)
+       << "重定位数据状态 = " << relocalizationStatusText(state)
        << "\n";
 
-    if (shouldPrintLocalOdom(state.localization_mode))
+    ss << "           "
+       << "global_frame = " << topicValueText(state.global_frame_name)
+       << "  local_frame = " << topicValueText(state.local_frame_name)
+       << "  base_frame = " << topicValueText(state.base_frame_name)
+       << "\n";
+
+    ss << colorText(" 局部odom  ", kAnsiLabel);
+    if (!state.local_odom.header.stamp.isZero())
     {
-        ss << colorText(" 局部odom  ", kAnsiLabel);
-        if (!state.local_odom.header.stamp.isZero())
-        {
-            ss << "frame: " << odomFrameText(state.local_odom) << "\n";
-            ss << "           位置 : " << odomPositionText(state.local_odom) << "\n";
-            ss << "           速度 : " << odomVelText(state.local_odom) << "\n";
-            ss << "           姿态 : " << odomAttitudeText(state.local_odom) << "\n";
-        }
-        else
-        {
-            ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
-        }
+        ss << "frame: " << odomFrameText(state.local_odom) << "\n";
+        ss << "           位置 : " << odomPositionText(state.local_odom) << "\n";
+        ss << "           速度 : " << odomVelText(state.local_odom) << "\n";
+        ss << "           姿态 : " << odomAttitudeText(state.local_odom) << "\n";
+    }
+    else
+    {
+        ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
     }
 
-    if (shouldPrintGlobalOdom(state.localization_mode))
+    const std::string relocalization_text = relocalizationMsgText(state);
+    if (!relocalization_text.empty())
     {
-        ss << colorText(" 全局odom  ", kAnsiLabel);
-        if (!state.global_odom.header.stamp.isZero())
-        {
-            ss << "frame: " << odomFrameText(state.global_odom) << "\n";
-            ss << "           位置 : " << odomPositionText(state.global_odom) << "\n";
-            ss << "           速度 : " << odomVelText(state.global_odom) << "\n";
-            ss << "           姿态 : " << odomAttitudeText(state.global_odom) << "\n";
-        }
-        else
-        {
-            ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
-        }
+        ss << relocalization_text;
+    }
+
+    ss << colorText(" 全局odom  ", kAnsiLabel);
+    if (!state.global_odom.header.stamp.isZero())
+    {
+        ss << "frame: " << odomFrameText(state.global_odom) << "\n";
+        ss << "           位置 : " << odomPositionText(state.global_odom) << "\n";
+        ss << "           速度 : " << odomVelText(state.global_odom) << "\n";
+        ss << "           姿态 : " << odomAttitudeText(state.global_odom) << "\n";
+    }
+    else
+    {
+        ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
     }
 
     return ss.str();

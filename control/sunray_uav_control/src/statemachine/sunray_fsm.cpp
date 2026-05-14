@@ -266,6 +266,10 @@ void Sunray_FSM::localization_state_callback(const sunray_msgs::OdomState& msg) 
 void Sunray_FSM::uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg) {
     // 构造临时变量
     control_common::UavControlCmd temp_cmd(msg);
+    // 强制使用收到指令的时刻作为时间戳，避免上游忘记填充 header.stamp 时
+    // 让 last_control_cmd_.timestamp 永远停留在 ros::Time(0)，进而导致
+    // check_rosmsg_timeout 无法判定指令流断开，move 状态卡死无法切回 hover。
+    temp_cmd.timestamp = ros::Time::now();
     // 更新缓存
     {
         std::lock_guard<std::mutex> lk(cmd_mutex_);

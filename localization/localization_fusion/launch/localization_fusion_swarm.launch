@@ -8,6 +8,8 @@
   <arg name="agent_id" default="1" />
   <arg name="agent_num" default="6" />
   <arg name="use_private_agent_key" default="true" />
+  <arg name="tf_world_global" default="false" />
+  <arg name="tf_local_world" default="false" />
   <arg name="enable_monitor" default="false" />
 
   <include file="$(find localization_fusion)/launch/localization_fusion.launch">
@@ -18,6 +20,8 @@
     <arg name="agent_name"           value="$(arg agent_name)" />
     <arg name="agent_id"             value="$(arg agent_id)" />
     <arg name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    <arg name="tf_world_global"      value="$(arg tf_world_global)" />
+    <arg name="tf_local_world"       value="$(arg tf_local_world)" />
     <arg name="enable_monitor"       value="false" />
   </include>
 
@@ -31,6 +35,8 @@
     <arg name="agent_id"             value="$(eval int(arg('agent_id')) + 1)" />
     <arg name="agent_num"            value="$(arg agent_num)" />
     <arg name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    <arg name="tf_world_global"      value="$(arg tf_world_global)" />
+    <arg name="tf_local_world"       value="$(arg tf_local_world)" />
     <arg name="enable_monitor"       value="$(arg enable_monitor)" />
   </include>
 
