@@ -196,6 +196,15 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
             throw std::runtime_error("param 'sunray_controller_param.max_acc' must > 0");
         }
     }
+    if (controller_param["max_d_acc"]) {
+        geometric_controller_param_.max_d_acc = controller_param["max_d_acc"].as<double>();
+        if (geometric_controller_param_.max_d_acc <= 0.0) {
+            throw std::runtime_error("param 'sunray_controller_param.max_d_acc' must > 0");
+        }
+    } else {
+        // 未配置时默认与 max_acc 一致，保持原有行为
+        geometric_controller_param_.max_d_acc = geometric_controller_param_.max_acc;
+    }
     if (controller_param["hover_thrust_estimator_type"]) {
         geometric_controller_param_.hover_thrust_estimator_type =
             controller_param["hover_thrust_estimator_type"].as<int>();

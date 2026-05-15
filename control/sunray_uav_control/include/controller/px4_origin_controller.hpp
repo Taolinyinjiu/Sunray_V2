@@ -49,6 +49,8 @@ class PX4_OriginController : public Controller_Interface {
     bool land(bool land_type, double max_land_velocity) override;
     // 设置悬停点
     bool set_hover_point(control_common::UAVStateEstimate current_odom) override;
+    // 将悬停点设置为最近一次 move_point 的目标点（避免被到达判断阶段的位置误差污染）
+    bool set_hover_point_to_last_target() override;
     // 进入悬停状态
     bool hover() override;
     // 紧急上锁

@@ -40,9 +40,18 @@ struct Geometric_AttitudeControl_Param_t {
     Eigen::Vector3d vel_kd{Eigen::Vector3d::Zero()};
 
     double max_acc{9.0};                            // 位置环加速度输出限幅 (m/s²)
+    // D 项输出单独限幅，防止速度前馈引入后误差变化率过大导致冲击。
+    // 默认与 max_acc 相同（不额外限制），可收紧到 2~4 m/s² 抑制冲击。
+    double max_d_acc{9.0};
 
     // ── 姿态环参数 ──────────────────────────────────────────
     double attitude_tau{0.1};  // SO3 姿态控制时间常数：越小响应越快，太小会振荡
+
+    // ── 推力计算保护参数 ────────────────────────────────────
+    // computeBodyRateCmd 中用 a_des.z() / zb_z 近似 collective thrust，
+    // 当机体 z 轴接近水平时该近似不再可靠，需对 zb_z 做下限保护。
+    // 0.5 对应约 60° 倾角，是常规多旋翼机动安全包络。
+    double zb_z_min{0.5};
 
     // ── 物理参数 ────────────────────────────────────────────
     double drone_mass{1.5};  // 无人机质量 (kg)
@@ -149,6 +158,8 @@ class Geometric_AttitudeControl {
         last_pos_error_.setZero();
         last_vel_error_.setZero();
         last_velocity_fixed_height_active_ = false;
+        first_run_ = true;
+        last_call_stamp_ = ros::Time(0);
     }
 
     // 仅重置 z 轴积分与误差缓存，避免高度环残留影响下一段运动
@@ -186,6 +197,16 @@ class Geometric_AttitudeControl {
     Control_Type last_control_type_{Control_Type::Undefine_};
     bool last_velocity_fixed_height_active_{false};
 
+    // poscontroller 第一帧标志：reset_integral 后第一次调用时跳过 D 项，
+    // 避免 last_*_error_ 为零造成的虚假误差变化率冲击。
+    bool first_run_{true};
+
+    // 用于实测 dt 计算的上一次调用时间戳（取自 odom）。
+    // 为零或与当前帧时间戳异常时，回退到 1/controller_hz。
+    ros::Time last_call_stamp_{ros::Time(0)};
+    // 当前帧解算 dt，由公共入口在每次调用时刷新。
+    double current_dt_{0.01};
+
     Geometric_AttitudeControl_DebugState_t last_debug_state_{};
 
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
@@ -195,7 +216,9 @@ class Geometric_AttitudeControl {
     double normalize_collective_acc(double collective_acc, double hover_anchor) const;
     double compose_thrust_command(double collective_acc,
                                   ThrustCommandPolicy thrust_policy) const;
-    static double wrap_angle(double angle_rad);
+    // 在每次公共入口调用开始时刷新 current_dt_：优先用 odom 时间戳差，
+    // 异常或首帧回退到 1/controller_hz。
+    void refresh_dt(const ros::Time& stamp);
     static Eigen::Vector3d so3_attitude_error(const Eigen::Quaterniond& curr_att,
                                               const Eigen::Quaterniond& ref_att) {
         const Eigen::Matrix3d R = curr_att.toRotationMatrix();
@@ -203,6 +226,10 @@ class Geometric_AttitudeControl {
         const Eigen::Matrix3d e_R_hat = 0.5 * (R.transpose() * R_d - R_d.transpose() * R);
         return Eigen::Vector3d(e_R_hat(2, 1), e_R_hat(0, 2), e_R_hat(1, 0));
     }
+    // 由 SO3 姿态误差解算期望机体角速度。
+    // 注意：此处为简化版纯比例控制，不包含期望角速度前馈 ω_des。
+    // 在轨迹快速变化（高速机动 / 大 jerk）时会出现姿态滞后；
+    // 适用于低速跟踪与位置/速度控制场景，如需做激进轨迹跟踪应叠加从 jerk 解算的 ω_des。
     Eigen::Vector3d solve_so3_bodyrate(const Eigen::Quaterniond& curr_att,
                                        const Eigen::Quaterniond& ref_att) const {
         return (2.0 / param_.attitude_tau) * so3_attitude_error(curr_att, ref_att);

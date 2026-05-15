@@ -24,6 +24,12 @@ class Controller_Interface {
     virtual bool land(bool land_type, double max_land_velocity) = 0;
     // 设置悬停点，参数为当前位置
     virtual bool set_hover_point(control_common::UAVStateEstimate current_odom) = 0;
+    // 将悬停点设置为最近一次 move_point 的目标（而非里程计）。
+    // 适用于 POINT_COMPLETED 之后的转移，避免到达判断阶段的位置误差被锁死为悬停点。
+    // 当控制器没有可用的 move_point 目标时返回 false，调用侧应回退到 set_hover_point()。
+    virtual bool set_hover_point_to_last_target() {
+        return false;
+    }
     // 切换为悬停状态
     virtual bool hover() = 0;
     // 紧急上锁

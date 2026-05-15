@@ -11,8 +11,8 @@ uint8 TAKEOFF=1 # 起飞
 uint8 LAND=2    # 降落
 uint8 HOVER=3    # 如果当前在运动，则打断，切换为悬停状态
 uint8 PLAN_RETURN=4 # 通过规划的方式，回到HOME点
-uint8 PLAN_LOCAL_GOAL=6 # 局部规划到某一点
-uint8 PLAN_GLOBAL_GOAL=7 # 全局规划到某一点
+uint8 PLAN_LOCAL_GOAL=5 # 局部规划到某一点
+uint8 PLAN_GLOBAL_GOAL=6 # 全局规划到某一点
 
 # 控制命令
 uint8 plan_cmd

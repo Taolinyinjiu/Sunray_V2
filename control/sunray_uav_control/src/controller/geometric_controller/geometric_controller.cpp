@@ -292,12 +292,21 @@ bool Geometric_Controller::move_point_impl(controller_data_types::TargetPoint_t 
     const ros::Time now = ros::Time::now();
     const curve::QuinticCurveState curve_result = motion_curve_.get_result();
     controller_data_types::TargetTrajectoryPoint_t des_state;
-    // Keep geometric point mode close to the historical "position hold" semantics:
-    // only smooth the position reference, and avoid quintic velocity/acceleration
-    // feedforward that can make the point interface much more aggressive.
-    des_state.position = curve_result.valid ? curve_result.position : point.position;
-    des_state.velocity = Eigen::Vector3d::Zero();
-    des_state.acceleration = Eigen::Vector3d::Zero();
+
+    // 曲线运行中继续跟踪平滑参考，避免中途直接跳到目标点产生位置阶跃。
+    // 只有 arrival_judge 通过且曲线已经结束时，move_point 才算真正完成。
+    // 曲线走完或无效时，切换为目标点定点保持，前馈归零。
+    const bool curve_still_running = curve_result.valid && !motion_curve_.is_finished();
+    if (curve_still_running) {
+        des_state.position = curve_result.position;
+        des_state.velocity = curve_result.velocity;
+        // des_state.acceleration = curve_result.acceleration;  // 暂时注释，观察曲线加速度是否合理
+        des_state.acceleration = Eigen::Vector3d::Zero();
+    } else {
+        des_state.position = last_point_.position;
+        des_state.velocity = Eigen::Vector3d::Zero();
+        des_state.acceleration = Eigen::Vector3d::Zero();
+    }
     des_state.jerk = Eigen::Vector3d::Zero();
     des_state.yaw = update_limited_yaw_target(point.yaw, now);
     des_state.yaw_rate = 0.0;
@@ -313,13 +322,14 @@ bool Geometric_Controller::move_point_impl(controller_data_types::TargetPoint_t 
     const double yaw_err =
         std::abs(normalize_angle_rad(last_point_.yaw - uav_odometry_.get_yaw()));
     const double yaw_rate_err = std::abs(uav_odometry_.bodyrate.z());
-    if (!arrival_helper::update_pose_and_check(point_arrival_state_,
-                                               arrival_judge_config_,
-                                               pos_err,
-                                               vel_err,
-                                               yaw_err,
-                                               yaw_rate_err,
-                                               now)) {
+    const bool arrival_ok = arrival_helper::update_pose_and_check(point_arrival_state_,
+                                                                  arrival_judge_config_,
+                                                                  pos_err,
+                                                                  vel_err,
+                                                                  yaw_err,
+                                                                  yaw_rate_err,
+                                                                  now);
+    if (!arrival_ok || curve_still_running) {
         point_complete_.store(false, std::memory_order_relaxed);
         return false;
     }
@@ -722,6 +732,20 @@ bool Geometric_Controller::set_hover_point(control_common::UAVStateEstimate curr
     reset_point_motion_context();
     yaw_reference_state_.reset();
     update_hover_reference(current_odom.position, current_odom.get_yaw(), "set_hover_point");
+    return true;
+}
+
+bool Geometric_Controller::set_hover_point_to_last_target() {
+    if (!point_target_initialized_) {
+        return false;
+    }
+    // 先抓快照，因为 reset_point_motion_context() 会把 last_point_ 清掉
+    const controller_data_types::TargetPoint_t target_snapshot = last_point_;
+    clear_motion_curve();
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
+    update_hover_reference(target_snapshot.position, target_snapshot.yaw,
+                           "set_hover_point_to_last_target");
     return true;
 }
 

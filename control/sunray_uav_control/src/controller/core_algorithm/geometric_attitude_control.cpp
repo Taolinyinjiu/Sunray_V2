@@ -64,11 +64,30 @@ void Geometric_AttitudeControl::seed_hover_thrust_estimator(double hover_thrust)
     hover_thrust_estimator_->seed_hover_thrust(hover_thrust);
 }
 
+void Geometric_AttitudeControl::refresh_dt(const ros::Time& stamp) {
+    const double nominal_dt = 1.0 / std::max(1.0, param_.controller_hz);
+    // 用实测时间戳差替代固定 dt：上限取 5 倍标称步长以抑制大跳变，
+    // 时间戳无效或回退时退化为标称步长。
+    if (stamp.isZero() || last_call_stamp_.isZero()) {
+        current_dt_ = nominal_dt;
+    } else {
+        const double dt = (stamp - last_call_stamp_).toSec();
+        if (dt > 0.0 && dt < 5.0 * nominal_dt) {
+            current_dt_ = dt;
+        } else {
+            current_dt_ = nominal_dt;
+        }
+    }
+    last_call_stamp_ = stamp;
+}
+
 
 Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     const controller_data_types::TargetTrajectoryPoint_t& des_state,
     const control_common::UAVStateEstimate& current_odom,
     ThrustCommandPolicy thrust_policy) {
+
+    refresh_dt(current_odom.timestamp);
 
     if (last_control_type_ == Control_Type::Velocity_) {
         reset_integral();
@@ -111,6 +130,8 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     const controller_data_types::TargetVelocity_t& des_state,
     const control_common::UAVStateEstimate& current_odom,
     ThrustCommandPolicy thrust_policy) {
+
+    refresh_dt(current_odom.timestamp);
 
     const bool fixed_height_active = des_state.fixed_height > 0.0;
     if (last_control_type_ != Control_Type::Velocity_) {
@@ -187,14 +208,49 @@ double Geometric_AttitudeControl::compose_thrust_command(
 // ─────────────────────────────────────────────────────────────────────────
 Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& pos_error,
                                                          const Eigen::Vector3d& vel_error) {
-    const double dt = 1.0 / std::max(1.0, param_.controller_hz);
+    const double dt = current_dt_;
 
-    // 三轴积分项（I）：支持位置环与速度环全量 PID
-    integral_pos_ += pos_error * dt;
-    integral_vel_ += vel_error * dt;
+    // 三轴微分项（D）
+    // 第一帧（reset 后）跳过差分，避免 last_*_error_ 为零导致的虚假大冲击。
+    Eigen::Vector3d pos_error_dot = Eigen::Vector3d::Zero();
+    Eigen::Vector3d vel_error_dot = Eigen::Vector3d::Zero();
+    if (!first_run_) {
+        pos_error_dot = (pos_error - last_pos_error_) / dt;
+        vel_error_dot = (vel_error - last_vel_error_) / dt;
+    }
+    last_pos_error_ = pos_error;
+    last_vel_error_ = vel_error;
+    first_run_ = false;
 
-    // 将积分状态按“输出加速度上限”做等效限幅，避免积分饱和
+    // D 项输出单独限幅，防止速度前馈引入后误差变化率过大导致冲击。
+    const Eigen::Vector3d d_term_raw = param_.pos_kd.asDiagonal() * pos_error_dot +
+                                       param_.vel_kd.asDiagonal() * vel_error_dot;
+    const double d_term_norm = d_term_raw.norm();
+    const Eigen::Vector3d d_term = (d_term_norm > param_.max_d_acc && d_term_norm > 1e-6)
+                                       ? d_term_raw * (param_.max_d_acc / d_term_norm)
+                                       : d_term_raw;
+
+    // 用上一拍的积分先算一次未饱和输出，判定本拍是否处于饱和区（D 项已限幅）
+    const Eigen::Vector3d a_fb_unsat = param_.pos_kp.asDiagonal() * pos_error +
+                                       param_.pos_ki.asDiagonal() * integral_pos_ +
+                                       d_term +
+                                       param_.vel_kp.asDiagonal() * vel_error +
+                                       param_.vel_ki.asDiagonal() * integral_vel_;
+    const bool saturated = a_fb_unsat.norm() > param_.max_acc;
+
+    // 条件积分 anti-windup：饱和时按轴判断，只允许"误差与积分异号"的方向继续积分
+    // 即放电方向允许、充电方向冻结，避免饱和后的过冲与滞回。
+    // 单轴硬限幅作为兜底保留。
     for (int i = 0; i < 3; ++i) {
+        const bool allow_pos = !saturated || (pos_error[i] * integral_pos_[i] < 0.0);
+        if (allow_pos) {
+            integral_pos_[i] += pos_error[i] * dt;
+        }
+        const bool allow_vel = !saturated || (vel_error[i] * integral_vel_[i] < 0.0);
+        if (allow_vel) {
+            integral_vel_[i] += vel_error[i] * dt;
+        }
+
         if (std::abs(param_.pos_ki[i]) > 1e-6) {
             const double lim = param_.int_max_pos[i] / std::max(std::abs(param_.pos_ki[i]), 1e-6);
             integral_pos_[i] = std::max(-lim, std::min(lim, integral_pos_[i]));
@@ -210,19 +266,12 @@ Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& 
         }
     }
 
-    // 三轴微分项（D）
-    const Eigen::Vector3d pos_error_dot = (pos_error - last_pos_error_) / dt;
-    const Eigen::Vector3d vel_error_dot = (vel_error - last_vel_error_) / dt;
-    last_pos_error_ = pos_error;
-    last_vel_error_ = vel_error;
-
-    // 三轴全量 PID 反馈（位置环 + 速度环）
+    // 用更新后的积分重新合成反馈加速度（D 项已限幅）
     Eigen::Vector3d a_fb = param_.pos_kp.asDiagonal() * pos_error +
                            param_.pos_ki.asDiagonal() * integral_pos_ +
-                           param_.pos_kd.asDiagonal() * pos_error_dot +
+                           d_term +
                            param_.vel_kp.asDiagonal() * vel_error +
-                           param_.vel_ki.asDiagonal() * integral_vel_ +
-                           param_.vel_kd.asDiagonal() * vel_error_dot;
+                           param_.vel_ki.asDiagonal() * integral_vel_;
 
     // 对输出加速度进行球形限幅，保持方向不变
     if (a_fb.norm() > param_.max_acc) {
@@ -245,8 +294,8 @@ Eigen::Vector3d Geometric_AttitudeControl::controlPosition(const Eigen::Vector3d
     // 重力向量，z 轴向上为正
     const Eigen::Vector3d gravity_vec(0.0, 0.0, -param_.gravity);
 
-    // 参考旋转矩阵：由参考加速度方向（去除重力）和偏航角构成
-    // 用于计算转子阻力补偿项
+    // 参考姿态：由"期望加速度 + 重力补偿"构成的期望推力方向，再叠加偏航角。
+    // 即 q_ref 表示稳态下推力轴应指向的方向，用于将转子阻力补偿投影到机体系。
     const Eigen::Quaterniond q_ref = acc2quaternion(target_acc - gravity_vec, mav_yaw);
     const Eigen::Matrix3d R_ref = q_ref.toRotationMatrix();
 
@@ -270,49 +319,29 @@ Eigen::Vector3d Geometric_AttitudeControl::controlVelocity(
     double target_yaw) {
 
     const Eigen::Vector3d gravity_vec(0.0, 0.0, -param_.gravity);
-    const Eigen::Quaterniond q_ref = acc2quaternion(-gravity_vec, target_yaw);
-    const Eigen::Matrix3d R_ref = q_ref.toRotationMatrix();
     Eigen::Vector3d target_vel = des_state.velocity;
     const Eigen::Vector3d mav_vel = current_odom.velocity;
     const bool fixed_height_active = des_state.fixed_height > 0.0;
 
+    Eigen::Vector3d a_fb;
     if (fixed_height_active) {
         target_vel.z() = 0.0;
         const Eigen::Vector3d pos_error(0.0, 0.0, des_state.fixed_height - current_odom.position.z());
         const Eigen::Vector3d vel_error = target_vel - mav_vel;
-        const Eigen::Vector3d a_fb = poscontroller(pos_error, vel_error);
-        const Eigen::Vector3d a_rd = R_ref * param_.D.asDiagonal() * R_ref.transpose() * target_vel;
-        return a_fb - a_rd - gravity_vec;
+        a_fb = poscontroller(pos_error, vel_error);
+    } else {
+        const Eigen::Vector3d vel_error = target_vel - mav_vel;
+        // 纯速度模式不引入位置环：传入零位置误差，由 poscontroller 内部统一处理积分/D 项/限幅。
+        // 同时清掉位置积分残留，避免下一次切回轨迹模式时被旧值污染。
+        integral_pos_.setZero();
+        last_pos_error_.setZero();
+        a_fb = poscontroller(Eigen::Vector3d::Zero(), vel_error);
     }
 
-    const Eigen::Vector3d vel_error = target_vel - mav_vel;
-    const double dt = 1.0 / std::max(1.0, param_.controller_hz);
-
-    // 纯速度模式下不使用位置环，避免旧的位置积分残留影响输出。
-    integral_pos_.setZero();
-    last_pos_error_.setZero();
-
-    integral_vel_ += vel_error * dt;
-    for (int i = 0; i < 3; ++i) {
-        if (std::abs(param_.vel_ki[i]) > 1e-6) {
-            const double lim = param_.int_max_vel[i] / std::max(std::abs(param_.vel_ki[i]), 1e-6);
-            integral_vel_[i] = std::max(-lim, std::min(lim, integral_vel_[i]));
-        } else {
-            integral_vel_[i] = 0.0;
-        }
-    }
-
-    const Eigen::Vector3d vel_error_dot = (vel_error - last_vel_error_) / dt;
-    last_vel_error_ = vel_error;
-
-    Eigen::Vector3d a_fb = param_.vel_kp.asDiagonal() * vel_error +
-                           param_.vel_ki.asDiagonal() * integral_vel_ +
-                           param_.vel_kd.asDiagonal() * vel_error_dot;
-
-    if (a_fb.norm() > param_.max_acc) {
-        a_fb = (param_.max_acc / a_fb.norm()) * a_fb;
-    }
-
+    // 参考姿态与 controlPosition 对齐：用"反馈加速度 + 重力补偿"作为期望推力方向。
+    // 速度控制场景下没有显式 target_acc，用 a_fb 作为期望加速度的最佳近似。
+    const Eigen::Quaterniond q_ref = acc2quaternion(a_fb - gravity_vec, target_yaw);
+    const Eigen::Matrix3d R_ref = q_ref.toRotationMatrix();
     const Eigen::Vector3d a_rd = R_ref * param_.D.asDiagonal() * R_ref.transpose() * target_vel;
     return a_fb - a_rd - gravity_vec;
 }
@@ -335,9 +364,13 @@ void Geometric_AttitudeControl::computeBodyRateCmd(Eigen::Vector4d& bodyrate_cmd
     // 输出 collective thrust 对应的总加速度需求。
     // 这里优先匹配世界系 z 轴加速度：u * zb.z = a_des.z。
     // 相比 a_des·zb，在横向机动且姿态尚未到位时能更好抑制先升后降的高度瞬态。
+    // 适用倾角范围：约 ±acos(zb_z_min)（默认 ~60°），超出后该近似误差显著。
+    // 保护：zb_z 下限避免除零；a_des.z() 取下限避免大倾角下指令为负后被 clamp 到 0。
     const Eigen::Vector3d zb = curr_att.toRotationMatrix().col(2);
-    const double zb_z = std::clamp(zb.z(), 0.1, 1.0);
-    bodyrate_cmd(3) = a_des.z() / zb_z;
+    const double zb_z_min = std::clamp(param_.zb_z_min, 0.1, 1.0);
+    const double zb_z = std::clamp(zb.z(), zb_z_min, 1.0);
+    const double a_des_z = std::max(a_des.z(), 0.0);
+    bodyrate_cmd(3) = a_des_z / zb_z;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -384,10 +417,6 @@ Eigen::Quaterniond Geometric_AttitudeControl::acc2quaternion(const Eigen::Vector
 // ═══════════════════════════════════════════════════════════════════════════
 // Debug 误差记录
 // ═══════════════════════════════════════════════════════════════════════════
-double Geometric_AttitudeControl::wrap_angle(double angle_rad) {
-    return std::atan2(std::sin(angle_rad), std::cos(angle_rad));
-}
-
 Eigen::Vector3d Geometric_AttitudeControl::compute_attitude_error(
     const Eigen::Quaterniond& curr_att,
     const Eigen::Quaterniond& ref_att) const {
@@ -411,7 +440,7 @@ void Geometric_AttitudeControl::update_debug_state(
     last_debug_state_.odom = current_odom;
     last_debug_state_.position_error = des_state.position - current_odom.position;
     last_debug_state_.velocity_error = des_state.velocity - current_odom.velocity;
-    last_debug_state_.yaw_error = wrap_angle(des_state.yaw - current_yaw);
+    last_debug_state_.yaw_error = eigen_helper::wrap_angle(des_state.yaw - current_yaw);
     last_debug_state_.attitude_error = compute_attitude_error(current_odom.orientation, output.orientation);
     last_debug_state_.desired_acceleration = desired_acc;
     last_debug_state_.desired_orientation = output.orientation;

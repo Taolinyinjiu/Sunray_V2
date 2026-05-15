@@ -144,6 +144,7 @@ add_executable(move_velocity_node src/MOVE_VELOCITY/move_velocity.cpp)
 add_executable(move_velocity_fixed_height_node src/MOVE_VELOCITY/move_velocity_fixed_height.cpp)
 add_executable(move_velocity_body_node src/MOVE_VELOCITY_BODY/move_velocity_body.cpp)
 add_executable(circle_velocity_node src/MOVE_VELOCITY/circle_velocity.cpp)
+add_executable(circle_velocity_yaw_node src/MOVE_VELOCITY/circle_velocity_yaw.cpp)
 add_executable(lemniscate_velocity_node src/MOVE_VELOCITY/lemniscate_velocity.cpp)
 add_executable(move_trajectory_node src/MOVE_TRAJECTORY/move_trajectory.cpp)
 add_executable(circle_trajectory_node src/MOVE_TRAJECTORY/circle_trajectory.cpp)
@@ -166,6 +167,7 @@ add_dependencies(move_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin
 add_dependencies(move_velocity_fixed_height_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_velocity_body_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(circle_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(circle_velocity_yaw_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(lemniscate_velocity_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(move_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(circle_trajectory_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -197,6 +199,9 @@ target_link_libraries(move_velocity_body_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(circle_velocity_node
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(circle_velocity_yaw_node
   ${catkin_LIBRARIES}
 )
 target_link_libraries(lemniscate_velocity_node

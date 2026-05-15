@@ -321,35 +321,34 @@ bool PX4_OriginController::move_point_impl(controller_data_types::TargetPoint_t 
         point_complete_.store(false, std::memory_order_relaxed);
         last_point_ = point;
         point_target_initialized_ = true;
-        const Eigen::Vector3d start_position =
-            last_setpoint_.valid ? last_setpoint_.position : uav_odometry_.position;
-        const Eigen::Vector3d start_velocity =
-            last_setpoint_.valid ? last_setpoint_.velocity : uav_odometry_.velocity;
         begin_motion_curve(MotionCurveOwner::MovePoint);
-        motion_curve_.set_start_trajpoint(start_position, start_velocity);
+        motion_curve_.set_start_trajpoint(uav_odometry_.position, uav_odometry_.velocity);
         motion_curve_.set_end_trajpoint(point.position, Eigen::Vector3d::Zero());
         motion_curve_.set_curve_maxvel(reference_limit_helper::compute_point_curve_maxvel(
-            start_position, point.position, max_velocity_));
+            uav_odometry_.position, point.position, max_velocity_));
     }
 
+    const ros::Time now = ros::Time::now();
     control_common::Mavros_SetpointLocal send_setpoint;
     send_setpoint.frame = control_common::Mavros_SetpointLocal::Mavros_LocalFrame::Local_Ned;
-    send_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
-                         control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
-                         control_common::Mavros_SetpointLocal::Mask::IgnoreVz |
-                         control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
+    send_setpoint.mask = control_common::Mavros_SetpointLocal::Mask::IgnoreAfx |
                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfy |
                          control_common::Mavros_SetpointLocal::Mask::IgnoreAfz |
                          control_common::Mavros_SetpointLocal::Mask::IgnoreYawRate;
     const curve::QuinticCurveState curve_result = motion_curve_.get_result();
-    // Keep point mode close to historical "position hold" semantics:
-    // smooth only the position reference, and avoid quintic velocity/acceleration
-    // feedforward that can make move_point much more aggressive. Mask them out as
-    // well so PX4 consumes this as a position+yaw reference instead of a mixed setpoint.
-    send_setpoint.position = curve_result.valid ? curve_result.position : point.position;
-    send_setpoint.velocity = Eigen::Vector3d::Zero();
+    const bool curve_still_running = curve_result.valid && !motion_curve_.is_finished();
+    if (curve_still_running) {
+        send_setpoint.position = curve_result.position;
+        send_setpoint.velocity = curve_result.velocity;
+    } else {
+        send_setpoint.mask |= control_common::Mavros_SetpointLocal::Mask::IgnoreVx |
+                              control_common::Mavros_SetpointLocal::Mask::IgnoreVy |
+                              control_common::Mavros_SetpointLocal::Mask::IgnoreVz;
+        send_setpoint.position = last_point_.position;
+        send_setpoint.velocity = Eigen::Vector3d::Zero();
+    }
     send_setpoint.accel_or_force = Eigen::Vector3d::Zero();
-    send_setpoint.yaw = update_limited_yaw_target(point.yaw, ros::Time::now());
+    send_setpoint.yaw = update_limited_yaw_target(point.yaw, now);
     send_setpoint.yaw_rate = 0.0;
     mavros_helper_.pub_local_setpoint(send_setpoint);
     cache_local_setpoint(send_setpoint);
@@ -358,19 +357,19 @@ bool PX4_OriginController::move_point_impl(controller_data_types::TargetPoint_t 
         return true;
     }
 
-    const ros::Time now = ros::Time::now();
     const double pos_err = (uav_odometry_.position - last_point_.position).norm();
     const double vel_err = uav_odometry_.velocity.norm();
     const double yaw_err =
         std::abs(normalize_angle_rad(last_point_.yaw - uav_odometry_.get_yaw()));
     const double yaw_rate_err = std::abs(uav_odometry_.bodyrate.z());
-    if (!arrival_helper::update_pose_and_check(point_arrival_state_,
-                                               arrival_judge_config_,
-                                               pos_err,
-                                               vel_err,
-                                               yaw_err,
-                                               yaw_rate_err,
-                                               now)) {
+    const bool arrival_ok = arrival_helper::update_pose_and_check(point_arrival_state_,
+                                                                  arrival_judge_config_,
+                                                                  pos_err,
+                                                                  vel_err,
+                                                                  yaw_err,
+                                                                  yaw_rate_err,
+                                                                  now);
+    if (!arrival_ok || curve_still_running) {
         point_complete_.store(false, std::memory_order_relaxed);
         return false;
     }
@@ -710,6 +709,20 @@ bool PX4_OriginController::set_hover_point(control_common::UAVStateEstimate curr
     yaw_reference_state_.reset();
     hover_point_ = current_odom.position;
     hover_yaw_ = current_odom.get_yaw();
+    publish_hold_setpoint(hover_point_, hover_yaw_);
+    return true;
+}
+
+bool PX4_OriginController::set_hover_point_to_last_target() {
+    if (!point_target_initialized_) {
+        return false;
+    }
+    const controller_data_types::TargetPoint_t target_snapshot = last_point_;
+    clear_motion_curve();
+    reset_point_motion_context();
+    yaw_reference_state_.reset();
+    hover_point_ = target_snapshot.position;
+    hover_yaw_ = target_snapshot.yaw;
     publish_hold_setpoint(hover_point_, hover_yaw_);
     return true;
 }

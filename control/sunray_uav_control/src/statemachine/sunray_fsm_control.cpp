@@ -239,3 +239,12 @@ bool Sunray_FSM::set_hover_point_from_latest_odom() {
     }
     return sunray_controller_->set_hover_point(odom_snapshot);
 }
+
+// POINT_COMPLETED 转移专用：将悬停点锁定到最近一次 move_point 目标，
+// 避免到达判断时刻的位置误差被作为悬停点。控制器没有可用目标时回退到里程计。
+bool Sunray_FSM::set_hover_point_to_target_or_odom() {
+    if (sunray_controller_->set_hover_point_to_last_target()) {
+        return true;
+    }
+    return set_hover_point_from_latest_odom();
+}

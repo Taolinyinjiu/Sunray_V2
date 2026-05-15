@@ -8,7 +8,7 @@
   <arg name="agent_id" default="1" />
   <arg name="agent_num" default="6" />
   <arg name="use_private_agent_key" default="true" />
-  <arg name="tf_world_global" default="false" />
+  <arg name="tf_world_global" default="true" />
   <arg name="tf_local_world" default="false" />
   <arg name="enable_monitor" default="false" />
   <arg name="enable_rviz_visualization" default="false" />

@@ -72,7 +72,7 @@ inline Eigen::Vector4d rot2Quaternion(const Eigen::Matrix3d &R) {
         quat(2) = (R(0, 2) - R(2, 0)) / S;
         quat(3) = (R(1, 0) - R(0, 1)) / S;
     }
-    else if ((R(0, 0) > R(1, 1)) & (R(0, 0) > R(2, 2))){
+    else if ((R(0, 0) > R(1, 1)) && (R(0, 0) > R(2, 2))){
         double S = std::sqrt(1.0 + R(0, 0) - R(1, 1) - R(2, 2)) * 2.0;  // S=4*qx
         quat(0) = (R(2, 1) - R(1, 2)) / S;
         quat(1) = 0.25 * S;

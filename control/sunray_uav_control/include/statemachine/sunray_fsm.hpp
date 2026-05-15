@@ -81,6 +81,9 @@ class Sunray_FSM {
                                   std::string* invalid_reason = nullptr) const;
     bool get_latest_valid_odometry(control_common::UAVStateEstimate& odom) const;
     bool set_hover_point_from_latest_odom();
+    // POINT_COMPLETED 后专用：优先把悬停点设为最近一次 move_point 目标，
+    // 控制器没有可用目标时回退到 set_hover_point_from_latest_odom()。
+    bool set_hover_point_to_target_or_odom();
 
     // --------------------------话题回调函数------------------------
     // 为了保持话题的高频回调，基本上回调函数都只负责将收到的消息转换为结构体变量缓存，不做其他处理

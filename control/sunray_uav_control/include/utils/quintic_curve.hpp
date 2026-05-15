@@ -35,6 +35,8 @@ class QuinticCurve {
     void clear();
     // 提供曲线状态查询接口
     bool is_ready();
+    // 曲线是否已走完（时间超过 curve_time_）
+    bool is_finished() const;
 
   private:
     // 根据一维运动的起点/终点位置与速度，以及给定总时间T，求一条五次多项式的系数。
@@ -120,6 +122,13 @@ inline void QuinticCurve::clear() {
 
 inline bool QuinticCurve::is_ready() {
     return curve_constraint_type_ != ConstarintType::Undefined;
+}
+
+inline bool QuinticCurve::is_finished() const {
+    if (start_time_ == ros::Time(0) || curve_time_ <= 1e-6) {
+        return false;
+    }
+    return (ros::Time::now() - start_time_).toSec() >= curve_time_;
 }
 
 inline QuinticCurveState QuinticCurve::get_result() {

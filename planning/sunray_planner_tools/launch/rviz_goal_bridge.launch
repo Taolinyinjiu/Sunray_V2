@@ -1,13 +1,22 @@
 <launch>
-  <arg name="rviz_goal_topic" default="/move_base_simple/goal" />
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="use_private_agent_key" default="false" />
+  <arg name="rviz_topic" default="/move_base_simple/goal" />
+  <arg name="use_agent_height" default="true" />
+  <arg name="fixed_goal_height" default="0.6" />
+  <arg name="world_goal_plan_frame" default="global" />
 
   <node name="rviz_goal_bridge" pkg="sunray_planner_tools" type="rviz_goal_bridge" output="screen">
-    <param name="rviz_goal_topic" value="$(arg rviz_goal_topic)" />
     <param name="agent_name" type="str" value="$(arg agent_name)" />
     <param name="agent_id" type="int" value="$(arg agent_id)" />
     <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
+    <param name="rviz_topic" value="$(arg rviz_topic)" />
+    <param name="use_agent_height" value="$(arg use_agent_height)" />
+    <param name="fixed_goal_height" value="$(arg fixed_goal_height)" />
+    <param name="world_goal_plan_frame" value="$(arg world_goal_plan_frame)" />
+    <param name="sunray_global_frame" value="${agent_key}/sunray_global" />
+    <param name="sunray_local_frame" value="${agent_key}/sunray_local" />
+    <param name="agent_odom_topic" value="${agent_key}/sunray/localization/local_odom" />
   </node>
 </launch>

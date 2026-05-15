@@ -107,11 +107,12 @@ void Sunray_FSM::init_transition_table() {
                                             always,
                                             [this] { return set_hover_point_from_latest_odom(); }});
     // MOVE -> HOVER (POINT_COMPLETED)
+    // 用 move_point 的目标点而不是当前里程计作为悬停点，避免到达判断阶段的位置误差被锁死
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::POINT_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
-                                            [this] { return set_hover_point_from_latest_odom(); }});
+                                            [this] { return set_hover_point_to_target_or_odom(); }});
 
     // MOVE -> HOVER (VELOCITY_COMPLETED)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
