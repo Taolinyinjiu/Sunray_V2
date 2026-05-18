@@ -2,13 +2,12 @@
 std_msgs/Header header
 
 # UAVControlState 是 sunray_uav_control 对外发布的完整运行状态。
-# 推荐外部 UI / monitor / RViz 只订阅本消息，不直接侵入 sunray_uav_control 内部逻辑。
 # 典型话题：
 #   /uav1/sunray/uav_control/control_state
 
 # ---------- robot identity ----------
 string agent_name                 # 机器人名称前缀，例如 uav
-uint8 agent_id                    # 机器人编号，从 1 开始
+uint8 agent_id                    # 机器人编号，默认从 1 开始
 uint8 controller_types            # 控制器类型
 
 # 当前起飞相对高度
@@ -42,7 +41,6 @@ UAVControlCMD last_cmd
 # ---------- current odom ----------
 # self_odom 为原始本机里程计，包含位置、姿态和速度。
 nav_msgs/Odometry self_odom
-
 
 # ---------- controller output ----------
 # 实际发布到底层 MAVROS setpoint 话题的控制量

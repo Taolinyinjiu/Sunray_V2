@@ -1,7 +1,12 @@
+# 话题头
 std_msgs/Header header
 
+# UAVControlCMD 是 sunray_uav_control 接收的外部控制指令（控制接口）
+# 典型话题：
+#   /uav1/sunray/uav_control/control_cmd
+
 # 枚举中，使用UNDEFINE = 0标识未定义
-uint8 UNDEFINE=0 					# 未定义的来源
+uint8 UNDEFINE=0 			# 未定义的来源/命令
 
 # ---------- command source ----------
 # ----------- 命令来源枚举 -------------
@@ -16,17 +21,17 @@ uint8 cmd_source
 
 # ---------- control command ----------
 # ------------- 控制命令枚举 ------------
-uint8 TAKEOFF=1 # 起飞
-uint8 LAND=2    # 降落
-uint8 RETURN=3  # 返航
-uint8 KILL=4    # 紧急锁桨
-uint8 HOVER=5   # 当前位置悬停
-uint8 MOVE_POINT=6  # 移动到某一点
-uint8 MOVE_VELOCITY=7   # 使用速度模式控制，可以选择固定高度
-uint8 MOVE_TRAJECTORY=8 # 追踪轨迹
-uint8 MOVE_POINT_BODY=9 # 固定高度，机体系下移动到某一点
-uint8 MOVE_VELOCITY_BODY=10  # 固定高度，机体系下速度模式控制
-uint8 MOVE_POINT_WGS84=11   # WGS84 经纬高定位
+uint8 TAKEOFF=1                     # 起飞：发送一次即可，无人机原地起飞至起飞高度
+uint8 LAND=2                        # 降落：发送一次即可，无人机原地降落
+uint8 RETURN=3                      # 返航：发送一次即可，无人机返回起始点并降落
+uint8 KILL=4                        # 紧急锁桨：危险操作！发送一次即可，无人机立刻停止转动，自由落体掉落
+uint8 HOVER=5                       # 当前位置悬停：发送一次即可，无人机会读取当前位置并在当前位置悬停
+uint8 MOVE_POINT=6                  # 惯性系位置控制：发送一次即可，配合desired_pos、desired_yaw使用
+uint8 MOVE_VELOCITY=7               # 惯性系速度控制：话题频率建议≥10Hz，配合desired_vel、支持fixed_height（需要desired_pos.z）、支持yaw_mode
+uint8 MOVE_TRAJECTORY=8             # 惯性系轨迹控制：话题频率建议≥100Hz，配合desired_pos、desired_vel、desired_acc、支持yaw_mode
+uint8 MOVE_POINT_BODY=9             # 机体系位置控制：发送一次即可，配合desired_pos、desired_yaw使用（偏航角为惯性系设定值）
+uint8 MOVE_VELOCITY_BODY=10         # 机体系位置控制：发送一次即可，配合desired_vel、fixed_height默认为true（需要desired_pos.z）、desired_yaw使用（偏航角为惯性系设定值）
+uint8 MOVE_POINT_WGS84=11           # WGS84系经纬高控制：发送一次即可，暂未支持。
 # 控制命令
 uint8 control_cmd
 

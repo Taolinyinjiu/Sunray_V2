@@ -44,6 +44,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -59,12 +60,15 @@
 
 #include <rviz/display.h>
 #include <rviz/render_panel.h>
+#include <rviz/view_controller.h>
+#include <rviz/view_manager.h>
 #include <rviz/visualization_manager.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -109,6 +113,7 @@ struct RvizDisplayConfig
     std::string type{"MarkerArray"};
     std::string topic;
     bool enabled{true};
+    std::string group{"其他"};
 };
 
 struct RvizDisplayRuntime
@@ -159,6 +164,28 @@ struct AgentRuntime
     ros::Time last_swarm_time;
 };
 
+struct FormationControls
+{
+    QComboBox *combo{nullptr};
+    QWidget *dynamic_time_row{nullptr};
+    QStackedWidget *param_stack{nullptr};
+    QDoubleSpinBox *leader_x_spin{nullptr};
+    QDoubleSpinBox *leader_y_spin{nullptr};
+    QDoubleSpinBox *leader_z_spin{nullptr};
+    QDoubleSpinBox *leader_yaw_spin{nullptr};
+    QDoubleSpinBox *line_spacing_spin{nullptr};
+    QDoubleSpinBox *line_angle_spin{nullptr};
+    QDoubleSpinBox *polygon_spacing_spin{nullptr};
+    QDoubleSpinBox *dynamic_time_spin{nullptr};
+    QDoubleSpinBox *ring_radius_spin{nullptr};
+    QDoubleSpinBox *ring_speed_spin{nullptr};
+    QDoubleSpinBox *dynamic_polygon_spacing_spin{nullptr};
+    QDoubleSpinBox *dynamic_polygon_speed_spin{nullptr};
+    QDoubleSpinBox *lemniscate_x_spin{nullptr};
+    QDoubleSpinBox *lemniscate_y_spin{nullptr};
+    QDoubleSpinBox *lemniscate_speed_spin{nullptr};
+};
+
 std::string xmlRpcString(const XmlRpc::XmlRpcValue &value, const std::string &fallback = "")
 {
     return value.getType() == XmlRpc::XmlRpcValue::TypeString ? static_cast<std::string>(value) : fallback;
@@ -171,6 +198,67 @@ int xmlRpcInt(const XmlRpc::XmlRpcValue &value, const int fallback = 0)
         return static_cast<int>(value);
     }
     return fallback;
+}
+
+std::string canonicalRvizDisplayGroup(const std::string &group)
+{
+    const QString value = QString::fromStdString(group).trimmed();
+    const QString lower = value.toLower();
+    if (value.isEmpty())
+    {
+        return "其他";
+    }
+    if (value.contains("定位") || lower.contains("localization"))
+    {
+        return "定位";
+    }
+    if ((lower.contains("uav") && value.contains("集群")) ||
+        lower.contains("uav_swarm") ||
+        lower.contains("uav swarm"))
+    {
+        return "UAV集群";
+    }
+    if ((lower.contains("ugv") && value.contains("集群")) ||
+        lower.contains("ugv_swarm") ||
+        lower.contains("ugv swarm"))
+    {
+        return "UGV集群";
+    }
+    if ((lower.contains("uav") && value.contains("控制")) ||
+        lower.contains("uav_control") ||
+        lower.contains("uav control"))
+    {
+        return "UAV控制";
+    }
+    if ((lower.contains("ugv") && value.contains("控制")) ||
+        lower.contains("ugv_control") ||
+        lower.contains("ugv control"))
+    {
+        return "UGV控制";
+    }
+    if (value.contains("其他") || lower == "other")
+    {
+        return "其他";
+    }
+    return "其他";
+}
+
+std::string inferRvizDisplayGroup(const RvizDisplayConfig &config)
+{
+    const QString text = QString("%1 %2")
+                             .arg(QString::fromStdString(config.name),
+                                  QString::fromStdString(config.topic));
+    return canonicalRvizDisplayGroup(text.toStdString());
+}
+
+std::string rvizDisplayGroup(const RvizDisplayConfig &config)
+{
+    const std::string group = canonicalRvizDisplayGroup(config.group);
+    if (group == "其他")
+    {
+        return inferRvizDisplayGroup(config);
+    }
+    return group;
 }
 
 QString formatDouble(const double value, const int precision = 2)
@@ -737,6 +825,47 @@ void setRowColor(QTableWidget *table, const int row, const QColor &background, c
     }
 }
 
+void setRowDefaultColor(QTableWidget *table, const int row)
+{
+    if (table == nullptr)
+    {
+        return;
+    }
+    const QColor background = (row % 2 == 0) ? QColor(255, 255, 255) : QColor(247, 250, 248);
+    const QColor foreground(24, 34, 28);
+    for (int column = 0; column < table->columnCount(); ++column)
+    {
+        QTableWidgetItem *item = table->item(row, column);
+        if (item != nullptr)
+        {
+            item->setBackground(background);
+            item->setForeground(foreground);
+        }
+    }
+}
+
+void setBadgeCell(QTableWidget *table,
+                  const int row,
+                  const int column,
+                  const QString &text,
+                  const QColor &background,
+                  const QColor &foreground)
+{
+    setItemText(table, row, column, text);
+    if (table == nullptr)
+    {
+        return;
+    }
+    QTableWidgetItem *item = table->item(row, column);
+    if (item == nullptr)
+    {
+        return;
+    }
+    item->setTextAlignment(Qt::AlignCenter);
+    item->setBackground(background);
+    item->setForeground(foreground);
+}
+
 TopicConfig makeTopicConfig(const std::string &name,
                             const std::string &module,
                             const std::string &agent_type,
@@ -766,6 +895,69 @@ QDoubleSpinBox *makeSpin(const double value,
     spin->setSingleStep(step);
     spin->setValue(value);
     return spin;
+}
+
+void setCompactSpinBoxes(const std::vector<QDoubleSpinBox *> &items, const int width = 96)
+{
+    for (QDoubleSpinBox *spin : items)
+    {
+        if (spin != nullptr)
+        {
+            spin->setMinimumWidth(width);
+            spin->setMaximumWidth(width);
+        }
+    }
+}
+
+void setSpinSuffixes(const std::vector<std::pair<QDoubleSpinBox *, QString>> &items)
+{
+    for (const auto &item : items)
+    {
+        if (item.first != nullptr)
+        {
+            item.first->setSuffix(item.second);
+        }
+    }
+}
+
+void setSpinPrefixes(const std::vector<std::pair<QDoubleSpinBox *, QString>> &items)
+{
+    for (const auto &item : items)
+    {
+        if (item.first != nullptr)
+        {
+            item.first->setPrefix(item.second);
+        }
+    }
+}
+
+QLabel *makeControlRowLabel(const QString &text, const int width = 72)
+{
+    auto *label = new QLabel(text);
+    label->setMinimumWidth(width);
+    label->setMaximumWidth(width);
+    label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    return label;
+}
+
+void tightenControlGrid(QGridLayout *layout,
+                        const int columns = 5,
+                        const int label_width = 72,
+                        const int field_width = 96,
+                        const bool stretch_last_column = true)
+{
+    if (layout == nullptr)
+    {
+        return;
+    }
+    layout->setColumnMinimumWidth(0, label_width);
+    layout->setColumnStretch(0, 0);
+    for (int column = 1; column < columns - 1; ++column)
+    {
+        layout->setColumnMinimumWidth(column, field_width);
+        layout->setColumnStretch(column, 0);
+    }
+    layout->setColumnStretch(columns - 1, stretch_last_column ? 1 : 0);
 }
 
 double yawFromOdom(const nav_msgs::Odometry &odom)
@@ -1340,6 +1532,11 @@ class SunrayMonitorPanel : public QMainWindow
         buildAutoRvizDisplays();
         loadStateTopics();
         loadRvizDisplays();
+        if (!agents_.empty())
+        {
+            selected_detail_platform_ = agents_.front().config.platform;
+            selected_detail_agent_id_ = agents_.front().config.id;
+        }
     }
 
     bool loadAgents()
@@ -1540,16 +1737,19 @@ class SunrayMonitorPanel : public QMainWindow
             return;
         }
 
+        RvizDisplayConfig normalized_config = config;
+        normalized_config.group = rvizDisplayGroup(config);
+
         for (size_t i = 0; i < rviz_displays_.size(); ++i)
         {
             if (rviz_displays_[i].topic == config.topic)
             {
-                rviz_displays_[i] = config;
+                rviz_displays_[i] = normalized_config;
                 return;
             }
         }
 
-        rviz_displays_.push_back(config);
+        rviz_displays_.push_back(normalized_config);
     }
 
     void buildAutoStateTopics()
@@ -1611,29 +1811,33 @@ class SunrayMonitorPanel : public QMainWindow
             addRvizDisplayConfig({"定位融合-" + suffix,
                                   "MarkerArray",
                                   agent.config.ns + "/sunray/localization/rviz_markers",
-                                  false});
+                                  false,
+                                  "定位"});
             if (agent.config.platform == Platform::UAV)
             {
                 addRvizDisplayConfig({"UAV控制-" + suffix,
                                       "MarkerArray",
                                       agent.config.ns + "/sunray/uav_control/rviz_markers",
-                                      false});
+                                      false,
+                                      "UAV控制"});
                 addRvizDisplayConfig({"UAV面板-" + suffix,
                                       "MarkerArray",
                                       agent.config.ns + "/sunray/uav_control_panel/markers",
-                                      false});
+                                      false,
+                                      "UAV控制"});
             }
             else
             {
                 addRvizDisplayConfig({"UGV控制-" + suffix,
                                       "MarkerArray",
                                       agent.config.ns + "/sunray/ugv_control/rviz_markers",
-                                      false});
+                                      false,
+                                      "UGV控制"});
             }
         }
 
-        addRvizDisplayConfig({"UAV集群", "MarkerArray", uav_swarm_rviz_topic_, false});
-        addRvizDisplayConfig({"UGV集群", "MarkerArray", ugv_swarm_rviz_topic_, false});
+        addRvizDisplayConfig({"UAV集群", "MarkerArray", uav_swarm_rviz_topic_, false, "UAV集群"});
+        addRvizDisplayConfig({"UGV集群", "MarkerArray", ugv_swarm_rviz_topic_, false, "UGV集群"});
     }
 
     void loadAgentList(const std::string &param_name,
@@ -1752,6 +1956,7 @@ class SunrayMonitorPanel : public QMainWindow
             config.enabled = entry.hasMember("enabled") && entry["enabled"].getType() == XmlRpc::XmlRpcValue::TypeBoolean
                                  ? static_cast<bool>(entry["enabled"])
                                  : false;
+            config.group = entry.hasMember("group") ? xmlRpcString(entry["group"], "其他") : "其他";
             if (!config.topic.empty())
             {
                 addRvizDisplayConfig(config);
@@ -1844,113 +2049,111 @@ class SunrayMonitorPanel : public QMainWindow
         root->addWidget(header_card);
 
         auto *splitter = new QSplitter(Qt::Horizontal, central);
-        left_tabs_ = new QTabWidget(splitter);
-        left_tabs_->setObjectName("leftTabs");
-        left_tabs_->setMinimumWidth(340);
-        left_tabs_->addTab(buildOverviewTab(), "概览");
-        left_tabs_->addTab(buildLocalizationFusionTab(), "定位融合状态");
-        left_tabs_->addTab(buildUavControlStatusTab(), "无人机控制状态");
-        left_tabs_->addTab(buildUgvControlStatusTab(), "无人车控制状态");
-        left_tabs_->addTab(buildUavSwarmStatusTab(), "无人机集群状态");
-        left_tabs_->addTab(buildUgvSwarmStatusTab(), "无人车集群状态");
-        left_tabs_->addTab(buildDetailsTab(), "详情");
+        QWidget *left_widget = buildLeftPanel();
+        left_widget->setMinimumWidth(480);
 
         QWidget *rviz_widget = buildRvizWidget();
         rviz_widget->setMinimumWidth(620);
         QWidget *control_widget = buildControlTab();
-        control_widget->setMinimumWidth(500);
+        control_widget->setMinimumWidth(390);
 
-        splitter->addWidget(left_tabs_);
+        splitter->addWidget(left_widget);
         splitter->addWidget(rviz_widget);
         splitter->addWidget(control_widget);
         splitter->setStretchFactor(0, 3);
         splitter->setStretchFactor(1, 6);
-        splitter->setStretchFactor(2, 4);
-        splitter->setSizes(QList<int>() << 390 << 840 << 550);
+        splitter->setStretchFactor(2, 2);
+        splitter->setSizes(QList<int>() << 544 << 816 << 400);
         root->addWidget(splitter, 1);
 
         setCentralWidget(central);
     }
 
-    QWidget *buildOverviewTab()
+    QWidget *buildLeftPanel()
     {
-        auto *page = new QWidget();
-        auto *layout = new QVBoxLayout(page);
-        layout->setContentsMargins(10, 10, 10, 10);
+        auto *panel = new QWidget();
+        auto *layout = new QVBoxLayout(panel);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(8);
+
+        QWidget *overview = buildOverviewPanel();
+        QWidget *details = buildSelectedAgentDetailsPanel();
+        layout->addWidget(overview, 2);
+        layout->addWidget(details, 5);
+        return panel;
+    }
+
+    QWidget *buildOverviewPanel()
+    {
+        auto *group = new QGroupBox("全局概览");
+        auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(8, 14, 8, 8);
         layout->setSpacing(8);
 
         overview_label_ = new QLabel("等待 UAV/UGV 状态...");
         overview_label_->setObjectName("sectionLabel");
+        overview_label_->setWordWrap(true);
         layout->addWidget(overview_label_);
 
-        agent_table_ = new QTableWidget(0, 10);
+        agent_table_ = new QTableWidget(0, 5);
         agent_table_->setHorizontalHeaderLabels(QStringList()
                                                 << "状态"
-                                                << "平台"
-                                                << "ID"
+                                                << "目标"
                                                 << "控制"
                                                 << "定位"
-                                                << "位置"
-                                                << "速度"
-                                                << "目标"
-                                                << "最近指令"
-                                                << "更新");
+                                                << "位置");
         agent_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
         agent_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
         agent_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
         agent_table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        agent_table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        agent_table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-        agent_table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
-        agent_table_->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
-        agent_table_->horizontalHeader()->setSectionResizeMode(8, QHeaderView::ResizeToContents);
-        agent_table_->horizontalHeader()->setSectionResizeMode(9, QHeaderView::ResizeToContents);
+        agent_table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
         agent_table_->verticalHeader()->setVisible(false);
         agent_table_->setAlternatingRowColors(true);
         agent_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         agent_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+        agent_table_->setSelectionMode(QAbstractItemView::SingleSelection);
+        connect(agent_table_, &QTableWidget::currentCellChanged, this,
+                [this](const int current_row, int, int, int) {
+                    selectAgentFromOverviewRow(current_row);
+                });
         layout->addWidget(agent_table_, 1);
 
-        return page;
+        return group;
+    }
+
+    QWidget *buildSelectedAgentDetailsPanel()
+    {
+        auto *group = new QGroupBox("目标详情");
+        auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(8, 14, 8, 8);
+        layout->setSpacing(8);
+
+        detail_target_label_ = new QLabel("当前目标: --");
+        detail_target_label_->setObjectName("sectionLabel");
+        detail_target_label_->setWordWrap(true);
+        layout->addWidget(detail_target_label_);
+
+        localization_detail_page_ = buildLocalizationFusionTab();
+        uav_control_status_page_ = buildUavControlStatusTab();
+        ugv_control_status_page_ = buildUgvControlStatusTab();
+        uav_swarm_status_page_ = buildUavSwarmStatusTab();
+        ugv_swarm_status_page_ = buildUgvSwarmStatusTab();
+        system_detail_page_ = buildDetailsTab();
+
+        detail_tabs_ = new QTabWidget(group);
+        detail_tabs_->setObjectName("leftDetailTabs");
+        layout->addWidget(detail_tabs_, 1);
+        updateDetailTabsForSelectedAgent();
+
+        return group;
     }
 
     QWidget *buildLocalizationFusionTab()
     {
         auto *page = new QWidget();
         auto *layout = new QVBoxLayout(page);
-        layout->setContentsMargins(10, 10, 10, 10);
+        layout->setContentsMargins(6, 6, 6, 6);
         layout->setSpacing(8);
-
-        auto *selector_layout = new QHBoxLayout();
-        selector_layout->setSpacing(8);
-        localization_agent_combo_ = new QComboBox();
-        localization_agent_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-        localization_agent_combo_->setMinimumContentsLength(10);
-        for (const AgentRuntime &agent : agents_)
-        {
-            localization_agent_combo_->addItem(QString::fromStdString(agent.config.ns), agent.config.id);
-            localization_agent_combo_->setItemData(localization_agent_combo_->count() - 1,
-                                                   static_cast<int>(agent.config.platform),
-                                                   Qt::UserRole + 1);
-        }
-        if (localization_agent_combo_->count() == 0)
-        {
-            localization_agent_combo_->addItem("无可用目标", 1);
-            localization_agent_combo_->setItemData(0, static_cast<int>(Platform::UAV), Qt::UserRole + 1);
-            localization_agent_combo_->setEnabled(false);
-        }
-        connect(localization_agent_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-            refreshLocalizationFusionTab();
-        });
-
-        selector_layout->addWidget(new QLabel("目标"));
-        selector_layout->addWidget(localization_agent_combo_, 1);
-        layout->addLayout(selector_layout);
-
-        localization_summary_label_ = new QLabel("-");
-        localization_summary_label_->setObjectName("sectionLabel");
-        localization_summary_label_->setWordWrap(true);
-        layout->addWidget(localization_summary_label_);
 
         localization_detail_text_ = new QTextEdit();
         localization_detail_text_->setReadOnly(true);
@@ -1964,18 +2167,10 @@ class SunrayMonitorPanel : public QMainWindow
     {
         auto *page = new QWidget();
         auto *layout = new QVBoxLayout(page);
-        layout->setContentsMargins(10, 10, 10, 10);
+        layout->setContentsMargins(6, 6, 6, 6);
         layout->setSpacing(8);
-
-        auto *selector_layout = new QHBoxLayout();
-        selector_layout->setSpacing(8);
-        combo = new QComboBox();
-        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-        combo->setMinimumContentsLength(10);
-        populateAgentSelector(combo, platform, false);
-        selector_layout->addWidget(new QLabel("目标"));
-        selector_layout->addWidget(combo, 1);
-        layout->addLayout(selector_layout);
+        combo = nullptr;
+        (void)platform;
 
         view = new QTextEdit();
         view->setReadOnly(true);
@@ -1988,40 +2183,24 @@ class SunrayMonitorPanel : public QMainWindow
     QWidget *buildUavControlStatusTab()
     {
         QWidget *page = buildStateMonitorTab(uav_control_status_combo_, uav_control_status_view_, Platform::UAV);
-        connect(uav_control_status_combo_,
-                QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this,
-                [this](int) { refreshUavControlStatusTab(); });
         return page;
     }
 
     QWidget *buildUgvControlStatusTab()
     {
         QWidget *page = buildStateMonitorTab(ugv_control_status_combo_, ugv_control_status_view_, Platform::UGV);
-        connect(ugv_control_status_combo_,
-                QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this,
-                [this](int) { refreshUgvControlStatusTab(); });
         return page;
     }
 
     QWidget *buildUavSwarmStatusTab()
     {
         QWidget *page = buildStateMonitorTab(uav_swarm_status_combo_, uav_swarm_status_view_, Platform::UAV);
-        connect(uav_swarm_status_combo_,
-                QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this,
-                [this](int) { refreshUavSwarmStatusTab(); });
         return page;
     }
 
     QWidget *buildUgvSwarmStatusTab()
     {
         QWidget *page = buildStateMonitorTab(ugv_swarm_status_combo_, ugv_swarm_status_view_, Platform::UGV);
-        connect(ugv_swarm_status_combo_,
-                QOverload<int>::of(&QComboBox::currentIndexChanged),
-                this,
-                [this](int) { refreshUgvSwarmStatusTab(); });
         return page;
     }
 
@@ -2036,8 +2215,9 @@ class SunrayMonitorPanel : public QMainWindow
         tabs->setObjectName("controlTabs");
         tabs->addTab(buildUavControlPage(), "无人机控制");
         tabs->addTab(buildUgvControlPage(), "无人车控制");
-        tabs->addTab(buildClusterControlPage(), "集群控制");
-        layout->addWidget(tabs, 5);
+        tabs->addTab(buildUavSwarmControlPage(), "无人机集群控制");
+        tabs->addTab(buildUgvSwarmControlPage(), "无人车集群控制");
+        layout->addWidget(tabs, 4);
 
         auto *log_group = new QGroupBox("操作日志", page);
         auto *log_layout = new QVBoxLayout(log_group);
@@ -2045,40 +2225,49 @@ class SunrayMonitorPanel : public QMainWindow
         log_view_ = new QPlainTextEdit(log_group);
         log_view_->setReadOnly(true);
         log_view_->setMaximumBlockCount(300);
-        log_view_->setMinimumHeight(130);
+        log_view_->setMinimumHeight(190);
         log_layout->addWidget(log_view_);
-        layout->addWidget(log_group, 1);
+        layout->addWidget(log_group, 2);
         return page;
     }
 
     QWidget *buildUavControlPage()
     {
-        return buildControlPage({buildUavCommandGroup(), buildUavStateGroup()});
+        return buildControlPage({buildUavCommandGroup()});
     }
 
     QWidget *buildUgvControlPage()
     {
-        return buildControlPage({buildUgvCommandGroup(), buildUgvStateGroup()});
+        return buildControlPage({buildUgvCommandGroup()});
     }
 
-    QWidget *buildClusterControlPage()
+    QWidget *buildUavSwarmControlPage()
     {
-        return buildControlPage({buildUavSwarmGroup(), buildUgvSwarmGroup(), buildFormationGroup()});
+        return buildControlPage({buildUavSwarmGroup(), buildFormationGroup(uav_formation_controls_, Platform::UAV)}, true);
     }
 
-    QWidget *buildControlPage(const std::vector<QWidget *> &groups)
+    QWidget *buildUgvSwarmControlPage()
+    {
+        return buildControlPage({buildUgvSwarmGroup(), buildFormationGroup(ugv_formation_controls_, Platform::UGV)}, true);
+    }
+
+    QWidget *buildControlPage(const std::vector<QWidget *> &groups, const bool compact = false)
     {
         auto *scroll = new QScrollArea();
         scroll->setWidgetResizable(true);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         auto *content = new QWidget();
         auto *layout = new QVBoxLayout(content);
-        layout->setContentsMargins(8, 8, 8, 8);
-        layout->setSpacing(8);
+        layout->setContentsMargins(compact ? 2 : 6, compact ? 2 : 6, compact ? 2 : 6, compact ? 2 : 6);
+        layout->setSpacing(compact ? 4 : 6);
         for (QWidget *group : groups)
         {
             layout->addWidget(group);
         }
-        layout->addStretch(1);
+        if (compact)
+        {
+            layout->addStretch(1);
+        }
         scroll->setWidget(content);
         return scroll;
     }
@@ -2086,9 +2275,8 @@ class SunrayMonitorPanel : public QMainWindow
     QWidget *buildUavCommandGroup()
     {
         auto *group = new QGroupBox("无人机控制");
-        auto *layout = new QGridLayout(group);
-        layout->setHorizontalSpacing(5);
-        layout->setVerticalSpacing(6);
+        auto *layout = new QVBoxLayout(group);
+        layout->setSpacing(7);
 
         uav_target_combo_ = new QComboBox();
         uav_target_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -2131,7 +2319,10 @@ class SunrayMonitorPanel : public QMainWindow
         uav_world_height_spin_ = makeSpin(1.5, -1.0, 50.0, 0.1);
         uav_world_yaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0, 1);
         auto *world_vel_btn = new QPushButton("MOVE_VEL");
+        auto *world_stop_btn = new QPushButton("STOP");
+        world_stop_btn->setObjectName("warnButton");
         connect(world_vel_btn, &QPushButton::clicked, this, [this]() { startWorldVelocity(); });
+        connect(world_stop_btn, &QPushButton::clicked, this, [this]() { stopContinuousCommand(); });
 
         uav_body_vx_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         uav_body_vy_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
@@ -2142,46 +2333,124 @@ class SunrayMonitorPanel : public QMainWindow
         stop_btn->setObjectName("warnButton");
         connect(body_vel_btn, &QPushButton::clicked, this, [this]() { startBodyVelocity(); });
         connect(stop_btn, &QPushButton::clicked, this, [this]() { stopContinuousCommand(); });
+        setSpinSuffixes({{uav_point_x_spin_, " m"},
+                         {uav_point_y_spin_, " m"},
+                         {uav_point_z_spin_, " m"},
+                         {uav_point_yaw_spin_, " deg"},
+                         {uav_body_point_x_spin_, " m"},
+                         {uav_body_point_y_spin_, " m"},
+                         {uav_body_point_height_spin_, " m"},
+                         {uav_body_point_yaw_spin_, " deg"},
+                         {uav_world_vx_spin_, " m/s"},
+                         {uav_world_vy_spin_, " m/s"},
+                         {uav_world_height_spin_, " m"},
+                         {uav_world_yaw_spin_, " deg"},
+                         {uav_body_vx_spin_, " m/s"},
+                         {uav_body_vy_spin_, " m/s"},
+                         {uav_body_height_spin_, " m"},
+                         {uav_body_yaw_rate_spin_, " deg/s"}});
+        setSpinPrefixes({{uav_point_x_spin_, "x="},
+                         {uav_point_y_spin_, "y="},
+                         {uav_point_z_spin_, "z="},
+                         {uav_point_yaw_spin_, "yaw="},
+                         {uav_body_point_x_spin_, "x="},
+                         {uav_body_point_y_spin_, "y="},
+                         {uav_body_point_height_spin_, "h="},
+                         {uav_body_point_yaw_spin_, "yaw="},
+                         {uav_world_vx_spin_, "vx="},
+                         {uav_world_vy_spin_, "vy="},
+                         {uav_world_height_spin_, "h="},
+                         {uav_world_yaw_spin_, "yaw="},
+                         {uav_body_vx_spin_, "vx="},
+                         {uav_body_vy_spin_, "vy="},
+                         {uav_body_height_spin_, "h="},
+                         {uav_body_yaw_rate_spin_, "yr="}});
+        setCompactSpinBoxes({uav_point_x_spin_,
+                             uav_point_y_spin_,
+                             uav_point_z_spin_,
+                             uav_point_yaw_spin_,
+                             uav_body_point_x_spin_,
+                             uav_body_point_y_spin_,
+                             uav_body_point_height_spin_,
+                             uav_body_point_yaw_spin_,
+                             uav_world_vx_spin_,
+                             uav_world_vy_spin_,
+                             uav_world_height_spin_,
+                             uav_world_yaw_spin_,
+                             uav_body_vx_spin_,
+                             uav_body_vy_spin_,
+                             uav_body_height_spin_,
+                             uav_body_yaw_rate_spin_});
+        for (QPushButton *button : {takeoff_btn, hover_btn, land_btn, return_btn})
+        {
+            button->setMinimumWidth(86);
+            button->setMaximumWidth(86);
+        }
 
-        layout->addWidget(new QLabel("目标"), 0, 0);
-        layout->addWidget(uav_target_combo_, 0, 1);
-        layout->addWidget(new QLabel("快捷指令"), 1, 0);
-        layout->addWidget(takeoff_btn, 1, 1);
-        layout->addWidget(land_btn, 1, 2);
-        layout->addWidget(return_btn, 1, 3);
-        layout->addWidget(hover_btn, 1, 4);
-        layout->addWidget(kill_btn, 1, 5);
+        auto *target_layout = new QHBoxLayout();
+        target_layout->setSpacing(6);
+        target_layout->addWidget(new QLabel("目标"));
+        uav_target_combo_->setMaximumWidth(150);
+        target_layout->addWidget(uav_target_combo_);
+        layout->addLayout(target_layout);
 
-        layout->addWidget(new QLabel("点 x/y/z/yaw"), 2, 0);
-        layout->addWidget(uav_point_x_spin_, 2, 1);
-        layout->addWidget(uav_point_y_spin_, 2, 2);
-        layout->addWidget(uav_point_z_spin_, 2, 3);
-        layout->addWidget(uav_point_yaw_spin_, 2, 4);
-        layout->addWidget(point_btn, 2, 5);
+        auto *quick_layout = new QHBoxLayout();
+        quick_layout->setSpacing(6);
+        quick_layout->addWidget(takeoff_btn);
+        quick_layout->addWidget(hover_btn);
+        quick_layout->addWidget(land_btn);
+        quick_layout->addWidget(return_btn);
+        layout->addLayout(quick_layout);
 
-        layout->addWidget(new QLabel("体点 x/y/h/yaw"), 3, 0);
-        layout->addWidget(uav_body_point_x_spin_, 3, 1);
-        layout->addWidget(uav_body_point_y_spin_, 3, 2);
-        layout->addWidget(uav_body_point_height_spin_, 3, 3);
-        layout->addWidget(uav_body_point_yaw_spin_, 3, 4);
-        layout->addWidget(body_point_btn, 3, 5);
+        auto *point_grid = new QGridLayout();
+        point_grid->setHorizontalSpacing(5);
+        point_grid->setVerticalSpacing(5);
+        auto *point_label = new QLabel("位置控制");
+        point_label->setObjectName("sectionLabel");
+        point_grid->addWidget(point_label, 0, 0, 1, 5);
+        point_grid->addWidget(makeControlRowLabel("世界点"), 1, 0);
+        point_grid->addWidget(uav_point_x_spin_, 1, 1);
+        point_grid->addWidget(uav_point_y_spin_, 1, 2);
+        point_grid->addWidget(uav_point_z_spin_, 1, 3);
+        point_grid->addWidget(uav_point_yaw_spin_, 2, 1);
+        point_grid->addWidget(point_btn, 2, 2, 1, 2);
+        point_grid->addWidget(makeControlRowLabel("机体系点"), 3, 0);
+        point_grid->addWidget(uav_body_point_x_spin_, 3, 1);
+        point_grid->addWidget(uav_body_point_y_spin_, 3, 2);
+        point_grid->addWidget(uav_body_point_height_spin_, 3, 3);
+        point_grid->addWidget(uav_body_point_yaw_spin_, 4, 1);
+        point_grid->addWidget(body_point_btn, 4, 2, 1, 2);
+        tightenControlGrid(point_grid, 5, 72, 96, false);
+        layout->addLayout(point_grid);
 
-        layout->addWidget(new QLabel("世界速 vx/vy/h/yaw"), 4, 0);
-        layout->addWidget(uav_world_vx_spin_, 4, 1);
-        layout->addWidget(uav_world_vy_spin_, 4, 2);
-        layout->addWidget(uav_world_height_spin_, 4, 3);
-        layout->addWidget(uav_world_yaw_spin_, 4, 4);
-        layout->addWidget(world_vel_btn, 4, 5);
+        auto *velocity_grid = new QGridLayout();
+        velocity_grid->setHorizontalSpacing(5);
+        velocity_grid->setVerticalSpacing(5);
+        auto *velocity_label = new QLabel("速度控制（持续 5Hz）");
+        velocity_label->setObjectName("sectionLabel");
+        velocity_grid->addWidget(velocity_label, 0, 0, 1, 5);
+        velocity_grid->addWidget(makeControlRowLabel("世界速度"), 1, 0);
+        velocity_grid->addWidget(uav_world_vx_spin_, 1, 1);
+        velocity_grid->addWidget(uav_world_vy_spin_, 1, 2);
+        velocity_grid->addWidget(uav_world_height_spin_, 1, 3);
+        velocity_grid->addWidget(uav_world_yaw_spin_, 2, 1);
+        velocity_grid->addWidget(world_vel_btn, 2, 2);
+        velocity_grid->addWidget(world_stop_btn, 2, 3);
+        velocity_grid->addWidget(makeControlRowLabel("机体系速度"), 3, 0);
+        velocity_grid->addWidget(uav_body_vx_spin_, 3, 1);
+        velocity_grid->addWidget(uav_body_vy_spin_, 3, 2);
+        velocity_grid->addWidget(uav_body_height_spin_, 3, 3);
+        velocity_grid->addWidget(uav_body_yaw_rate_spin_, 4, 1);
+        velocity_grid->addWidget(body_vel_btn, 4, 2);
+        velocity_grid->addWidget(stop_btn, 4, 3);
+        tightenControlGrid(velocity_grid, 5, 72, 96, false);
+        layout->addLayout(velocity_grid);
 
-        layout->addWidget(new QLabel("体速 vx/vy/h/yaw"), 5, 0);
-        layout->addWidget(uav_body_vx_spin_, 5, 1);
-        layout->addWidget(uav_body_vy_spin_, 5, 2);
-        layout->addWidget(uav_body_height_spin_, 5, 3);
-        layout->addWidget(uav_body_yaw_rate_spin_, 5, 4);
-        layout->addWidget(body_vel_btn, 5, 5);
-        layout->addWidget(stop_btn, 5, 6);
-
-        layout->setColumnStretch(7, 1);
+        auto *danger_label = new QLabel("危险操作");
+        danger_label->setObjectName("sectionLabel");
+        layout->addWidget(danger_label);
+        kill_btn->setMaximumWidth(150);
+        layout->addWidget(kill_btn);
         return group;
     }
 
@@ -2219,9 +2488,8 @@ class SunrayMonitorPanel : public QMainWindow
     QWidget *buildUgvCommandGroup()
     {
         auto *group = new QGroupBox("无人车控制");
-        auto *layout = new QGridLayout(group);
-        layout->setHorizontalSpacing(5);
-        layout->setVerticalSpacing(6);
+        auto *layout = new QVBoxLayout(group);
+        layout->setSpacing(7);
 
         ugv_target_combo_ = new QComboBox();
         ugv_target_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -2259,39 +2527,107 @@ class SunrayMonitorPanel : public QMainWindow
         ugv_wgs84_alt_spin_ = makeSpin(0.0, -1000.0, 10000.0, 0.1);
         auto *wgs84_btn = new QPushButton("MOVE_WGS84");
         connect(wgs84_btn, &QPushButton::clicked, this, [this]() { publishUgvWgs84(); });
+        setSpinSuffixes({{ugv_point_x_spin_, " m"},
+                         {ugv_point_y_spin_, " m"},
+                         {ugv_point_yaw_spin_, " deg"},
+                         {ugv_body_vx_spin_, " m/s"},
+                         {ugv_body_vy_spin_, " m/s"},
+                         {ugv_body_yaw_rate_spin_, " deg/s"},
+                         {ugv_world_vx_spin_, " m/s"},
+                         {ugv_world_vy_spin_, " m/s"},
+                         {ugv_world_yaw_spin_, " deg"},
+                         {ugv_wgs84_lat_spin_, " deg"},
+                         {ugv_wgs84_lon_spin_, " deg"},
+                         {ugv_wgs84_alt_spin_, " m"}});
+        setSpinPrefixes({{ugv_point_x_spin_, "x="},
+                         {ugv_point_y_spin_, "y="},
+                         {ugv_point_yaw_spin_, "yaw="},
+                         {ugv_body_vx_spin_, "vx="},
+                         {ugv_body_vy_spin_, "vy="},
+                         {ugv_body_yaw_rate_spin_, "wz="},
+                         {ugv_world_vx_spin_, "vx="},
+                         {ugv_world_vy_spin_, "vy="},
+                         {ugv_world_yaw_spin_, "yaw="},
+                         {ugv_wgs84_lat_spin_, "lat="},
+                         {ugv_wgs84_lon_spin_, "lon="},
+                         {ugv_wgs84_alt_spin_, "alt="}});
+        setCompactSpinBoxes({ugv_point_x_spin_,
+                             ugv_point_y_spin_,
+                             ugv_point_yaw_spin_,
+                             ugv_body_vx_spin_,
+                             ugv_body_vy_spin_,
+                             ugv_body_yaw_rate_spin_,
+                             ugv_world_vx_spin_,
+                             ugv_world_vy_spin_,
+                             ugv_world_yaw_spin_,
+                             ugv_wgs84_lat_spin_,
+                             ugv_wgs84_lon_spin_,
+                             ugv_wgs84_alt_spin_});
+        for (QPushButton *button : {hold_btn, return_btn})
+        {
+            button->setMinimumWidth(86);
+            button->setMaximumWidth(86);
+        }
 
-        layout->addWidget(new QLabel("目标"), 0, 0);
-        layout->addWidget(ugv_target_combo_, 0, 1);
+        auto *target_layout = new QHBoxLayout();
+        target_layout->setSpacing(6);
+        target_layout->addWidget(new QLabel("目标"));
+        ugv_target_combo_->setMaximumWidth(150);
+        target_layout->addWidget(ugv_target_combo_);
+        layout->addLayout(target_layout);
 
-        layout->addWidget(new QLabel("快捷指令"), 1, 0);
-        layout->addWidget(hold_btn, 1, 1);
-        layout->addWidget(return_btn, 1, 2);
+        auto *quick_layout = new QHBoxLayout();
+        quick_layout->setSpacing(6);
+        quick_layout->addWidget(hold_btn);
+        quick_layout->addWidget(return_btn);
+        layout->addLayout(quick_layout);
 
-        layout->addWidget(new QLabel("点 x/y/yaw"), 2, 0);
-        layout->addWidget(ugv_point_x_spin_, 2, 1);
-        layout->addWidget(ugv_point_y_spin_, 2, 2);
-        layout->addWidget(ugv_point_yaw_spin_, 2, 3);
-        layout->addWidget(point_btn, 2, 4);
+        auto *point_grid = new QGridLayout();
+        point_grid->setHorizontalSpacing(5);
+        point_grid->setVerticalSpacing(5);
+        auto *point_label = new QLabel("位置控制");
+        point_label->setObjectName("sectionLabel");
+        point_grid->addWidget(point_label, 0, 0, 1, 5);
+        point_grid->addWidget(makeControlRowLabel("平面点"), 1, 0);
+        point_grid->addWidget(ugv_point_x_spin_, 1, 1);
+        point_grid->addWidget(ugv_point_y_spin_, 1, 2);
+        point_grid->addWidget(ugv_point_yaw_spin_, 1, 3);
+        point_grid->addWidget(point_btn, 2, 1, 1, 3);
+        tightenControlGrid(point_grid, 5, 72, 96, false);
+        layout->addLayout(point_grid);
 
-        layout->addWidget(new QLabel("体速 vx/vy/wz"), 3, 0);
-        layout->addWidget(ugv_body_vx_spin_, 3, 1);
-        layout->addWidget(ugv_body_vy_spin_, 3, 2);
-        layout->addWidget(ugv_body_yaw_rate_spin_, 3, 3);
-        layout->addWidget(body_vel_btn, 3, 4);
+        auto *velocity_grid = new QGridLayout();
+        velocity_grid->setHorizontalSpacing(5);
+        velocity_grid->setVerticalSpacing(5);
+        auto *velocity_label = new QLabel("速度控制");
+        velocity_label->setObjectName("sectionLabel");
+        velocity_grid->addWidget(velocity_label, 0, 0, 1, 5);
+        velocity_grid->addWidget(makeControlRowLabel("机体系速度"), 1, 0);
+        velocity_grid->addWidget(ugv_body_vx_spin_, 1, 1);
+        velocity_grid->addWidget(ugv_body_vy_spin_, 1, 2);
+        velocity_grid->addWidget(ugv_body_yaw_rate_spin_, 1, 3);
+        velocity_grid->addWidget(body_vel_btn, 2, 1, 1, 3);
+        velocity_grid->addWidget(makeControlRowLabel("世界速度"), 3, 0);
+        velocity_grid->addWidget(ugv_world_vx_spin_, 3, 1);
+        velocity_grid->addWidget(ugv_world_vy_spin_, 3, 2);
+        velocity_grid->addWidget(ugv_world_yaw_spin_, 3, 3);
+        velocity_grid->addWidget(world_vel_btn, 4, 1, 1, 3);
+        tightenControlGrid(velocity_grid, 5, 72, 96, false);
+        layout->addLayout(velocity_grid);
 
-        layout->addWidget(new QLabel("世界速 vx/vy/yaw"), 4, 0);
-        layout->addWidget(ugv_world_vx_spin_, 4, 1);
-        layout->addWidget(ugv_world_vy_spin_, 4, 2);
-        layout->addWidget(ugv_world_yaw_spin_, 4, 3);
-        layout->addWidget(world_vel_btn, 4, 4);
-
-        layout->addWidget(new QLabel("WGS84 lat/lon/alt"), 5, 0);
-        layout->addWidget(ugv_wgs84_lat_spin_, 5, 1);
-        layout->addWidget(ugv_wgs84_lon_spin_, 5, 2);
-        layout->addWidget(ugv_wgs84_alt_spin_, 5, 3);
-        layout->addWidget(wgs84_btn, 5, 4);
-
-        layout->setColumnStretch(5, 1);
+        auto *wgs84_grid = new QGridLayout();
+        wgs84_grid->setHorizontalSpacing(5);
+        wgs84_grid->setVerticalSpacing(5);
+        auto *wgs84_label = new QLabel("经纬度控制");
+        wgs84_label->setObjectName("sectionLabel");
+        wgs84_grid->addWidget(wgs84_label, 0, 0, 1, 5);
+        wgs84_grid->addWidget(makeControlRowLabel("WGS84"), 1, 0);
+        wgs84_grid->addWidget(ugv_wgs84_lat_spin_, 1, 1);
+        wgs84_grid->addWidget(ugv_wgs84_lon_spin_, 1, 2);
+        wgs84_grid->addWidget(ugv_wgs84_alt_spin_, 1, 3);
+        wgs84_grid->addWidget(wgs84_btn, 2, 1, 1, 3);
+        tightenControlGrid(wgs84_grid, 5, 72, 96, false);
+        layout->addLayout(wgs84_grid);
         return group;
     }
 
@@ -2332,9 +2668,9 @@ class SunrayMonitorPanel : public QMainWindow
     QWidget *buildUavSwarmGroup()
     {
         auto *group = new QGroupBox("UAV 集群");
-        auto *layout = new QGridLayout(group);
-        layout->setHorizontalSpacing(8);
-        layout->setVerticalSpacing(8);
+        auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(5, 12, 5, 5);
+        layout->setSpacing(5);
 
         uav_swarm_target_combo_ = new QComboBox();
         uav_swarm_target_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -2349,23 +2685,35 @@ class SunrayMonitorPanel : public QMainWindow
         connect(swarm_hold_btn, &QPushButton::clicked, this, [this]() { publishUavSwarmHold(); });
         connect(swarm_land_btn, &QPushButton::clicked, this, [this]() { publishUavSwarmLand(); });
         connect(swarm_return_btn, &QPushButton::clicked, this, [this]() { publishUavSwarmReturn(); });
+        for (QPushButton *button : {swarm_takeoff_btn, swarm_hold_btn, swarm_land_btn, swarm_return_btn})
+        {
+            button->setMinimumWidth(86);
+            button->setMaximumWidth(86);
+        }
 
-        layout->addWidget(new QLabel("目标"), 0, 0);
-        layout->addWidget(uav_swarm_target_combo_, 0, 1);
-        layout->addWidget(swarm_takeoff_btn, 1, 0);
-        layout->addWidget(swarm_hold_btn, 1, 1);
-        layout->addWidget(swarm_land_btn, 1, 2);
-        layout->addWidget(swarm_return_btn, 1, 3);
-        layout->setColumnStretch(4, 1);
+        auto *target_layout = new QHBoxLayout();
+        target_layout->setSpacing(6);
+        target_layout->addWidget(new QLabel("目标"));
+        uav_swarm_target_combo_->setMaximumWidth(130);
+        target_layout->addWidget(uav_swarm_target_combo_);
+        layout->addLayout(target_layout);
+
+        auto *quick_layout = new QHBoxLayout();
+        quick_layout->setSpacing(6);
+        quick_layout->addWidget(swarm_takeoff_btn);
+        quick_layout->addWidget(swarm_hold_btn);
+        quick_layout->addWidget(swarm_land_btn);
+        quick_layout->addWidget(swarm_return_btn);
+        layout->addLayout(quick_layout);
         return group;
     }
 
     QWidget *buildUgvSwarmGroup()
     {
         auto *group = new QGroupBox("UGV 集群");
-        auto *layout = new QGridLayout(group);
-        layout->setHorizontalSpacing(8);
-        layout->setVerticalSpacing(8);
+        auto *layout = new QVBoxLayout(group);
+        layout->setContentsMargins(5, 12, 5, 5);
+        layout->setSpacing(5);
 
         ugv_swarm_target_combo_ = new QComboBox();
         ugv_swarm_target_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -2376,110 +2724,160 @@ class SunrayMonitorPanel : public QMainWindow
         auto *swarm_return_btn = new QPushButton("RETURN");
         connect(swarm_hold_btn, &QPushButton::clicked, this, [this]() { publishUgvSwarmHold(); });
         connect(swarm_return_btn, &QPushButton::clicked, this, [this]() { publishUgvSwarmReturn(); });
+        for (QPushButton *button : {swarm_hold_btn, swarm_return_btn})
+        {
+            button->setMinimumWidth(86);
+            button->setMaximumWidth(86);
+        }
 
-        layout->addWidget(new QLabel("目标"), 0, 0);
-        layout->addWidget(ugv_swarm_target_combo_, 0, 1);
-        layout->addWidget(swarm_hold_btn, 1, 0);
-        layout->addWidget(swarm_return_btn, 1, 1);
-        layout->setColumnStretch(2, 1);
+        auto *target_layout = new QHBoxLayout();
+        target_layout->setSpacing(6);
+        target_layout->addWidget(new QLabel("目标"));
+        ugv_swarm_target_combo_->setMaximumWidth(130);
+        target_layout->addWidget(ugv_swarm_target_combo_);
+        layout->addLayout(target_layout);
+
+        auto *quick_layout = new QHBoxLayout();
+        quick_layout->setSpacing(6);
+        quick_layout->addWidget(swarm_hold_btn);
+        quick_layout->addWidget(swarm_return_btn);
+        layout->addLayout(quick_layout);
         return group;
     }
 
-    QWidget *buildFormationGroup()
+    QWidget *buildFormationGroup(FormationControls &controls, const Platform platform)
     {
         auto *group = new QGroupBox("阵型指令");
         auto *layout = new QVBoxLayout(group);
-        layout->setSpacing(8);
+        layout->setContentsMargins(5, 12, 5, 5);
+        layout->setSpacing(5);
 
         auto *top_layout = new QHBoxLayout();
-        formation_combo_ = new QComboBox();
-        formation_combo_->addItem("STATIC_KEEP_FORMATION", sunray_msgs::Formation::STATIC_KEEP_FORMATION);
-        formation_combo_->addItem("STATIC_FORMATION_LINE", sunray_msgs::Formation::STATIC_FORMATION_LINE);
-        formation_combo_->addItem("STATIC_FORMATION_POLYGON", sunray_msgs::Formation::STATIC_FORMATION_POLYGON);
-        formation_combo_->addItem("STATIC_FORMATION_RANDOM", sunray_msgs::Formation::STATIC_FORMATION_RANDOM);
-        formation_combo_->addItem("DYNAMIC_FORMATION_RING", sunray_msgs::Formation::DYNAMIC_FORMATION_RING);
-        formation_combo_->addItem("DYNAMIC_FORMATION_POLYGON", sunray_msgs::Formation::DYNAMIC_FORMATION_POLYGON);
-        formation_combo_->addItem("DYNAMIC_FORMATION_LEMNISCATE", sunray_msgs::Formation::DYNAMIC_FORMATION_LEMNISCATE);
-        connect(formation_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-            onFormationChanged();
+        top_layout->setContentsMargins(0, 0, 0, 0);
+        top_layout->setSpacing(5);
+        controls.combo = new QComboBox();
+        controls.combo->addItem("STATIC_KEEP_FORMATION", sunray_msgs::Formation::STATIC_KEEP_FORMATION);
+        controls.combo->addItem("STATIC_FORMATION_LINE", sunray_msgs::Formation::STATIC_FORMATION_LINE);
+        controls.combo->addItem("STATIC_FORMATION_POLYGON", sunray_msgs::Formation::STATIC_FORMATION_POLYGON);
+        controls.combo->addItem("STATIC_FORMATION_RANDOM", sunray_msgs::Formation::STATIC_FORMATION_RANDOM);
+        controls.combo->addItem("DYNAMIC_FORMATION_RING", sunray_msgs::Formation::DYNAMIC_FORMATION_RING);
+        controls.combo->addItem("DYNAMIC_FORMATION_POLYGON", sunray_msgs::Formation::DYNAMIC_FORMATION_POLYGON);
+        controls.combo->addItem("DYNAMIC_FORMATION_LEMNISCATE", sunray_msgs::Formation::DYNAMIC_FORMATION_LEMNISCATE);
+        connect(controls.combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, &controls](int) {
+            onFormationChanged(controls);
         });
-        auto *uav_formation_btn = new QPushButton("UAV");
-        auto *ugv_formation_btn = new QPushButton("UGV");
-        connect(uav_formation_btn, &QPushButton::clicked, this, [this]() { publishUavFormation(); });
-        connect(ugv_formation_btn, &QPushButton::clicked, this, [this]() { publishUgvFormation(); });
+        controls.combo->setMinimumContentsLength(18);
+        auto *formation_btn = new QPushButton(platform == Platform::UAV ? "UAV阵型" : "UGV阵型");
+        formation_btn->setMaximumWidth(82);
+        connect(formation_btn, &QPushButton::clicked, this, [this, &controls, platform]() {
+            publishFormation(platform, controls);
+        });
         top_layout->addWidget(new QLabel("阵型"));
-        top_layout->addWidget(formation_combo_, 1);
-        top_layout->addWidget(uav_formation_btn);
-        top_layout->addWidget(ugv_formation_btn);
+        top_layout->addWidget(controls.combo, 1);
+        top_layout->addWidget(formation_btn);
         layout->addLayout(top_layout);
 
         auto *leader_group = new QGroupBox("虚拟 Leader");
         auto *leader_layout = new QGridLayout(leader_group);
-        formation_leader_x_spin_ = makeSpin(0.0, -200.0, 200.0, 0.1);
-        formation_leader_y_spin_ = makeSpin(0.0, -200.0, 200.0, 0.1);
-        formation_leader_z_spin_ = makeSpin(1.5, -20.0, 50.0, 0.1);
-        formation_leader_yaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0, 1);
-        leader_layout->setHorizontalSpacing(8);
-        leader_layout->setVerticalSpacing(8);
-        leader_layout->addWidget(new QLabel("X leader_pos.x / m"), 0, 0);
-        leader_layout->addWidget(formation_leader_x_spin_, 0, 1);
-        leader_layout->addWidget(new QLabel("Y leader_pos.y / m"), 0, 2);
-        leader_layout->addWidget(formation_leader_y_spin_, 0, 3);
-        leader_layout->addWidget(new QLabel("Z leader_pos.z / m"), 1, 0);
-        leader_layout->addWidget(formation_leader_z_spin_, 1, 1);
-        leader_layout->addWidget(new QLabel("航向 leader_yaw / deg"), 1, 2);
-        leader_layout->addWidget(formation_leader_yaw_spin_, 1, 3);
-        leader_layout->setColumnStretch(4, 1);
+        leader_layout->setContentsMargins(4, 10, 4, 4);
+        controls.leader_x_spin = makeSpin(0.0, -200.0, 200.0, 0.1);
+        controls.leader_y_spin = makeSpin(0.0, -200.0, 200.0, 0.1);
+        controls.leader_z_spin = makeSpin(1.5, -20.0, 50.0, 0.1);
+        controls.leader_yaw_spin = makeSpin(0.0, -180.0, 180.0, 5.0, 1);
+        setSpinSuffixes({{controls.leader_x_spin, " m"},
+                         {controls.leader_y_spin, " m"},
+                         {controls.leader_z_spin, " m"},
+                         {controls.leader_yaw_spin, " deg"}});
+        setSpinPrefixes({{controls.leader_x_spin, "x="},
+                         {controls.leader_y_spin, "y="},
+                         {controls.leader_z_spin, "z="},
+                         {controls.leader_yaw_spin, "yaw="}});
+        setCompactSpinBoxes({controls.leader_x_spin,
+                             controls.leader_y_spin,
+                             controls.leader_z_spin,
+                             controls.leader_yaw_spin},
+                            86);
+        leader_layout->setHorizontalSpacing(4);
+        leader_layout->setVerticalSpacing(4);
+        leader_layout->addWidget(makeControlRowLabel("Leader", 58), 0, 0);
+        leader_layout->addWidget(controls.leader_x_spin, 0, 1);
+        leader_layout->addWidget(controls.leader_y_spin, 0, 2);
+        leader_layout->addWidget(controls.leader_z_spin, 0, 3);
+        leader_layout->addWidget(controls.leader_yaw_spin, 1, 1);
+        tightenControlGrid(leader_layout, 4, 58, 86);
         layout->addWidget(leader_group);
 
-        formation_line_spacing_spin_ = makeSpin(2.0, 0.1, 30.0, 0.1);
-        formation_line_angle_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0, 1);
-        formation_polygon_spacing_spin_ = makeSpin(2.0, 0.1, 30.0, 0.1);
-        formation_dynamic_time_spin_ = makeSpin(20.0, 0.1, 600.0, 1.0, 1);
-        formation_ring_radius_spin_ = makeSpin(3.0, 0.1, 50.0, 0.1);
-        formation_ring_speed_spin_ = makeSpin(0.5, -10.0, 10.0, 0.1);
-        formation_dynamic_polygon_spacing_spin_ = makeSpin(2.0, 0.1, 30.0, 0.1);
-        formation_dynamic_polygon_speed_spin_ = makeSpin(0.5, -10.0, 10.0, 0.1);
-        formation_lemniscate_x_spin_ = makeSpin(4.0, 0.1, 50.0, 0.1);
-        formation_lemniscate_y_spin_ = makeSpin(2.5, 0.1, 50.0, 0.1);
-        formation_lemniscate_speed_spin_ = makeSpin(0.5, -10.0, 10.0, 0.1);
+        controls.line_spacing_spin = makeSpin(2.0, 0.1, 30.0, 0.1);
+        controls.line_angle_spin = makeSpin(0.0, -180.0, 180.0, 5.0, 1);
+        controls.polygon_spacing_spin = makeSpin(2.0, 0.1, 30.0, 0.1);
+        controls.dynamic_time_spin = makeSpin(20.0, 0.1, 600.0, 1.0, 1);
+        controls.ring_radius_spin = makeSpin(3.0, 0.1, 50.0, 0.1);
+        controls.ring_speed_spin = makeSpin(0.5, -10.0, 10.0, 0.1);
+        controls.dynamic_polygon_spacing_spin = makeSpin(2.0, 0.1, 30.0, 0.1);
+        controls.dynamic_polygon_speed_spin = makeSpin(0.5, -10.0, 10.0, 0.1);
+        controls.lemniscate_x_spin = makeSpin(4.0, 0.1, 50.0, 0.1);
+        controls.lemniscate_y_spin = makeSpin(2.5, 0.1, 50.0, 0.1);
+        controls.lemniscate_speed_spin = makeSpin(0.5, -10.0, 10.0, 0.1);
+        setCompactSpinBoxes({controls.line_spacing_spin,
+                             controls.line_angle_spin,
+                             controls.polygon_spacing_spin,
+                             controls.dynamic_time_spin,
+                             controls.ring_radius_spin,
+                             controls.ring_speed_spin,
+                             controls.dynamic_polygon_spacing_spin,
+                             controls.dynamic_polygon_speed_spin,
+                             controls.lemniscate_x_spin,
+                             controls.lemniscate_y_spin,
+                             controls.lemniscate_speed_spin},
+                            86);
 
-        formation_dynamic_time_group_ = new QGroupBox("动态阵型时间");
-        auto *time_layout = new QFormLayout(formation_dynamic_time_group_);
-        time_layout->setContentsMargins(10, 10, 10, 10);
-        time_layout->addRow("持续时间 dynamic_time / s", formation_dynamic_time_spin_);
-        layout->addWidget(formation_dynamic_time_group_);
-
-        formation_param_stack_ = new QStackedWidget();
-        formation_param_stack_->addWidget(buildFormationParamPage(
+        auto *param_group = new QGroupBox("阵型参数");
+        auto *param_group_layout = new QVBoxLayout(param_group);
+        param_group_layout->setContentsMargins(4, 10, 4, 4);
+        param_group_layout->setSpacing(0);
+        controls.param_stack = new QStackedWidget();
+        controls.param_stack->setContentsMargins(0, 0, 0, 0);
+        controls.param_stack->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        controls.param_stack->addWidget(buildFormationParamPage(
             "当前相对队形 STATIC_KEEP_FORMATION",
             {}));
-        formation_param_stack_->addWidget(buildFormationParamPage(
+        controls.param_stack->addWidget(buildFormationParamPage(
             "静态直线阵型 STATIC_FORMATION_LINE",
-            {{"相邻间距 static_line_spacing / m", formation_line_spacing_spin_},
-             {"直线角度 static_line_angle / deg", formation_line_angle_spin_}}));
-        formation_param_stack_->addWidget(buildFormationParamPage(
+            {{"相邻间距 static_line_spacing / m", controls.line_spacing_spin},
+             {"直线角度 static_line_angle / deg", controls.line_angle_spin}}));
+        controls.param_stack->addWidget(buildFormationParamPage(
             "静态多边形阵型 STATIC_FORMATION_POLYGON",
-            {{"边长 static_polygon_spacing / m", formation_polygon_spacing_spin_}}));
-        formation_param_stack_->addWidget(buildFormationParamPage(
+            {{"边长 static_polygon_spacing / m", controls.polygon_spacing_spin}}));
+        controls.param_stack->addWidget(buildFormationParamPage(
             "静态随机阵型 STATIC_FORMATION_RANDOM",
             {}));
-        formation_param_stack_->addWidget(buildFormationParamPage(
+        controls.param_stack->addWidget(buildFormationParamPage(
             "动态圆环阵型 DYNAMIC_FORMATION_RING",
-            {{"圆半径 dynamic_ring_radius / m", formation_ring_radius_spin_},
-             {"切向速度 dynamic_ring_move_speed / m/s", formation_ring_speed_spin_}}));
-        formation_param_stack_->addWidget(buildFormationParamPage(
+            {{"圆半径 dynamic_ring_radius / m", controls.ring_radius_spin},
+             {"切向速度 dynamic_ring_move_speed / m/s", controls.ring_speed_spin}}));
+        controls.param_stack->addWidget(buildFormationParamPage(
             "动态多边形阵型 DYNAMIC_FORMATION_POLYGON",
-            {{"边长 dynamic_polygon_spacing / m", formation_dynamic_polygon_spacing_spin_},
-             {"线速度 dynamic_polygon_move_speed / m/s", formation_dynamic_polygon_speed_spin_}}));
-        formation_param_stack_->addWidget(buildFormationParamPage(
+            {{"边长 dynamic_polygon_spacing / m", controls.dynamic_polygon_spacing_spin},
+             {"线速度 dynamic_polygon_move_speed / m/s", controls.dynamic_polygon_speed_spin}}));
+        controls.param_stack->addWidget(buildFormationParamPage(
             "动态 8 字阵型 DYNAMIC_FORMATION_LEMNISCATE",
-            {{"X 方向尺度 dynamic_lemniscate_x_radius / m", formation_lemniscate_x_spin_},
-             {"Y 方向尺度 dynamic_lemniscate_y_radius / m", formation_lemniscate_y_spin_},
-             {"等效线速度 dynamic_lemniscate_move_speed / m/s", formation_lemniscate_speed_spin_}}));
-        layout->addWidget(formation_param_stack_);
+            {{"X 方向尺度 dynamic_lemniscate_x_radius / m", controls.lemniscate_x_spin},
+             {"Y 方向尺度 dynamic_lemniscate_y_radius / m", controls.lemniscate_y_spin},
+             {"等效线速度 dynamic_lemniscate_move_speed / m/s", controls.lemniscate_speed_spin}}));
+        param_group_layout->addWidget(controls.param_stack);
 
-        onFormationChanged();
+        controls.dynamic_time_row = new QWidget(param_group);
+        controls.dynamic_time_row->setContentsMargins(0, 0, 0, 0);
+        auto *time_layout = new QFormLayout(controls.dynamic_time_row);
+        time_layout->setContentsMargins(0, 0, 0, 0);
+        time_layout->setHorizontalSpacing(4);
+        time_layout->setVerticalSpacing(4);
+        time_layout->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+        time_layout->addRow("持续时间 dynamic_time / s", controls.dynamic_time_spin);
+        param_group_layout->addWidget(controls.dynamic_time_row);
+        layout->addWidget(param_group);
+
+        onFormationChanged(controls);
 
         return group;
     }
@@ -2489,8 +2887,10 @@ class SunrayMonitorPanel : public QMainWindow
     {
         auto *page = new QWidget();
         auto *layout = new QFormLayout(page);
-        layout->setContentsMargins(4, 4, 4, 4);
-        layout->setSpacing(8);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setHorizontalSpacing(4);
+        layout->setVerticalSpacing(4);
+        layout->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
 
         auto *title_label = new QLabel(title);
         title_label->setObjectName("sectionLabel");
@@ -2506,40 +2906,36 @@ class SunrayMonitorPanel : public QMainWindow
 
     QWidget *buildDetailsTab()
     {
-        auto *tabs = new QTabWidget();
+        auto *page = new QWidget();
+        auto *layout = new QVBoxLayout(page);
+        layout->setContentsMargins(6, 6, 6, 6);
+        layout->setSpacing(8);
 
-        detail_text_ = new QPlainTextEdit();
+        auto *selector_layout = new QHBoxLayout();
+        selector_layout->setSpacing(8);
+        selector_layout->addWidget(new QLabel("话题"));
+        echo_topic_combo_ = new QComboBox(page);
+        echo_topic_combo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        echo_topic_combo_->setMinimumContentsLength(18);
+        connect(echo_topic_combo_,
+                QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this,
+                [this](int) { refreshTopicEcho(); });
+        selector_layout->addWidget(echo_topic_combo_, 1);
+        layout->addLayout(selector_layout);
+
+        echo_status_label_ = new QLabel("-");
+        echo_status_label_->setObjectName("sectionLabel");
+        echo_status_label_->setWordWrap(true);
+        layout->addWidget(echo_status_label_);
+
+        detail_text_ = new QPlainTextEdit(page);
+        detail_text_->setObjectName("echoText");
         detail_text_->setReadOnly(true);
         detail_text_->setLineWrapMode(QPlainTextEdit::NoWrap);
-        tabs->addTab(detail_text_, "状态字段");
+        layout->addWidget(detail_text_, 1);
 
-        topic_table_ = new QTableWidget(0, 9);
-        topic_table_->setHorizontalHeaderLabels(QStringList()
-                                                << "状态"
-                                                << "名称"
-                                                << "模块"
-                                                << "类型"
-                                                << "ID"
-                                                << "频率"
-                                                << "延迟"
-                                                << "消息类型"
-                                                << "话题");
-        topic_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
-        topic_table_->horizontalHeader()->setSectionResizeMode(8, QHeaderView::Stretch);
-        topic_table_->verticalHeader()->setVisible(false);
-        topic_table_->setAlternatingRowColors(true);
-        topic_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        topic_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-        tabs->addTab(topic_table_, "话题健康");
-
-        return tabs;
+        return page;
     }
 
     QWidget *buildRvizWidget()
@@ -2567,20 +2963,68 @@ class SunrayMonitorPanel : public QMainWindow
         rviz_status_label_->setObjectName("rvizOverlayLabel");
         overlay_layout->addWidget(rviz_status_label_);
 
+        rviz_grid_button_ = new QToolButton(overlay);
+        rviz_grid_button_->setObjectName("rvizToolbarButton");
+        rviz_grid_button_->setText("Grid");
+        rviz_grid_button_->setCheckable(true);
+        rviz_grid_button_->setChecked(true);
+        overlay_layout->addWidget(rviz_grid_button_);
+
         rviz_display_menu_ = new QMenu(overlay);
         rviz_display_button_ = new QToolButton(overlay);
         rviz_display_button_->setObjectName("rvizDisplayButton");
-        rviz_display_button_->setText(QString("显示话题 (%1)").arg(rviz_displays_.size()));
+        rviz_display_button_->setText(QString("Marker Topics (%1)").arg(rviz_displays_.size()));
         rviz_display_button_->setPopupMode(QToolButton::InstantPopup);
         rviz_display_button_->setMenu(rviz_display_menu_);
         overlay_layout->addWidget(rviz_display_button_);
+
+        rviz_reset_view_button_ = new QToolButton(overlay);
+        rviz_reset_view_button_->setObjectName("rvizToolbarButton");
+        rviz_reset_view_button_->setText("Reset View");
+        connect(rviz_reset_view_button_, &QToolButton::clicked, this, [this]() {
+            resetRvizView();
+        });
+        overlay_layout->addWidget(rviz_reset_view_button_);
         overlay_layout->addStretch(1);
+
+        const std::vector<std::string> preferred_groups = {
+            "定位",
+            "UAV控制",
+            "UGV控制",
+            "UAV集群",
+            "UGV集群",
+            "其他",
+        };
+        std::map<std::string, QMenu *> group_menus;
+        auto ensureGroupMenu = [&](const std::string &group) {
+            std::map<std::string, QMenu *>::iterator it = group_menus.find(group);
+            if (it != group_menus.end())
+            {
+                return it->second;
+            }
+            QMenu *menu = rviz_display_menu_->addMenu(QString::fromStdString(group));
+            group_menus[group] = menu;
+            return menu;
+        };
+
+        for (const std::string &group : preferred_groups)
+        {
+            for (const RvizDisplayConfig &config : rviz_displays_)
+            {
+                if (config.group == group)
+                {
+                    ensureGroupMenu(group);
+                    break;
+                }
+            }
+        }
 
         for (RvizDisplayConfig &config : rviz_displays_)
         {
             RvizDisplayRuntime runtime;
             runtime.config = config;
-            runtime.action = rviz_display_menu_->addAction(
+            QMenu *group_menu = ensureGroupMenu(config.group);
+            runtime.action = group_menu->addAction(
                 QString("%1  %2").arg(QString::fromStdString(config.name),
                                       QString::fromStdString(config.topic)));
             runtime.action->setCheckable(true);
@@ -2601,13 +3045,22 @@ class SunrayMonitorPanel : public QMainWindow
         rviz_manager_->startUpdate();
         rviz_manager_->setFixedFrame(QString::fromStdString(fixed_frame_));
 
-        rviz::Display *grid = rviz_manager_->createDisplay("rviz/Grid", "Grid", true);
-        if (grid != nullptr)
+        rviz_grid_display_ = rviz_manager_->createDisplay("rviz/Grid", "Grid", true);
+        if (rviz_grid_display_ != nullptr)
         {
-            grid->subProp("Plane Cell Count")->setValue(30);
-            grid->subProp("Cell Size")->setValue(1.0);
-            grid->subProp("Color")->setValue(QColor(120, 128, 136));
-            grid->subProp("Alpha")->setValue(0.45);
+            rviz_grid_display_->subProp("Plane Cell Count")->setValue(30);
+            rviz_grid_display_->subProp("Cell Size")->setValue(1.0);
+            rviz_grid_display_->subProp("Color")->setValue(QColor(120, 128, 136));
+            rviz_grid_display_->subProp("Alpha")->setValue(0.45);
+            if (rviz_grid_button_ != nullptr)
+            {
+                connect(rviz_grid_button_, &QToolButton::toggled, this, [this](const bool checked) {
+                    if (rviz_grid_display_ != nullptr)
+                    {
+                        rviz_grid_display_->setEnabled(checked);
+                    }
+                });
+            }
         }
 
         for (RvizDisplayRuntime &runtime : rviz_display_runtimes_)
@@ -2632,6 +3085,19 @@ class SunrayMonitorPanel : public QMainWindow
                     });
                 }
             }
+        }
+    }
+
+    void resetRvizView()
+    {
+        if (rviz_manager_ == nullptr || rviz_manager_->getViewManager() == nullptr)
+        {
+            return;
+        }
+        rviz::ViewController *view = rviz_manager_->getViewManager()->getCurrent();
+        if (view != nullptr)
+        {
+            view->reset();
         }
     }
 
@@ -2701,8 +3167,8 @@ class SunrayMonitorPanel : public QMainWindow
                 background: #ffffff;
                 border: 1px solid #bac7bf;
                 border-radius: 8px;
-                margin-top: 10px;
-                padding: 8px 7px 7px 7px;
+                margin-top: 8px;
+                padding: 6px 6px 6px 6px;
                 font-weight: 700;
             }
             QGroupBox::title {
@@ -2744,15 +3210,15 @@ class SunrayMonitorPanel : public QMainWindow
                 color: #15211b;
                 border: 1px solid #b9c7be;
                 border-radius: 5px;
-                padding: 3px 6px;
-                min-height: 22px;
+                padding: 2px 5px;
+                min-height: 20px;
             }
             QPushButton {
                 background: #1f7a5b;
                 color: white;
                 border: 0;
                 border-radius: 5px;
-                padding: 6px 8px;
+                padding: 5px 7px;
                 font-weight: 700;
             }
             QPushButton:hover {
@@ -2783,6 +3249,22 @@ class SunrayMonitorPanel : public QMainWindow
             }
             QToolButton#rvizDisplayButton:hover {
                 background: rgba(40, 145, 108, 240);
+            }
+            QToolButton#rvizToolbarButton {
+                background: rgba(248, 250, 247, 230);
+                color: #20352c;
+                border: 1px solid #b9c7be;
+                border-radius: 5px;
+                padding: 6px 10px;
+                font-weight: 700;
+            }
+            QToolButton#rvizToolbarButton:hover {
+                background: rgba(223, 232, 226, 240);
+            }
+            QToolButton#rvizToolbarButton:checked {
+                background: rgba(31, 122, 91, 230);
+                color: white;
+                border-color: #1f7a5b;
             }
             QMenu {
                 background: #ffffff;
@@ -2820,6 +3302,11 @@ class SunrayMonitorPanel : public QMainWindow
                 padding: 8px;
                 font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
             }
+            QPlainTextEdit#echoText {
+                padding: 3px 4px;
+                font-size: 10px;
+                line-height: 11px;
+            }
             QTextEdit#stateMonitorText {
                 background: #fbfcfa;
                 color: #17211c;
@@ -2844,8 +3331,7 @@ class SunrayMonitorPanel : public QMainWindow
         refreshUgvSwarmStatusTab();
         refreshUavControlTab();
         refreshUgvControlTab();
-        refreshTopicTable();
-        refreshDetails();
+        refreshTopicEcho();
     }
 
     void refreshUavControlTab()
@@ -3007,8 +3493,8 @@ class SunrayMonitorPanel : public QMainWindow
         }
 
         const ros::Time now = ros::Time::now();
-        int online_count = 0;
-        int odom_ok_count = 0;
+        int online_uav_count = 0;
+        int online_ugv_count = 0;
         int uav_count = 0;
         int ugv_count = 0;
 
@@ -3027,76 +3513,72 @@ class SunrayMonitorPanel : public QMainWindow
 
             const bool online = agentOnline(agent, now);
             const bool odom_ok = agentOdomOk(agent);
-            if (online)
+            if (online && agent.config.platform == Platform::UAV)
             {
-                ++online_count;
+                ++online_uav_count;
             }
-            if (odom_ok)
+            else if (online && agent.config.platform == Platform::UGV)
             {
-                ++odom_ok_count;
+                ++online_ugv_count;
             }
 
-            setItemText(agent_table_, row, 0, online ? "在线" : "离线");
-            setItemText(agent_table_, row, 1, platformText(agent.config.platform));
-            setItemText(agent_table_, row, 2, QString::number(agent.config.id));
-            setItemText(agent_table_, row, 3, controlStateText(agent));
-            setItemText(agent_table_, row, 4, odom_ok ? "OK" : "NO");
-            setItemText(agent_table_, row, 5, currentPoseText(agent));
-            setItemText(agent_table_, row, 6, currentVelocityText(agent));
-            setItemText(agent_table_, row, 7, targetText(agent));
-            setItemText(agent_table_, row, 8, lastCommandText(agent));
-            setItemText(agent_table_, row, 9, secondsText(agentAge(agent, now)));
-
-            if (!online)
+            const QString status_text = online ? "在线" : "离线";
+            const QColor status_background = online ? QColor(225, 247, 236) : QColor(255, 232, 228);
+            const QColor status_foreground = online ? QColor(30, 125, 78) : QColor(189, 77, 69);
+            setBadgeCell(agent_table_, row, 0, status_text, status_background, status_foreground);
+            setItemText(agent_table_,
+                        row,
+                        1,
+                        QString("%1%2").arg(platformText(agent.config.platform)).arg(agent.config.id));
+            setItemText(agent_table_, row, 2, controlStateText(agent));
+            setItemText(agent_table_, row, 3, odom_ok ? "OK" : "NO");
+            setItemText(agent_table_, row, 4, currentPoseText(agent));
+            for (int column = 0; column < agent_table_->columnCount(); ++column)
             {
-                setRowColor(agent_table_, row, QColor(72, 37, 34), QColor(255, 210, 203));
+                QTableWidgetItem *item = agent_table_->item(row, column);
+                if (item != nullptr)
+                {
+                    item->setData(Qt::UserRole, static_cast<int>(agent.config.platform));
+                    item->setData(Qt::UserRole + 1, agent.config.id);
+                }
             }
-            else if (!odom_ok)
-            {
-                setRowColor(agent_table_, row, QColor(75, 58, 31), QColor(255, 226, 178));
-            }
-            else
-            {
-                setRowColor(agent_table_, row, QColor(32, 65, 49), QColor(217, 255, 235));
-            }
+            setRowDefaultColor(agent_table_, row);
+            setBadgeCell(agent_table_, row, 0, status_text, status_background, status_foreground);
+            setBadgeCell(agent_table_,
+                         row,
+                         3,
+                         odom_ok ? "OK" : "NO",
+                         odom_ok ? QColor(225, 247, 236) : QColor(255, 244, 218),
+                         odom_ok ? QColor(30, 125, 78) : QColor(185, 128, 46));
         }
 
-        const QString active_text = has_active_command_
-                                        ? QString("持续指令: %1%2 %3")
-                                              .arg(platformText(active_platform_))
-                                              .arg(active_agent_id_)
-                                              .arg(active_command_label_)
-                                        : "持续指令: 无";
-        const QString summary = QString("UAV %1  UGV %2  在线 %3/%4  定位 %5/%4  %6")
+        if (selected_detail_agent_id_ <= 0 && !agents_.empty())
+        {
+            selectDetailAgent(agents_.front().config.platform, agents_.front().config.id);
+        }
+        syncOverviewSelection();
+
+        const QString summary = QString("无人机 %1/%2  无人车 %3/%4")
+                                    .arg(online_uav_count)
                                     .arg(uav_count)
-                                    .arg(ugv_count)
-                                    .arg(online_count)
-                                    .arg(agents_.size())
-                                    .arg(odom_ok_count)
-                                    .arg(active_text);
+                                    .arg(online_ugv_count)
+                                    .arg(ugv_count);
         if (overview_label_ != nullptr)
         {
-            overview_label_->setText(QString("核心状态  |  %1  |  超时阈值 %2 s  |  FixedFrame %3")
-                                         .arg(summary)
-                                         .arg(status_timeout_, 0, 'f', 2)
-                                         .arg(QString::fromStdString(fixed_frame_)));
+            overview_label_->setText(summary);
         }
     }
 
     void refreshLocalizationFusionTab()
     {
-        if (localization_summary_label_ == nullptr || localization_detail_text_ == nullptr ||
-            localization_agent_combo_ == nullptr)
+        if (localization_detail_text_ == nullptr)
         {
             return;
         }
 
-        const Platform platform = selectedLocalizationPlatform();
-        const int target_id = selectedAgentId(localization_agent_combo_, 1);
-        AgentRuntime *agent = findAgent(platform, target_id);
+        AgentRuntime *agent = findAgent(selected_detail_platform_, selected_detail_agent_id_);
         if (agent == nullptr)
         {
-            localization_summary_label_->setText("未找到该智能体配置");
             localization_detail_text_->setHtml(htmlDocument(QStringList()
                                                             << htmlTitle("============== Localization Fusion 状态面板 ==============")
                                                             << htmlLine("基本状态", "等待有效的 agent 配置...", kHtmlBadColor)));
@@ -3106,7 +3588,6 @@ class SunrayMonitorPanel : public QMainWindow
         const QString agent_key = QString::fromStdString(agent->config.ns);
         if (!agent->has_odom_state)
         {
-            localization_summary_label_->setText(QString("%1  等待 OdomState...").arg(agent_key));
             QStringList lines;
             lines << htmlTitle(QString("============== Localization Fusion 状态面板 | %1 ==============").arg(agent_key));
             lines << "";
@@ -3122,14 +3603,6 @@ class SunrayMonitorPanel : public QMainWindow
         }
 
         const sunray_msgs::OdomState &state = agent->odom_state;
-        localization_summary_label_->setText(
-            QString("%1  外部定位源=%2  odom=%3  频率=%4 Hz  重定位=%5")
-                .arg(agent_key)
-                .arg(odomSourceName(state.external_source))
-                .arg(state.odometry_valid ? "正常" : "异常")
-                .arg(state.odometry_update_hz, 0, 'f', 1)
-                .arg(relocalizationHintText(state)));
-
         QStringList lines;
         lines << htmlTitle(QString("============== Localization Fusion 状态面板 | %1 ==============").arg(agent_key));
         lines << "";
@@ -3161,11 +3634,9 @@ class SunrayMonitorPanel : public QMainWindow
                                                state.odometry_valid ? kHtmlGoodColor : kHtmlBadColor,
                                                true)));
         lines << htmlLineRaw("重定位数据状态", htmlRelocalizationHint(state));
-        lines << htmlLine("坐标系",
-                          QString("global_frame=%1  local_frame=%2  base_frame=%3")
-                              .arg(QString::fromStdString(state.global_frame_name))
-                              .arg(QString::fromStdString(state.local_frame_name))
-                              .arg(QString::fromStdString(state.base_frame_name)));
+        lines << htmlLine("global_frame", QString::fromStdString(state.global_frame_name));
+        lines << htmlLine("local_frame", QString::fromStdString(state.local_frame_name));
+        lines << htmlLine("base_frame", QString::fromStdString(state.base_frame_name));
 
         lines << "";
         lines << htmlSection("局部odom");
@@ -3187,17 +3658,17 @@ class SunrayMonitorPanel : public QMainWindow
 
     void refreshUavControlStatusTab()
     {
-        if (uav_control_status_view_ == nullptr || uav_control_status_combo_ == nullptr)
+        if (uav_control_status_view_ == nullptr)
         {
             return;
         }
 
-        const int target_id = selectedAgentId(uav_control_status_combo_, 1);
+        const int target_id = selected_detail_agent_id_;
         AgentRuntime *agent = findAgent(Platform::UAV, target_id);
         QStringList lines;
-        const QString target_text = uav_control_status_combo_->currentText().isEmpty()
-                                        ? QString("/uav%1").arg(target_id)
-                                        : uav_control_status_combo_->currentText();
+        const QString target_text = agent != nullptr
+                                        ? QString::fromStdString(agent->config.ns)
+                                        : QString("/uav%1").arg(target_id);
         lines << htmlTitle(QString("=================== UAV 控制状态面板 | %1 ===================").arg(target_text));
         if (agent == nullptr)
         {
@@ -3272,17 +3743,17 @@ class SunrayMonitorPanel : public QMainWindow
 
     void refreshUgvControlStatusTab()
     {
-        if (ugv_control_status_view_ == nullptr || ugv_control_status_combo_ == nullptr)
+        if (ugv_control_status_view_ == nullptr)
         {
             return;
         }
 
-        const int target_id = selectedAgentId(ugv_control_status_combo_, 1);
+        const int target_id = selected_detail_agent_id_;
         AgentRuntime *agent = findAgent(Platform::UGV, target_id);
         QStringList lines;
-        const QString target_text = ugv_control_status_combo_->currentText().isEmpty()
-                                        ? QString("/ugv%1").arg(target_id)
-                                        : ugv_control_status_combo_->currentText();
+        const QString target_text = agent != nullptr
+                                        ? QString::fromStdString(agent->config.ns)
+                                        : QString("/ugv%1").arg(target_id);
         lines << htmlTitle(QString("=================== UGV 控制状态面板 | %1 ===================").arg(target_text));
         if (agent == nullptr)
         {
@@ -3356,17 +3827,17 @@ class SunrayMonitorPanel : public QMainWindow
 
     void refreshUavSwarmStatusTab()
     {
-        if (uav_swarm_status_view_ == nullptr || uav_swarm_status_combo_ == nullptr)
+        if (uav_swarm_status_view_ == nullptr)
         {
             return;
         }
 
-        const int target_id = selectedAgentId(uav_swarm_status_combo_, 1);
+        const int target_id = selected_detail_agent_id_;
         AgentRuntime *agent = findAgent(Platform::UAV, target_id);
         QStringList lines;
-        const QString target_text = uav_swarm_status_combo_->currentText().isEmpty()
-                                        ? QString("/uav%1").arg(target_id)
-                                        : uav_swarm_status_combo_->currentText();
+        const QString target_text = agent != nullptr
+                                        ? QString::fromStdString(agent->config.ns)
+                                        : QString("/uav%1").arg(target_id);
         lines << htmlTitle(QString("================ UAV 集群控制状态面板 | %1 ================").arg(target_text));
         if (agent == nullptr)
         {
@@ -3441,17 +3912,17 @@ class SunrayMonitorPanel : public QMainWindow
 
     void refreshUgvSwarmStatusTab()
     {
-        if (ugv_swarm_status_view_ == nullptr || ugv_swarm_status_combo_ == nullptr)
+        if (ugv_swarm_status_view_ == nullptr)
         {
             return;
         }
 
-        const int target_id = selectedAgentId(ugv_swarm_status_combo_, 1);
+        const int target_id = selected_detail_agent_id_;
         AgentRuntime *agent = findAgent(Platform::UGV, target_id);
         QStringList lines;
-        const QString target_text = ugv_swarm_status_combo_->currentText().isEmpty()
-                                        ? QString("/ugv%1").arg(target_id)
-                                        : ugv_swarm_status_combo_->currentText();
+        const QString target_text = agent != nullptr
+                                        ? QString::fromStdString(agent->config.ns)
+                                        : QString("/ugv%1").arg(target_id);
         lines << htmlTitle(QString("================ UGV 集群控制状态面板 | %1 ================").arg(target_text));
         if (agent == nullptr)
         {
@@ -3524,42 +3995,6 @@ class SunrayMonitorPanel : public QMainWindow
         ugv_swarm_status_view_->setHtml(htmlDocument(lines));
     }
 
-    void refreshTopicTable()
-    {
-        if (topic_table_ == nullptr)
-        {
-            return;
-        }
-
-        const ros::Time now = ros::Time::now();
-        topic_table_->setRowCount(static_cast<int>(topics_.size()));
-        for (int row = 0; row < static_cast<int>(topics_.size()); ++row)
-        {
-            const TopicRuntime &runtime = topics_[static_cast<size_t>(row)];
-            const bool has_msg = runtime.message_count > 0 && !runtime.last_receive_time.isZero();
-            const double age = has_msg ? (now - runtime.last_receive_time).toSec() : -1.0;
-            const bool online = has_msg && age <= status_timeout_;
-            const double duration = has_msg ? std::max(0.001, (now - runtime.first_receive_time).toSec()) : 0.0;
-            const double hz = runtime.message_count > 1 ? static_cast<double>(runtime.message_count - 1) / duration : 0.0;
-            const QString agent_id_text = runtime.config.agent_id > 0 ? QString::number(runtime.config.agent_id) : "-";
-
-            setItemText(topic_table_, row, 0, online ? "在线" : "离线");
-            setItemText(topic_table_, row, 1, QString::fromStdString(runtime.config.name));
-            setItemText(topic_table_, row, 2, QString::fromStdString(runtime.config.module));
-            setItemText(topic_table_, row, 3, QString::fromStdString(runtime.config.agent_type));
-            setItemText(topic_table_, row, 4, agent_id_text);
-            setItemText(topic_table_, row, 5, hzText(hz));
-            setItemText(topic_table_, row, 6, secondsText(age));
-            setItemText(topic_table_, row, 7, runtime.datatype.empty() ? "--" : QString::fromStdString(runtime.datatype));
-            setItemText(topic_table_, row, 8, QString::fromStdString(runtime.config.topic));
-
-            setRowColor(topic_table_,
-                        row,
-                        online ? QColor(32, 65, 49) : QColor(72, 37, 34),
-                        online ? QColor(217, 255, 235) : QColor(255, 210, 203));
-        }
-    }
-
     void refreshDetails()
     {
         if (detail_text_ == nullptr)
@@ -3602,6 +4037,330 @@ class SunrayMonitorPanel : public QMainWindow
         }
 
         detail_text_->setPlainText(text);
+    }
+
+    template <typename MsgT>
+    QString echoMessageText(const MsgT &msg) const
+    {
+        std::ostringstream stream;
+        stream << msg;
+        return QString::fromStdString(stream.str());
+    }
+
+    QString echoTopicLabel(const QString &label, const std::string &topic) const
+    {
+        return QString("%1  %2").arg(label, QString::fromStdString(topic));
+    }
+
+    void addEchoChoice(const QString &label, const std::string &topic)
+    {
+        if (echo_topic_combo_ == nullptr || topic.empty())
+        {
+            return;
+        }
+        echo_topic_combo_->addItem(echoTopicLabel(label, topic), QString::fromStdString(topic));
+    }
+
+    void rebuildEchoTopicChoices()
+    {
+        if (echo_topic_combo_ == nullptr)
+        {
+            return;
+        }
+
+        const QString previous_topic = echo_topic_combo_->currentData().toString();
+        echo_topic_combo_->blockSignals(true);
+        echo_topic_combo_->clear();
+
+        AgentRuntime *agent = findAgent(selected_detail_platform_, selected_detail_agent_id_);
+        if (agent != nullptr)
+        {
+            addEchoChoice("定位状态", agent->config.odom_state_topic);
+            addEchoChoice("控制状态", agent->config.control_state_topic);
+            if (selected_detail_platform_ == Platform::UAV)
+            {
+                addEchoChoice("规划状态", agent->config.planning_state_topic);
+                addEchoChoice("集群状态", uav_swarm_state_topic_);
+            }
+            else
+            {
+                addEchoChoice("集群状态", ugv_swarm_state_topic_);
+            }
+        }
+
+        for (const TopicRuntime &runtime : topics_)
+        {
+            const QString topic = QString::fromStdString(runtime.config.topic);
+            if (!topic.isEmpty() && echo_topic_combo_->findData(topic) < 0)
+            {
+                addEchoChoice(QString::fromStdString(runtime.config.name), runtime.config.topic);
+            }
+        }
+
+        if (echo_topic_combo_->count() == 0)
+        {
+            echo_topic_combo_->addItem("无可用话题", "");
+            echo_topic_combo_->setEnabled(false);
+        }
+        else
+        {
+            echo_topic_combo_->setEnabled(true);
+            const int previous_index = echo_topic_combo_->findData(previous_topic);
+            echo_topic_combo_->setCurrentIndex(previous_index >= 0 ? previous_index : 0);
+        }
+        echo_topic_combo_->blockSignals(false);
+    }
+
+    const TopicRuntime *findTopicRuntime(const std::string &topic) const
+    {
+        for (const TopicRuntime &runtime : topics_)
+        {
+            if (runtime.config.topic == topic)
+            {
+                return &runtime;
+            }
+        }
+        return nullptr;
+    }
+
+    QString echoStatusText(const std::string &topic,
+                           const QString &datatype,
+                           const bool has_msg,
+                           const ros::Time &last_receive_time,
+                           const ros::Time &first_receive_time,
+                           const uint64_t message_count) const
+    {
+        const ros::Time now = ros::Time::now();
+        const double age = has_msg && !last_receive_time.isZero() ? (now - last_receive_time).toSec() : -1.0;
+        const double duration = has_msg && !first_receive_time.isZero()
+                                    ? std::max(0.001, (now - first_receive_time).toSec())
+                                    : 0.0;
+        const double hz = message_count > 1 ? static_cast<double>(message_count - 1) / duration : 0.0;
+        return QString("话题: %1\n类型: %2  频率: %3  最近更新: %4  已收到: %5")
+            .arg(QString::fromStdString(topic),
+                 datatype.isEmpty() ? QString("--") : datatype,
+                 hzText(hz),
+                 secondsText(age),
+                 has_msg ? QString("是") : QString("否"));
+    }
+
+    void refreshTopicEcho()
+    {
+        if (detail_text_ == nullptr || echo_topic_combo_ == nullptr || echo_status_label_ == nullptr)
+        {
+            return;
+        }
+
+        const QString topic_q = echo_topic_combo_->currentData().toString();
+        const std::string topic = topic_q.toStdString();
+        if (topic.empty())
+        {
+            echo_status_label_->setText("没有可用话题");
+            detail_text_->setPlainText("");
+            return;
+        }
+
+        AgentRuntime *agent = findAgent(selected_detail_platform_, selected_detail_agent_id_);
+        if (agent != nullptr && topic == agent->config.odom_state_topic)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       "sunray_msgs/OdomState",
+                                                       agent->has_odom_state,
+                                                       agent->last_odom_time,
+                                                       agent->last_odom_time,
+                                                       agent->has_odom_state ? 1 : 0));
+            detail_text_->setPlainText(agent->has_odom_state ? echoMessageText(agent->odom_state)
+                                                             : "等待 OdomState...");
+            return;
+        }
+        if (agent != nullptr && agent->config.platform == Platform::UAV &&
+            topic == agent->config.control_state_topic)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       "sunray_msgs/UAVControlState",
+                                                       agent->has_uav_control,
+                                                       agent->last_control_time,
+                                                       agent->last_control_time,
+                                                       agent->has_uav_control ? 1 : 0));
+            detail_text_->setPlainText(agent->has_uav_control ? echoMessageText(agent->uav_control_state)
+                                                              : "等待 UAVControlState...");
+            return;
+        }
+        if (agent != nullptr && agent->config.platform == Platform::UGV &&
+            topic == agent->config.control_state_topic)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       "sunray_msgs/UGVControlState",
+                                                       agent->has_ugv_control,
+                                                       agent->last_control_time,
+                                                       agent->last_control_time,
+                                                       agent->has_ugv_control ? 1 : 0));
+            detail_text_->setPlainText(agent->has_ugv_control ? echoMessageText(agent->ugv_control_state)
+                                                              : "等待 UGVControlState...");
+            return;
+        }
+        if (agent != nullptr && agent->config.platform == Platform::UAV &&
+            topic == agent->config.planning_state_topic)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       "sunray_msgs/UAVPlanningState",
+                                                       agent->has_planning_state,
+                                                       agent->last_planning_time,
+                                                       agent->last_planning_time,
+                                                       agent->has_planning_state ? 1 : 0));
+            detail_text_->setPlainText(agent->has_planning_state ? echoMessageText(agent->planning_state)
+                                                                 : "等待 UAVPlanningState...");
+            return;
+        }
+        if (agent != nullptr && agent->config.platform == Platform::UAV &&
+            topic == uav_swarm_state_topic_)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       "sunray_msgs/UAVSwarmState",
+                                                       agent->has_uav_swarm_state,
+                                                       agent->last_swarm_time,
+                                                       agent->last_swarm_time,
+                                                       agent->has_uav_swarm_state ? 1 : 0));
+            detail_text_->setPlainText(agent->has_uav_swarm_state ? echoMessageText(agent->uav_swarm_state)
+                                                                  : "等待 UAVSwarmState...");
+            return;
+        }
+        if (agent != nullptr && agent->config.platform == Platform::UGV &&
+            topic == ugv_swarm_state_topic_)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       "sunray_msgs/UGVSwarmState",
+                                                       agent->has_ugv_swarm_state,
+                                                       agent->last_swarm_time,
+                                                       agent->last_swarm_time,
+                                                       agent->has_ugv_swarm_state ? 1 : 0));
+            detail_text_->setPlainText(agent->has_ugv_swarm_state ? echoMessageText(agent->ugv_swarm_state)
+                                                                  : "等待 UGVSwarmState...");
+            return;
+        }
+
+        const TopicRuntime *runtime = findTopicRuntime(topic);
+        if (runtime != nullptr)
+        {
+            echo_status_label_->setText(echoStatusText(topic,
+                                                       QString::fromStdString(runtime->datatype),
+                                                       runtime->message_count > 0,
+                                                       runtime->last_receive_time,
+                                                       runtime->first_receive_time,
+                                                       runtime->message_count));
+            detail_text_->setPlainText("该话题当前只做健康监控，未保存原始字段。\n"
+                                       "强类型 Echo 支持当前目标的定位、控制、规划和集群状态话题。");
+            return;
+        }
+
+        echo_status_label_->setText(QString("话题: %1\n未找到该话题的订阅记录").arg(topic_q));
+        detail_text_->setPlainText("");
+    }
+
+    QString detailTargetText() const
+    {
+        if (selected_detail_agent_id_ <= 0)
+        {
+            return "--";
+        }
+        return QString("%1%2")
+            .arg(platformText(selected_detail_platform_))
+            .arg(selected_detail_agent_id_);
+    }
+
+    void selectDetailAgent(const Platform platform, const int id)
+    {
+        if (id <= 0)
+        {
+            return;
+        }
+        if (selected_detail_platform_ == platform && selected_detail_agent_id_ == id)
+        {
+            return;
+        }
+        selected_detail_platform_ = platform;
+        selected_detail_agent_id_ = id;
+        updateDetailTabsForSelectedAgent();
+    }
+
+    void selectAgentFromOverviewRow(const int row)
+    {
+        if (agent_table_ == nullptr || row < 0 || row >= agent_table_->rowCount())
+        {
+            return;
+        }
+        QTableWidgetItem *item = agent_table_->item(row, 0);
+        if (item == nullptr ||
+            !item->data(Qt::UserRole).isValid() ||
+            !item->data(Qt::UserRole + 1).isValid())
+        {
+            return;
+        }
+        selectDetailAgent(static_cast<Platform>(item->data(Qt::UserRole).toInt()),
+                          item->data(Qt::UserRole + 1).toInt());
+    }
+
+    void syncOverviewSelection()
+    {
+        if (agent_table_ == nullptr || selected_detail_agent_id_ <= 0)
+        {
+            return;
+        }
+        for (int row = 0; row < agent_table_->rowCount(); ++row)
+        {
+            QTableWidgetItem *item = agent_table_->item(row, 0);
+            if (item == nullptr)
+            {
+                continue;
+            }
+            if (item->data(Qt::UserRole).toInt() == static_cast<int>(selected_detail_platform_) &&
+                item->data(Qt::UserRole + 1).toInt() == selected_detail_agent_id_)
+            {
+                if (agent_table_->currentRow() != row)
+                {
+                    agent_table_->setCurrentCell(row, 0);
+                }
+                return;
+            }
+        }
+    }
+
+    void updateDetailTabsForSelectedAgent()
+    {
+        if (detail_target_label_ != nullptr)
+        {
+            detail_target_label_->setText(QString("当前目标: %1").arg(detailTargetText()));
+        }
+        if (detail_tabs_ == nullptr)
+        {
+            return;
+        }
+
+        QWidget *current_page = detail_tabs_->currentWidget();
+        while (detail_tabs_->count() > 0)
+        {
+            detail_tabs_->removeTab(0);
+        }
+
+        detail_tabs_->addTab(localization_detail_page_, "定位融合");
+        if (selected_detail_platform_ == Platform::UAV)
+        {
+            detail_tabs_->addTab(uav_control_status_page_, "UAV控制");
+            detail_tabs_->addTab(uav_swarm_status_page_, "UAV集群");
+        }
+        else
+        {
+            detail_tabs_->addTab(ugv_control_status_page_, "UGV控制");
+            detail_tabs_->addTab(ugv_swarm_status_page_, "UGV集群");
+        }
+        detail_tabs_->addTab(system_detail_page_, "话题Echo");
+
+        const int current_index = detail_tabs_->indexOf(current_page);
+        if (current_index >= 0)
+        {
+            detail_tabs_->setCurrentIndex(current_index);
+        }
+        rebuildEchoTopicChoices();
     }
 
     bool agentOnline(const AgentRuntime &agent, const ros::Time &now) const
@@ -4268,12 +5027,7 @@ class SunrayMonitorPanel : public QMainWindow
 
     Platform selectedLocalizationPlatform() const
     {
-        if (localization_agent_combo_ != nullptr &&
-            localization_agent_combo_->currentData(Qt::UserRole + 1).isValid())
-        {
-            return static_cast<Platform>(localization_agent_combo_->currentData(Qt::UserRole + 1).toInt());
-        }
-        return Platform::UAV;
+        return selected_detail_platform_;
     }
 
     void publishUavSwarmCommand(const uint8_t command, const QString &label, const int target_id)
@@ -4304,47 +5058,47 @@ class SunrayMonitorPanel : public QMainWindow
                       .arg(QString::fromStdString(ugv_swarm_cmd_topic_)));
     }
 
-    sunray_msgs::Formation makeFormationCommand() const
+    sunray_msgs::Formation makeFormationCommand(const FormationControls &controls) const
     {
         sunray_msgs::Formation formation;
         formation.header.stamp = ros::Time::now();
-        formation.formation_type = static_cast<uint8_t>(formation_combo_->currentData().toInt());
-        formation.leader_pos.x = formation_leader_x_spin_->value();
-        formation.leader_pos.y = formation_leader_y_spin_->value();
-        formation.leader_pos.z = formation_leader_z_spin_->value();
-        formation.leader_yaw = static_cast<float>(formation_leader_yaw_spin_->value() * kDegToRad);
-        formation.static_line_spacing = static_cast<float>(formation_line_spacing_spin_->value());
-        formation.static_line_angle = static_cast<float>(formation_line_angle_spin_->value());
-        formation.static_polygon_spacing = static_cast<float>(formation_polygon_spacing_spin_->value());
-        formation.dynamic_time = static_cast<float>(formation_dynamic_time_spin_->value());
-        formation.dynamic_ring_radius = static_cast<float>(formation_ring_radius_spin_->value());
-        formation.dynamic_ring_move_speed = static_cast<float>(formation_ring_speed_spin_->value());
-        formation.dynamic_polygon_spacing = static_cast<float>(formation_dynamic_polygon_spacing_spin_->value());
-        formation.dynamic_polygon_move_speed = static_cast<float>(formation_dynamic_polygon_speed_spin_->value());
-        formation.dynamic_lemniscate_x_radius = static_cast<float>(formation_lemniscate_x_spin_->value());
-        formation.dynamic_lemniscate_y_radius = static_cast<float>(formation_lemniscate_y_spin_->value());
-        formation.dynamic_lemniscate_move_speed = static_cast<float>(formation_lemniscate_speed_spin_->value());
+        formation.formation_type = static_cast<uint8_t>(controls.combo->currentData().toInt());
+        formation.leader_pos.x = controls.leader_x_spin->value();
+        formation.leader_pos.y = controls.leader_y_spin->value();
+        formation.leader_pos.z = controls.leader_z_spin->value();
+        formation.leader_yaw = static_cast<float>(controls.leader_yaw_spin->value() * kDegToRad);
+        formation.static_line_spacing = static_cast<float>(controls.line_spacing_spin->value());
+        formation.static_line_angle = static_cast<float>(controls.line_angle_spin->value());
+        formation.static_polygon_spacing = static_cast<float>(controls.polygon_spacing_spin->value());
+        formation.dynamic_time = static_cast<float>(controls.dynamic_time_spin->value());
+        formation.dynamic_ring_radius = static_cast<float>(controls.ring_radius_spin->value());
+        formation.dynamic_ring_move_speed = static_cast<float>(controls.ring_speed_spin->value());
+        formation.dynamic_polygon_spacing = static_cast<float>(controls.dynamic_polygon_spacing_spin->value());
+        formation.dynamic_polygon_move_speed = static_cast<float>(controls.dynamic_polygon_speed_spin->value());
+        formation.dynamic_lemniscate_x_radius = static_cast<float>(controls.lemniscate_x_spin->value());
+        formation.dynamic_lemniscate_y_radius = static_cast<float>(controls.lemniscate_y_spin->value());
+        formation.dynamic_lemniscate_move_speed = static_cast<float>(controls.lemniscate_speed_spin->value());
         return formation;
     }
 
-    void publishUavFormation()
+    void publishFormation(const Platform platform, const FormationControls &controls)
     {
-        const sunray_msgs::Formation formation = makeFormationCommand();
-        sunray_msgs::UAVSwarmCMD msg;
-        msg.header.stamp = ros::Time::now();
-        msg.cmd_source = sunray_msgs::UAVSwarmCMD::GROUND_STATION;
-        msg.agent_id = static_cast<uint8_t>(uavSwarmTargetId());
-        msg.swarm_cmd = sunray_msgs::UAVSwarmCMD::SWARM_FORMATION;
-        msg.formation_cmd = formation;
-        uav_swarm_cmd_pub_.publish(msg);
-        appendLog(QString("发布 UAV 阵型 %1 target=%2")
-                      .arg(formationName(formation.formation_type))
-                      .arg(uavSwarmTargetId()));
-    }
+        const sunray_msgs::Formation formation = makeFormationCommand(controls);
+        if (platform == Platform::UAV)
+        {
+            sunray_msgs::UAVSwarmCMD msg;
+            msg.header.stamp = ros::Time::now();
+            msg.cmd_source = sunray_msgs::UAVSwarmCMD::GROUND_STATION;
+            msg.agent_id = static_cast<uint8_t>(uavSwarmTargetId());
+            msg.swarm_cmd = sunray_msgs::UAVSwarmCMD::SWARM_FORMATION;
+            msg.formation_cmd = formation;
+            uav_swarm_cmd_pub_.publish(msg);
+            appendLog(QString("发布 UAV 阵型 %1 target=%2")
+                          .arg(formationName(formation.formation_type))
+                          .arg(uavSwarmTargetId()));
+            return;
+        }
 
-    void publishUgvFormation()
-    {
-        const sunray_msgs::Formation formation = makeFormationCommand();
         sunray_msgs::UGVSwarmCMD msg;
         msg.header.stamp = ros::Time::now();
         msg.cmd_source = sunray_msgs::UGVSwarmCMD::GROUND_STATION;
@@ -4357,20 +5111,30 @@ class SunrayMonitorPanel : public QMainWindow
                       .arg(ugvSwarmTargetId()));
     }
 
-    void onFormationChanged()
+    void onFormationChanged(FormationControls &controls)
     {
-        if (formation_param_stack_ != nullptr)
+        if (controls.param_stack != nullptr && controls.combo != nullptr)
         {
-            formation_param_stack_->setCurrentIndex(formation_combo_->currentIndex());
+            controls.param_stack->setCurrentIndex(controls.combo->currentIndex());
+            QWidget *current_page = controls.param_stack->currentWidget();
+            if (current_page != nullptr)
+            {
+                controls.param_stack->setFixedHeight(current_page->sizeHint().height());
+            }
         }
 
-        const uint8_t formation_type = static_cast<uint8_t>(formation_combo_->currentData().toInt());
+        if (controls.combo == nullptr)
+        {
+            return;
+        }
+
+        const uint8_t formation_type = static_cast<uint8_t>(controls.combo->currentData().toInt());
         const bool is_dynamic = formation_type == sunray_msgs::Formation::DYNAMIC_FORMATION_RING ||
                                 formation_type == sunray_msgs::Formation::DYNAMIC_FORMATION_POLYGON ||
                                 formation_type == sunray_msgs::Formation::DYNAMIC_FORMATION_LEMNISCATE;
-        if (formation_dynamic_time_group_ != nullptr)
+        if (controls.dynamic_time_row != nullptr)
         {
-            formation_dynamic_time_group_->setVisible(is_dynamic);
+            controls.dynamic_time_row->setVisible(is_dynamic);
         }
     }
 
@@ -4529,8 +5293,7 @@ class SunrayMonitorPanel : public QMainWindow
     QTimer *refresh_timer_{nullptr};
     QTimer *command_publish_timer_{nullptr};
     QLabel *overview_label_{nullptr};
-    QComboBox *localization_agent_combo_{nullptr};
-    QLabel *localization_summary_label_{nullptr};
+    QLabel *detail_target_label_{nullptr};
     QTextEdit *localization_detail_text_{nullptr};
     QComboBox *uav_control_status_combo_{nullptr};
     QTextEdit *uav_control_status_view_{nullptr};
@@ -4540,17 +5303,29 @@ class SunrayMonitorPanel : public QMainWindow
     QTextEdit *uav_swarm_status_view_{nullptr};
     QComboBox *ugv_swarm_status_combo_{nullptr};
     QTextEdit *ugv_swarm_status_view_{nullptr};
+    QComboBox *echo_topic_combo_{nullptr};
+    QLabel *echo_status_label_{nullptr};
     QLabel *rviz_status_label_{nullptr};
     QLabel *logo_label_{nullptr};
     QToolButton *rviz_display_button_{nullptr};
+    QToolButton *rviz_grid_button_{nullptr};
+    QToolButton *rviz_reset_view_button_{nullptr};
     QMenu *rviz_display_menu_{nullptr};
-    QTabWidget *left_tabs_{nullptr};
+    QTabWidget *detail_tabs_{nullptr};
+    QWidget *localization_detail_page_{nullptr};
+    QWidget *uav_control_status_page_{nullptr};
+    QWidget *ugv_control_status_page_{nullptr};
+    QWidget *uav_swarm_status_page_{nullptr};
+    QWidget *ugv_swarm_status_page_{nullptr};
+    QWidget *system_detail_page_{nullptr};
     QTableWidget *agent_table_{nullptr};
-    QTableWidget *topic_table_{nullptr};
     QPlainTextEdit *detail_text_{nullptr};
     QPlainTextEdit *log_view_{nullptr};
     rviz::RenderPanel *rviz_panel_{nullptr};
     rviz::VisualizationManager *rviz_manager_{nullptr};
+    rviz::Display *rviz_grid_display_{nullptr};
+    Platform selected_detail_platform_{Platform::UAV};
+    int selected_detail_agent_id_{0};
 
     QComboBox *uav_target_combo_{nullptr};
     QDoubleSpinBox *uav_point_x_spin_{nullptr};
@@ -4600,24 +5375,8 @@ class SunrayMonitorPanel : public QMainWindow
 
     QComboBox *uav_swarm_target_combo_{nullptr};
     QComboBox *ugv_swarm_target_combo_{nullptr};
-    QComboBox *formation_combo_{nullptr};
-    QWidget *formation_dynamic_time_group_{nullptr};
-    QStackedWidget *formation_param_stack_{nullptr};
-    QDoubleSpinBox *formation_leader_x_spin_{nullptr};
-    QDoubleSpinBox *formation_leader_y_spin_{nullptr};
-    QDoubleSpinBox *formation_leader_z_spin_{nullptr};
-    QDoubleSpinBox *formation_leader_yaw_spin_{nullptr};
-    QDoubleSpinBox *formation_line_spacing_spin_{nullptr};
-    QDoubleSpinBox *formation_line_angle_spin_{nullptr};
-    QDoubleSpinBox *formation_polygon_spacing_spin_{nullptr};
-    QDoubleSpinBox *formation_dynamic_time_spin_{nullptr};
-    QDoubleSpinBox *formation_ring_radius_spin_{nullptr};
-    QDoubleSpinBox *formation_ring_speed_spin_{nullptr};
-    QDoubleSpinBox *formation_dynamic_polygon_spacing_spin_{nullptr};
-    QDoubleSpinBox *formation_dynamic_polygon_speed_spin_{nullptr};
-    QDoubleSpinBox *formation_lemniscate_x_spin_{nullptr};
-    QDoubleSpinBox *formation_lemniscate_y_spin_{nullptr};
-    QDoubleSpinBox *formation_lemniscate_speed_spin_{nullptr};
+    FormationControls uav_formation_controls_;
+    FormationControls ugv_formation_controls_;
 
     bool has_active_command_{false};
     Platform active_platform_{Platform::UAV};
