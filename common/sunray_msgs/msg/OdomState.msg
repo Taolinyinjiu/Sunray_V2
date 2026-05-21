@@ -1,6 +1,9 @@
 # -------------OdomState-------------
-# 外部定位源状态消息：用于描述来源类型、能力、发布模式与当前状态量
 std_msgs/Header header	# 消息头（时间戳与坐标系名）
+
+# OdomState 是 localization_fusion 对外发布的完整运行状态。
+# 典型话题：
+#   /uav1/sunray/localization_fusion/odom_state
 
 #【基本参数：外部定位来源】
 # external_source 重定位数据来源枚举

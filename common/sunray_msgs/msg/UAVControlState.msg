@@ -1,26 +1,19 @@
-# 话题头
-std_msgs/Header header
+# -------------UAVControlState-------------
+std_msgs/Header header  # 话题头
 
 # UAVControlState 是 sunray_uav_control 对外发布的完整运行状态。
 # 典型话题：
 #   /uav1/sunray/uav_control/control_state
 
-# ---------- robot identity ----------
+#【基本参数】
 string agent_name                 # 机器人名称前缀，例如 uav
 uint8 agent_id                    # 机器人编号，默认从 1 开始
 uint8 controller_types            # 控制器类型
-
-# 当前起飞相对高度
-float64 takeoff_relative_height
-# 当前起飞最大速度
-float64 takeoff_max_velocity
-# 当前降落类型
-uint8 land_type
-# 当前降落最大速度
-float64 land_max_velocity
-
-# 当前返航目标点
-geometry_msgs/Vector3 home_point
+float64 takeoff_relative_height     # 当前起飞相对高度
+float64 takeoff_max_velocity        # 当前起飞最大速度
+uint8 land_type                 # 当前降落类型
+float64 land_max_velocity       # 当前降落最大速度
+geometry_msgs/Vector3 home_point    # 当前返航目标点
 
 # Sunray控制模块状态枚举
 uint8 OFF=0     # OFF状态表示当前不满足正常工作的条件,这里也许需要引入一个错误码，来表示那些条件没有被满足?
