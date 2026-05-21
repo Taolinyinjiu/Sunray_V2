@@ -4,26 +4,13 @@
     <arg name="source_id" default="3" />
     <!-- 使用的配置文件路径 -->
     <arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />
-    <!-- 定位信息检查的频率，建议不低于10Hz -->
-    <arg name="health_rate_hz" default="10.0" />
-    <!-- 使用接收时间戳代替里程计发送时间戳，用于在某些仿真环节使用仿真时间戳的场景 -->
-    <arg name="use_receive_time" default="$(eval 'true' if int(arg('source_id')) == 3 else 'false')" />
     <!-- agent_name与agent_id 用于仿真环节或者特殊调试环节，指定智能体标识符 -->
     <arg name="agent_name" default="uav" />
     <arg name="agent_id" default="1" />
     <!-- 当下面的use_private_agent_key为true时，节点使用上面定义的agent_name与agent_id -->
     <arg name="use_private_agent_key" default="true" />
-    <!-- 是否发布静态TF: world -> sunray_global -->
-    <arg name="tf_world_global" default="true" />
-    <!-- 是否发布静态TF: ${agent}/sunray_local -> world -->
-    <arg name="tf_local_world" default="false" />
     <!-- 是否启动定位状态监视器，集群场景建议关闭并改用 swarm_monitor -->
     <arg name="enable_monitor" default="true" />
-    <!-- 是否启动定位 RViz Marker 发布节点，只订阅 OdomState -->
-    <arg name="enable_rviz_visualization" default="true" />
-    <arg name="rviz_frame_id" default="world" />
-    <arg name="localization_state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/odom_state" />
-    <arg name="localization_marker_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/rviz_markers" />
 
     <!--
       根据 source_id 启动对应的定位源子 launch。
@@ -57,13 +44,9 @@
     <node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion_$(arg agent_name)$(arg agent_id)" output="screen">
         <param name="source_id" value="$(arg source_id)" />
         <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
-        <param name="health_rate_hz" value="$(arg health_rate_hz)" />
-        <param name="use_receive_time" value="$(arg use_receive_time)" />
         <param name="agent_name" value="$(arg agent_name)" />
         <param name="agent_id" value="$(arg agent_id)" />
         <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
-        <param name="tf_world_global" value="$(arg tf_world_global)" />
-        <param name="tf_local_world" value="$(arg tf_local_world)" />
     </node>
 
     <!-- 定位模块输出状态监听节点 -->
@@ -78,6 +61,11 @@
     </node>
 
     <!-- 定位模块 RViz Marker 发布节点，只订阅 OdomState -->
+    <!-- 是否启动定位 RViz Marker 发布节点，只订阅 OdomState -->
+    <arg name="enable_rviz_visualization" default="true" />
+    <arg name="rviz_frame_id" default="world" />
+    <arg name="localization_state_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/odom_state" />
+    <arg name="localization_marker_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/rviz_markers" />
     <node pkg="localization_fusion"
         type="rviz_visualization_localization_fusion_node"
         name="$(arg agent_name)$(arg agent_id)_localization_fusion_rviz_visualization"

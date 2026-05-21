@@ -336,7 +336,7 @@ void appendStatusText(visualization_msgs::MarkerArray &markers,
     std::ostringstream ss;
     ss << "source=" << sourceName(state.external_source)
        << "\nodom=" << (state.odometry_valid ? "OK" : "BAD")
-       << "  relocal=" << (state.relocalization_valid ? "OK" : "BAD")
+       << "  relocal_topic=" << (state.subtopic_name_external_relocalization.empty() ? "none" : "configured")
        << "  hz=" << std::fixed << std::setprecision(1) << state.odometry_update_hz;
     text.text = ss.str();
     markers.markers.push_back(text);

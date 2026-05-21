@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "agent_key_helper.hpp"
-#include "localization_fusion_types.hpp"
+#include "localization_fusion_utils.hpp"
 
 namespace {
 
@@ -70,21 +70,13 @@ std::string okText(const bool ok)
     return ok ? colorText("正常", kAnsiGood) : colorText("异常", kAnsiBad);
 }
 
-std::string relocalizationStatusText(const sunray_msgs::OdomState &state)
+std::string relocalizationTopicText(const sunray_msgs::OdomState &state)
 {
-    if (!state.has_config_relocalization)
+    if (state.subtopic_name_external_relocalization.empty())
     {
-        return colorText("当前定位源未配置重定位功能", kAnsiWarn);
+        return colorText("未配置", kAnsiWarn);
     }
-    if (state.relocalization_received_stamp.isZero())
-    {
-        return colorText("当前未接收重定位数据", kAnsiWarn);
-    }
-    if (!state.relocalization_valid)
-    {
-        return colorText("重定位数据异常", kAnsiBad);
-    }
-    return colorText("重定位数据有效", kAnsiGood);
+    return colorText(state.subtopic_name_external_relocalization, kAnsiValue);
 }
 
 std::string sourceName(const uint8_t source)
@@ -200,25 +192,6 @@ std::string odomAttitudeText(const nav_msgs::Odometry &odom)
     return colorText(ss.str(), kAnsiValue);
 }
 
-std::string relocalizationMsgText(const sunray_msgs::OdomState &state)
-{
-    if (!state.has_config_relocalization || state.relocalization_received_stamp.isZero())
-    {
-        return "";
-    }
-
-    std::ostringstream ss;
-    ss << colorText(" 重定位消息 ", kAnsiLabel);
-    if (!state.recive_relocalization_msg.header.stamp.isZero())
-    {
-        ss << "frame: " << odomFrameText(state.recive_relocalization_msg) << "\n";
-        ss << "           位置 : " << odomPositionText(state.recive_relocalization_msg) << "\n";
-        ss << "           速度 : " << odomVelText(state.recive_relocalization_msg) << "\n";
-        ss << "           姿态 : " << odomAttitudeText(state.recive_relocalization_msg) << "\n";
-    }
-    return ss.str();
-}
-
 std::string buildPanel(const std::string &agent_key,
                        const AgentTopics &topics,
                        const CachedState &cached)
@@ -242,13 +215,13 @@ std::string buildPanel(const std::string &agent_key,
     const sunray_msgs::OdomState &state = cached.state;
 
     ss << colorText(" 订阅话题  ", kAnsiLabel)
-       << "外部定位源（局部）话题: " << topicValueText(topics.external_odom_topic) << "\n";
+       << "外部定位源（局部）话题: " << topicValueText(state.subtopic_name_external_odom) << "\n";
     ss << "           "
-       << "外部定位源（重定位）话题: " << topicValueText(topics.relocalization_topic) << "\n";
+       << "外部定位源（重定位）话题: " << relocalizationTopicText(state) << "\n";
     ss << colorText(" 发布话题  ", kAnsiLabel)
-       << "局部odom话题: " << topicValueText(topics.local_odom_topic) << "\n";
+       << "局部odom话题: " << topicValueText(state.pubtopic_name_local_odom) << "\n";
     ss << "           "
-       << "全局odom话题: " << topicValueText(topics.global_odom_topic) << "\n";
+       << "全局odom话题: " << topicValueText(state.pubtopic_name_global_odom) << "\n";
 
     ss << colorText(" 基本信息  ", kAnsiLabel)
        << "外部定位源 = " << colorText(sourceName(state.external_source), kAnsiValue)
@@ -256,10 +229,6 @@ std::string buildPanel(const std::string &agent_key,
        << "  频率 = "
        << colorText(std::to_string(static_cast<int>(state.odometry_update_hz + 0.5f)) + " Hz",
                     kAnsiValue)
-       << "\n";
-
-    ss << "           "
-       << "重定位数据状态 = " << relocalizationStatusText(state)
        << "\n";
 
     ss << "           "
@@ -279,12 +248,6 @@ std::string buildPanel(const std::string &agent_key,
     else
     {
         ss << "           " << colorText("等待数据...", kAnsiWarn) << "\n";
-    }
-
-    const std::string relocalization_text = relocalizationMsgText(state);
-    if (!relocalization_text.empty())
-    {
-        ss << relocalization_text;
     }
 
     ss << colorText(" 全局odom  ", kAnsiLabel);

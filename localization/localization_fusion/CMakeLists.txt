@@ -53,7 +53,6 @@ include_directories(
 # Core library: class implementation (no main function)
 add_library(localization_fusion_core
   src/localization_fusion.cpp
-  src/localization_fusion_utils.cpp
 )
 target_link_libraries(localization_fusion_core
   ${catkin_LIBRARIES}
@@ -80,7 +79,6 @@ add_dependencies(localization_fusion_node
 # Monitor node: terminal panel for one or more localization_fusion agents
 add_executable(localization_fusion_monitor_node
   src/tools/localization_fusion_monitor_node.cpp
-  src/localization_fusion_utils.cpp
 )
 target_link_libraries(localization_fusion_monitor_node
   ${catkin_LIBRARIES}

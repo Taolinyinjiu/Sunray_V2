@@ -745,34 +745,18 @@ QString odomBlockText(const nav_msgs::Odometry &odom, const QString &indent = QS
 
 QString relocalizationHintText(const sunray_msgs::OdomState &state)
 {
-    if (!state.has_config_relocalization)
+    if (state.subtopic_name_external_relocalization.empty())
     {
-        return "OdomState显示无重定位输入";
+        return "重定位话题未配置";
     }
-    if (state.relocalization_received_stamp.isZero())
-    {
-        return "当前未接收重定位数据";
-    }
-    if (!state.relocalization_valid)
-    {
-        return "重定位数据异常";
-    }
-    return "重定位数据有效";
+    return QString("重定位话题: %1").arg(QString::fromStdString(state.subtopic_name_external_relocalization));
 }
 
 QString htmlRelocalizationHint(const sunray_msgs::OdomState &state)
 {
-    if (!state.has_config_relocalization)
+    if (state.subtopic_name_external_relocalization.empty())
     {
         return htmlSpan(relocalizationHintText(state), kHtmlWarnColor, true);
-    }
-    if (state.relocalization_received_stamp.isZero())
-    {
-        return htmlSpan(relocalizationHintText(state), kHtmlWarnColor, true);
-    }
-    if (!state.relocalization_valid)
-    {
-        return htmlSpan(relocalizationHintText(state), kHtmlBadColor, true);
     }
     return htmlSpan(relocalizationHintText(state), kHtmlGoodColor, true);
 }
@@ -3591,11 +3575,6 @@ class SunrayMonitorPanel : public QMainWindow
             QStringList lines;
             lines << htmlTitle(QString("============== Localization Fusion 状态面板 | %1 ==============").arg(agent_key));
             lines << "";
-            lines << htmlSection("订阅话题");
-            lines << htmlLine("odom状态话题", QString::fromStdString(agent->config.odom_state_topic));
-            lines << htmlLineRaw("更新延迟",
-                                 htmlStateAge(agentAge(*agent, ros::Time::now()), status_timeout_));
-            lines << "";
             lines << htmlSection("基本信息");
             lines << htmlLine("基本状态", "等待 OdomState...", kHtmlWarnColor);
             localization_detail_text_->setHtml(htmlDocument(lines));
@@ -3607,22 +3586,14 @@ class SunrayMonitorPanel : public QMainWindow
         lines << htmlTitle(QString("============== Localization Fusion 状态面板 | %1 ==============").arg(agent_key));
         lines << "";
         lines << htmlSection("订阅话题");
-        lines << htmlLine("odom状态话题", QString::fromStdString(agent->config.odom_state_topic));
-        lines << htmlLine("OdomState.external_source",
-                          QString("%1 (%2)")
-                              .arg(odomSourceName(state.external_source))
-                              .arg(static_cast<int>(state.external_source)));
-        lines << htmlLineRaw("OdomState.has_config_relocalization",
-                             htmlSpan(state.has_config_relocalization ? "true" : "false",
-                                      state.has_config_relocalization ? kHtmlGoodColor : kHtmlWarnColor,
-                                      true));
-        lines << htmlLineRaw("更新延迟",
-                             htmlStateAge(agentAge(*agent, ros::Time::now()), status_timeout_));
+        lines << htmlLine("外部定位源（局部）话题", QString::fromStdString(state.subtopic_name_external_odom));
+        lines << htmlLineRaw("外部定位源（重定位）话题", htmlRelocalizationHint(state));
 
         lines << "";
         lines << htmlSection("发布话题");
-        lines << htmlLine("局部odom话题", QString("%1/sunray/localization/local_odom").arg(agent_key));
-        lines << htmlLine("全局odom话题", QString("%1/sunray/localization/global_odom").arg(agent_key));
+        lines << htmlLine("局部odom话题", QString::fromStdString(state.pubtopic_name_local_odom));
+        lines << htmlLine("全局odom话题", QString::fromStdString(state.pubtopic_name_global_odom));
+        lines << htmlLine("odom状态话题", QString::fromStdString(agent->config.odom_state_topic));
 
         lines << "";
         lines << htmlSection("基本信息");
@@ -3633,7 +3604,6 @@ class SunrayMonitorPanel : public QMainWindow
                                  .arg(htmlSpan(QString("%1 Hz").arg(state.odometry_update_hz, 0, 'f', 1),
                                                state.odometry_valid ? kHtmlGoodColor : kHtmlBadColor,
                                                true)));
-        lines << htmlLineRaw("重定位数据状态", htmlRelocalizationHint(state));
         lines << htmlLine("global_frame", QString::fromStdString(state.global_frame_name));
         lines << htmlLine("local_frame", QString::fromStdString(state.local_frame_name));
         lines << htmlLine("base_frame", QString::fromStdString(state.base_frame_name));
@@ -3641,14 +3611,6 @@ class SunrayMonitorPanel : public QMainWindow
         lines << "";
         lines << htmlSection("局部odom");
         lines << htmlOdomBlock(state.local_odom, "  ");
-
-        if (state.has_config_relocalization && !state.relocalization_received_stamp.isZero() &&
-            !state.recive_relocalization_msg.header.stamp.isZero())
-        {
-            lines << "";
-            lines << htmlSection("重定位消息");
-            lines << htmlOdomBlock(state.recive_relocalization_msg, "  ");
-        }
 
         lines << "";
         lines << htmlSection("全局odom");
@@ -4573,11 +4535,9 @@ class SunrayMonitorPanel : public QMainWindow
             return "no OdomState";
         }
         const sunray_msgs::OdomState &state = agent.odom_state;
-        QString text = QString("valid=%1 hz=%2 source=%3 relocal=%4")
+        QString text = QString("valid=%1 hz=%2")
                            .arg(boolText(state.odometry_valid))
-                           .arg(formatDouble(state.odometry_update_hz, 1))
-                           .arg(state.external_source)
-                           .arg(boolText(state.relocalization_valid));
+                           .arg(formatDouble(state.odometry_update_hz, 1));
         if (!state.local_odom.header.stamp.isZero())
         {
             text += QString(" local=[%1]").arg(poseText(state.local_odom));

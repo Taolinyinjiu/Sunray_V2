@@ -1,16 +1,6 @@
 /**
  * @file localization_fusion.hpp
- * @brief
- * 设计意图：
- * 本模块负责统一不同定位源的输入语义，输出标准化的 local/global 里程计与 TF。
- *
- * 最新约定（2026-05-14）：
- * 1. odometry_topic 永远表示 local 主里程计输入
- * 2. relocalization_topic 表示 base_link 在 sunray_global 下的位姿输入，可为空
- * 3. local_odom 在 odometry_callback 中完成外参变换后立即发布，保持与输入同频
- * 4. global_odom / TF / OdomState 统一由 health_timer_ 周期发布
- * 5. TF 树固定为 world -> {agent}/sunray_global -> {agent}/sunray_local -> {agent}/base_link
- * 6. world -> {agent}/sunray_global 是固定零变换；是否广播到 /tf_static 由 tf_world_global 控制
+ * @brief 定位融合节点类声明。
  */
 
 #pragma once
@@ -18,14 +8,20 @@
 #include <deque>
 #include <string>
 
-#include <geometry_msgs/TransformStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <ros/node_handle.h>
 #include <ros/ros.h>
+#include <sunray_msgs/OdomState.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include <stdexcept>
 
-#include "localization_fusion_types.hpp"
+#include <Eigen/Dense>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
+#include "agent_key_helper.hpp"
+#include "localization_fusion_utils.hpp"
 
 class LocalizationFusion {
   public:
@@ -33,7 +29,6 @@ class LocalizationFusion {
     ~LocalizationFusion() = default;
 
     bool Init();
-    void Spin();
 
   private:
     // 加载参数
@@ -45,12 +40,10 @@ class LocalizationFusion {
     void relocalization_callback(const nav_msgs::OdometryConstPtr& msg);
     // 定时器回调函数，用于发布global_odom,odom_state以及tf
     void healthtimer_callback(const ros::TimerEvent& e);
-    
     // 将输入的里程计，经过config中配置的外参矩阵，变换为sunray_local系发布的里程计
     nav_msgs::Odometry transform_source_odom_to_local(const nav_msgs::Odometry& msg) const;
     // 从local系里程计计算global系里程计
-    bool build_global_odom_from_local(const nav_msgs::Odometry& local_msg,
-                                      nav_msgs::Odometry& global_msg) const;
+    bool build_global_odom_from_local(const nav_msgs::Odometry& local_msg, nav_msgs::Odometry& global_msg) const;
     // 从里程计中更新local到base_link的tf
     void update_local_to_base_tf_from_odom(const nav_msgs::Odometry& local_odom);
 
@@ -69,7 +62,9 @@ class LocalizationFusion {
     // tf变换器 [静态TF] + [连续变换TF]
     tf2_ros::StaticTransformBroadcaster static_tf_broadcaster_;
     tf2_ros::TransformBroadcaster tf_broadcaster_;
-    
+
+    // 节点名字
+    std::string node_name;
     // 智能体标识符
     std::string agent_key_;
     // yaml格式配置文件路径
@@ -78,43 +73,15 @@ class LocalizationFusion {
     int selected_source_id_{-1};
     // 定位源配置
     SourceConfig selected_source_{};
-    
-    bool has_selected_source_{false};
-    double health_rate_hz_{10.0};
-    bool use_receive_time_{false};
-    bool tf_world_global_{false};
-    bool tf_local_world_{false};
 
+    // 对外发布的定位融合状态快照
+    sunray_msgs::OdomState odom_state;
+    
     std::string global_odometry_topic_{"${agent_key}/sunray/localization/global_odom"};
     std::string local_odometry_topic_{"${agent_key}/sunray/localization/local_odom"};
     std::string odom_state_topic_{"${agent_key}/sunray/localization/odom_state"};
 
-    std::string world_frame_id_{"world"};
-    std::string global_frame_id_{"sunray_global"};
-    std::string local_frame_id_{"sunray_local"};
-    std::string base_frame_id_{"base_link"};
-
-    nav_msgs::Odometry latest_local_odom_;
-    nav_msgs::Odometry latest_relocalization_odom_;
-    nav_msgs::Odometry last_published_local_odom_;
-    nav_msgs::Odometry last_published_global_odom_;
-
-    ros::Time odometry_received_stamp_;
-    ros::Time relocalization_received_stamp_;
     ros::Time odometry_last_receive_time_;
-    ros::Time relocalization_last_receive_time_;
 
-    bool has_local_odom_{false};
-    bool has_relocalization_odom_{false};
-    bool has_relocalization_input_{false};
-    bool odometry_valid_{false};
-    bool relocalization_valid_{false};
-    bool global_local_tf_valid_{false};
-
-    double odometry_update_hz{0.0};
     std::deque<double> hz_stamps_;
-
-    geometry_msgs::TransformStamped world_to_global_tf_;
-    geometry_msgs::TransformStamped global_to_local_tf_;
-    geometry_msgs::TransformStamped local_to_base_tf_;
 };
