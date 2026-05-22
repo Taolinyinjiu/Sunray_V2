@@ -1,0 +1,13 @@
+string feature_name
+---
+bool success
+string message
+string name
+string group
+bool running
+string description
+bool auto_start
+string[] depends_on
+float32 stop_timeout_sec
+string[] start_preview_units
+string[] start_preview_commands

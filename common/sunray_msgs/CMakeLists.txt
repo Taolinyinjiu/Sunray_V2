@@ -20,6 +20,7 @@ add_message_files(
   OdomState.msg
   Px4State.msg
   PlanningWaypoint.msg
+  SystemInfo.msg
   UAVControlCMD.msg
   UAVControlState.msg
   UAVPlanningCMD.msg
@@ -35,10 +36,13 @@ add_message_files(
 )
 
 ## Add service definitions after creating files under srv/
-# add_service_files(
-#   FILES
-#   Example.srv
-# )
+add_service_files(
+  FILES
+  StartFeature.srv
+  StopFeature.srv
+  ListFeatures.srv
+  GetFeatures.srv
+)
 
 ## Enable after adding at least one msg/srv file
 generate_messages(

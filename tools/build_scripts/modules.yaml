@@ -29,6 +29,11 @@ modules:
     source_path: "tools/sunray_monitor_tools"
     build_path: "build/sunray_monitor_tools"
     dependencies: [sunray_msgs]
+  sunray_system:
+    description: "Sunray 真机功能 supervisor"
+    source_path: "tools/sunray_system"
+    build_path: "build/sunray_system"
+    dependencies: [sunray_msgs]
 
   # uav_control_example
   sunray_uav_control_example:

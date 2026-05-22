@@ -1,0 +1,15 @@
+[Unit]
+Description=Sunray system supervisor for user %i
+After=network.target roscore.service
+Requires=roscore.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/Sunray_v2
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/%i/Sunray_v2/devel/setup.bash && roslaunch sunray_system sunray_system.launch'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

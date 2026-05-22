@@ -1,0 +1,11 @@
+<launch>
+  <arg name="config_file"
+       default="$(find sunray_system)/config/features.yaml" />
+
+  <node pkg="sunray_system"
+        type="sunray_system_node.py"
+        name="sunray_system"
+        output="screen">
+    <param name="config_file" value="$(arg config_file)" />
+  </node>
+</launch>

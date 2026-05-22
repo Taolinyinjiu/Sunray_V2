@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.0.2)
+project(sunray_system)
+
+find_package(catkin REQUIRED COMPONENTS
+  rospy
+  std_msgs
+  sunray_msgs
+)
+
+catkin_package(
+  CATKIN_DEPENDS
+    rospy
+    std_msgs
+    sunray_msgs
+)
+
+catkin_install_python(PROGRAMS
+  scripts/sunray_system_node.py
+  sunray_system_tui/sunray_system_tui.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+install(DIRECTORY config launch systemd
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
