@@ -89,6 +89,7 @@ class SunraySystemTUI:
     def run(self, stdscr):
         self.init_colors()
         curses.curs_set(0)
+        stdscr.keypad(True)
         stdscr.nodelay(True)
         stdscr.timeout(200)
 
@@ -122,7 +123,17 @@ class SunraySystemTUI:
                 self.stop_selected()
             elif key in (curses.KEY_F5, curses.KEY_F0 + 5):
                 self.refresh()
+            elif key in (ord("m"), ord("M")):
+                self.start_mode_terminal = not self.start_mode_terminal
+                self.status_message = "启动模式: %s" % ("终端启动" if self.start_mode_terminal else "后台启动")
+            elif key in (ord("s"), ord("S")):
+                self.start_selected()
+            elif key in (ord("x"), ord("X")):
+                self.stop_selected()
+            elif key in (ord("r"), ord("R")):
+                self.refresh()
 
+        stdscr.keypad(False)
         stdscr.nodelay(False)
 
     def refresh_selected_only(self):
@@ -206,23 +217,26 @@ class SunraySystemTUI:
         if width < 12:
             return
         running = feature["running"]
-        marker = "●"
+        marker = "●" if running else "○"
+        prefix = "→" if selected else ("●" if running else " ")
         status_badge = "ON" if running else "OFF"
         badge_attr = self.attr(7 if running else 8, curses.A_BOLD)
-        text_attr = self.attr(6, curses.A_BOLD) if selected else self.attr(2)
+        text_attr = self.attr(2, curses.A_BOLD) if selected else self.attr(2)
         icon_attr = self.attr(3 if running else 4, curses.A_BOLD)
+        prefix_attr = self.attr(5, curses.A_BOLD) if selected else self.attr(3 if running else 2)
 
         if selected:
-            self.safe_addnstr(stdscr, y, left, " " * width, width, self.attr(10))
+            self.safe_addnstr(stdscr, y, left, " " * width, width, self.attr(1))
 
         badge_width = len(status_badge) + 2
-        name_width = max(6, width - badge_width - 5)
+        name_width = max(6, width - badge_width - 7)
         feature_name = feature["name"]
         if len(feature_name) > name_width:
             feature_name = feature_name[: max(3, name_width - 1)] + "…"
 
-        self.safe_addnstr(stdscr, y, left + 1, marker, 2, icon_attr)
-        self.safe_addnstr(stdscr, y, left + 3, feature_name, name_width, text_attr)
+        self.safe_addnstr(stdscr, y, left, prefix, 2, prefix_attr)
+        self.safe_addnstr(stdscr, y, left + 2, marker, 2, icon_attr)
+        self.safe_addnstr(stdscr, y, left + 4, feature_name, name_width, text_attr)
         self.safe_addnstr(stdscr, y, left + width - badge_width - 1, (" %s " % status_badge), badge_width, badge_attr)
 
     def start_selected(self):
@@ -270,6 +284,7 @@ class SunraySystemTUI:
         curses.init_pair(9, curses.COLOR_BLACK, curses.COLOR_YELLOW)
         curses.init_pair(10, curses.COLOR_BLUE, -1)
         curses.init_pair(11, curses.COLOR_MAGENTA, -1)
+        curses.init_pair(12, curses.COLOR_BLACK, curses.COLOR_YELLOW)
 
     def attr(self, pair_id=0, extra=0):
         if not getattr(self, "colors_enabled", False) or pair_id <= 0:
@@ -380,13 +395,17 @@ class SunraySystemTUI:
             return
 
         header_attr = self.attr(1, curses.A_BOLD)
-        self.safe_addnstr(stdscr, 0, 0, " Sunray System TUI ".ljust(width), width, header_attr)
-        status_text = "状态: %s" % self.status_message
-        self.safe_addnstr(stdscr, 1, 0, status_text.ljust(width), width, self.attr(2))
-        mode_text = "启动模式: %s" % ("终端启动" if self.start_mode_terminal else "后台启动")
-        self.safe_addnstr(stdscr, 2, 0, mode_text.ljust(width), width, self.attr(11, curses.A_BOLD))
+        title_text = " Sunray System TUI "
+        mode_badge = " %s " % ("终端启动" if self.start_mode_terminal else "后台启动")
+        self.safe_addnstr(stdscr, 0, 0, " " * width, width, header_attr)
+        self.safe_addnstr(stdscr, 0, 1, title_text, len(title_text), header_attr)
+        self.safe_addnstr(stdscr, 0, max(1, width - len(mode_badge) - 2), mode_badge, len(mode_badge), self.attr(12, curses.A_BOLD))
 
-        content_top = 4
+        status_text = "状态: %s" % self.status_message
+        self.safe_addnstr(stdscr, 1, 1, status_text.ljust(max(1, width - 2)), max(1, width - 2), self.attr(2))
+        self.safe_hline(stdscr, 2, 0, curses.ACS_HLINE, width)
+
+        content_top = 3
         footer_height = 2
         content_height = max(10, height - content_top - footer_height)
         left_width = max(30, min(42, width // 3))
@@ -420,14 +439,33 @@ class SunraySystemTUI:
 
             row = self.grouped_rows[row_index]
             if row["type"] == "group":
-                group_text = "[ %s  %d/%d ]" % (row["label"], row["running_count"], row["total_count"])
+                group_text = row["label"]
+                count_text = " %d/%d " % (row["running_count"], row["total_count"])
+                group_attr = self.attr(5 if row["running_count"] > 0 else 2, curses.A_BOLD)
+                lead_attr = self.attr(5, curses.A_BOLD) if row["running_count"] > 0 else self.attr(2)
                 self.safe_addnstr(
                     stdscr,
                     list_inner_top + row_idx,
                     1,
-                    group_text.ljust(left_width - 3),
-                    left_width - 3,
-                    self.attr(6, curses.A_BOLD),
+                    "●",
+                    2,
+                    lead_attr,
+                )
+                self.safe_addnstr(
+                    stdscr,
+                    list_inner_top + row_idx,
+                    3,
+                    group_text,
+                    max(0, left_width - len(count_text) - 6),
+                    group_attr,
+                )
+                self.safe_addnstr(
+                    stdscr,
+                    list_inner_top + row_idx,
+                    max(3, left_width - len(count_text) - 2),
+                    count_text,
+                    len(count_text),
+                    self.attr(12, curses.A_BOLD) if row["running_count"] > 0 else self.attr(10),
                 )
                 continue
 
@@ -528,7 +566,7 @@ class SunraySystemTUI:
         else:
             self.safe_addnstr(stdscr, system_top, left_width + 1, "等待 /sunray/system_info ...", system_max_width, self.attr(5, curses.A_BOLD))
 
-        footer_text = "方向键选择   F1 切换启动模式   F2 启动   F3 停止   F5 刷新   Esc 退出"
+        footer_text = "方向键选择   F1/F2/F3/F5 或 M/S/X/R   Esc 退出"
         footer_x = max(0, (width - len(footer_text)) // 2)
         self.safe_addnstr(stdscr, height - 1, footer_x, footer_text, len(footer_text), self.attr(1))
         stdscr.refresh()

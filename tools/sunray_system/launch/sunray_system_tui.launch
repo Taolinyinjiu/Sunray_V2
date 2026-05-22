@@ -1,0 +1,7 @@
+<launch>
+  <node
+    pkg="sunray_system"
+    type="sunray_system_tui.py"
+    name="sunray_system_tui"
+    output="screen" />
+</launch>

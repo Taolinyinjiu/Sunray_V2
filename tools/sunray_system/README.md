@@ -160,6 +160,14 @@ source devel/setup.bash
 rosrun sunray_system sunray_system_tui.py
 ```
 
+或者直接通过 launch 启动：
+
+```bash
+cd ~/Sunray_v2
+source devel/setup.bash
+roslaunch sunray_system sunray_system_tui.launch
+```
+
 快捷键：
 
 - 方向键：切换 feature
