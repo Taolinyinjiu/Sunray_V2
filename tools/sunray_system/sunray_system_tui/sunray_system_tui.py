@@ -5,6 +5,7 @@ import locale
 import textwrap
 import threading
 import time
+import unicodedata
 
 import rospy
 
@@ -45,7 +46,7 @@ class SunraySystemTUI:
             self.system_info = message
             self.system_info_time = time.time()
 
-    def refresh(self):
+    def refresh(self, status_message=None):
         with self.lock:
             try:
                 response = self.list_features()
@@ -81,7 +82,7 @@ class SunraySystemTUI:
                         "message": detail.message,
                     }
 
-                self.status_message = "刷新成功"
+                self.status_message = status_message if status_message is not None else "刷新成功"
                 self.last_refresh_time = time.time()
             except Exception as exc:
                 self.status_message = "刷新失败: %s" % exc
@@ -122,15 +123,6 @@ class SunraySystemTUI:
             elif key in (curses.KEY_F3, curses.KEY_F0 + 3):
                 self.stop_selected()
             elif key in (curses.KEY_F5, curses.KEY_F0 + 5):
-                self.refresh()
-            elif key in (ord("m"), ord("M")):
-                self.start_mode_terminal = not self.start_mode_terminal
-                self.status_message = "启动模式: %s" % ("终端启动" if self.start_mode_terminal else "后台启动")
-            elif key in (ord("s"), ord("S")):
-                self.start_selected()
-            elif key in (ord("x"), ord("X")):
-                self.stop_selected()
-            elif key in (ord("r"), ord("R")):
                 self.refresh()
 
         stdscr.keypad(False)
@@ -241,6 +233,7 @@ class SunraySystemTUI:
 
     def start_selected(self):
         if not self.features:
+            self.status_message = "没有可启动的功能"
             return
         feature_name = self.features[self.selected_index]["name"]
         try:
@@ -250,19 +243,20 @@ class SunraySystemTUI:
                 restart_if_running=False,
                 start_with_terminal=self.start_mode_terminal,
             )
-            self.status_message = response.message
-            self.refresh()
+            action_message = response.message or ("启动成功: %s" % feature_name if response.success else "启动失败: %s" % feature_name)
+            self.refresh(status_message=action_message)
         except Exception as exc:
             self.status_message = "启动失败: %s" % exc
 
     def stop_selected(self):
         if not self.features:
+            self.status_message = "没有可停止的功能"
             return
         feature_name = self.features[self.selected_index]["name"]
         try:
             response = self.stop_feature(feature_name=feature_name, force=False)
-            self.status_message = response.message
-            self.refresh()
+            action_message = response.message or ("停止成功: %s" % feature_name if response.success else "停止失败: %s" % feature_name)
+            self.refresh(status_message=action_message)
         except Exception as exc:
             self.status_message = "停止失败: %s" % exc
 
@@ -341,6 +335,15 @@ class SunraySystemTUI:
         except curses.error:
             pass
 
+    def display_width(self, text):
+        width = 0
+        for char in text:
+            width += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        return width
+
+    def centered_x(self, width, text):
+        return max(0, (width - self.display_width(text)) // 2)
+
     def draw_box(self, stdscr, top, left, height, width, title, title_attr=0, body_attr=0):
         max_y, max_x = stdscr.getmaxyx()
         if top < 0 or left < 0 or top >= max_y or left >= max_x:
@@ -385,21 +388,22 @@ class SunraySystemTUI:
         stdscr.bkgd(" ", self.attr(0))
 
         if height < 16 or width < 72:
-            self.safe_addnstr(stdscr, 0, 0, "Sunray System TUI", width, self.attr(1, curses.A_BOLD))
-            self.safe_addnstr(stdscr, 2, 0, "终端窗口太小，当前至少需要 72x16。", width, self.attr(8, curses.A_BOLD))
-            self.safe_addnstr(stdscr, 4, 0, "请放大终端后重试。", width, self.attr(2))
+            title_text = "Sunray System TUI"
+            warn_text = "终端窗口太小，当前至少需要 72x16。"
+            hint_text = "请放大终端后重试。"
+            self.safe_addnstr(stdscr, 0, self.centered_x(width, title_text), title_text, len(title_text), self.attr(1, curses.A_BOLD))
+            self.safe_addnstr(stdscr, 2, self.centered_x(width, warn_text), warn_text, len(warn_text), self.attr(8, curses.A_BOLD))
+            self.safe_addnstr(stdscr, 4, self.centered_x(width, hint_text), hint_text, len(hint_text), self.attr(2))
             footer_text = "Esc 退出"
-            footer_x = max(0, (width - len(footer_text)) // 2)
+            footer_x = self.centered_x(width, footer_text)
             self.safe_addnstr(stdscr, height - 1, footer_x, footer_text, len(footer_text), self.attr(2))
             stdscr.refresh()
             return
 
         header_attr = self.attr(1, curses.A_BOLD)
-        title_text = " Sunray System TUI "
-        mode_badge = " %s " % ("终端启动" if self.start_mode_terminal else "后台启动")
+        title_text = "Sunray System TUI"
         self.safe_addnstr(stdscr, 0, 0, " " * width, width, header_attr)
-        self.safe_addnstr(stdscr, 0, 1, title_text, len(title_text), header_attr)
-        self.safe_addnstr(stdscr, 0, max(1, width - len(mode_badge) - 2), mode_badge, len(mode_badge), self.attr(12, curses.A_BOLD))
+        self.safe_addnstr(stdscr, 0, self.centered_x(width, title_text), title_text, len(title_text), header_attr)
 
         status_text = "状态: %s" % self.status_message
         self.safe_addnstr(stdscr, 1, 1, status_text.ljust(max(1, width - 2)), max(1, width - 2), self.attr(2))
@@ -566,8 +570,10 @@ class SunraySystemTUI:
         else:
             self.safe_addnstr(stdscr, system_top, left_width + 1, "等待 /sunray/system_info ...", system_max_width, self.attr(5, curses.A_BOLD))
 
-        footer_text = "方向键选择   F1/F2/F3/F5 或 M/S/X/R   Esc 退出"
-        footer_x = max(0, (width - len(footer_text)) // 2)
+        footer_text = "方向键选择   F1 切换启动模式(%s)   F2 启动   F3 停止   F5 刷新   Esc 退出" % (
+            "终端启动" if self.start_mode_terminal else "后台启动"
+        )
+        footer_x = self.centered_x(width, footer_text)
         self.safe_addnstr(stdscr, height - 1, footer_x, footer_text, len(footer_text), self.attr(1))
         stdscr.refresh()
 

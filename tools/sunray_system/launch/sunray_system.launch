@@ -1,11 +1,20 @@
 <launch>
   <arg name="config_file"
        default="$(find sunray_system)/config/features.yaml" />
+  <arg name="ros_setup_file"
+       default="/opt/ros/noetic/setup.bash" />
+  <arg name="workspace_setup_file"
+       default="/home/yundrone/Sunray_v2/devel/setup.bash" />
+  <arg name="external_workspaces"
+       default="" />
 
   <node pkg="sunray_system"
         type="sunray_system_node.py"
         name="sunray_system"
         output="screen">
     <param name="config_file" value="$(arg config_file)" />
+    <param name="ros_setup_file" value="$(arg ros_setup_file)" />
+    <param name="workspace_setup_file" value="$(arg workspace_setup_file)" />
+    <rosparam param="external_workspaces" subst_value="true">[$(arg external_workspaces)]</rosparam>
   </node>
 </launch>

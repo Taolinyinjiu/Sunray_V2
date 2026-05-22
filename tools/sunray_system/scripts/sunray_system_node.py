@@ -100,6 +100,9 @@ class SunraySystemSupervisor:
         os.makedirs(self._runtime_dir, exist_ok=True)
 
         self._config_file = rospy.get_param("~config_file")
+        self._ros_setup_file = rospy.get_param("~ros_setup_file", "/opt/ros/noetic/setup.bash")
+        self._workspace_setup_file = rospy.get_param("~workspace_setup_file", "")
+        self._external_workspaces = self._normalize_workspace_list(rospy.get_param("~external_workspaces", []))
         self._load_config(self._config_file)
 
         self._system_info_pub = rospy.Publisher("/sunray/system_info", SystemInfo, queue_size=1)
@@ -130,6 +133,16 @@ class SunraySystemSupervisor:
             self._runtimes[name] = FeatureRuntime()
 
         self._features = loaded
+
+    def _normalize_workspace_list(self, configured_workspaces):
+        if isinstance(configured_workspaces, str):
+            configured_workspaces = [configured_workspaces] if configured_workspaces.strip() else []
+        normalized = []
+        for workspace in configured_workspaces:
+            workspace_path = os.path.expanduser(str(workspace).strip())
+            if workspace_path:
+                normalized.append(workspace_path)
+        return normalized
 
     def _autostart_features(self):
         for name, feature in self._features.items():
@@ -249,11 +262,13 @@ class SunraySystemSupervisor:
                 for launch in launches:
                     unit_name = launch.get("name") or launch.get("file") or "launch"
                     command = self._build_command(launch, override_args)
+                    shell_command = self._build_shell_command(command)
                     pid_file = self._make_runtime_file(feature_name, unit_name, ".pid")
                     script_path = self._create_terminal_launch_script(
                         feature_name,
                         unit_name,
                         command,
+                        shell_command,
                         pid_file,
                         accumulated_delay_sec,
                     )
@@ -261,6 +276,7 @@ class SunraySystemSupervisor:
                         {
                             "unit_name": unit_name,
                             "command": command,
+                            "shell_command": shell_command,
                             "pid_file": pid_file,
                             "script_path": script_path,
                             "startup_grace_sec": accumulated_delay_sec + 5.0,
@@ -302,9 +318,10 @@ class SunraySystemSupervisor:
                 for launch in launches:
                     unit_name = launch.get("name") or launch.get("file") or "launch"
                     command = self._build_command(launch, override_args)
+                    shell_command = self._build_shell_command(command)
                     pid_file = self._make_runtime_file(feature_name, unit_name, ".pid")
                     process = subprocess.Popen(
-                        command,
+                        shell_command,
                         preexec_fn=os.setsid,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
@@ -383,12 +400,14 @@ class SunraySystemSupervisor:
                     tab_title = self._format_launch_display_name(current_feature_name, unit_name)
 
                     command = self._build_command(launch, feature_plan["override_args"])
+                    shell_command = self._build_shell_command(command)
                     pid_file = self._make_runtime_file(current_feature_name, unit_name, ".pid")
                     shell_pid_file = self._make_runtime_file(current_feature_name, unit_name, ".tabpid")
                     script_path = self._create_terminal_launch_script(
                         current_feature_name,
                         tab_title,
                         command,
+                        shell_command,
                         pid_file,
                         shell_pid_file,
                         accumulated_delay_sec,
@@ -399,6 +418,7 @@ class SunraySystemSupervisor:
                             "unit_name": unit_name,
                             "tab_title": tab_title,
                             "command": command,
+                            "shell_command": shell_command,
                             "pid_file": pid_file,
                             "shell_pid_file": shell_pid_file,
                             "script_path": script_path,
@@ -488,10 +508,7 @@ class SunraySystemSupervisor:
         return "%s | %s | %s" % (group_name, feature_name, unit_name)
 
     def _format_launch_command_preview(self, launch):
-        package_name = launch.get("package", "").strip()
-        launch_file = launch.get("file", "").strip()
-        command = ["roslaunch", package_name, launch_file]
-        command.extend(list(launch.get("args", [])))
+        command = self._build_command(launch, [])
         return " ".join(shlex.quote(token) for token in command if token)
 
     def _stop_feature(self, feature_name, force):
@@ -562,6 +579,84 @@ class SunraySystemSupervisor:
         command.extend(override_args)
         return command
 
+    def _build_shell_command(self, command):
+        shell_parts = []
+        if self._ros_setup_file:
+            shell_parts.append("source %s" % shlex.quote(self._ros_setup_file))
+        if self._workspace_setup_file:
+            shell_parts.append("source %s" % shlex.quote(os.path.expanduser(self._workspace_setup_file)))
+        shell_parts.extend(self._build_external_workspace_env_commands())
+        shell_parts.append("rospack profile >/dev/null 2>&1 || true")
+        shell_parts.append("exec %s" % " ".join(shlex.quote(token) for token in command))
+        return ["bash", "-lc", " && ".join(shell_parts)]
+
+    def _build_external_workspace_env_commands(self):
+        source_roots = []
+        devel_paths = []
+        for workspace_root in self._external_workspaces:
+            workspace_root = os.path.abspath(os.path.expanduser(workspace_root))
+            source_roots.extend(self._find_external_workspace_source_roots(workspace_root))
+            devel_path = os.path.join(workspace_root, "devel")
+            if os.path.isdir(devel_path):
+                devel_paths.append(devel_path)
+
+        source_roots = self._unique_existing_paths(source_roots)
+        devel_paths = self._unique_existing_paths(devel_paths)
+        commands = []
+        if source_roots:
+            commands.append(self._build_export_command("ROS_PACKAGE_PATH", source_roots))
+        if devel_paths:
+            commands.append(self._build_export_command("CMAKE_PREFIX_PATH", devel_paths))
+
+            bin_paths = self._unique_existing_paths([os.path.join(path, "bin") for path in devel_paths])
+            lib_paths = self._unique_existing_paths([os.path.join(path, "lib") for path in devel_paths])
+            python_paths = self._unique_existing_paths(
+                [os.path.join(path, "lib", "python3", "dist-packages") for path in devel_paths]
+                + [os.path.join(path, "lib", "python2.7", "dist-packages") for path in devel_paths]
+            )
+
+            if bin_paths:
+                commands.append(self._build_export_command("PATH", bin_paths))
+            if lib_paths:
+                commands.append(self._build_export_command("LD_LIBRARY_PATH", lib_paths))
+            if python_paths:
+                commands.append(self._build_export_command("PYTHONPATH", python_paths))
+        return commands
+
+    def _build_export_command(self, env_name, prepend_paths):
+        quoted_paths = ":".join(shlex.quote(path) for path in prepend_paths)
+        return 'export %s="%s${%s:+:${%s}}"' % (env_name, quoted_paths, env_name, env_name)
+
+    def _find_external_workspace_source_roots(self, workspace_root):
+        source_roots = []
+        catkin_file = os.path.join(workspace_root, "devel", ".catkin")
+        if os.path.isfile(catkin_file):
+            try:
+                with open(catkin_file, "r") as handle:
+                    for token in handle.read().strip().split(";"):
+                        token = token.strip()
+                        if token and os.path.isdir(token):
+                            source_roots.append(token)
+            except Exception:
+                pass
+
+        standard_src = os.path.join(workspace_root, "src")
+        if os.path.isdir(standard_src):
+            source_roots.append(standard_src)
+        return source_roots
+
+    def _unique_existing_paths(self, paths):
+        unique_paths = []
+        seen = set()
+        for path in paths:
+            normalized = os.path.abspath(os.path.expanduser(path))
+            if normalized in seen:
+                continue
+            if os.path.exists(normalized):
+                unique_paths.append(normalized)
+                seen.add(normalized)
+        return unique_paths
+
     def _monitor_processes(self, _event):
         with self._lock:
             for feature_name, runtime in self._runtimes.items():
@@ -606,6 +701,7 @@ class SunraySystemSupervisor:
         feature_name,
         unit_name,
         command,
+        shell_command,
         pid_file,
         shell_pid_file,
         start_delay_sec,
@@ -645,7 +741,7 @@ class SunraySystemSupervisor:
             handle.write("echo \"[Sunray] Launch: %s\"\n" % unit_name)
             handle.write("echo \"[Sunray] Command: %s\"\n" % " ".join(shlex.quote(token) for token in command))
             handle.write("echo\n")
-            handle.write("%s &\n" % " ".join(shlex.quote(token) for token in command))
+            handle.write("%s &\n" % " ".join(shlex.quote(token) for token in shell_command))
             handle.write("roslaunch_pid=$!\n")
             handle.write("echo \"$roslaunch_pid\" > \"$pid_file\"\n")
             handle.write("wait \"$roslaunch_pid\"\n")

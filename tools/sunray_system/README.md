@@ -205,6 +205,14 @@ features:
 
 `override_args` 为启动时动态附加参数，会追加到 feature 里每个 launch 单元的参数末尾。
 
+`sunray_system` 在实际拉起 launch 时，会先统一注入 ROS 运行环境，再执行 `roslaunch`。默认会依次加载：
+
+- `ros_setup_file`
+- `workspace_setup_file`
+- `external_workspaces` 对应的环境补充（如有）
+
+这样即使在 systemd、自启动或机载原生终端环境中，也不会依赖当前 shell 是否手动 `source` 过工作空间。
+
 ### 字段说明
 
 - `name`：feature 的唯一标识符。`sunray_system` 内部用它做索引，服务调用里的 `feature_name`、`depends_on` 引用的也是它。
@@ -220,6 +228,22 @@ features:
 - `launches[].file`：launch 文件名，默认从对应 package 的 `launch/` 目录查找。
 - `launches[].args`：传给 `roslaunch` 的参数列表，格式为 `name:=value`。
 - `launches[].delay_sec`：当前 launch 单元启动后，到下一个 launch 单元启动前的延迟秒数。
+
+### 启动环境参数
+
+`sunray_system.launch` 现在支持以下参数：
+
+- `ros_setup_file`：ROS 发行版环境脚本，默认 `/opt/ros/noetic/setup.bash`
+- `workspace_setup_file`：当前工作空间环境脚本，默认 `/home/yundrone/Sunray_v2/devel/setup.bash`
+- `external_workspaces`：可选的外部 workspace 列表，用于补充 `ROS_PACKAGE_PATH`、`CMAKE_PREFIX_PATH`、`PATH`、`LD_LIBRARY_PATH`、`PYTHONPATH`
+
+示例：
+
+```bash
+roslaunch sunray_system sunray_system.launch \
+  workspace_setup_file:=/home/yundrone/Sunray_v2/devel/setup.bash \
+  external_workspaces:="['/home/yundrone/pengyu_sim']"
+```
 
 ### `name` 能不能写中文
 
