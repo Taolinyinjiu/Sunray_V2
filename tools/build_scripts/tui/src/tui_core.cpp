@@ -293,8 +293,30 @@ void UIState::update_module_render_items() {
     }
   }
 
-  // 3. 遍历所有模块，生成右栏渲染项目
+  // 3. 按模块名字母顺序排序，便于在右栏快速查找
+  std::vector<const Module *> sorted_modules;
+  sorted_modules.reserve(core_data.modules.size());
   for (const auto &module : core_data.modules) {
+    sorted_modules.push_back(&module);
+  }
+
+  auto normalized_name = [](const std::string &name) {
+    std::string normalized = name;
+    std::transform(
+        normalized.begin(), normalized.end(), normalized.begin(),
+        [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return normalized;
+  };
+
+  std::stable_sort(
+      sorted_modules.begin(), sorted_modules.end(),
+      [&](const Module *lhs, const Module *rhs) {
+        return normalized_name(lhs->name) < normalized_name(rhs->name);
+      });
+
+  // 4. 遍历排序后的模块，生成右栏渲染项目
+  for (const Module *module_ptr : sorted_modules) {
+    const Module &module = *module_ptr;
     // 3.1 搜索过滤逻辑 - 检查模块是否匹配搜索条件
     if (!view.search_filter.empty()) {
       if (!matches_filter(module.name, view.search_filter) &&
@@ -316,7 +338,7 @@ void UIState::update_module_render_items() {
     module_render_items.emplace_back(module_item);
   }
 
-  // 4. 确保模块选择索引有效
+  // 5. 确保模块选择索引有效
   if (module_selection_index >= static_cast<int>(module_render_items.size())) {
     module_selection_index =
         std::max(0, static_cast<int>(module_render_items.size()) - 1);
