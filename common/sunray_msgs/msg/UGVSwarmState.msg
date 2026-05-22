@@ -1,24 +1,25 @@
-std_msgs/Header header
+# -------------UGVSwarmState-------------
+std_msgs/Header header	# 消息头（时间戳与坐标系名）
 
-# swarm_control_ugv的相关参数
-# 本机ID
-uint8 agent_id
-# 集群数量
-uint32 swarm_num
+# UGVSwarmState 是 swarm_control_ugv 对外发布的完整运行状态。
+# 典型话题：
+#   /sunray/swarm/ugv_swarm_state
 
-# swarm_control_ugv的相关状态
+#【基本参数】
+uint8 agent_id      # 本机ID
+uint32 swarm_num    # 集群数量
+
+#【输入信息：当前odom】
+# 1. self_odom_ready=false 时，本字段为默认空消息
+# 2. self_odom 来自本机 /sunray/localization/local_odom，包含位置、姿态、速度等信息
+nav_msgs/Odometry self_odom
 # 输入准备状态
 bool self_odom_ready
 bool peers_odom_ready
 uint32 ready_peer_num
 
-# 本机局部里程计
-# 1. self_odom_ready=false 时，本字段为默认空消息
-# 2. self_odom 来自本机 /sunray/localization/local_odom，包含位置、姿态、速度等信息
-nav_msgs/Odometry self_odom
-
-# 当前选择执行的集群控制指令UGVSwarmCMD（来自外部）
-sunray_msgs/UGVSwarmCMD swarm_cmd
+#【输入信息：集群控制状态以及当前执行的集群指令】
+sunray_msgs/UGVSwarmCMD swarm_cmd   # 当前选择执行的集群控制指令UGVSwarmCMD（来自外部）
 
 # 当前集群状态
 uint8 INIT=0
@@ -37,5 +38,5 @@ bool target_valid
 geometry_msgs/Point target_pos
 float32 target_yaw
 
-# 当前发布的UGVControlCMD（发布到无人车控制器）
+#【输出信息：当前发布的UGVControlCMD（发布到无人车控制器）】
 sunray_msgs/UGVControlCMD ugv_cmd

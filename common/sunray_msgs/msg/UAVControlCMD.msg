@@ -1,5 +1,5 @@
-# 话题头
-std_msgs/Header header
+# -------------UAVControlCMD-------------
+std_msgs/Header header	# 消息头（时间戳与坐标系名）
 
 # UAVControlCMD 是 sunray_uav_control 接收的外部控制指令（控制接口）
 # 典型话题：
