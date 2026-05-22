@@ -20,6 +20,9 @@ locale.setlocale(locale.LC_ALL, "")
 
 
 class SunraySystemTUI:
+    MIN_WIDTH = 72
+    MIN_HEIGHT = 16
+
     def __init__(self):
         rospy.init_node("sunray_system_tui", anonymous=False, disable_signals=True)
 
@@ -124,6 +127,13 @@ class SunraySystemTUI:
                 self.stop_selected()
             elif key in (curses.KEY_F5, curses.KEY_F0 + 5):
                 self.refresh()
+            elif key == curses.KEY_RESIZE:
+                try:
+                    curses.update_lines_cols()
+                    curses.resize_term(0, 0)
+                except curses.error:
+                    pass
+                self.status_message = "窗口尺寸已更新"
 
         stdscr.keypad(False)
         stdscr.nodelay(False)
@@ -382,14 +392,58 @@ class SunraySystemTUI:
             self.safe_addnstr(stdscr, bar_y, x + 1 + fill_width, "·" * empty_width, empty_width, self.attr(10))
         self.safe_addnstr(stdscr, bar_y, x + 1 + bar_width, "]", 1, self.attr(10))
 
+    def compute_layout(self, width, height):
+        content_top = 3
+        footer_height = 2
+        content_height = height - content_top - footer_height
+        if content_height <= 0:
+            return None
+
+        min_left_width = 30
+        min_right_width = 36
+        min_detail_height = 10
+        min_system_height = 6
+        min_total_height = min_detail_height + min_system_height
+        if content_height < min_total_height:
+            return None
+
+        # 对齐 build.sh TUI 的思路：始终保持双栏，只做动态边界调整。
+        right_start = (width - 1) // 2
+        left_width = right_start
+        right_width = width - right_start
+        if left_width < min_left_width or right_width < min_right_width:
+            return None
+
+        extra_height = content_height - min_total_height
+        detail_height = min_detail_height + min(4, extra_height)
+        extra_height -= min(4, extra_height)
+        system_height = min_system_height + extra_height
+
+        return {
+            "content_top": content_top,
+            "content_height": content_height,
+            "list_left": 0,
+            "list_width": left_width,
+            "list_top": content_top,
+            "list_height": content_height,
+            "detail_left": left_width,
+            "detail_width": right_width,
+            "detail_top": content_top,
+            "detail_height": detail_height,
+            "system_left": left_width,
+            "system_width": right_width,
+            "system_top": content_top + detail_height,
+            "system_height": system_height,
+        }
+
     def draw(self, stdscr):
         stdscr.erase()
         height, width = stdscr.getmaxyx()
         stdscr.bkgd(" ", self.attr(0))
 
-        if height < 16 or width < 72:
+        if height < self.MIN_HEIGHT or width < self.MIN_WIDTH:
             title_text = "Sunray System TUI"
-            warn_text = "终端窗口太小，当前至少需要 72x16。"
+            warn_text = "终端窗口太小，当前至少需要 %dx%d。" % (self.MIN_WIDTH, self.MIN_HEIGHT)
             hint_text = "请放大终端后重试。"
             self.safe_addnstr(stdscr, 0, self.centered_x(width, title_text), title_text, len(title_text), self.attr(1, curses.A_BOLD))
             self.safe_addnstr(stdscr, 2, self.centered_x(width, warn_text), warn_text, len(warn_text), self.attr(8, curses.A_BOLD))
@@ -409,28 +463,46 @@ class SunraySystemTUI:
         self.safe_addnstr(stdscr, 1, 1, status_text.ljust(max(1, width - 2)), max(1, width - 2), self.attr(2))
         self.safe_hline(stdscr, 2, 0, curses.ACS_HLINE, width)
 
-        content_top = 3
-        footer_height = 2
-        content_height = max(10, height - content_top - footer_height)
-        left_width = max(30, min(42, width // 3))
-        right_width = width - left_width
-        if right_width < 36:
-            right_width = 36
-            left_width = width - right_width
-        left_width = max(30, left_width)
-        right_width = max(36, width - left_width)
-        detail_height = max(9, content_height // 2)
-        system_height = content_height - detail_height
-        if system_height < 8:
-            system_height = 8
-            detail_height = content_height - system_height
+        layout = self.compute_layout(width, height)
+        if layout is None:
+            warn_text = "当前窗口高度不足以完整显示面板。"
+            hint_text = "请继续放大终端。"
+            self.safe_addnstr(stdscr, height // 2 - 1, self.centered_x(width, warn_text), warn_text, len(warn_text), self.attr(8, curses.A_BOLD))
+            self.safe_addnstr(stdscr, height // 2 + 1, self.centered_x(width, hint_text), hint_text, len(hint_text), self.attr(2))
+            footer_text = "Esc 退出"
+            footer_x = self.centered_x(width, footer_text)
+            self.safe_addnstr(stdscr, height - 1, footer_x, footer_text, len(footer_text), self.attr(1))
+            stdscr.refresh()
+            return
 
-        self.draw_box(stdscr, content_top, 0, content_height, left_width, "功能列表", self.attr(6, curses.A_BOLD))
-        self.draw_box(stdscr, content_top, left_width, detail_height, right_width, "当前功能详情", self.attr(6, curses.A_BOLD))
-        self.draw_box(stdscr, content_top + detail_height, left_width, system_height, right_width, "系统信息 /sunray/system_info", self.attr(6, curses.A_BOLD))
+        content_top = layout["content_top"]
+        list_left = layout["list_left"]
+        list_width = layout["list_width"]
+        list_top = layout["list_top"]
+        list_height = layout["list_height"]
+        detail_left = layout["detail_left"]
+        detail_width = layout["detail_width"]
+        detail_top = layout["detail_top"]
+        detail_height = layout["detail_height"]
+        system_left_box = layout["system_left"]
+        system_width = layout["system_width"]
+        system_top_base = layout["system_top"]
+        system_height = layout["system_height"]
 
-        list_inner_top = content_top + 1
-        list_inner_height = max(1, content_height - 2)
+        self.draw_box(stdscr, list_top, list_left, list_height, list_width, "功能列表", self.attr(6, curses.A_BOLD))
+        self.draw_box(stdscr, detail_top, detail_left, detail_height, detail_width, "当前功能详情", self.attr(6, curses.A_BOLD))
+        self.draw_box(
+            stdscr,
+            system_top_base,
+            system_left_box,
+            system_height,
+            system_width,
+            "系统信息 /sunray/system_info",
+            self.attr(6, curses.A_BOLD),
+        )
+
+        list_inner_top = list_top + 1
+        list_inner_height = max(1, list_height - 2)
         selected_row_index = self.find_selected_row_index()
         scroll_offset = 0
         if selected_row_index >= list_inner_height:
@@ -460,13 +532,13 @@ class SunraySystemTUI:
                     list_inner_top + row_idx,
                     3,
                     group_text,
-                    max(0, left_width - len(count_text) - 6),
+                    max(0, list_width - len(count_text) - 6),
                     group_attr,
                 )
                 self.safe_addnstr(
                     stdscr,
                     list_inner_top + row_idx,
-                    max(3, left_width - len(count_text) - 2),
+                    max(3, list_width - len(count_text) - 2),
                     count_text,
                     len(count_text),
                     self.attr(12, curses.A_BOLD) if row["running_count"] > 0 else self.attr(10),
@@ -475,24 +547,34 @@ class SunraySystemTUI:
 
             feature = row["feature"]
             selected = feature["name"] == self.features[self.selected_index]["name"]
-            self.draw_feature_row(stdscr, list_inner_top + row_idx, 1, left_width - 3, feature, selected)
+            self.draw_feature_row(stdscr, list_inner_top + row_idx, list_left + 1, list_width - 3, feature, selected)
 
         if self.features:
             current_name = self.features[self.selected_index]["name"]
             detail = self.feature_details.get(current_name, {})
-            panel_left = left_width + 2
-            panel_width = max(20, right_width - 4)
+            panel_left = detail_left + 2
+            panel_width = max(10, detail_width - 4)
             column_gap = 3
-            column_width = max(12, (panel_width - column_gap) // 2)
+            detail_single_column = panel_width < 40
+            column_width = panel_width if detail_single_column else max(12, (panel_width - column_gap) // 2)
             left_col = panel_left
-            right_col = panel_left + column_width + column_gap
-            info_top = content_top + 1
+            right_col = panel_left if detail_single_column else panel_left + column_width + column_gap
+            info_top = detail_top + 1
 
             self.draw_inline_field(stdscr, info_top, left_col, column_width, "名称", detail.get("name", current_name), 6, 2)
-            self.draw_inline_field(stdscr, info_top, right_col, column_width, "分组", detail.get("group", "未分组"), 11, 2)
             self.draw_inline_field(
                 stdscr,
-                info_top + 1,
+                info_top if not detail_single_column else info_top + 1,
+                right_col,
+                column_width,
+                "分组",
+                detail.get("group", "未分组"),
+                11,
+                2,
+            )
+            self.draw_inline_field(
+                stdscr,
+                info_top + 1 if not detail_single_column else info_top + 2,
                 left_col,
                 column_width,
                 "状态",
@@ -502,7 +584,7 @@ class SunraySystemTUI:
             )
             self.draw_inline_field(
                 stdscr,
-                info_top + 1,
+                info_top + 1 if not detail_single_column else info_top + 3,
                 right_col,
                 column_width,
                 "自动启动",
@@ -512,7 +594,7 @@ class SunraySystemTUI:
             )
             self.draw_inline_field(
                 stdscr,
-                info_top + 2,
+                info_top + 2 if not detail_single_column else info_top + 4,
                 left_col,
                 column_width,
                 "停止超时",
@@ -522,7 +604,7 @@ class SunraySystemTUI:
             )
             self.draw_inline_field(
                 stdscr,
-                info_top + 2,
+                info_top + 2 if not detail_single_column else info_top + 5,
                 right_col,
                 column_width,
                 "依赖功能",
@@ -531,7 +613,7 @@ class SunraySystemTUI:
                 2,
             )
 
-            desc_top = info_top + 4
+            desc_top = info_top + 4 if not detail_single_column else info_top + 7
             desc_width = panel_width
             desc_text = "描述: %s" % (detail.get("description", "") or "-")
             desc_lines = textwrap.wrap(desc_text, width=desc_width) or ["-"]
@@ -539,7 +621,7 @@ class SunraySystemTUI:
                 self.safe_addnstr(stdscr, desc_top + idx, panel_left, line, desc_width, self.attr(2))
 
             preview_top = desc_top + len(desc_lines) + 1
-            preview_height = content_top + detail_height - preview_top - 1
+            preview_height = detail_top + detail_height - preview_top - 1
             self.draw_preview_panel(
                 stdscr,
                 preview_top,
@@ -550,25 +632,38 @@ class SunraySystemTUI:
                 detail.get("start_preview_commands", []),
             )
 
-        system_top = content_top + detail_height + 1
-        system_max_width = max(20, right_width - 3)
+        system_top = system_top_base + 1
+        system_left = system_left_box + 1
+        system_max_width = max(12, system_width - 3)
+        system_inner_height = max(1, system_height - 2)
         info = self.system_info
         if info is not None:
-            self.draw_meter(stdscr, system_top, left_width + 1, system_max_width, "CPU", info.cpu_percent)
-            self.draw_meter(stdscr, system_top + 3, left_width + 1, system_max_width, "内存", info.memory_percent)
+            if system_inner_height >= 7:
+                self.draw_meter(stdscr, system_top, system_left, system_max_width, "CPU", info.cpu_percent)
+                self.draw_meter(stdscr, system_top + 3, system_left, system_max_width, "内存", info.memory_percent)
 
-            nodes_title = "活跃 ROS 节点 (%d)" % len(info.active_ros_nodes)
-            self.safe_addnstr(stdscr, system_top + 6, left_width + 1, nodes_title, system_max_width, self.attr(6, curses.A_BOLD))
+                nodes_title = "活跃 ROS 节点 (%d)" % len(info.active_ros_nodes)
+                self.safe_addnstr(stdscr, system_top + 6, system_left, nodes_title, system_max_width, self.attr(6, curses.A_BOLD))
 
-            node_lines = max(1, content_top + content_height - 2 - (system_top + 7))
-            visible_nodes = info.active_ros_nodes[:node_lines]
-            for idx, node_name in enumerate(visible_nodes):
-                self.safe_addnstr(stdscr, system_top + 7 + idx, left_width + 1, "- " + node_name, system_max_width, self.attr(2))
-            if len(info.active_ros_nodes) > len(visible_nodes) and system_top + 7 + len(visible_nodes) < height - 2:
-                remaining = len(info.active_ros_nodes) - len(visible_nodes)
-                self.safe_addnstr(stdscr, system_top + 7 + len(visible_nodes), left_width + 1, "... 还有 %d 个节点" % remaining, system_max_width, self.attr(5))
+                node_lines = max(0, system_inner_height - 7)
+                visible_nodes = info.active_ros_nodes[:node_lines]
+                for idx, node_name in enumerate(visible_nodes):
+                    self.safe_addnstr(stdscr, system_top + 7 + idx, system_left, "- " + node_name, system_max_width, self.attr(2))
+                if len(info.active_ros_nodes) > len(visible_nodes) and system_top + 7 + len(visible_nodes) < system_top_base + system_height - 1:
+                    remaining = len(info.active_ros_nodes) - len(visible_nodes)
+                    self.safe_addnstr(stdscr, system_top + 7 + len(visible_nodes), system_left, "... 还有 %d 个节点" % remaining, system_max_width, self.attr(5))
+            else:
+                summary_text = "CPU %.1f%%   内存 %.1f%%   节点 %d" % (
+                    info.cpu_percent,
+                    info.memory_percent,
+                    len(info.active_ros_nodes),
+                )
+                self.safe_addnstr(stdscr, system_top, system_left, summary_text, system_max_width, self.attr(6, curses.A_BOLD))
+                if system_inner_height >= 2 and info.active_ros_nodes:
+                    first_node = "当前节点: %s" % info.active_ros_nodes[0]
+                    self.safe_addnstr(stdscr, system_top + 1, system_left, first_node, system_max_width, self.attr(2))
         else:
-            self.safe_addnstr(stdscr, system_top, left_width + 1, "等待 /sunray/system_info ...", system_max_width, self.attr(5, curses.A_BOLD))
+            self.safe_addnstr(stdscr, system_top, system_left, "等待 /sunray/system_info ...", system_max_width, self.attr(5, curses.A_BOLD))
 
         footer_text = "方向键选择   F1 切换启动模式(%s)   F2 启动   F3 停止   F5 刷新   Esc 退出" % (
             "终端启动" if self.start_mode_terminal else "后台启动"
