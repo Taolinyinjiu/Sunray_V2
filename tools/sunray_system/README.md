@@ -9,7 +9,7 @@
 - 支持 feature 依赖
 - 维护每个 feature 对应的 launch 子进程
 - 发布 `/sunray/system_info` 话题，提供系统级运行信息
-- 提供独立的 TUI 终端界面用于查看状态和交互启停
+- 可配合 `scripts_manage` 提供独立终端管理界面
 
 ## 启动
 
@@ -124,7 +124,7 @@ string[] start_preview_units
 - `success`：查询是否成功
 - `message`：返回说明，例如 `ok` 或 `unknown feature: xxx`
 - `name`：该 feature 的名称
-- `group`：该 feature 所属分组，供 TUI 分组展示
+- `group`：该 feature 所属分组，供管理界面分组展示
 - `running`：该 feature 当前是否在运行
 - `description`：该 feature 的描述
 - `auto_start`：该 feature 是否配置为 `sunray_system` 启动时自动启动
@@ -144,12 +144,12 @@ rostopic echo /sunray/system_info
 - 内存占用率
 - 当前活跃的 ROS 节点名列表
 
-## TUI
+## 管理界面
 
-初版 TUI 放在独立目录：
+旧版 `sunray_system` 内置 TUI 已移除。新的终端管理界面独立放在：
 
 ```text
-tools/sunray_system/sunray_system_tui
+tools/scripts_manage
 ```
 
 启动方式：
@@ -157,25 +157,14 @@ tools/sunray_system/sunray_system_tui
 ```bash
 cd ~/Sunray_v2
 source devel/setup.bash
-rosrun sunray_system sunray_system_tui.py
+rosrun scripts_manage scripts_manage_tui
 ```
 
-或者直接通过 launch 启动：
+或：
 
 ```bash
-cd ~/Sunray_v2
-source devel/setup.bash
-roslaunch sunray_system sunray_system_tui.launch
+roslaunch scripts_manage scripts_manage_tui.launch
 ```
-
-快捷键：
-
-- 方向键：切换 feature
-- `F1`：切换启动模式（后台启动 / 终端启动）
-- `F2`：启动当前 feature
-- `F3`：停止当前 feature
-- `F5`：立即刷新当前界面状态
-- `Esc`：退出
 
 ## 配置
 
@@ -216,8 +205,8 @@ features:
 ### 字段说明
 
 - `name`：feature 的唯一标识符。`sunray_system` 内部用它做索引，服务调用里的 `feature_name`、`depends_on` 引用的也是它。
-- `description`：给 TUI 和状态展示用的中文说明。
-- `group`：功能分组名称，供 TUI 左侧按组展示。建议写中文短名称，例如 `单机无人机`、`地面站`、`基础模块`。
+- `description`：给管理界面和状态展示用的中文说明。
+- `group`：功能分组名称，供管理界面左侧按组展示。建议写中文短名称，例如 `单机无人机`、`地面站`、`基础模块`。
 - `auto_start`：当 `sunray_system` 节点启动时，是否自动启动这个 feature。
 - `depends_on`：当前 feature 依赖的其他 feature 名称列表。启动当前 feature 时会先启动依赖项。
 - 当使用 `start_with_terminal=true` 时，依赖项不会再各自弹出一个新终端窗口，而是和主 feature 一起合并到同一个 `gnome-terminal` 窗口中，按顺序拆成多个 tab。
@@ -266,7 +255,7 @@ roslaunch sunray_system sunray_system.launch \
 - `name`：用稳定的英文标识，例如 `single_uav_basic`
 - `description`：用中文说明，例如 `单机无人机基础链路`
 
-如果你后面明确希望 TUI 左侧直接显示中文名称，更合适的方式是后续增加一个单独的 `display_name` 字段，而不是直接把 `name` 改成中文。
+如果你后面明确希望管理界面左侧直接显示中文名称，更合适的方式是后续增加一个单独的 `display_name` 字段，而不是直接把 `name` 改成中文。
 
 ### 如何新增一个 feature
 

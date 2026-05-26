@@ -16,7 +16,6 @@ catkin_package(
 
 catkin_install_python(PROGRAMS
   scripts/sunray_system_node.py
-  sunray_system_tui/sunray_system_tui.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

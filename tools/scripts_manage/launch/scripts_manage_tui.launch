@@ -1,0 +1,15 @@
+<launch>
+  <arg name="system_ns" default="/sunray_system" />
+  <arg name="system_info_topic" default="/sunray/system_info" />
+  <arg name="refresh_period_sec" default="5.0" />
+
+  <node
+    pkg="scripts_manage"
+    type="scripts_manage_tui"
+    name="scripts_manage_tui"
+    output="screen">
+    <param name="system_ns" value="$(arg system_ns)" />
+    <param name="system_info_topic" value="$(arg system_info_topic)" />
+    <param name="refresh_period_sec" value="$(arg refresh_period_sec)" />
+  </node>
+</launch>
