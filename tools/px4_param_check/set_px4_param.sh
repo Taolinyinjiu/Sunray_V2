@@ -8,6 +8,7 @@ CONFIG_DIR="${SCRIPT_DIR}/config"
 CONFIG_FILE="px4_params_default.yaml"
 FLOAT_TOLERANCE="${FLOAT_TOLERANCE:-0.001}"
 SERVICE_TIMEOUT_SEC="${SERVICE_TIMEOUT_SEC:-3}"
+REBOOT_PROMPT_TIMEOUT_SEC="${REBOOT_PROMPT_TIMEOUT_SEC:-20}"
 AGENT_NAME="${AGENT_NAME:-}"
 AGENT_ID="${AGENT_ID:-}"
 MAVROS_NODE="${MAVROS_NODE:-}"
@@ -34,7 +35,7 @@ Options:
   --mavros-ns NS       Full MAVROS namespace. Overrides agent config.
   --group GROUP       Only set one parameter group name from config.
   --dry-run           Print commands without changing PX4 parameters.
-  --reboot            Reboot flight controller after setting parameters.
+  --reboot            Reboot flight controller after setting parameters without prompt.
   -h, --help          Show this help.
 
 Example:
@@ -403,7 +404,39 @@ reboot_fcu() {
     return 0
   fi
 
-  rosservice call "${MAVROS_NS}/cmd/command" "${request}" >/dev/null
+  timeout "${SERVICE_TIMEOUT_SEC}" rosservice call "${MAVROS_NS}/cmd/command" "${request}" >/dev/null
+}
+
+ask_reboot_fcu() {
+  local answer
+
+  if [[ "${DRY_RUN}" -eq 1 || "${success_count}" -eq 0 ]]; then
+    return 0
+  fi
+
+  echo
+  printf "部分 PX4 参数修改后可能需要重启飞控才会生效。是否现在重启飞控？[y/N] "
+  if ! read -r -t "${REBOOT_PROMPT_TIMEOUT_SEC}" answer; then
+    echo
+    echo "等待 ${REBOOT_PROMPT_TIMEOUT_SEC}s 未选择，跳过重启并退出。"
+    return 0
+  fi
+
+  case "${answer}" in
+    y|Y|yes|YES)
+      printf "Reboot flight controller... "
+      if reboot_fcu; then
+        echo "ok"
+      else
+        failed=$((failed + 1))
+        failed_count=$((failed_count + 1))
+        echo "failed"
+      fi
+      ;;
+    *)
+      echo "跳过重启。"
+      ;;
+  esac
 }
 
 echo "PX4 parameter set"
@@ -413,6 +446,7 @@ echo "MAVROS namespace: ${MAVROS_NS}"
 [[ -n "${GROUP_FILTER}" ]] && echo "Group: ${GROUP_FILTER}"
 echo "Float tolerance: ${FLOAT_TOLERANCE}"
 echo "Service timeout: ${SERVICE_TIMEOUT_SEC}s"
+echo "Reboot prompt timeout: ${REBOOT_PROMPT_TIMEOUT_SEC}s"
 [[ "${DRY_RUN}" -eq 1 ]] && echo "Mode: dry-run"
 echo
 
@@ -488,8 +522,11 @@ if [[ "${REBOOT}" -eq 1 ]]; then
     echo "ok"
   else
     failed=$((failed + 1))
+    failed_count=$((failed_count + 1))
     echo "failed"
   fi
+else
+  ask_reboot_fcu
 fi
 
 echo
