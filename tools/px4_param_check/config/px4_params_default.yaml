@@ -1,0 +1,343 @@
+# Sunray 关注的 PX4 参数建议值。
+# 这些数值只作为初始建议，需要结合机型、PX4 版本、机架类型和试飞数据重新确认。
+#
+# agent_name 和 agent_id 对应 drivers/sunray_mavros/launch/mavros.launch:
+#   <group ns="$(arg agent_name)$(arg agent_id)">
+# 默认 MAVROS namespace 为 /uav1/mavros。
+
+agent_name: uav
+agent_id: 1
+mavros_node: mavros
+
+parameter_group:
+  - name: EKF2
+    description: PX4中多源融合模块参数
+    parameters:
+      - name: EKF2_EV_CTRL
+        type: integer
+        recommended_value: 15
+        description: 外部视觉融合控制
+
+      - name: EKF2_EV_DELAY
+        type: real
+        recommended_value: 0.0
+        description: 外部视觉数据相对 IMU 的延迟，单位为毫秒；该值与视觉链路、时间戳同步方式有关，需要根据日志创新量实测调整。
+
+      - name: EKF2_EV_POS_X
+        type: real
+        recommended_value: 0.0
+        description: 外部视觉传感器在机体系 X 轴方向相对飞机重心的位置，单位为米；正方向通常为机头前方。
+
+      - name: EKF2_EV_POS_Y
+        type: real
+        recommended_value: 0.0
+        description: 外部视觉传感器在机体系 Y 轴方向相对飞机重心的位置，单位为米；正方向通常为机体右侧。
+
+      - name: EKF2_EV_POS_Z
+        type: real
+        recommended_value: 0.0
+        description: 外部视觉传感器在机体系 Z 轴方向相对飞机重心的位置，单位为米；正方向通常为机体下方。
+
+      - name: EKF2_EV_NOISE_MD
+        type: integer
+        recommended_value: 0
+        description: 外部视觉观测噪声来源，0表示优先使用视觉消息中的协方差并用参数作为下限，1表示直接使用 PX4 参数中的噪声设置。
+
+      - name: EKF2_EVP_NOISE
+        type: real
+        recommended_value: 0.1
+        description: 外部视觉位置观测噪声，单位为米；当视觉消息协方差缺失或低于该值时，用于限制位置融合置信度。
+
+      - name: EKF2_EVV_NOISE
+        type: real
+        recommended_value: 0.1
+        description: 外部视觉速度观测噪声，单位为米每秒；当融合视觉速度时用于限制速度融合置信度。
+
+      - name: EKF2_EVA_NOISE
+        type: real
+        recommended_value: 0.1
+        description: 外部视觉姿态角观测噪声，单位为弧度；当融合外部视觉偏航时用于限制角度融合置信度。
+
+      - name: EKF2_EVP_GATE
+        type: real
+        recommended_value: 5.0
+        description: 外部视觉位置融合创新门限，单位为标准差；数值越小越容易拒绝异常视觉位置数据。
+
+      - name: EKF2_EVV_GATE
+        type: real
+        recommended_value: 3.0
+        description: 外部视觉速度融合创新门限，单位为标准差；数值越小越容易拒绝异常视觉速度数据。
+
+      - name: EKF2_EV_QMIN
+        type: integer
+        recommended_value: 0
+        description: 外部视觉质量最低阈值；0表示不使用可选质量字段做额外门限，适合大多数不发布质量字段的 VIO 或动捕系统。
+
+      - name: EKF2_HGT_REF
+        type: integer
+        recommended_value: 3
+        description: EKF 高度参考源，高度参考源：0代表气压计、1代表GPS、2代表测距仪、3代表外部视觉
+
+      - name: EKF2_GPS_CTRL
+        type: integer
+        recommended_value: 0
+        description: GPS 融合控制：0表示禁用，1代表使能
+
+      - name: EKF2_BARO_CTRL
+        type: integer
+        recommended_value: 0
+        description: 气压计高度融合控制：0表示禁用，1代表使能
+
+      - name: EKF2_MAG_TYPE
+        type: integer
+        recommended_value: 5
+        description: 磁力计融合类型，5表示不使用磁力计；仅建议在外部视觉可靠提供偏航时使用，否则应改回自动模式。
+
+      - name: EKF2_IMU_CTRL
+        type: integer
+        recommended_value: 7
+        description: IMU 状态估计控制位掩码，通常保持陀螺零偏、加计零偏和重力向量相关估计启用。
+
+      - name: EKF2_OF_CTRL
+        type: integer
+        recommended_value: 1
+        description: 光流融合控制：0表示禁用，1代表使能
+
+      - name: EKF2_OF_POS_X
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 X 轴方向相对飞机重心的位置，单位为米；正方向通常为机头前方。
+
+      - name: EKF2_OF_POS_Y
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 Y 轴方向相对飞机重心的位置，单位为米；正方向通常为机体右侧。
+
+      - name: EKF2_OF_POS_Z
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 Z 轴方向相对飞机重心的位置，单位为米；正方向通常为机体下方。
+
+      - name: EKF2_RNG_CTRL
+        type: integer
+        recommended_value: 1
+        description: 测距传感器融合控制，0 表示禁用，1表示条件启用测距仪融合‌（仅在水平速度 < EKF2_RNG_A_VMAX 且离地高度 < EKF2_RNG_A_HMAX 时使用）
+
+      - name: EKF2_RNG_A_HMAX
+        type: real
+        recommended_value: 5.0
+        description: 条件测距辅助允许的最大离地高度，单位为米；仅当 EKF2_RNG_CTRL 为条件模式时生效。
+
+      - name: EKF2_RNG_A_VMAX
+        type: real
+        recommended_value: 1.0
+        description: 条件测距辅助允许的最大水平速度，单位为米每秒；速度超过该值时停止用测距仪辅助高度估计。
+
+  - name: Multicopter Position Control
+    description: 位置控制相关参数
+    parameters:
+      - name: MPC_XY_P
+        type: real
+        recommended_value: 0.95
+        description: 水平位置环 P 增益，影响水平位置误差到速度指令的响应。
+
+      - name: MPC_Z_P
+        type: real
+        recommended_value: 1.0
+        description: 垂直位置环 P 增益，影响高度误差到垂直速度指令的响应。
+
+      - name: MPC_XY_VEL_P_ACC
+        type: real
+        recommended_value: 1.8
+        description: 水平速度环 P 增益，输出加速度控制量。
+
+      - name: MPC_XY_VEL_I_ACC
+        type: real
+        recommended_value: 0.4
+        description: 水平速度环 I 增益，用于补偿持续速度误差。
+
+      - name: MPC_XY_VEL_D_ACC
+        type: real
+        recommended_value: 0.2
+        description: 水平速度环 D 增益，用于抑制速度变化过快。
+
+      - name: MPC_Z_VEL_P_ACC
+        type: real
+        recommended_value: 4.0
+        description: 垂直速度环 P 增益，输出垂直方向加速度控制量。
+
+      - name: MPC_Z_VEL_I_ACC
+        type: real
+        recommended_value: 2.0
+        description: 垂直速度环 I 增益，用于补偿持续高度或速度误差。
+
+      - name: MPC_XY_VEL_MAX
+        type: real
+        recommended_value: 2.0
+        description: 最大水平速度，单位为米每秒；OFFBOARD 速度或位置轨迹产生的速度会被该值限制，室内外部视觉场景建议先用保守值。
+
+      - name: MPC_Z_VEL_MAX_UP
+        type: real
+        recommended_value: 1.0
+        description: 最大上升速度，单位为米每秒；OFFBOARD 垂直速度指令会被该值限制。
+
+      - name: MPC_Z_VEL_MAX_DN
+        type: real
+        recommended_value: 0.8
+        description: 最大下降速度，单位为米每秒；数值过大可能导致降落或高度修正过程过激。
+
+      - name: MPC_TILTMAX_AIR
+        type: real
+        recommended_value: 35.0
+        description: 空中最大倾角，单位为度；限制速度或加速度控制模式下的最大机体倾斜角。
+
+      - name: MPC_TKO_SPEED
+        type: real
+        recommended_value: 1.0
+        description: 起飞爬升速度，单位为米每秒；外部视觉场景建议先使用较保守的起飞速度。
+
+      - name: MPC_LAND_SPEED
+        type: real
+        recommended_value: 0.6
+        description: 降落下降速度，单位为米每秒；影响自动降落阶段的下降速率。
+
+      - name: MPC_THR_HOVER
+        type: real
+        recommended_value: 0.35
+        description: 悬停所需归一化推力初值；用于悬停推力估计初始化，也会影响高度控制和落地检测。
+
+      - name: MPC_USE_HTE
+        type: integer
+        recommended_value: 1
+        description: 悬停推力估计开关，1表示启用估计；机型载荷变化明显时建议启用。
+
+      - name: MPC_THR_MIN
+        type: real
+        recommended_value: 0.12
+        description: 爬升率控制模式下的最小集体推力；过低可能导致横滚、俯仰、偏航控制力不足。
+
+      - name: MPC_THR_MAX
+        type: real
+        recommended_value: 1.0
+        description: 爬升率控制模式下的最大集体推力；室内测试大推重比机型时可按安全需要降低。
+
+      - name: MPC_THR_XY_MARG
+        type: real
+        recommended_value: 0.3
+        description: 为水平控制预留的推力余量；垂直推力接近饱和时保留部分推力给水平控制。
+
+  - name: Multicopter Attitude & Rate Control
+    description: 姿态控制相关参数
+    parameters:
+      - name: MC_ROLL_P
+        type: real
+        recommended_value: 6.5
+        description: 横滚姿态 P 增益，影响横滚角误差到角速度指令的响应。
+
+      - name: MC_PITCH_P
+        type: real
+        recommended_value: 6.5
+        description: 俯仰姿态 P 增益，影响俯仰角误差到角速度指令的响应。
+
+      - name: MC_YAW_P
+        type: real
+        recommended_value: 2.8
+        description: 偏航姿态 P 增益，影响偏航角误差到偏航角速度指令的响应。
+
+      - name: MC_ROLLRATE_K
+        type: real
+        recommended_value: 1.0
+        description: 横滚角速度控制器整体增益缩放系数。
+
+      - name: MC_ROLLRATE_P
+        type: real
+        recommended_value: 0.15
+        description: 横滚角速度环 P 增益。
+
+      - name: MC_ROLLRATE_I
+        type: real
+        recommended_value: 0.2
+        description: 横滚角速度环 I 增益。
+
+      - name: MC_ROLLRATE_D
+        type: real
+        recommended_value: 0.003
+        description: 横滚角速度环 D 增益。
+
+      - name: MC_PITCHRATE_K
+        type: real
+        recommended_value: 1.0
+        description: 俯仰角速度控制器整体增益缩放系数。
+
+      - name: MC_PITCHRATE_P
+        type: real
+        recommended_value: 0.15
+        description: 俯仰角速度环 P 增益。
+
+      - name: MC_PITCHRATE_I
+        type: real
+        recommended_value: 0.2
+        description: 俯仰角速度环 I 增益。
+
+      - name: MC_PITCHRATE_D
+        type: real
+        recommended_value: 0.003
+        description: 俯仰角速度环 D 增益。
+
+      - name: MC_YAWRATE_K
+        type: real
+        recommended_value: 1.0
+        description: 偏航角速度控制器整体增益缩放系数。
+
+      - name: MC_YAWRATE_P
+        type: real
+        recommended_value: 0.2
+        description: 偏航角速度环 P 增益。
+
+      - name: MC_YAWRATE_I
+        type: real
+        recommended_value: 0.1
+        description: 偏航角速度环 I 增益。
+
+      - name: MC_YAWRATE_D
+        type: real
+        recommended_value: 0.0
+        description: 偏航角速度环 D 增益。
+
+  - name: Commander
+    description: OFFBOARD模式丢失如何处理的相关参数
+    parameters:
+      - name: COM_OF_LOSS_T
+        type: real
+        recommended_value: 1.0
+        description: OFFBOARD模式控制指令丢失后的超时时间，单位为秒。
+
+      - name: COM_OBL_RC_ACT
+        type: integer
+        recommended_value: 4
+        description: OFFBOARD模式丢失且遥控器可用时的动作， 0 表示切到定点模式，4代表原地降落。
+
+      - name: COM_RC_OVERRIDE
+        type: integer
+        recommended_value: 2
+        description: 是否允许摇杆接管自动或 OFFBOARD 模式，0 = 禁用， 2 = 允许在OFFBOARD模式下接管。
+
+      - name: COM_RC_STICK_OV
+        type: real
+        recommended_value: 30.0
+        description: 摇杆接管阈值，单位为百分比；当摇杆输入超过该阈值且 COM_RC_OVERRIDE 允许时，会切回 Position 模式。
+
+      - name: COM_RCL_EXCEPT
+        type: integer
+        recommended_value: 4
+        description: 哪些飞行模式下忽略遥控器 (RC) 丢失，不触发 RC 丢失失控保护，4代表Offboard 免 RC 检查。
+
+      - name: COM_RC_LOSS_T
+        type: real
+        recommended_value: 0.5
+        description: 遥控器或 Joystick 控制输入丢失判定时间，单位为秒；超过该时间未收到新输入则认为链路丢失。
+
+      - name: COM_ARM_WO_GPS
+        type: integer
+        recommended_value: 1
+        description: GPS 预检失败时的解锁策略，1允许无 GPS 解锁仅警告。
