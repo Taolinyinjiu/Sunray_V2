@@ -112,6 +112,7 @@ PlanningFsmState active_task_to_fsm_state() {
 PlanningFSM::PlanningFSM(ros::NodeHandle& nh) : nh_(nh), private_nh_("~") {}
 
 void PlanningFSM::init() {
+    // 读取参数
     load_param();
 
     // The planner adapter is selected once at node startup from launch/config
@@ -166,6 +167,7 @@ void PlanningFSM::load_param() {
     private_nh_.param("log_save", log_save_, false);
     init_logger();
 
+    // 规划器类型
     private_nh_.param("planner_type", selected_planner_type_, std::string(""));
     selected_planner_type_ = normalize_planner_type(selected_planner_type_);
 
