@@ -20,5 +20,6 @@
     <param name="acc_noise_std" value="0.08"/>
     <param name="acc_cmd_amp" value="0.6"/>
     <param name="acc_cmd_freq_hz" value="0.35"/>
+    <param name="sim_delay_s" value="0.04"/>
   </node>
 </launch>

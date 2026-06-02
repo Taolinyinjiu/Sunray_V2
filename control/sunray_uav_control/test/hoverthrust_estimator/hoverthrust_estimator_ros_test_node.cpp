@@ -1,4 +1,6 @@
 #include <cmath>
+#include <algorithm>
+#include <deque>
 #include <memory>
 #include <random>
 #include <string>
@@ -27,6 +29,7 @@ class HoverThrustEstimatorRosTestNode {
         pnh_.param("acc_noise_std", acc_noise_std_, 0.08);
         pnh_.param("acc_cmd_amp", acc_cmd_amp_, 0.6);
         pnh_.param("acc_cmd_freq_hz", acc_cmd_freq_hz_, 0.35);
+        pnh_.param("sim_delay_s", sim_delay_s_, 0.04);
         pnh_.param("pass_abs_error", pass_abs_error_, 0.05);
 
         rng_.seed(42);
@@ -65,17 +68,13 @@ class HoverThrustEstimatorRosTestNode {
   private:
     std::unique_ptr<thrust_estimator::HoverThrustEstimator> createEstimator(
         const std::string& estimator_type) {
-        if (estimator_type == "lowpass") {
-            return std::unique_ptr<thrust_estimator::HoverThrustEstimator>(
-                new thrust_estimator::LowPass_HoverThrustEstimator());
-        }
         if (estimator_type == "rls") {
             return std::unique_ptr<thrust_estimator::HoverThrustEstimator>(
                 new thrust_estimator::RLS_HoverThrustEstimator());
         }
-        if (estimator_type == "kalman") {
+        if (estimator_type == "ekf") {
             return std::unique_ptr<thrust_estimator::HoverThrustEstimator>(
-                new thrust_estimator::Kalman_HoverThrustEstimator());
+                new thrust_estimator::EKF_HoverThrustEstimator());
         }
         return nullptr;
     }
@@ -97,8 +96,29 @@ class HoverThrustEstimatorRosTestNode {
                                                  (thr2acc_true_ * std::max(tilt_cos, 1e-3)),
                                              0.05,
                                              0.80);
-        const double measured_acc_z =
-            thr2acc_true_ * thrust_cmd * tilt_cos - gravity_ + noise_dist_(rng_);
+        command_history_.push_back(CommandSample{now, attitude, thrust_cmd});
+        while (!command_history_.empty() &&
+               (now - command_history_.front().stamp).toSec() > sim_delay_s_ + 0.1) {
+            command_history_.pop_front();
+        }
+
+        CommandSample response_sample{now, attitude, thrust_cmd};
+        if (estimator_type_ == "ekf") {
+            for (auto it = command_history_.rbegin(); it != command_history_.rend(); ++it) {
+                const double age = (now - it->stamp).toSec();
+                if (age >= sim_delay_s_) {
+                    response_sample = *it;
+                    break;
+                }
+            }
+        }
+
+        const Eigen::Vector3d response_zb = response_sample.attitude.toRotationMatrix().col(2);
+        const double response_tilt_cos =
+            std::clamp(response_zb.dot(Eigen::Vector3d::UnitZ()), -1.0, 1.0);
+        const double measured_acc_z = thr2acc_true_ * response_sample.thrust_cmd *
+                                          response_tilt_cos -
+                                      gravity_ + noise_dist_(rng_);
 
         thrust_estimator::Input_t input;
         input.stamp = now;
@@ -157,6 +177,12 @@ class HoverThrustEstimatorRosTestNode {
 
     std::unique_ptr<thrust_estimator::HoverThrustEstimator> estimator_;
 
+    struct CommandSample {
+        ros::Time stamp{ros::Time(0)};
+        Eigen::Quaterniond attitude{Eigen::Quaterniond::Identity()};
+        double thrust_cmd{0.0};
+    };
+
     std::string estimator_type_{"rls"};
     double loop_hz_{100.0};
     double test_duration_s_{20.0};
@@ -168,11 +194,13 @@ class HoverThrustEstimatorRosTestNode {
     double acc_cmd_amp_{0.6};
     double acc_cmd_freq_hz_{0.35};
     double pass_abs_error_{0.05};
+    double sim_delay_s_{0.04};
 
     double thr2acc_true_{0.0};
     int sample_count_{0};
     int exit_code_{0};
     ros::Time start_time_{ros::Time(0)};
+    std::deque<CommandSample> command_history_;
     std::mt19937 rng_;
     std::normal_distribution<double> noise_dist_;
 };

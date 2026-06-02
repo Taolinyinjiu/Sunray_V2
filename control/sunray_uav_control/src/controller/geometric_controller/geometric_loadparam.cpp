@@ -58,6 +58,8 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     }
     geometric_controller_param_.hover_thrust_init =
         std::clamp(basic_param["hover_thrust_percent"].as<double>(), 0.05, 0.80);
+    geometric_controller_param_.hover_thrust_min = 0.05;
+    geometric_controller_param_.hover_thrust_max = 0.80;
 
     // ---------------- arrival_judge_param ----------------
     const YAML::Node arrival_judge_param = root["arrival_judge_param"];
@@ -209,9 +211,61 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         geometric_controller_param_.hover_thrust_estimator_type =
             controller_param["hover_thrust_estimator_type"].as<int>();
         if (geometric_controller_param_.hover_thrust_estimator_type < 0 ||
-            geometric_controller_param_.hover_thrust_estimator_type > 2) {
+            geometric_controller_param_.hover_thrust_estimator_type > 1) {
             throw std::runtime_error(
-                "param 'sunray_controller_param.hover_thrust_estimator_type' must be 0, 1 or 2");
+                "param 'sunray_controller_param.hover_thrust_estimator_type' must be 0 (RLS) or 1 (EKFAccel)");
         }
+    }
+
+    // ---------------- takeoff_land_type 路由 ----------------
+    if (!controller_param["takeoff_land_type"]) {
+        throw std::runtime_error("missing param 'sunray_controller_param.takeoff_land_type'");
+    }
+    takeoff_land_type_ = controller_param["takeoff_land_type"].as<int>();
+    if (takeoff_land_type_ != 0 && takeoff_land_type_ != 1) {
+        throw std::runtime_error(
+            "param 'sunray_controller_param.takeoff_land_type' must be 0 (direct thrust) or 1 (AccFF)");
+    }
+
+    // ---------------- AccFF 起降参数:由 gravity / hover_thrust_init 推导 ----------------
+    // 设计原则:yaml 仅暴露 takeoff_land_type 开关,AccFF 内部参数全部从基础物理量推导,
+    // 避免向用户暴露 ramp/jerk/touchdown 这类纯调试维度。详见 ai_result/accff_takeoff_landing_todo.md。
+    const double gravity = geometric_controller_param_.gravity;
+    const double hover_init = std::clamp(geometric_controller_param_.hover_thrust_init, 0.05, 0.80);
+
+    // 起飞:a_start 对应 thrust ≈ 0.08(略高于 idle,远低于悬停);a_target = g + 0.5。
+    takeoff_accff_tuning_.a_start_mps2 = std::clamp(gravity * 0.08 / hover_init, 0.5, gravity);
+    takeoff_accff_tuning_.a_target_mps2 = gravity + 0.5;
+    takeoff_accff_tuning_.ramp_time_s = 1.2;
+    takeoff_accff_tuning_.jerk_max_mps3 = 8.0;
+    takeoff_accff_tuning_.a_min_mps2 = 0.0;
+    takeoff_accff_tuning_.a_max_mps2 = gravity + 5.0;
+    takeoff_accff_tuning_.liftoff_detect_h_m = 0.05;
+    takeoff_accff_tuning_.liftoff_detect_vz_mps = 0.15;
+
+    // 降落:a_touchdown 接近 g 的稳态值,让 NearGround 大部分时间维持悬停推力,
+    // 只在末段做温和净减速,避免出现 a_touchdown=0.55g 时的"NearGround 一进入就自由落体"。
+    landing_accff_tuning_.near_ground_h_m = 0.25;
+    landing_accff_tuning_.near_ground_vz_mps = 0.10;
+    landing_accff_tuning_.a_touchdown_mps2 = 0.85 * gravity;
+    landing_accff_tuning_.ramp_time_s = 2.0;
+    landing_accff_tuning_.jerk_max_mps3 = 1.0;
+    landing_accff_tuning_.a_min_mps2 = 0.0;
+    landing_accff_tuning_.a_max_mps2 = gravity + 2.0;
+    landing_accff_tuning_.touchdown_landed_state = true;
+    landing_accff_tuning_.touchdown_h_settle_m = 0.05;
+    landing_accff_tuning_.touchdown_v_settle_mps = 0.05;
+    landing_accff_tuning_.touchdown_dwell_s = 0.30;
+
+    // 推导值的健全性校验:防止 gravity/hover_thrust_init 极端取值后失稳
+    if (!(takeoff_accff_tuning_.a_start_mps2 < takeoff_accff_tuning_.a_target_mps2 &&
+          takeoff_accff_tuning_.a_target_mps2 < takeoff_accff_tuning_.a_max_mps2)) {
+        throw std::runtime_error(
+            "derived takeoff_accff acc values are inconsistent (check gravity / hover_thrust_percent)");
+    }
+    if (!(landing_accff_tuning_.a_touchdown_mps2 > landing_accff_tuning_.a_min_mps2 &&
+          landing_accff_tuning_.a_touchdown_mps2 < gravity)) {
+        throw std::runtime_error(
+            "derived landing_accff a_touchdown is inconsistent (check gravity)");
     }
 }

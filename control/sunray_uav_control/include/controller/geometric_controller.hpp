@@ -115,6 +115,15 @@ class Geometric_Controller : public Controller_Interface {
                                    double tau_s,
                                    const ros::Time& now);
     void maybe_rebase_takeoff_curve_start();
+    void maybe_rebase_takeoff_curve_start_accff();
+    // 起降 AccFF 路径专用拆分实现,与 takeoff()/land() 两层路由配合使用
+    bool takeoff_direct_thrust(double relative_takeoff_height, double max_takeoff_velocity);
+    bool takeoff_accff(double relative_takeoff_height, double max_takeoff_velocity);
+    bool land_direct_thrust(double max_land_velocity);
+    bool land_accff(double max_land_velocity);
+    bool land_px4_autoland();
+    // 统一清理 takeoff/land 双路径状态,所有控制流出口都应调用
+    void reset_takeoff_land_contexts();
     void update_hover_reference(const Eigen::Vector3d& hover_point,
                                 double hover_yaw,
                                 const char* reason);
@@ -129,6 +138,9 @@ class Geometric_Controller : public Controller_Interface {
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
     void reset_stage_thrust_filters();
     void cache_attitude_setpoint(const control_common::Mavros_SetpointAttitude& setpoint);
+    void feed_thrust_estimator_from_setpoint(
+        const control_common::Mavros_SetpointAttitude& setpoint,
+        bool is_hover_context);
     bool
     publish_trajectory_setpoint(const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
                                 ThrustCommandPolicy thrust_policy =
@@ -168,6 +180,13 @@ class Geometric_Controller : public Controller_Interface {
     // 降落阶段相关状态
     takeoff_land::LandingTuning landing_tuning_{};
     takeoff_land::LandingState landing_state_{};
+
+    // 加速度前馈起降 (takeoff_land_type=1) 调参与运行状态,与 direct 路径并行
+    int takeoff_land_type_{0};
+    takeoff_land::TakeoffAccFFTuning takeoff_accff_tuning_{};
+    takeoff_land::TakeoffAccFFState  takeoff_accff_state_{};
+    takeoff_land::LandingAccFFTuning landing_accff_tuning_{};
+    takeoff_land::LandingAccFFState  landing_accff_state_{};
 
     arrival_helper::State takeoff_arrival_state_{};
     arrival_helper::State point_arrival_state_{};

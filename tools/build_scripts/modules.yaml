@@ -99,11 +99,17 @@ modules:
     build_path: "build/simulator_utils"
     dependencies: []
 
+  gazebo_plugin:
+    description: "gazebo_plugin 功能包"
+    source_path: "simulation/gazebo_plugin"
+    build_path: "build/gazebo_plugin"
+    dependencies: []
+
   sunray_simulator:
     description: "sunray_simulator 功能包"
     source_path: "simulation/sunray_simulator"
     build_path: "build/sunray_simulator"
-    dependencies: ["sunray_planning"]
+    dependencies: ["sunray_planning", "gazebo_plugin"]
   # 驱动模块功能包
 
   sunray_mavros:

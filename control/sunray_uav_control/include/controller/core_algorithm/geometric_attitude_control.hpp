@@ -60,7 +60,32 @@ struct Geometric_AttitudeControl_Param_t {
     // ── 推力模型参数 ────────────────────────────────────────
     // hover_thrust_init: 线性回退模型的锚点，也是估计器初始化值
     double hover_thrust_init{0.35};
-    int hover_thrust_estimator_type{1};  // 0 = LowPass, 1 = RLS, 2 = Kalman
+    double hover_thrust_min{0.05};
+    double hover_thrust_max{0.80};
+    int hover_thrust_estimator_type{0};  // 0 = RLS, 1 = EKFAccel
+
+    bool hover_thrust_ekf_onlyhover_estimate{true};
+    double hover_thrust_ekf_Q{1e-4};
+    double hover_thrust_ekf_R{0.05};
+    double hover_thrust_ekf_P0{0.1};
+    double hover_thrust_ekf_P_min{1e-6};
+    double hover_thrust_ekf_P_max{10.0};
+    double hover_thrust_ekf_delay_min_s{0.035};
+    double hover_thrust_ekf_delay_max_s{0.045};
+    double hover_thrust_ekf_innovation_gate{6.0};
+    double hover_thrust_ekf_min_thrust_cmd{0.05};
+    double hover_thrust_ekf_max_thrust_cmd{0.90};
+    double hover_thrust_ekf_min_tilt_cos_hover{0.50};
+    double hover_thrust_ekf_min_tilt_cos_move{0.85};
+    double hover_thrust_ekf_max_abs_acc_z_hover{5.0};
+    double hover_thrust_ekf_max_abs_acc_z_move{3.0};
+    double hover_thrust_ekf_convergence_p_threshold{0.02};
+    double hover_thrust_ekf_convergence_hold_s{1.0};
+    bool hover_thrust_ekf_adaptive_R_enabled{false};
+    double hover_thrust_ekf_R_min{0.005};
+    double hover_thrust_ekf_R_max{1.0};
+
+    double accepted_hover_thrust_rate{0.02};
 
     // ── 转子阻力补偿 ────────────────────────────────────────
     // 对应 ecbf_bodyrate 中的 D_ 向量，不确定时保持零向量
@@ -145,6 +170,7 @@ class Geometric_AttitudeControl {
     // 向悬停推力估计器注入观测数据
     void feed_thrust_estimator(const thrust_estimator::Input_t& input);
     void seed_hover_thrust_estimator(double hover_thrust);
+    bool thrust_estimator_should_estimate_onlyhover() const;
 
     // 获取最近一次控制计算的调试快照，供 controller 层发布状态分析话题。
     const Geometric_AttitudeControl_DebugState_t& get_last_debug_state() const {
@@ -174,6 +200,18 @@ class Geometric_AttitudeControl {
     void set_initial_yaw(double yaw_rad) {
         last_desired_yaw_ = yaw_rad;
     }
+
+    // 覆盖 UseFixedAnchor 路径的锚点值。
+    // 用法:降落首帧由上层 snapshot estimator 收敛值,后续整段 AccFF 降落都用 snapshot
+    // 而非 yaml 静态 hover_thrust_init,实现"降落锚点自动跟随载荷/电池实际状态"。
+    // 传入非有限值或 <=0 时清除覆盖,回退到 hover_thrust_init。
+    void set_fixed_anchor_override(double anchor);
+    void clear_fixed_anchor_override() { fixed_anchor_override_ = -1.0; }
+
+    // 暴露 estimator 当前可用的悬停推力估计值,供上层 snapshot 使用。
+    // 优先返回 estimator 实时值(EKF 还需 converged);
+    // estimator 未就绪或值非法时回退到 accepted_hover_thrust_。
+    double get_accepted_hover_thrust() const;
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
@@ -208,6 +246,11 @@ class Geometric_AttitudeControl {
     double current_dt_{0.01};
 
     Geometric_AttitudeControl_DebugState_t last_debug_state_{};
+    mutable double accepted_hover_thrust_{0.0};
+
+    // UseFixedAnchor 路径的覆盖值;>0 时优先使用,<=0 视为未覆盖。
+    // 由 set_fixed_anchor_override / clear_fixed_anchor_override 维护。
+    double fixed_anchor_override_{-1.0};
 
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法

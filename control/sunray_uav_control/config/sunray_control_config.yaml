@@ -115,12 +115,14 @@ velocity_param:
     yaw_rate: 30
 # ------------------- Sunray Controller Param -----------
 sunray_controller_param:
-  # 控制器输出类型， 0:attitude+thrust  1:bodyrate+thrust
-  # 使用attitude作为输出时，控制器的动态性能有所下降，误差增大
+  # 控制器输出类型， 0:attitude+thrust  1:bodyrate+ thrust
+  # 1. 默认PID参数用于bodyrate输出量，切换为attitude作为输出量时，
+  #    控制器的动态性能有所下降，误差增大,同时PID参数应该酌情加大
   control_type: 1
-
-  # 悬停推力估计器类型 0: 低通滤波器 1: RLS最小二乘法估计 2:卡尓曼滤波估计
-  hover_thrust_estimator_type: 1
+  # 悬停推力估计器类型 0:RLS最小二乘法估计 1:EKF加速度观测估计
+  hover_thrust_estimator_type: 0
+  # 起降策略类型 0:直接推力起降 1:基于加速度前馈构造的起降
+  takeoff_land_type: 1
   # 位置环PID参数
   pos_kp: [1.5, 1.5, 3]
   pos_ki: [0.0, 0.0, 0.0]
@@ -129,9 +131,6 @@ sunray_controller_param:
   vel_kp: [2.0, 2.0, 3]
   vel_ki: [0.0, 0.0, 0.0]
   vel_kd: [0.0, 0.0, 0.0]
-  # Sunray_Controller支持使用RC遥控器作为输入得到和PX4原生控制器一样的体验
-  # 机体系速度控制采用“body-xy速度 + fixed_height”混合语义：
-  # fixed_height 会复用 pos_kp.z 生成 z 方向速度指令，并使用 velocity_param.max_velocity.z_vel 限幅
   # 位置/速度环反馈加速度限幅；太小会让控制器看起来“对误差不敏感”
   max_acc: 9.0
   # 姿态控制时间常数(s)：越小响应越快，太小会产生振荡，建议 0.1~0.5

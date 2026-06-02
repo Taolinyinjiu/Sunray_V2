@@ -21,7 +21,8 @@ void Sunray_FSM::check_controller_ready() {
     {
         std::lock_guard<std::mutex> lk(odom_mutex_);
         odom_ready = has_valid_odometry_ &&
-                     (ros::Time::now() - last_odometry_.timestamp).toSec() <=
+                     !last_valid_odom_receive_time_.isZero() &&
+                     (ros::Time::now() - last_valid_odom_receive_time_).toSec() <=
                          fsm_config_.msg_timeout_param.local_odometry;
     }
 
@@ -47,19 +48,20 @@ void Sunray_FSM::check_rosmsg_timeout() {
     // 状态检查部分由于没有实现完也没有使用，所以这里只需要配置外部里程计回调函数和无人机控制指令回调函数
     ros::Time now = ros::Time::now();
     // 打份快照
-    control_common::UAVStateEstimate odom_snapshot;
+    ros::Time last_valid_odom_receive_time_snapshot{0.0};
     control_common::UavControlCmd last_cmd_snapshot;
     {
         std::lock_guard<std::mutex> lk1(odom_mutex_);
-        odom_snapshot = last_odometry_;
+        last_valid_odom_receive_time_snapshot = last_valid_odom_receive_time_;
     }
     {
         std::lock_guard<std::mutex> lk2(cmd_mutex_);
         last_cmd_snapshot = last_control_cmd_;
     }
 
-    if (odom_snapshot.timestamp != ros::Time(0) &&
-        (now - odom_snapshot.timestamp).toSec() > fsm_config_.msg_timeout_param.local_odometry) {
+    if (!last_valid_odom_receive_time_snapshot.isZero() &&
+        (now - last_valid_odom_receive_time_snapshot).toSec() >
+            fsm_config_.msg_timeout_param.local_odometry) {
         // enqueue_fsm_event(sunray_fsm::SunrayEvent::KILL_REQUEST);
         // 里程计超时，切KILL？其实并不保险我个人认为
     }

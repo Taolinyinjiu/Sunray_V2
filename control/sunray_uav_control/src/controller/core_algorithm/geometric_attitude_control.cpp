@@ -22,15 +22,12 @@
 void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param_t& param) {
     param_ = param;
 
-    // 悬停推力估计器由 core 持有，默认沿用 controller 侧现有配置语义。
+    // 悬停推力估计器由 core 持有，0=RLS，1=EKFAccel。
     switch (param_.hover_thrust_estimator_type) {
-    case 0:
-        hover_thrust_estimator_ = std::make_unique<thrust_estimator::LowPass_HoverThrustEstimator>();
-        break;
-    case 2:
-        hover_thrust_estimator_ = std::make_unique<thrust_estimator::Kalman_HoverThrustEstimator>();
-        break;
     case 1:
+        hover_thrust_estimator_ = std::make_unique<thrust_estimator::EKF_HoverThrustEstimator>();
+        break;
+    case 0:
     default:
         hover_thrust_estimator_ = std::make_unique<thrust_estimator::RLS_HoverThrustEstimator>();
         break;
@@ -39,9 +36,33 @@ void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param
     thrust_estimator::Param_t estimator_param;
     estimator_param.gravity = param_.gravity;
     estimator_param.hover_thrust = param_.hover_thrust_init;
+    estimator_param.hover_thrust_min = param_.hover_thrust_min;
+    estimator_param.hover_thrust_max = param_.hover_thrust_max;
+    estimator_param.ekf_onlyhover_estimate = param_.hover_thrust_ekf_onlyhover_estimate;
+    estimator_param.ekf_Q = param_.hover_thrust_ekf_Q;
+    estimator_param.ekf_R = param_.hover_thrust_ekf_R;
+    estimator_param.ekf_P0 = param_.hover_thrust_ekf_P0;
+    estimator_param.ekf_P_min = param_.hover_thrust_ekf_P_min;
+    estimator_param.ekf_P_max = param_.hover_thrust_ekf_P_max;
+    estimator_param.ekf_delay_min_s = param_.hover_thrust_ekf_delay_min_s;
+    estimator_param.ekf_delay_max_s = param_.hover_thrust_ekf_delay_max_s;
+    estimator_param.ekf_innovation_gate = param_.hover_thrust_ekf_innovation_gate;
+    estimator_param.ekf_min_thrust_cmd = param_.hover_thrust_ekf_min_thrust_cmd;
+    estimator_param.ekf_max_thrust_cmd = param_.hover_thrust_ekf_max_thrust_cmd;
+    estimator_param.ekf_min_tilt_cos_hover = param_.hover_thrust_ekf_min_tilt_cos_hover;
+    estimator_param.ekf_min_tilt_cos_move = param_.hover_thrust_ekf_min_tilt_cos_move;
+    estimator_param.ekf_max_abs_acc_z_hover = param_.hover_thrust_ekf_max_abs_acc_z_hover;
+    estimator_param.ekf_max_abs_acc_z_move = param_.hover_thrust_ekf_max_abs_acc_z_move;
+    estimator_param.ekf_convergence_p_threshold =
+        param_.hover_thrust_ekf_convergence_p_threshold;
+    estimator_param.ekf_convergence_hold_s = param_.hover_thrust_ekf_convergence_hold_s;
+    estimator_param.ekf_adaptive_R_enabled = param_.hover_thrust_ekf_adaptive_R_enabled;
+    estimator_param.ekf_R_min = param_.hover_thrust_ekf_R_min;
+    estimator_param.ekf_R_max = param_.hover_thrust_ekf_R_max;
     hover_thrust_estimator_->load_param(estimator_param);
 
     last_debug_state_ = Geometric_AttitudeControl_DebugState_t{};
+    accepted_hover_thrust_ = param_.hover_thrust_init;
 }
 
 void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::Input_t& input) {
@@ -62,6 +83,40 @@ void Geometric_AttitudeControl::seed_hover_thrust_estimator(double hover_thrust)
         return;
     }
     hover_thrust_estimator_->seed_hover_thrust(hover_thrust);
+    accepted_hover_thrust_ =
+        std::clamp(hover_thrust, param_.hover_thrust_min, param_.hover_thrust_max);
+}
+
+bool Geometric_AttitudeControl::thrust_estimator_should_estimate_onlyhover() const {
+    return hover_thrust_estimator_ ? hover_thrust_estimator_->should_estimate_onlyhover() : true;
+}
+
+void Geometric_AttitudeControl::set_fixed_anchor_override(double anchor) {
+    if (!std::isfinite(anchor) || anchor <= 0.0) {
+        fixed_anchor_override_ = -1.0;
+        return;
+    }
+    fixed_anchor_override_ =
+        std::clamp(anchor, param_.hover_thrust_min, param_.hover_thrust_max);
+}
+
+double Geometric_AttitudeControl::get_accepted_hover_thrust() const {
+    // 优先返回 estimator 当前值,跨 RLS/EKF 统一行为:
+    //   - RLS (type=0): 没有 converged 概念,只要值合法就采纳
+    //   - EKF (type=1): 还要求 converged() == true
+    // 估计器未就绪或值非法时回退到 accepted_hover_thrust_(= hover_thrust_init 初值)。
+    if (hover_thrust_estimator_) {
+        const double h = hover_thrust_estimator_->get_hover_thrust();
+        const bool valid =
+            std::isfinite(h) && h >= param_.hover_thrust_min && h <= param_.hover_thrust_max;
+        if (valid) {
+            const bool need_converged = (param_.hover_thrust_estimator_type == 1);
+            if (!need_converged || hover_thrust_estimator_->converged()) {
+                return h;
+            }
+        }
+    }
+    return accepted_hover_thrust_;
 }
 
 void Geometric_AttitudeControl::refresh_dt(const ros::Time& stamp) {
@@ -177,17 +232,45 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
 
 double Geometric_AttitudeControl::select_hover_anchor(ThrustCommandPolicy thrust_policy) const {
     if (thrust_policy == ThrustCommandPolicy::UseFixedAnchor) {
+        // 优先使用上层 snapshot 的覆盖值(降落入口处会从 estimator 取一次),
+        // 否则回退到 yaml 静态 hover_thrust_init。
+        if (fixed_anchor_override_ > 0.0 && std::isfinite(fixed_anchor_override_)) {
+            return std::clamp(fixed_anchor_override_,
+                              param_.hover_thrust_min,
+                              param_.hover_thrust_max);
+        }
         return param_.hover_thrust_init;
     }
 
-    if (hover_thrust_estimator_) {
-        const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
-        if (std::isfinite(hover_thrust) && hover_thrust > 0.0) {
-            return hover_thrust;
-        }
+    if (!hover_thrust_estimator_) {
+        return accepted_hover_thrust_;
     }
 
-    return param_.hover_thrust_init;
+    const double hover_thrust = hover_thrust_estimator_->get_hover_thrust();
+    const bool valid_estimate = std::isfinite(hover_thrust) &&
+                                hover_thrust >= param_.hover_thrust_min &&
+                                hover_thrust <= param_.hover_thrust_max;
+
+    if (param_.hover_thrust_estimator_type != 1) {
+        if (valid_estimate) {
+            return hover_thrust;
+        }
+        return accepted_hover_thrust_;
+    }
+
+    if (!valid_estimate || !hover_thrust_estimator_->converged()) {
+        return accepted_hover_thrust_;
+    }
+
+    const double max_step =
+        std::max(0.0, param_.accepted_hover_thrust_rate) * std::max(current_dt_, 1e-3);
+    accepted_hover_thrust_ =
+        std::clamp(hover_thrust,
+                   accepted_hover_thrust_ - max_step,
+                   accepted_hover_thrust_ + max_step);
+    accepted_hover_thrust_ =
+        std::clamp(accepted_hover_thrust_, param_.hover_thrust_min, param_.hover_thrust_max);
+    return accepted_hover_thrust_;
 }
 
 double Geometric_AttitudeControl::normalize_collective_acc(double collective_acc,
