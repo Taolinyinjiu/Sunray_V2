@@ -72,6 +72,9 @@ docs/
 todo/
 ai_tools/
 
+# models
+*.onnx
+*.pt
 
 # Machine-specific VINS configuration
 localization/vins-fusion/config/
