@@ -4,3 +4,6 @@
 [submodule "communication/sunray_communication/lib"]
 	path = communication/sunray_communication/lib
 	url = https://gitee.com/yundrone_sunray2023/communication.git
+[submodule "thirdparty/yunlink"]
+	path = thirdparty/yunlink
+	url = https://github.com/YunDrone-Team/yunlink.git
