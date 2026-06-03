@@ -34,6 +34,11 @@ modules:
     source_path: "tools/sunray_system"
     build_path: "build/sunray_system"
     dependencies: [sunray_msgs]
+  yunlink_ros_bridge:
+    description: "订阅 Sunray 状态话题并转发到 yunlink 的 ROS 桥接包"
+    source_path: "communication/yunlink_ros_bridge"
+    build_path: "build/yunlink_ros_bridge"
+    dependencies: ["sunray_msgs", "sunray_mavros"]
 
   # uav_control_example
   sunray_uav_control_example:
