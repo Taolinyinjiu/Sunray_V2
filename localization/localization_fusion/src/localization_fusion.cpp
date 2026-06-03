@@ -88,19 +88,20 @@ bool LocalizationFusion::Init() {
 // 重要回调：处理外部定位源的odom数据
 void LocalizationFusion::odometry_callback(const nav_msgs::OdometryConstPtr& msg) 
 {
+    const ros::Time receive_time = ros::Time::now();
     // 收到消息更新则认为odom有效
     odom_state.odometry_valid = true;
-    // 使用当前时间作为local_odom的时间戳
-    odom_state.local_odom.header.stamp = ros::Time::now();
     // 根据传感器到机体中心的外参矩阵计算local_odom
     odom_state.local_odom = transform_source_odom_to_local(*msg);
+    // 使用接收时刻作为输出local_odom的时间戳，同时作为超时判断基准
+    odom_state.local_odom.header.stamp = receive_time;
     // 发布local_odom
     local_odom_pub_.publish(odom_state.local_odom);
-    // 保存odom收到的时间戳，用于后续有效性判断
-    odometry_last_receive_time_ = odom_state.local_odom.header.stamp;
+    // 保存本节点实际收到消息的时刻，用于后续有效性判断
+    odometry_last_receive_time_ = receive_time;
     
     // 计算更新频率
-    update_input_rate(odom_state.odometry_update_hz, hz_stamps_, odom_state.local_odom.header.stamp.toSec());
+    update_input_rate(odom_state.odometry_update_hz, hz_stamps_, receive_time.toSec());
     // 根据local_odom计算local_to_base_tf
     update_local_to_base_tf_from_odom(odom_state.local_odom);
     // 根据local_odom和global_to_local_tf计算global_odom并发布
