@@ -46,7 +46,13 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(yunlink_ros_bridge_node src/yunlink_ros_bridge_node.cpp)
+add_executable(yunlink_ros_bridge_node
+  src/main.cpp
+  src/bridge_mapping.cpp
+  src/bridge_node_core.cpp
+  src/bridge_commands.cpp
+  src/bridge_topics.cpp
+)
 add_dependencies(yunlink_ros_bridge_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(yunlink_ros_bridge_node
   ${catkin_LIBRARIES}
