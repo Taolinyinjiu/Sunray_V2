@@ -1,7 +1,7 @@
 features:
-  - name: "Mavros"
+  - name: "Mavros:ACM0 - 921600"
     group: "Mavros模块"
-    description: "Mavros模块：启动Mavros"
+    description: "Mavros模块：启动Mavros ACM0 - 921600"
     auto_start: false
     stop_timeout_sec: 8.0
     launches:
@@ -9,6 +9,21 @@ features:
         package: "sunray_mavros"
         file: "mavros.launch"
         args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        delay_sec: 1.0
+  - name: "Mavros:THS0 - 921600"
+    group: "Mavros模块"
+    description: "Mavros模块：启动Mavros THS0 - 921600"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "mavros"
+        package: "sunray_mavros"
+        file: "mavros.launch"
+        args:
+          - "fcu_url:=/dev/ttyTHS0:921600"
+          - "gcs_ip:=192.168.2.99:14551"
           - "agent_name:=uav"
           - "agent_id:=1"
         delay_sec: 1.0
