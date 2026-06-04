@@ -1,0 +1,36 @@
+<launch>
+  <arg name="udp_bind_port" default="9696" />
+  <arg name="udp_target_port" default="9898" />
+  <arg name="tcp_listen_port" default="9696" />
+  <arg name="remote_ip" default="127.0.0.1" />
+  <arg name="remote_tcp_port" default="9797" />
+  <arg name="shared_secret" default="yunlink-default-secret" />
+  <arg name="agent_id" default="1" />
+
+  <arg name="local_odom_topic" default="/uav1/sunray/localization/local_odom" />
+  <arg name="odom_state_topic" default="/uav1/sunray/localization/odom_state" />
+  <arg name="control_state_topic" default="/uav1/sunray/uav_control/control_state" />
+  <arg name="control_cmd_topic" default="/uav1/sunray/uav_control/control_cmd" />
+  <arg name="mavros_state_topic" default="/uav1/mavros/state" />
+  <arg name="px4_state_topic" default="/uav1/sunray/px4_state" />
+
+  <node pkg="yunlink_ros_bridge"
+        type="yunlink_ros_bridge_node"
+        name="yunlink_ros_bridge_node"
+        output="screen">
+    <param name="udp_bind_port" value="$(arg udp_bind_port)" />
+    <param name="udp_target_port" value="$(arg udp_target_port)" />
+    <param name="tcp_listen_port" value="$(arg tcp_listen_port)" />
+    <param name="remote_ip" value="$(arg remote_ip)" />
+    <param name="remote_tcp_port" value="$(arg remote_tcp_port)" />
+    <param name="shared_secret" value="$(arg shared_secret)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+
+    <param name="local_odom_topic" value="$(arg local_odom_topic)" />
+    <param name="odom_state_topic" value="$(arg odom_state_topic)" />
+    <param name="control_state_topic" value="$(arg control_state_topic)" />
+    <param name="control_cmd_topic" value="$(arg control_cmd_topic)" />
+    <param name="mavros_state_topic" value="$(arg mavros_state_topic)" />
+    <param name="px4_state_topic" value="$(arg px4_state_topic)" />
+  </node>
+</launch>
