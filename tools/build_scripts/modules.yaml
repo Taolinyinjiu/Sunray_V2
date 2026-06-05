@@ -8,7 +8,7 @@ modules:
     description: "Sunray 重构中的uav_control"
     source_path: "control/sunray_uav_control"
     build_path: "build/sunray_uav_control"
-    dependencies: []
+    dependencies: [sunray_msgs, sunray_common]
   ugv_control:
     description: "Sunray 重构中的ugv_control"
     source_path: "control/sunray_ugv_control"
@@ -18,7 +18,7 @@ modules:
     description: "为控制模块设计的一些工具"
     source_path: "control/control_tools"
     build_path: "build/control_tools"
-    dependencies: []
+    dependencies: [sunray_msgs, sunray_common]
   sunray_launcher_panel:
     description: "Sunray 仿真和模块启动器工具"
     source_path: "tools/sunray_launcher_panel"
@@ -45,14 +45,12 @@ modules:
     build_path: "build/yunlink_ros_bridge"
     dependencies: ["sunray_msgs", "sunray_mavros"]
 
-
-
   # uav_control_example
   sunray_uav_control_example:
     description: "sunray项目中uav单机控制示例 - 无其他模块辅助，属于基本实例部分"
     source_path: "examples/sunray_uav_control_example"
     build_path: "build/sunray_uav_control_example"
-    dependencies: []
+    dependencies: [sunray_msgs, uav_control, sunray_common]
 
   # 规划模块功能包
 
@@ -204,12 +202,13 @@ modules:
 # 直接基于 build_deprecated 目录的脚本内容
 groups:
   # common测试
-  common_test:
-    description: "common测试"
-    modules: []
+  test:
+    description: "测试"
+    modules: ["sunray_msgs","sunray_common","sunray_mavros","livox_ros_driver2","vrpn_client_ros","localization_fusion","sunray_mocap","ekf_odometry","fast_lio","uav_control","control_tools","sunray_launcher_panel","sunray_monitor_tools","sunray_system","scripts_manage","yunlink_ros_bridge","sunray_uav_control_example"]
+
   # control测试
   control_test:
-    description: "control测试"
+    description: "control测试 - 杨庆彬"
     modules: ["uav_control"]
   # localization_fusion 测试用
   localization_fusion_test:
