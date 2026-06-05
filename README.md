@@ -33,7 +33,6 @@ roslaunch sunray_launcher_panel sunray_launcher_panel.launch
 
 ### 真机测试
 
-
 - Sunray系统后台任务（建议设置为开机自启）
   ```bash
   cd ~/Sunray_v2
@@ -45,6 +44,18 @@ roslaunch sunray_launcher_panel sunray_launcher_panel.launch
   ```bash
   roslaunch scripts_manage scripts_manage_tui.launch
   ```
+- 如果想确认或修改PX4参数，确认启动Mavros后，启动：
+  ```bash
+  cd Sunray_v2/tools/px4_param_check
+  ## 检查PX4参数
+  ./check_px4_param.sh --config px4_params_default.yaml
+  ## 设置PX4参数
+  ./set_px4_param.sh --config px4_params_default.yaml
+  ```
+  - 参数存放在~/Sunray_v2/tools/px4_param_check/config，目前有三份参数
+    - px4_params_default.yaml
+    - px4_params_s150.yaml
+    - px4_params_s300.yaml
 
 ### 版权声明
 
