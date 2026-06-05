@@ -1,7 +1,8 @@
 features:
-  - name: "Mavros"
+## Mavros模块  
+  - name: "Mavros(N150-ACM0)"
     group: "Mavros模块"
-    description: "Mavros模块：启动Mavros"
+    description: "Mavros模块：启动Mavros ACM0 - 921600"
     auto_start: false
     stop_timeout_sec: 8.0
     launches:
@@ -9,10 +10,28 @@ features:
         package: "sunray_mavros"
         file: "mavros.launch"
         args:
+          - "fcu_url:=/dev/ttyACM0:921600"
+          - "gcs_ip:=192.168.2.99:14551"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        delay_sec: 1.0
+  - name: "Mavros(NX-THS0)"
+    group: "Mavros模块"
+    description: "Mavros模块：启动Mavros THS0 - 921600"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "mavros"
+        package: "sunray_mavros"
+        file: "mavros.launch"
+        args:
+          - "fcu_url:=/dev/ttyTHS0:921600"
+          - "gcs_ip:=192.168.2.99:14551"
           - "agent_name:=uav"
           - "agent_id:=1"
         delay_sec: 1.0
 
+## 定位模块  
   - name: "localization_mocap"
     group: "无人机定位模块"
     description: "无人机定位模块：基于MOCAP定位"
@@ -24,21 +43,6 @@ features:
         file: "localization_fusion.launch"
         args:
           - "source_id:=1"
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "enable_monitor:=true"
-        delay_sec: 1.0
-  - name: "localization_vins"
-    group: "无人机定位模块"
-    description: "无人机定位模块：基于VINS定位"
-    auto_start: false
-    stop_timeout_sec: 8.0
-    launches:
-      - name: "localization"
-        package: "localization_fusion"
-        file: "localization_fusion.launch"
-        args:
-          - "source_id:=2"
           - "agent_name:=uav"
           - "agent_id:=1"
           - "enable_monitor:=true"
@@ -58,8 +62,82 @@ features:
           - "agent_id:=1"
           - "enable_monitor:=true"
         delay_sec: 1.0
+  - name: "localization_viobot"
+    group: "无人机定位模块"
+    description: "无人机定位模块：基于Viobot定位"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "localization"
+        package: "localization_fusion"
+        file: "localization_fusion.launch"
+        args:
+          - "source_id:=0"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_monitor:=true"
+        delay_sec: 1.0
+  - name: "localization_vins"
+    group: "无人机定位模块"
+    description: "无人机定位模块：基于VINS定位"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "localization"
+        package: "localization_fusion"
+        file: "localization_fusion.launch"
+        args:
+          - "source_id:=2"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_monitor:=true"
+        delay_sec: 1.0
 
-  - name: "uav_control_px4_origin"
+## 无人机模块  
+  - name: "uav_control_px4_origin(only)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于PX4原生控制器"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=0"
+        delay_sec: 1.0
+  - name: "uav_control_attitude_controller(only)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于attitude_controller"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=1"
+  - name: "uav_control_px4_raptor(only)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于PX4 Raptor控制器"
+    auto_start: false
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=2"
+  - name: "uav_control_px4_origin(mocap)"
     group: "无人机控制模块"
     description: "无人机控制模块：基于PX4原生控制器"
     auto_start: false
@@ -76,8 +154,7 @@ features:
           - "enable_single_monitor:=true"
           - "basic_param/controller_types:=0"
         delay_sec: 1.0
-
-  - name: "uav_control_attitude_controller"
+  - name: "uav_control_attitude_controller(mocap)"
     group: "无人机控制模块"
     description: "无人机控制模块：基于attitude_controller"
     auto_start: false
@@ -93,7 +170,74 @@ features:
           - "agent_id:=1"
           - "enable_single_monitor:=true"
           - "basic_param/controller_types:=1"
-  
+  - name: "uav_control_px4_raptor(mocap)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于PX4 Raptor控制器"
+    auto_start: false
+    depends_on:
+      - "localization_mocap"
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=2"
+  - name: "uav_control_px4_origin(fast-lio)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于PX4原生控制器"
+    auto_start: false
+    depends_on:
+      - "localization_fastlio"
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=0"
+        delay_sec: 1.0
+  - name: "uav_control_attitude_controller(fast-lio)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于attitude_controller"
+    auto_start: false
+    depends_on:
+      - "localization_fastlio"
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=1"
+  - name: "uav_control_px4_raptor(fast-lio)"
+    group: "无人机控制模块"
+    description: "无人机控制模块：基于PX4 Raptor控制器"
+    auto_start: false
+    depends_on:
+      - "localization_fastlio"
+    stop_timeout_sec: 8.0
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+          - "basic_param/controller_types:=2"
+
+
+## 无人机控制示例  
   - name: "example_takeoff_land"
     group: "无人机控制示例"
     description: "无人机控制示例：起飞后悬停并降落"

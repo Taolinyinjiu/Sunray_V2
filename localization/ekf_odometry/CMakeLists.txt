@@ -18,7 +18,45 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(Eigen3 REQUIRED)
-find_package(Sophus REQUIRED )
+find_package(Sophus QUIET)
+
+set(USE_BUNDLED_SOPHUS FALSE)
+if(NOT Sophus_FOUND)
+  set(USE_BUNDLED_SOPHUS TRUE)
+elseif(Sophus_LIBRARIES)
+  foreach(SOPHUS_LIBRARY ${Sophus_LIBRARIES})
+    if(IS_ABSOLUTE ${SOPHUS_LIBRARY} AND NOT EXISTS ${SOPHUS_LIBRARY})
+      message(WARNING "Ignoring broken Sophus package because ${SOPHUS_LIBRARY} does not exist")
+      set(USE_BUNDLED_SOPHUS TRUE)
+    endif()
+  endforeach()
+endif()
+
+if(USE_BUNDLED_SOPHUS)
+  set(SOPHUS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../drivers/Sophus)
+  if(EXISTS ${SOPHUS_SOURCE_DIR}/sophus/so3.h)
+    message(STATUS "Sophus package not found; using bundled Sophus from ${SOPHUS_SOURCE_DIR}")
+    set(Sophus_INCLUDE_DIRS ${SOPHUS_SOURCE_DIR})
+    add_library(sophus_vendor
+      ${SOPHUS_SOURCE_DIR}/sophus/so2.cpp
+      ${SOPHUS_SOURCE_DIR}/sophus/se2.cpp
+      ${SOPHUS_SOURCE_DIR}/sophus/se3.cpp
+      ${SOPHUS_SOURCE_DIR}/sophus/so3.cpp
+      ${SOPHUS_SOURCE_DIR}/sophus/scso3.cpp
+      ${SOPHUS_SOURCE_DIR}/sophus/sim3.cpp
+    )
+    target_include_directories(sophus_vendor PUBLIC
+      ${Sophus_INCLUDE_DIRS}
+      ${EIGEN3_INCLUDE_DIR}
+    )
+    set(Sophus_LIBRARIES sophus_vendor)
+  else()
+    message(FATAL_ERROR
+      "Could not find Sophus and bundled Sophus is missing at ${SOPHUS_SOURCE_DIR}. "
+      "Install Sophus or set Sophus_DIR to a directory containing SophusConfig.cmake."
+    )
+  endif()
+endif()
 
 
 catkin_package(
