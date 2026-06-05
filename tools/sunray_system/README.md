@@ -155,14 +155,6 @@ tools/scripts_manage
 启动方式：
 
 ```bash
-cd ~/Sunray_v2
-source devel/setup.bash
-rosrun scripts_manage scripts_manage_tui
-```
-
-或：
-
-```bash
 roslaunch scripts_manage scripts_manage_tui.launch
 ```
 
