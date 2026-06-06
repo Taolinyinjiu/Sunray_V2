@@ -20,6 +20,17 @@ cd Sunray_v2
 ./build.sh
 ```
 
+```bash
+# 安装配网工具，方便以后切换wifi
+bash <(curl -fsSL https://install.yundrone.cn/ble-wifi-tool.sh)
+
+# 外部PC使用如下网址进行配网
+https://tool.yundrone.cn/ble/
+```
+
+
+
+
 ### 编译问题排查
 
 - Fast-lio2编译不过
