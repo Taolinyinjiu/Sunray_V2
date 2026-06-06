@@ -9,7 +9,7 @@
   <arg name="log_type" default="log" />
 
   <!-- 启动MID360s的点云数据输出 -->
-  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360s.launch">
+  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch">
     <arg name="log_type" value="$(arg log_type)" />
   </include>
 

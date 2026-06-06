@@ -93,6 +93,28 @@ build_tui_if_needed() {
     local tui_src_dir="$BUILDSCRIPTS_DIR/tui"
     local build_dir="$tui_src_dir/build"
 
+    tui_binary_matches_host_arch() {
+        local binary_info host_arch
+        binary_info="$(file -b "$tui_binary" 2>/dev/null || true)"
+        host_arch="$(uname -m)"
+
+        case "$host_arch" in
+            x86_64|amd64)
+                [[ "$binary_info" == *"x86-64"* || "$binary_info" == *"x86_64"* ]]
+                ;;
+            aarch64|arm64)
+                [[ "$binary_info" == *"aarch64"* || "$binary_info" == *"ARM64"* ]]
+                ;;
+            armv7l|armv7*|armhf)
+                [[ "$binary_info" == *"ARM"* && "$binary_info" != *"aarch64"* ]]
+                ;;
+            *)
+                print_warning "无法识别当前架构: $host_arch，跳过TUI架构校验"
+                return 0
+                ;;
+        esac
+    }
+
     configure_tui_cmake() {
         local cache_file="$build_dir/CMakeCache.txt"
         if [[ -f "$cache_file" ]]; then
@@ -118,6 +140,11 @@ build_tui_if_needed() {
     
     if [[ ! -f "$tui_binary" ]]; then
         print_status "TUI程序不存在，开始编译..."
+        need_build=true
+    elif ! tui_binary_matches_host_arch; then
+        print_warning "检测到TUI程序架构与当前系统不匹配，重新编译..."
+        print_status "当前系统架构: $(uname -m)"
+        print_status "现有TUI程序: $(file -b "$tui_binary" 2>/dev/null || echo unknown)"
         need_build=true
     else
         local newest_src=$(find "$tui_src_dir" -path "*/third_party" -prune -o \( -name "*.cpp" -o -name "*.hpp" -o -name "CMakeLists.txt" \) -newer "$tui_binary" -print | head -1)
