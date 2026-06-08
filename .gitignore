@@ -76,6 +76,8 @@ ai_tools/
 *.onnx
 *.pt
 
+localization/fast_lio/Log/mat_pre.txt
+
 # Machine-specific VINS configuration
 localization/vins-fusion/config/
 localization/vins-fusion-gpu/config/

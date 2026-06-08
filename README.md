@@ -100,9 +100,13 @@ https://tool.yundrone.cn/ble/
 
   # 检查 PX4 参数，config指PX4参数的配置文件，fcu-url为飞控端口地址
   ./check_px4_param.sh --config px4_params_default.yaml --fcu-url /dev/ttyACM0:921600
+  ./check_px4_param.sh --config px4_params_s150.yaml --fcu-url /dev/ttyACM0:921600
+  ./check_px4_param.sh --config px4_params_s300.yaml --fcu-url /dev/ttyACM0:921600
 
   # 设置 PX4 参数，config指PX4参数的配置文件，fcu-url为飞控端口地址
   ./set_px4_param.sh --config px4_params_default.yaml --fcu-url /dev/ttyACM0:921600
+  ./set_px4_param.sh --config px4_params_s150.yaml --fcu-url /dev/ttyACM0:921600
+  ./set_px4_param.sh --config px4_params_s300.yaml --fcu-url /dev/ttyACM0:921600
   ```
 
 - 参数存放在：
