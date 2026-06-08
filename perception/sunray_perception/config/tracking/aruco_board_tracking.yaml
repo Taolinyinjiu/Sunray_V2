@@ -1,0 +1,7 @@
+dictionaryId: 1
+layoutOffsetsPath: aruco/out/layout_offsets.csv
+smallMarkerLength: 0.0107
+
+sizeUnitScale:
+  small: 1.0
+  big: 5.0

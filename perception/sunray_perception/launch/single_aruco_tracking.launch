@@ -1,0 +1,10 @@
+<launch>
+  <arg name="camera_config_path" default="$(find sunray_perception)/config/camera/usb_camera.yaml" />
+  <arg name="tracking_config_path" default="$(find sunray_perception)/config/tracking/single_aruco_tracking.yaml" />
+
+  <node pkg="sunray_perception" type="tracking_node" name="single_aruco_tracking" output="screen">
+    <param name="tracker_type" value="single_aruco" />
+    <param name="camera_config_path" value="$(arg camera_config_path)" />
+    <param name="tracking_config_path" value="$(arg tracking_config_path)" />
+  </node>
+</launch>

@@ -1,0 +1,12 @@
+<launch>
+  <arg name="image_topic" default="/web_cam/image_raw" />
+  <arg name="config_path" default="$(find sunray_perception)/config/detection/npu_detector.yaml" />
+  <arg name="model_path" default="$(find sunray_perception)/models/yolov26.rknn"/>
+
+  <node pkg="sunray_perception" type="detection_node" name="npu_detection" output="screen">
+    <param name="detector_type" value="npu" />
+    <param name="image_topic" value="$(arg image_topic)" />
+    <param name="config_path" value="$(arg config_path)" />
+    <param name="model_path" value="$(arg model_path)" />
+  </node>
+</launch>
