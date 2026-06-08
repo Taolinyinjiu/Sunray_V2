@@ -87,6 +87,8 @@ https://tool.yundrone.cn/ble/
 - Sunray脚本启动器（TUI界面，通过SSH启动）
 
   ```bash
+  cd ~/Sunray_v2
+  source devel/setup.bash
   roslaunch scripts_manage scripts_manage_tui.launch
   ```
 
@@ -94,13 +96,13 @@ https://tool.yundrone.cn/ble/
 - 如果想确认或修改 PX4 参数，请确认 Mavros 已启动，然后执行：
 
   ```bash
-  cd Sunray_v2/tools/px4_param_check
+  cd ~/Sunray_v2/tools/px4_param_check
 
-  # 检查 PX4 参数
-  ./check_px4_param.sh --config px4_params_default.yaml
+  # 检查 PX4 参数，config指PX4参数的配置文件，fcu-url为飞控端口地址
+  ./check_px4_param.sh --config px4_params_default.yaml --fcu-url /dev/ttyACM0:921600
 
-  # 设置 PX4 参数
-  ./set_px4_param.sh --config px4_params_default.yaml
+  # 设置 PX4 参数，config指PX4参数的配置文件，fcu-url为飞控端口地址
+  ./set_px4_param.sh --config px4_params_default.yaml --fcu-url /dev/ttyACM0:921600
   ```
 
 - 参数存放在：

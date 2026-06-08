@@ -183,7 +183,7 @@ roslaunch localization_fusion localization_fusion_swarm.launch source_id:=5 agen
 
 ### localization_fusion
 
-这是定位子系统最重要的 Sunray 封装层。
+这是定位子系统最重要的 Sunray 封装层，也是推荐给控制、规划、监控模块使用的统一定位出口。
 
 核心文件：
 
@@ -197,8 +197,114 @@ localization_fusion/config/localization_sources.yaml
 主要节点：
 
 - `localization_fusion_node`：统一输出 local/global odom、TF 和 OdomState。
-- `localization_fusion_monitor_node`：终端监控当前定位源、有效性、频率和输出状态。
-- `rviz_visualization_localization_fusion_node`：根据 OdomState 发布 RViz Marker。
+- `localization_fusion_monitor_node`：终端打印监控节点，订阅一个或多个无人机的 OdomState，周期性打印定位源、输入话题、输出话题、定位有效性、频率、frame 和 odom 快照。
+- `rviz_visualization_localization_fusion_node`：RViz 可视化节点，只订阅 OdomState，发布 MarkerArray 展示坐标轴、local/global odom 轨迹和定位状态文字。
+
+`localization_fusion.launch` 默认会同时启动这三个节点。可以通过参数关闭监控或 RViz：
+
+```bash
+roslaunch localization_fusion localization_fusion.launch \
+  source_id:=3 \
+  agent_name:=uav \
+  agent_id:=1 \
+  enable_monitor:=true \
+  enable_rviz_visualization:=true
+```
+
+#### 主节点：localization_fusion_node
+
+`localization_fusion_node` 的职责是把某个外部定位源转换成 Sunray 标准输出。
+
+主要参数：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `source_id` | `3` | 选择 `localization_sources.yaml` 中的定位源 |
+| `config_yamlfile_path` | `$(find localization_fusion)/config/localization_sources.yaml` | 定位源配置文件 |
+| `agent_name` | `uav` | 智能体名前缀 |
+| `agent_id` | `1` | 智能体编号 |
+| `use_private_agent_key` | `true` | 是否使用 launch 私有参数生成 agent key |
+
+主节点的话题关系：
+
+| 方向 | 话题 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| 订阅 | 配置中的 `odometry_topic` | `nav_msgs/Odometry` | 当前定位源的局部里程计输入 |
+| 订阅 | 配置中的 `relocalization_topic` | `nav_msgs/Odometry` | 可选重定位输入；为空时不订阅 |
+| 发布 | `/${agent_name}${agent_id}/sunray/localization/local_odom` | `nav_msgs/Odometry` | 标准局部里程计，frame 为 `{agent}/sunray_local -> {agent}/base_link` |
+| 发布 | `/${agent_name}${agent_id}/sunray/localization/global_odom` | `nav_msgs/Odometry` | 标准全局里程计，frame 为 `{agent}/sunray_global -> {agent}/base_link` |
+| 发布 | `/${agent_name}${agent_id}/sunray/localization/odom_state` | `sunray_msgs/OdomState` | 定位状态快照，包含输入/输出话题、有效性、频率、odom 和 TF |
+| 发布 TF | `world -> {agent}/sunray_global` | `geometry_msgs/TransformStamped` | 静态 TF，默认单位变换 |
+| 发布 TF | `{agent}/sunray_global -> {agent}/sunray_local` | `geometry_msgs/TransformStamped` | 重定位后更新；无重定位时为单位变换 |
+| 发布 TF | `{agent}/sunray_local -> {agent}/base_link` | `geometry_msgs/TransformStamped` | 根据当前 local odom 更新 |
+
+以 `uav1` 为例，主节点默认输出：
+
+```text
+/uav1/sunray/localization/local_odom
+/uav1/sunray/localization/global_odom
+/uav1/sunray/localization/odom_state
+```
+
+#### 终端打印节点：localization_fusion_monitor_node
+
+`localization_fusion_monitor_node` 是定位状态的终端面板。它不参与定位计算，只订阅 `odom_state` 并打印状态。
+
+主要参数：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `agent_name` | `uav` | 智能体名前缀 |
+| `agent_num` | `1` | 监控无人机数量；多机模式会订阅 `uav1` 到 `uavN` |
+| `source_id` | `3` | 用于解析和显示当前定位源配置 |
+| `config_yamlfile_path` | `localization_sources.yaml` | 定位源配置文件 |
+| `print_hz` | `5.0` | 终端刷新频率 |
+| `stale_timeout` | `1.0` | 超过该时间未收到 OdomState 时标记为陈旧 |
+
+单机默认订阅：
+
+```text
+/uav1/sunray/localization/odom_state
+```
+
+多机模式下会订阅：
+
+```text
+/uav1/sunray/localization/odom_state
+/uav2/sunray/localization/odom_state
+...
+/uavN/sunray/localization/odom_state
+```
+
+#### RViz 节点：rviz_visualization_localization_fusion_node
+
+`rviz_visualization_localization_fusion_node` 是定位可视化节点。它只依赖 `OdomState`，不额外订阅 `local_odom` 或 `global_odom`。
+
+主要参数：
+
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| `agent_name` | `uav` | 智能体名前缀 |
+| `agent_id` | `1` | 智能体编号 |
+| `frame_id` | `world` | Marker 使用的参考坐标系 |
+| `state_topic` | `/uav1/sunray/localization/odom_state` | OdomState 输入话题 |
+| `marker_topic` | `/uav1/sunray/localization/rviz_markers` | MarkerArray 输出话题 |
+| `world_axis_length` | 代码默认值 | world 坐标轴长度 |
+| `tf_axis_length` | 代码默认值 | TF 坐标轴长度 |
+| `trail_length` | 代码默认值 | local/global odom 轨迹保留长度 |
+
+默认话题关系：
+
+| 方向 | 话题 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| 订阅 | `/uav1/sunray/localization/odom_state` | `sunray_msgs/OdomState` | 定位状态快照 |
+| 发布 | `/uav1/sunray/localization/rviz_markers` | `visualization_msgs/MarkerArray` | RViz Marker，包含坐标轴、轨迹和状态文字 |
+
+在 RViz 中添加 `MarkerArray`，话题选择：
+
+```text
+/uav1/sunray/localization/rviz_markers
+```
 
 ### sunray_mocap
 
@@ -328,99 +434,6 @@ roslaunch localization_fusion localization_fusion.launch source_id:=3 agent_name
 - `timeout_s` 是否过小。
 - 输入 odom 的时间戳是否异常。
 
-## 当前代码优化方向
+## 后续优化
 
-### 1. 统一参数化话题和 frame
-
-部分节点仍使用硬编码话题或 frame，例如：
-
-- `sunray_viobot` 固定订阅 `/baton/stereo3/odometry`。
-- `ekf_odometry` 固定发布 `/sunray/ekf_odometry`。
-- `fast_lio/src/transform_odom_pointCloud.cpp` 固定订阅 `/livox/imu`、`/Odometry`、`/PointCloud`。
-- `open3d_loc` 固定使用 `/Odometry_loc`、`/cloud_registered_1`、`map/odom/base_link` 等。
-
-建议统一改为 ROS 参数，并在 launch 文件中显式配置，减少不同机型和多机环境下的改代码需求。
-
-### 2. 统一命名和枚举拼写
-
-当前存在一些历史拼写问题：
-
-- `FASTLIO_EFK` 应考虑统一为 `FASTLIO_EKF`。
-- `GloabalLocalization` 应考虑改为 `GlobalLocalization`。
-- `ProcssIMU` 应考虑改为 `ProcessIMU`。
-
-如果这些名称已被外部使用，建议先做兼容别名，再逐步迁移。
-
-### 3. 加强时间同步和缓冲管理
-
-`ekf_odometry` 当前用两个 `deque` 手动匹配 IMU 与 odom，缺少队列长度上限、时间戳异常处理和插值。建议：
-
-- 给 IMU/odom buffer 增加最大长度。
-- 对倒退时间戳、过大 dt、空队列状态做保护。
-- 对 odom 更新时刻做 IMU 插值或更严格的时间同步。
-- 将噪声参数、初始化帧数、发布话题全部参数化。
-
-### 4. 明确协方差语义
-
-多个节点发布 `nav_msgs/Odometry` 时没有填充 pose/twist covariance。对飞控、融合、诊断工具来说，协方差是判断定位可信度的重要信息。建议：
-
-- 动捕、VIO、FAST-LIO、EKF 输出都按来源填写合理协方差。
-- `localization_fusion` 转换外参时同步旋转协方差。
-- `OdomState` 中可增加定位质量、延迟、重定位置信度等字段。
-
-### 5. 降低第三方算法包和 Sunray 封装耦合
-
-`fast_lio`、`vins-fusion`、`open3d_loc` 中既有第三方算法代码，也有 Sunray 适配代码。建议：
-
-- 尽量不直接改第三方核心算法。
-- 把 Sunray 适配节点放在单独 wrapper 包或明确的 `sunray_*` 节点中。
-- 保留上游算法 README，另写 Sunray 使用说明。
-
-### 6. 改善 CMake 和依赖配置
-
-当前可优化项：
-
-- `open3d_loc/CMakeLists.txt` 中 `Open3D_DIR` 是绝对路径 `/home/liar/open3d141/...`，应改为环境变量、CMake 参数或系统查找。
-- `fast_lio/CMakeLists.txt` 同时设置 Debug 和 `-O3`，构建类型语义不清。
-- 多处重复 `-std=c++14` 或 `-std=c++0x`。
-- 建议统一 CMake 最低版本、C++ 标准和 install 规则。
-
-### 7. 完善 launch 覆盖
-
-`localization_fusion.launch` 中部分 `source_id` 目前只有占位注释，没有 include 实际启动源：
-
-- `source_id=0` VIOBOT
-- `source_id=2` VINS
-- `source_id=3` GAZEBO
-- `source_id=4` GAZEBO_ARUCO
-- `source_id=5` PENGYU_SIM
-
-建议补齐对应 `source_launch/start_*.launch`，让每个 source 都能一键启动或明确声明由外部系统提供。
-
-### 8. 增加测试和回放验证
-
-建议增加以下最小测试：
-
-- YAML 配置解析测试。
-- `source_frame_to_base` 外参转换单元测试。
-- `global_to_local_tf` 重定位计算测试。
-- rosbag 回放下的 `odom_state.odometry_valid`、输出频率和 TF 连通性检查。
-
-### 9. 改善多机命名空间一致性
-
-当前部分包按 `/uavX/...` 输出，部分包使用全局 `/sunray/...`。建议统一遵循：
-
-```text
-/{agent_name}{agent_id}/sunray/...
-```
-
-对于必须全局唯一的话题，应在 README 和 launch 参数中明确说明。
-
-### 10. 文档化实机标定流程
-
-定位质量高度依赖外参和时间同步。建议补充：
-
-- LiDAR-IMU 外参标定流程。
-- VIO 相机-IMU 外参和时间偏移标定流程。
-- 动捕坐标系与机体系对齐流程。
-- PX4 EKF2 外部视觉参数配置建议。
+代码优化和维护建议单独整理在 [TODO.md](TODO.md)。
