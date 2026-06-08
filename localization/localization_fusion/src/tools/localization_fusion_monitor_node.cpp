@@ -48,6 +48,16 @@ struct CachedState
     ros::Time              receive_time{0.0};
 };
 
+struct TopicRuntime
+{
+    bool      configured{false};
+    bool      has_msg{false};
+    uint32_t  publisher_count{0};
+    uint64_t  msg_count{0};
+    double    hz{0.0};
+    ros::Time receive_time{0.0};
+};
+
 struct AgentTopics
 {
     std::string external_odom_topic;
@@ -58,6 +68,7 @@ struct AgentTopics
 };
 
 std::map<int, CachedState> g_states;
+std::map<int, TopicRuntime> g_external_odom_topics;
 std::mutex g_mutex;
 
 std::string colorText(const std::string &text, const char *color)
@@ -68,6 +79,37 @@ std::string colorText(const std::string &text, const char *color)
 std::string okText(const bool ok)
 {
     return ok ? colorText("正常", kAnsiGood) : colorText("异常", kAnsiBad);
+}
+
+std::string externalTopicStatusText(const TopicRuntime &runtime, const double stale_timeout)
+{
+    if (!runtime.configured)
+    {
+        return colorText("未配置", kAnsiWarn);
+    }
+    if (runtime.publisher_count == 0)
+    {
+        return colorText("无发布者", kAnsiBad);
+    }
+    if (!runtime.has_msg)
+    {
+        return colorText("等待消息", kAnsiWarn);
+    }
+
+    const double age = (ros::Time::now() - runtime.receive_time).toSec();
+    if (age > stale_timeout)
+    {
+        return colorText("消息超时", kAnsiBad);
+    }
+    return colorText("正常发布", kAnsiGood);
+}
+
+std::string externalTopicHzText(const TopicRuntime &runtime)
+{
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(1)
+       << "频率 = " << (runtime.has_msg ? runtime.hz : 0.0) << " Hz";
+    return colorText(ss.str(), kAnsiValue);
 }
 
 std::string relocalizationTopicText(const sunray_msgs::OdomState &state)
@@ -194,7 +236,9 @@ std::string odomAttitudeText(const nav_msgs::Odometry &odom)
 
 std::string buildPanel(const std::string &agent_key,
                        const AgentTopics &topics,
-                       const CachedState &cached)
+                       const CachedState &cached,
+                       const TopicRuntime &external_odom_runtime,
+                       const double stale_timeout)
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
@@ -207,6 +251,11 @@ std::string buildPanel(const std::string &agent_key,
     {
         ss << colorText(" 订阅话题  ", kAnsiLabel)
            << "odom状态话题: " << topicValueText(topics.odom_state_topic) << "\n";
+        ss << "           "
+           << "外部定位源（局部）话题: " << topicValueText(topics.external_odom_topic)
+           << "  发布状态: " << externalTopicStatusText(external_odom_runtime, stale_timeout)
+           << "  " << externalTopicHzText(external_odom_runtime)
+           << "\n";
         ss << colorText(" 基本信息  ", kAnsiLabel) << colorText("等待 OdomState...", kAnsiWarn)
            << "\n";
         return ss.str();
@@ -215,7 +264,10 @@ std::string buildPanel(const std::string &agent_key,
     const sunray_msgs::OdomState &state = cached.state;
 
     ss << colorText(" 订阅话题  ", kAnsiLabel)
-       << "外部定位源（局部）话题: " << topicValueText(state.subtopic_name_external_odom) << "\n";
+       << "外部定位源（局部）话题: " << topicValueText(state.subtopic_name_external_odom)
+       << "  发布状态: " << externalTopicStatusText(external_odom_runtime, stale_timeout)
+       << "  " << externalTopicHzText(external_odom_runtime)
+       << "\n";
     ss << "           "
        << "外部定位源（重定位）话题: " << relocalizationTopicText(state) << "\n";
     ss << colorText(" 发布话题  ", kAnsiLabel)
@@ -275,15 +327,44 @@ void stateCallback(const sunray_msgs::OdomState::ConstPtr &msg, const int agent_
     cached.receive_time = ros::Time::now();
 }
 
+void externalOdomCallback(const nav_msgs::Odometry::ConstPtr &, const int agent_id)
+{
+    const ros::Time now = ros::Time::now();
+    std::lock_guard<std::mutex> lock(g_mutex);
+    TopicRuntime &runtime = g_external_odom_topics[agent_id];
+    runtime.configured = true;
+    if (runtime.has_msg)
+    {
+        const double dt = (now - runtime.receive_time).toSec();
+        if (dt > 1e-6)
+        {
+            const double instant_hz = 1.0 / dt;
+            runtime.hz = runtime.hz <= 0.0 ? instant_hz : 0.8 * runtime.hz + 0.2 * instant_hz;
+        }
+    }
+    runtime.has_msg = true;
+    runtime.receive_time = now;
+    ++runtime.msg_count;
+}
+
 void printPanel(const ros::TimerEvent &,
                 const std::vector<std::string> &agent_keys,
                 const std::vector<AgentTopics> &agent_topics,
+                const std::vector<ros::Subscriber> &external_odom_subs,
                 const double stale_timeout)
 {
     std::map<int, CachedState> states;
+    std::map<int, TopicRuntime> external_odom_topics;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         states = g_states;
+        external_odom_topics = g_external_odom_topics;
+    }
+
+    for (size_t i = 0; i < external_odom_subs.size(); ++i)
+    {
+        TopicRuntime &runtime = external_odom_topics[static_cast<int>(i + 1)];
+        runtime.publisher_count = external_odom_subs[i].getNumPublishers();
     }
 
     std::cout << "\033[2J\033[H";
@@ -291,6 +372,18 @@ void printPanel(const ros::TimerEvent &,
     {
         std::cout << colorText("Localization Fusion 状态面板", kAnsiTitle) << "\n";
         std::cout << "等待 OdomState 消息...\n";
+        for (size_t i = 0; i < agent_keys.size(); ++i)
+        {
+            const int id = static_cast<int>(i + 1);
+            const TopicRuntime external_odom_runtime =
+                (external_odom_topics.count(id) > 0) ? external_odom_topics[id] : TopicRuntime{};
+            std::cout << colorText(" 外部odom  ", kAnsiLabel)
+                      << agent_keys[i]
+                      << "  话题: " << topicValueText(agent_topics[i].external_odom_topic)
+                      << "  发布状态: "
+                      << externalTopicStatusText(external_odom_runtime, stale_timeout)
+                      << "  " << externalTopicHzText(external_odom_runtime) << "\n";
+        }
         std::cout.flush();
         return;
     }
@@ -305,12 +398,19 @@ void printPanel(const ros::TimerEvent &,
         const AgentTopics topics = (id >= 1 && id <= static_cast<int>(agent_topics.size()))
                                        ? agent_topics[static_cast<size_t>(id - 1)]
                                        : buildAgentTopics(key, SourceConfig{});
+        const TopicRuntime external_odom_runtime =
+            (external_odom_topics.count(id) > 0) ? external_odom_topics[id] : TopicRuntime{};
         if (item.second.has_state && (now - item.second.receive_time).toSec() > stale_timeout)
         {
             std::cout << colorText(key + " 状态超时", kAnsiBad) << "\n";
+            std::cout << colorText(" 外部odom  ", kAnsiLabel)
+                      << "话题: " << topicValueText(topics.external_odom_topic)
+                      << "  发布状态: "
+                      << externalTopicStatusText(external_odom_runtime, stale_timeout)
+                      << "  " << externalTopicHzText(external_odom_runtime) << "\n";
             continue;
         }
-        std::cout << buildPanel(key, topics, item.second);
+        std::cout << buildPanel(key, topics, item.second, external_odom_runtime, stale_timeout);
     }
     std::cout.flush();
 }
@@ -351,9 +451,11 @@ int main(int argc, char **argv)
     std::vector<std::string> agent_keys;
     std::vector<AgentTopics> agent_topics;
     std::vector<ros::Subscriber> subs;
+    std::vector<ros::Subscriber> external_odom_subs;
     agent_keys.reserve(static_cast<size_t>(num));
     agent_topics.reserve(static_cast<size_t>(num));
     subs.reserve(static_cast<size_t>(num));
+    external_odom_subs.reserve(static_cast<size_t>(num));
 
     for (int id = 1; id <= num; ++id)
     {
@@ -362,18 +464,33 @@ int main(int argc, char **argv)
         agent_keys.push_back(key);
         agent_topics.push_back(topics);
         g_states[id] = CachedState{};
+        g_external_odom_topics[id] = TopicRuntime{!topics.external_odom_topic.empty()};
 
         subs.push_back(nh.subscribe<sunray_msgs::OdomState>(
             topics.odom_state_topic, 10,
             [id](const sunray_msgs::OdomState::ConstPtr &msg) { stateCallback(msg, id); }));
+
+        if (!topics.external_odom_topic.empty())
+        {
+            external_odom_subs.push_back(nh.subscribe<nav_msgs::Odometry>(
+                topics.external_odom_topic, 10,
+                [id](const nav_msgs::Odometry::ConstPtr &msg) { externalOdomCallback(msg, id); }));
+            ROS_INFO("localization_fusion_monitor subscribe external odom: %s",
+                     topics.external_odom_topic.c_str());
+        }
+        else
+        {
+            external_odom_subs.push_back(ros::Subscriber{});
+            ROS_WARN("localization_fusion_monitor external odom topic is empty for %s", key.c_str());
+        }
 
         ROS_INFO("localization_fusion_monitor subscribe: %s", topics.odom_state_topic.c_str());
     }
 
     ros::Timer print_timer = nh.createTimer(
         ros::Duration(1.0 / std::max(0.1, print_hz)),
-        [&agent_keys, &agent_topics, stale_timeout](const ros::TimerEvent &e) {
-            printPanel(e, agent_keys, agent_topics, stale_timeout);
+        [&agent_keys, &agent_topics, &external_odom_subs, stale_timeout](const ros::TimerEvent &e) {
+            printPanel(e, agent_keys, agent_topics, external_odom_subs, stale_timeout);
         });
 
     ros::spin();

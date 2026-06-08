@@ -4,7 +4,7 @@
   <arg name="ros_setup_file"
        default="/opt/ros/noetic/setup.bash" />
   <arg name="workspace_setup_file"
-       default="/home/yundrone/Sunray_v2/devel/setup.bash" />
+       default="~/Sunray_v2/devel/setup.bash" />
   <arg name="external_workspaces"
        default="" />
 

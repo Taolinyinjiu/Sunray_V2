@@ -163,6 +163,7 @@ class ScriptsManageTui {
     private_nh_.param<std::string>("system_info_topic", system_info_topic_,
                                    "/sunray/system_info");
     private_nh_.param<double>("refresh_period_sec", refresh_period_sec_, 5.0);
+    private_nh_.param<bool>("start_with_terminal", start_with_terminal_, true);
     system_ns_ = normalize_namespace(system_ns_);
 
     ros::NodeHandle nh;
@@ -995,7 +996,7 @@ class ScriptsManageTui {
   int pane_focus_ = 0;
   int group_selection_ = 0;
   int feature_selection_ = 0;
-  bool start_with_terminal_ = false;
+  bool start_with_terminal_ = true;
   bool status_is_error_ = false;
   std::string status_message_ = "正在初始化...";
   std::chrono::system_clock::time_point last_refresh_wall_time_;

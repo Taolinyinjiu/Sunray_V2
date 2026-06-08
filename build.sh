@@ -155,6 +155,11 @@ build_tui_if_needed() {
     fi
     
     if [[ "$need_build" == true ]]; then
+        if [[ -f "$tui_binary" ]] && ! tui_binary_matches_host_arch; then
+            print_status "删除架构不匹配的旧TUI程序: $tui_binary"
+            rm -f "$tui_binary"
+        fi
+
         mkdir -p "$build_dir" || { print_error "无法创建构建目录: $build_dir"; exit 1; }
         
         print_status "配置CMake..."
@@ -174,6 +179,11 @@ build_tui_if_needed() {
     
     if [[ ! -f "$tui_binary" ]]; then
         print_error "编译完成但找不到可执行文件: $tui_binary"; exit 1
+    fi
+
+    if ! tui_binary_matches_host_arch; then
+        print_error "TUI程序架构仍与当前系统不匹配: $(file -b "$tui_binary" 2>/dev/null || echo unknown)"
+        exit 1
     fi
 }
 

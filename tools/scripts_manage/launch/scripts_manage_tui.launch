@@ -2,6 +2,7 @@
   <arg name="system_ns" default="/sunray_system" />
   <arg name="system_info_topic" default="/sunray/system_info" />
   <arg name="refresh_period_sec" default="5.0" />
+  <arg name="start_with_terminal" default="true" />
 
   <node
     pkg="scripts_manage"
@@ -11,5 +12,6 @@
     <param name="system_ns" value="$(arg system_ns)" />
     <param name="system_info_topic" value="$(arg system_info_topic)" />
     <param name="refresh_period_sec" value="$(arg refresh_period_sec)" />
+    <param name="start_with_terminal" value="$(arg start_with_terminal)" />
   </node>
 </launch>

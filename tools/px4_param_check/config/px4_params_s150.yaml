@@ -1,5 +1,5 @@
 # Sunray 关注的 PX4 参数建议值。
-# 这些数值只作为初始建议，需要结合机型、PX4 版本、机架类型和试飞数据重新确认。
+# based on PX4 v1.15.2dev firmware，适用于Sunray-150系列无人机。
 #
 # agent_name 和 agent_id 对应 drivers/sunray_mavros/launch/mavros.launch:
 #   <group ns="$(arg agent_name)$(arg agent_id)">
@@ -8,7 +8,6 @@
 agent_name: uav
 agent_id: 1
 mavros_node: mavros
-
 
 parameter_group:
   - name: EKF2
@@ -33,7 +32,7 @@ parameter_group:
       - name: EKF2_HGT_REF
         type: integer
         recommended_value: 2
-        description: 高度参考源传感器:0表示气压计,2表示测距仪.
+        description: EKF 高度参考源，高度参考源：0代表气压计、1代表GPS、2代表测距仪、3代表外部视觉
       - name: EKF2_IMU_CTRL
         type: integer
         recommended_value: 7
@@ -44,12 +43,24 @@ parameter_group:
         description: 测距传感器高度辅助融合控制:0代表禁用,1代表使能.
       - name: EKF2_BARO_CTRL
         type: integer
-        recommended_value: 1
+        recommended_value: 0
         description: 气压计高度融合控制:0表示禁用,1代表使能.
       - name: EKF2_OF_CTRL
         type: integer
         recommended_value: 1
         description: 光流辅助:0表示融合未启用,1表示使能.
+      - name: EKF2_OF_POS_X
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 X 轴方向相对飞机重心的位置，单位为米；正方向通常为机头前方。
+      - name: EKF2_OF_POS_Y
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 Y 轴方向相对飞机重心的位置，单位为米；正方向通常为机体右侧。
+      - name: EKF2_OF_POS_Z
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 Z 轴方向相对飞机重心的位置，单位为米；正方向通常为机体下方。
       - name: EKF2_GPS_CTRL
         type: integer
         recommended_value: 0
@@ -62,6 +73,10 @@ parameter_group:
         type: real
         recommended_value: 1.0
         description: 测距仪高度辅助允许的最大水平速度，单位为米每秒。
+      - name: EKF2_MAG_TYPE
+        type: integer
+        recommended_value: 5
+        description: 磁力计融合类型，5表示不使用磁力计；仅建议在外部视觉可靠提供偏航时使用，否则应改回自动模式。
 
 
 
@@ -98,7 +113,7 @@ parameter_group:
         description: 高度参考模式,2表示Terrain hold:静止或低速时优先使用测距仪保持对地高度，测距失效时回退到本地高度。
       - name: MPC_TILTMAX_AIR
         type: real
-        recommended_value: 35.0
+        recommended_value: 20.0
         description: 空中最大倾角，单位为度；限制速度或加速度控制模式下的最大机体倾斜角。
       - name: MPC_TKO_SPEED
         type: real
@@ -128,9 +143,19 @@ parameter_group:
         type: real
         recommended_value: 0.3
         description: 为水平控制预留的推力余量；垂直推力接近饱和时保留部分推力给水平控制。
-  
-  
-  
+      - name: MPC_POS_MODE
+        type: integer
+        recommended_value: 1
+        description: 位置控制模式；0=加速度模式，1代表平滑速度，2代表直接速度
+      - name: MPC_JERK_MAX
+        type: real
+        recommended_value: 4.0
+        description: 最大加加速度，控制轨迹平滑度，避免电机突变抖动。
+      - name: MPC_HOLD_DZ
+        type: real
+        recommended_value: 0.05
+        description: 摇杆死区，减少手动操作带来的位置扰动。
+
   - name: Commander
     description: OFFBOARD模式丢失如何处理的相关参数
     parameters:
@@ -162,9 +187,7 @@ parameter_group:
         type: real
         recommended_value: 0.5
         description: 遥控器或 Joystick 控制输入丢失判定时间，单位为秒；超过该时间未收到新输入则认为链路丢失。
-  
-  
-  
+    
   - name: MAVLink
     description: MAVLink 通信基础参数
     parameters:
@@ -213,8 +236,6 @@ parameter_group:
         recommended_value: 0
         description: 第1路 MAVLink 实例使用普通遥测数据流模式,0代表Normal,1代表Custom,2代表Onboard。
   
-  
-  
   - name: Serial Port
     description: 串口配置参数
     parameters:
@@ -226,8 +247,6 @@ parameter_group:
         type: integer
         recommended_value: 115200
         description: TELEM2串口波特率。
-  
-  
   
   - name: BAT
     description: 电池参数
@@ -245,8 +264,6 @@ parameter_group:
         recommended_value: 3.20
         description: 电池电压,3.20代表没电时每片电芯电压。
   
-  
-  
   - name: Manual Control
     description: 摇杆/手动控制相关参数
     parameters:
@@ -254,8 +271,6 @@ parameter_group:
         type: integer
         recommended_value: 0
         description: 摇杆解锁/上锁手势开关,0表示禁用。
-  
-  
   
   - name: RC Input
     description: 遥控器输入协议参数
@@ -324,9 +339,14 @@ parameter_group:
   - name: Failure Detector
     description: 故障检测相关参数
     parameters:
+      - name: CBRK_FLIGHTTERM
+        type: integer
+        recommended_value: 0
+        description: 飞行终止断路器,0表示启用Flight Termination；姿态故障等严重故障触发后可能直接停桨/上锁，实机测试需谨慎。
+
       - name: FD_FAIL_P
         type: integer
-        recommended_value: 60
+        recommended_value: 45
         description: 最大允许俯仰角，单位为度；超过后可触发姿态故障检测。
 
       - name: FD_FAIL_P_TTRI
@@ -336,7 +356,7 @@ parameter_group:
 
       - name: FD_FAIL_R
         type: integer
-        recommended_value: 60
+        recommended_value: 45
         description: 最大允许横滚角，单位为度；超过后可触发姿态故障检测。
 
       - name: FD_FAIL_R_TTRI

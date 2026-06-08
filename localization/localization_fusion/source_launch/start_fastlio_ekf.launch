@@ -8,10 +8,14 @@
   -->
   <arg name="log_type" default="log" />
 
-  <!-- 启动MID360s的点云数据输出 -->
+  <!-- 启动MID360的点云数据输出 -->
   <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch">
-    <arg name="log_type" value="$(arg log_type)" />
   </include>
+
+  <!-- 启动MID360s的点云数据输出 -->
+  <!-- <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360s.launch">
+    <arg name="log_type" value="$(arg log_type)" />
+  </include> -->
 
   <!-- 启动fast_lio建图 -->
   <include file="$(find fast_lio)/launch/mapping_mid360.launch">
