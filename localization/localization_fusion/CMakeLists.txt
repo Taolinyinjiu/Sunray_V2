@@ -101,11 +101,23 @@ add_dependencies(rviz_visualization_localization_fusion_node
   ${catkin_EXPORTED_TARGETS}
 )
 
+add_executable(local_odom_to_vision_pose_node
+  src/tools/local_odom_to_vision_pose_node.cpp
+)
+target_link_libraries(local_odom_to_vision_pose_node
+  ${catkin_LIBRARIES}
+)
+add_dependencies(local_odom_to_vision_pose_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
 install(TARGETS
   localization_fusion_core
   localization_fusion_node
   localization_fusion_monitor_node
   rviz_visualization_localization_fusion_node
+  local_odom_to_vision_pose_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

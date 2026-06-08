@@ -372,3 +372,11 @@ parameter_group:
         type: integer
         recommended_value: 0
         description: 电池电压推力补偿开关,0表示关闭:启用后会根据电池电压下降放大推力和力矩设定能把推力和力矩设定值放大一点，让飞机在低电压时尽量保持接近满电时的控制手感,但是建议关闭。     
+
+  - name: SD Logging
+    description: Logging
+    parameters:
+      - name: SDLOG_PROFILE
+        type: integer
+        recommended_value: 145
+        description: 日志记录模式

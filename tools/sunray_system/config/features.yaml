@@ -46,6 +46,7 @@ features:
           - "agent_name:=uav"
           - "agent_id:=1"
           - "enable_monitor:=true"
+          - "enable_vision_pose:=true"
         delay_sec: 1.0
   - name: "localization_fastlio"
     group: "无人机定位模块"
@@ -61,6 +62,7 @@ features:
           - "agent_name:=uav"
           - "agent_id:=1"
           - "enable_monitor:=true"
+          - "enable_vision_pose:=true"
         delay_sec: 1.0
   - name: "localization_viobot"
     group: "无人机定位模块"
@@ -76,6 +78,7 @@ features:
           - "agent_name:=uav"
           - "agent_id:=1"
           - "enable_monitor:=true"
+          - "enable_vision_pose:=true"
         delay_sec: 1.0
   - name: "localization_vins"
     group: "无人机定位模块"
@@ -91,9 +94,10 @@ features:
           - "agent_name:=uav"
           - "agent_id:=1"
           - "enable_monitor:=true"
+          - "enable_vision_pose:=true"
         delay_sec: 1.0
 
-## 无人机模块  
+## 无人机控制模块  
   - name: "uav_control_px4_origin(only)"
     group: "无人机控制模块"
     description: "无人机控制模块：基于PX4原生控制器"

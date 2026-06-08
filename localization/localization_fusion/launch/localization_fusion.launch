@@ -11,6 +11,8 @@
     <arg name="use_private_agent_key" default="true" />
     <!-- 是否启动定位状态监视器，集群场景建议关闭并改用 swarm_monitor -->
     <arg name="enable_monitor" default="true" />
+    <!-- 是否将 local_odom 转发为 MAVROS vision_pose，默认关闭 -->
+    <arg name="enable_vision_pose" default="false" />
 
     <!--
       根据 source_id 启动对应的定位源子 launch。
@@ -41,7 +43,7 @@
     </group>
 
     <!-- ROS节点名，默认按 agent_name + agent_id 命名，例如 localization_fusion_uav1 -->
-    <node pkg="localization_fusion" type="localization_fusion_node" name="localization_fusion_$(arg agent_name)$(arg agent_id)" output="screen">
+    <node pkg="localization_fusion" type="localization_fusion_node" name="$(arg agent_name)$(arg agent_id)_localization_fusion_node" output="screen">
         <param name="source_id" value="$(arg source_id)" />
         <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
         <param name="agent_name" value="$(arg agent_name)" />
@@ -49,10 +51,22 @@
         <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
     </node>
 
+    <!-- 将 localization_fusion 的 local_odom 转发给 PX4 MAVROS vision_pose -->
+    <arg name="vision_pose_local_odom_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/local_odom" />
+    <arg name="vision_pose_topic" default="/$(arg agent_name)$(arg agent_id)/mavros/vision_pose/pose" />
+    <node pkg="localization_fusion"
+        type="local_odom_to_vision_pose_node"
+        name="$(arg agent_name)$(arg agent_id)_local_odom_to_vision_pose"
+        output="screen"
+        if="$(arg enable_vision_pose)">
+        <param name="local_odom_topic" value="$(arg vision_pose_local_odom_topic)" />
+        <param name="vision_pose_topic" value="$(arg vision_pose_topic)" />
+    </node>
+
     <!-- 定位模块输出状态监听节点 -->
     <node pkg="localization_fusion"
         type="localization_fusion_monitor_node"
-        name="localization_fusion_monitor"
+        name="$(arg agent_name)$(arg agent_id)_localization_fusion_monitor"
         output="screen"
         if="$(arg enable_monitor)">
         <param name="agent_name" value="$(arg agent_name)" />
