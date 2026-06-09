@@ -64,11 +64,23 @@ modules:
     build_path: "build/sunray_planner_msgs"
     dependencies: [""]
 
+  planner_msgs:
+    description: "uav planning example 内部使用的 planner_msgs"
+    source_path: "examples/sunray_uav_planning_example/source_planners/planner_msgs"
+    build_path: "build/planner_msgs"
+    dependencies: [""]
+
   ego_planner_swarm:
     description: "ego_planner_swarm 功能包"
-    source_path: "planning/source_planners/ego_planner_swarm"
+    source_path: "examples/sunray_uav_planning_example/source_planners/ego-planner-swarm"
     build_path: "build/ego_planner_swarm"
-    dependencies: ["sunray_planner_msgs"]
+    dependencies: ["planner_msgs"]
+
+  ego_example:
+    description: "EGO planner position_cmd 到 uav_control 的桥接示例"
+    source_path: "examples/sunray_uav_planning_example/ego_example"
+    build_path: "build/ego_example"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
 
   diff_planner:
     description: "Diff Planner"
@@ -123,7 +135,7 @@ modules:
     description: "sunray_simulator 功能包"
     source_path: "simulation/sunray_simulator"
     build_path: "build/sunray_simulator"
-    dependencies: ["sunray_planning", "gazebo_plugin"]
+    dependencies: ["gazebo_plugin"]
   # 驱动模块功能包
 
   sunray_mavros:

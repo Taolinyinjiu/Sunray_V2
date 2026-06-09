@@ -1,10 +1,15 @@
 <launch>
+    <arg name="input_point_topic" default="/uav1/livox/lidar" />
+    <arg name="output_point_topic" default="/uav1/global_points" />
+    <arg name="odom_topic" default="/uav1/sunray/gazebo_pose" />
+    <arg name="frame_id" default="world" />
+    <arg name="child_frame_id" default="uav1/base_link" />
 
     <node name="point_cloud_transform" pkg="sunray_planner_tools" type="point_cloud_transform" output="screen">
-        <param name="input_point_topic" value="/uav1/livox/lidar" />
-        <param name="output_point_topic" value="/uav1/global_points" />
-        <param name="odom_topic" value="/uav1/sunray/gazebo_pose" />
-        <param name="frame_id" value="world" />
-        <param name="child_frame_id" value="uav1/base_link" />
+        <param name="input_point_topic" value="$(arg input_point_topic)" />
+        <param name="output_point_topic" value="$(arg output_point_topic)" />
+        <param name="odom_topic" value="$(arg odom_topic)" />
+        <param name="frame_id" value="$(arg frame_id)" />
+        <param name="child_frame_id" value="$(arg child_frame_id)" />
     </node>
 </launch>

@@ -1,0 +1,30 @@
+<launch>
+  <!-- agent_name：无人机名称前缀，由调用方传入，并与 agent_id 拼接成当前示例中的无人机命名空间，例如 uav1。 -->
+  <arg name="agent_name" default="uav" />
+  <!-- agent_id：无人机编号，由调用方传入，用于区分多机系统中的不同无人机实例。 -->
+  <arg name="agent_id" default="1" />
+  <!-- node_name：本转换节点的 ROS 节点名，默认随 agent_id 生成，便于多机同时启动时区分节点。 -->
+  <arg name="node_name" default="$(eval 'Ego2Sunray_' + str(int(arg('agent_id'))))" />
+  <!-- planner_prefix：EGO planner 在当前示例中的规划话题后缀，需要与调用方传给 advanced_param.xml 的 planner_prefix 保持一致。 -->
+  <arg name="planner_prefix" default="/sunray/planning/ego_planner" />
+  <!-- agent_prefix：由 agent_name 和 agent_id 拼接得到的当前无人机命名空间，例如 /uav1。 -->
+  <arg name="agent_prefix" default="$(eval '/' + arg('agent_name') + str(arg('agent_id')))" />
+  <!-- input_topic：订阅 ego_planner 的 traj_server 输出 position_cmd，默认使用 agent_prefix 与 planner_prefix 拼接得到。 -->
+  <arg name="input_topic" default="$(arg agent_prefix)$(arg planner_prefix)/position_cmd" />
+  <!-- output_topic：发布 Sunray 控制指令的话题，默认发布到当前无人机控制模块的 control_cmd 输入。 -->
+  <arg name="output_topic" default="$(arg agent_prefix)/sunray/uav_control/control_cmd" />
+  <!-- queue_size：订阅和发布队列长度，用于缓冲短时间内到达的规划指令或控制指令。 -->
+  <arg name="queue_size" default="50" />
+  <!-- use_yaw_rate：是否使用 ego_planner 的 yaw_dot 作为期望偏航角速度；为 false 时使用 yaw 作为期望偏航角。 -->
+  <arg name="use_yaw_rate" default="false" />
+
+  <node pkg="ego_example"
+        type="Ego2Sunray_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="input_topic" value="$(arg input_topic)" />
+    <param name="output_topic" value="$(arg output_topic)" />
+    <param name="queue_size" value="$(arg queue_size)" />
+    <param name="use_yaw_rate" value="$(arg use_yaw_rate)" />
+  </node>
+</launch>
