@@ -8,7 +8,7 @@ quick_launch_groups:
             delay_sec: 2.0
           - ref: "定位融合/无人机定位融合"
             delay_sec: 2.0
-          - ref: "无人机控制/单机无人机控制"
+          - ref: "无人机控制/单机无人机控制（pengyu_sim）"
 
       - title: "单无人机规划验证（pengyu_sim）"
         description: "pengyu_sim地图/局部点云 + pengyu_sim无人机仿真节点 + 定位融合节点 + 无人机控制节点 + diff 规划节点"
@@ -21,7 +21,7 @@ quick_launch_groups:
             delay_sec: 1.0
           - ref: "定位融合/无人机定位融合"
             delay_sec: 1.0
-          - ref: "无人机控制/单机无人机控制"
+          - ref: "无人机控制/单机无人机控制（pengyu_sim）"
             delay_sec: 1.0
           - ref: "路径规划/Sunray Planning Diff"
 
@@ -41,7 +41,7 @@ quick_launch_groups:
             delay_sec: 1.5
           - ref: "定位融合/集群无人机定位融合"
             delay_sec: 1.0
-          - ref: "无人机控制/集群无人机控制"
+          - ref: "无人机控制/集群无人机控制（pengyu_sim）"
             delay_sec: 1.0
           - ref: "无人机集群控制/无人机集群控制仿真"
 
@@ -62,6 +62,13 @@ quick_launch_groups:
         description: "占位脚本：后续用于接入 Gazebo 仿真链路"
         items:
           - ref: "Gazebo仿真器/Gazebo 单无人机"
+
+      - title: "Gazebo 单无人机控制验证"
+        description: "Gazebo单无人机仿真节点 + 无人机控制节点"
+        items:
+          - ref: "Gazebo仿真器/Gazebo 单无人机"
+            delay_sec: 2.0
+          - ref: "无人机控制/单机无人机控制（Gazebo）"
 
   - category: "真机"
     scripts:

@@ -58,6 +58,26 @@ launch_groups:
           - "enable_single_monitor:=true"
         description: "启动单机 sunray_uav_control 控制节点和状态监控。"
 
+      - title: "单机无人机控制（pengyu_sim）"
+        package: "sunray_uav_control"
+        launch: "uav_control.launch"
+        args:
+          - "airframe_type:=pengyu_sim"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+        description: "启动单机 sunray_uav_control 控制节点，使用 pengyu_sim 机型参数。"
+
+      - title: "单机无人机控制（Gazebo）"
+        package: "sunray_uav_control"
+        launch: "uav_control.launch"
+        args:
+          - "airframe_type:=gazebo_sim"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+          - "enable_single_monitor:=true"
+        description: "启动单机 sunray_uav_control 控制节点，使用 gazebo_sim 机型参数。"
+
       - title: "集群无人机控制"
         package: "sunray_uav_control"
         launch: "uav_control_swarm.launch"
@@ -66,6 +86,26 @@ launch_groups:
           - "agent_num:=6"
           - "enable_monitor:=true"
         description: "启动多架无人机控制节点和统一监控。"
+
+      - title: "集群无人机控制（pengyu_sim）"
+        package: "sunray_uav_control"
+        launch: "uav_control_swarm.launch"
+        args:
+          - "airframe_type:=pengyu_sim"
+          - "agent_name:=uav"
+          - "agent_num:=6"
+          - "enable_monitor:=true"
+        description: "启动多架无人机控制节点和统一监控，使用 pengyu_sim 机型参数。"
+
+      - title: "集群无人机控制（Gazebo）"
+        package: "sunray_uav_control"
+        launch: "uav_control_swarm.launch"
+        args:
+          - "airframe_type:=gazebo_sim"
+          - "agent_name:=uav"
+          - "agent_num:=6"
+          - "enable_monitor:=true"
+        description: "启动多架无人机控制节点和统一监控，使用 gazebo_sim 机型参数。"
 
       - title: "无人机控制面板"
         package: "control_tools"
