@@ -62,13 +62,13 @@ private:
     double posteriErrorEstimate_;
 };
 
-class GloabalLocalization
+class GlobalLocalization
 {
 private:
     /* data */
 public:
-    GloabalLocalization(ros::NodeHandle &nh, ros::NodeHandle &nh_private);
-    ~GloabalLocalization();
+    GlobalLocalization(ros::NodeHandle &nh, ros::NodeHandle &nh_private);
+    ~GlobalLocalization();
 
     /// @brief 初始化定位
     void LocalizationInitialize();
@@ -228,7 +228,7 @@ private:
     double dis_updatemap_;
 };
 
-GloabalLocalization::GloabalLocalization(ros::NodeHandle &nh, ros::NodeHandle &nh_private) : nh_(nh),
+GlobalLocalization::GlobalLocalization(ros::NodeHandle &nh, ros::NodeHandle &nh_private) : nh_(nh),
                                                                                              nh_private_(nh_private)
 {
     flag_exit_ = false;
@@ -262,9 +262,9 @@ GloabalLocalization::GloabalLocalization(ros::NodeHandle &nh, ros::NodeHandle &n
     loc_frequence_ = 2.0; //
     loc_fitness_ = 0.0;
     // 注册回调函数
-    sub_baselink2odom_ = nh_.subscribe("/Odometry_loc", 50, &GloabalLocalization::CallbackBaselink2Odom, this);
-    sub_scan_cur_ = nh_.subscribe("/cloud_registered_1", 50, &GloabalLocalization::CallbackScan, this);
-    sub_initialpose_ = nh_.subscribe("/initialpose", 50, &GloabalLocalization::CallbackInitialPose, this);
+    sub_baselink2odom_ = nh_.subscribe("/Odometry_loc", 50, &GlobalLocalization::CallbackBaselink2Odom, this);
+    sub_scan_cur_ = nh_.subscribe("/cloud_registered_1", 50, &GlobalLocalization::CallbackScan, this);
+    sub_initialpose_ = nh_.subscribe("/initialpose", 50, &GlobalLocalization::CallbackInitialPose, this);
 
     pose_baselink2odom_ = nav_msgs::Odometry();
     pose_baselink2odom_.header.frame_id = "odom";
@@ -353,14 +353,14 @@ GloabalLocalization::GloabalLocalization(ros::NodeHandle &nh, ros::NodeHandle &n
     ROS_WARN("initialize finished");
 }
 
-GloabalLocalization::~GloabalLocalization()
+GlobalLocalization::~GlobalLocalization()
 {
     lock_exit_.lock();
     flag_exit_ = true;
     lock_exit_.unlock();
 }
 
-Eigen::Matrix3d GloabalLocalization::Euler2Matrix3d(const Eigen::Vector3d euler)
+Eigen::Matrix3d GlobalLocalization::Euler2Matrix3d(const Eigen::Vector3d euler)
 {
     Eigen::Matrix3d mat3d;
     // convert degrees to radians
@@ -371,7 +371,7 @@ Eigen::Matrix3d GloabalLocalization::Euler2Matrix3d(const Eigen::Vector3d euler)
     mat3d = rollAngle * pitchAngle * yawAngle;
     return mat3d;
 }
-bool GloabalLocalization::GetTfTransformToMatrix(std::string frame_id, std::string child_frame_id, Eigen::Matrix4d &matrix)
+bool GlobalLocalization::GetTfTransformToMatrix(std::string frame_id, std::string child_frame_id, Eigen::Matrix4d &matrix)
 {
     // 获取pose
     tf::StampedTransform pose_;
@@ -402,7 +402,7 @@ bool GloabalLocalization::GetTfTransformToMatrix(std::string frame_id, std::stri
     return true;
 }
 
-void GloabalLocalization::CallbackBaselink2Odom(
+void GlobalLocalization::CallbackBaselink2Odom(
     const nav_msgs::Odometry::ConstPtr &baselink2odom)
 {
     auto odom_cbk_s = std::chrono::high_resolution_clock::now();
@@ -520,7 +520,7 @@ void GloabalLocalization::CallbackBaselink2Odom(
         pub_localization_3d_.publish(localization_3d_);
     }
 }
-void GloabalLocalization::CallbackScan(
+void GlobalLocalization::CallbackScan(
     const sensor_msgs::PointCloud2::ConstPtr &scan_in_baselink)
 {
     auto cbk_s = std::chrono::high_resolution_clock::now();
@@ -555,7 +555,7 @@ void GloabalLocalization::CallbackScan(
     auto cbk_e = std::chrono::high_resolution_clock::now();
 }
 
-void GloabalLocalization::LocalizationInitialize()
+void GlobalLocalization::LocalizationInitialize()
 {
     /// 裁剪后的地图
     std::shared_ptr<open3d::geometry::PointCloud> map_coarse_crop(new open3d::geometry::PointCloud);
@@ -673,7 +673,7 @@ void GloabalLocalization::LocalizationInitialize()
 
     open3d::utility::LogInfo("\n\n\nlocalization initialize success!!!!\n\n\n");
 }
-void GloabalLocalization::Localization()
+void GlobalLocalization::Localization()
 {
     ROS_INFO("wait for Odometry_loc");
     ros::topic::waitForMessage<nav_msgs::Odometry>("/Odometry_loc");
@@ -860,12 +860,12 @@ void GloabalLocalization::Localization()
     }
 }
 
-void GloabalLocalization::StartLoc()
+void GlobalLocalization::StartLoc()
 {
-    thread_loc_ = std::thread(&GloabalLocalization::Localization, this);
+    thread_loc_ = std::thread(&GlobalLocalization::Localization, this);
 }
 
-void GloabalLocalization::CallbackInitialPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &initialpose)
+void GlobalLocalization::CallbackInitialPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &initialpose)
 {
     std::cout << "mat_odom2map_\n"
               << mat_odom2map_ << std::endl;
@@ -897,7 +897,7 @@ void GloabalLocalization::CallbackInitialPose(const geometry_msgs::PoseWithCovar
     std::cout << "mat_odom2map_\n"
               << mat_odom2map_ << std::endl;
 }
-double GloabalLocalization::ComputeMotionDis(const Eigen::Vector3d &a, const Eigen::Vector3d &b)
+double GlobalLocalization::ComputeMotionDis(const Eigen::Vector3d &a, const Eigen::Vector3d &b)
 {
     return std::sqrt(std::pow(a.x() - b.x(), 2) + std::pow(a.y() - b.y(), 2) + std::pow(a.z() - b.z(), 2));
 }
@@ -915,7 +915,7 @@ int main(int argc, char *argv[])
     // 开始异步处理
     spinner.start();
 
-    GloabalLocalization global_loc(nh, nh_private);
+    GlobalLocalization global_loc(nh, nh_private);
     global_loc.StartLoc();
 
     // 等待节点关闭

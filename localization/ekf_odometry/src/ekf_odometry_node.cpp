@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
                     // IMU预积分的第一帧
                     ImuData imu_data;
                     double dt = 0;
-                    imu_process->ProcssIMU(cur_imu.second, imu_data, dt);
+                    imu_process->ProcessIMU(cur_imu.second, imu_data, dt);
                     imu_buffer.pop_front();
 
                     ekf_init_flag = true;
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
 
                 ImuData imu_data;
                 double dt = 0;
-                imu_process->ProcssIMU(cur_imu.second, imu_data, dt);
+                imu_process->ProcessIMU(cur_imu.second, imu_data, dt);
                 imu_buffer.pop_front();
                 ekf_filter->Predict(imu_data, dt);
                 PublishOdometry(ekf_odom_pub, ekf_filter->GetEkfState());

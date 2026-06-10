@@ -1,6 +1,6 @@
 #include "imu_process.h"
 
-void ImuProcess::ProcssIMU(const ImuData& input_imu_data, ImuData& output_imu_data, double& dt) {
+void ImuProcess::ProcessIMU(const ImuData& input_imu_data, ImuData& output_imu_data, double& dt) {
 
     static bool first_frame_flag = true;
 

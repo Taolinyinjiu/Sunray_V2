@@ -131,7 +131,7 @@ std::string sourceName(const uint8_t source)
     case sunray_msgs::OdomState::GAZEBO:       return "GAZEBO";
     case sunray_msgs::OdomState::GAZEBO_ARUCO: return "GAZEBO_ARUCO";
     case sunray_msgs::OdomState::PENGYU_SIM:   return "PENGYU_SIM";
-    case sunray_msgs::OdomState::FASTLIO_EFK:  return "FASTLIO_EKF";
+    case sunray_msgs::OdomState::FASTLIO_EKF:  return "FASTLIO_EKF";
     default:                                   return "UNKNOWN";
     }
 }

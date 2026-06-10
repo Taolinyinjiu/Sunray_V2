@@ -28,7 +28,7 @@ class ImuProcess {
         return gravity_;
     };
 
-    void ProcssIMU(const ImuData& input_imu_data, ImuData& output_imu_data, double& dt);
+    void ProcessIMU(const ImuData& input_imu_data, ImuData& output_imu_data, double& dt);
 
 
     bool ImuInit(const ImuData& input_imu_data);

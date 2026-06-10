@@ -15,13 +15,7 @@
 
 ## 2. 统一命名和枚举拼写
 
-当前存在一些历史拼写问题：
-
-- `FASTLIO_EFK` 应考虑统一为 `FASTLIO_EKF`。
-- `GloabalLocalization` 应考虑改为 `GlobalLocalization`。
-- `ProcssIMU` 应考虑改为 `ProcessIMU`。
-
-如果这些名称已被外部使用，建议先做兼容别名，再逐步迁移。
+历史拼写问题已统一处理，定位源枚举、全局定位类名和 IMU 处理函数名已改为规范命名。
 
 ## 3. 加强时间同步和缓冲管理
 

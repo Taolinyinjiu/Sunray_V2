@@ -13,7 +13,7 @@ uint8 VINS = 2          # VINS算法
 uint8 GAZEBO = 3        # Gazebo仿真
 uint8 GAZEBO_ARUCO = 4  # Gazebo中的Aruco定位
 uint8 PENGYU_SIM = 5    # 借助pengyu_sim仿真包进行仿真
-uint8 FASTLIO_EFK = 6   # Fastlio算法+EKF高频
+uint8 FASTLIO_EKF = 6   # Fastlio算法+EKF高频
 # 当前使用的外部定位源
 uint8 external_source	
 
@@ -43,4 +43,3 @@ string base_frame_name              # 当前机体系名称
 geometry_msgs/TransformStamped world_to_global_tf   # world -> {agent}/sunray_global
 geometry_msgs/TransformStamped global_to_local_tf   # {agent}/sunray_global -> {agent}/sunray_local
 geometry_msgs/TransformStamped local_to_base_tf     # {agent}/sunray_local -> {agent}/base_link
-

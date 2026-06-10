@@ -29,28 +29,6 @@ https://tool.yundrone.cn/ble/
 ```
 
 
-
-
-### 编译问题排查
-
-- Fast-lio2编译不过
-  ```text
-  可能原因：原有的镜像预先配置的Livox_SDK与Livox_ros_driver2是基于MID360的旧版本，但是Sunray_V2仓库中实用的livox_ros_driver2是MID360s的新版本，如果系统中的Livox_SDK没有更新，则会导致编译过程中产生报错，因此需要更新Livox_SDK
-  ```
-  ```text
-  # 进入对应目录
-  cd ~/Sunray_v2/drivers/Livox_SDK2/
-  # 创建编译目录
-  mkdir build
-  cd build
-  # 进行编译
-  cmake ..
-  make 
-  sudo make install
-  # 回到主目录重新编译
-  ```
-
-
 ## 仿真使用
 
 - 启动仿真一键启动面板：
@@ -125,3 +103,68 @@ https://tool.yundrone.cn/ble/
 
 - 本开源项目仅限个人使用，请勿用于商业用途。
 - 如利用本项目进行营利活动，云纵科技将追究侵权行为。
+
+
+## 编译问题排查
+
+- Fast-lio2编译不过
+  ```text
+  可能原因：原有的镜像预先配置的Livox_SDK与Livox_ros_driver2是基于MID360的旧版本，但是Sunray_V2仓库中实用的livox_ros_driver2是MID360s的新版本，如果系统中的Livox_SDK没有更新，则会导致编译过程中产生报错，因此需要更新Livox_SDK
+  ```
+  ```text
+  # 进入对应目录
+  cd ~/Sunray_v2/drivers/Livox_SDK2/
+  # 创建编译目录
+  mkdir build
+  cd build
+  # 进行编译
+  cmake ..
+  make
+  sudo make install
+  # 回到主目录重新编译
+  ```
+
+- open3d_loc 编译找不到 Open3D
+  ```text
+  open3d_loc 依赖 Open3D 的 C++ 开发库，需要系统中存在 Open3DConfig.cmake 或 open3d-config.cmake。
+  Ubuntu 20.04 默认 apt 源通常没有 Open3D C++ 开发包，可使用 Open3D 官方预编译包。
+  ```
+  ```bash
+  # 安装基础依赖。官方预编译包依赖 libc++ / libc++abi。
+  sudo apt update
+  sudo apt install -y git cmake build-essential python3-dev libc++-dev libc++abi-dev
+
+  # 下载并安装 Open3D C++ 开发包，版本可按需要调整
+  cd ~
+  mkdir -p open3d_install
+  curl -L -o /tmp/open3d-devel-linux-x86_64-cxx11-abi-0.19.0.tar.xz \
+    https://github.com/isl-org/Open3D/releases/download/v0.19.0/open3d-devel-linux-x86_64-cxx11-abi-0.19.0.tar.xz
+  tar -xf /tmp/open3d-devel-linux-x86_64-cxx11-abi-0.19.0.tar.xz \
+    -C $HOME/open3d_install --strip-components=1
+
+  # 让 open3d_loc 找到 Open3D
+  cd ~/Sunray_v2
+  cmake -S localization/open3d_loc -B build/open3d_loc \
+    -DOpen3D_ROOT=$HOME/open3d_install \
+    -DCATKIN_DEVEL_PREFIX=$HOME/Sunray_v2/devel
+  cmake --build build/open3d_loc --target global_localization_node -j$(nproc)
+  ```
+
+  ```bash
+  # 也可以写入 shell 配置，后续构建自动生效
+  echo 'export Open3D_ROOT=$HOME/open3d_install' >> ~/.bashrc
+  ```
+  ```bash
+  # 如果没有 sudo 权限安装 libc++，可以只下载并解包到用户目录
+  mkdir -p /tmp/libcxx_debs $HOME/open3d_libcxx
+  cd /tmp/libcxx_debs
+  apt-get download libc++1-10 libc++-10-dev libc++abi1-10 libc++abi-10-dev
+  for f in *.deb; do dpkg-deb -x "$f" $HOME/open3d_libcxx; done
+
+  cd ~/Sunray_v2
+  cmake -S localization/open3d_loc -B build/open3d_loc \
+    -DOpen3D_ROOT=$HOME/open3d_install \
+    -DLIBCXX_ROOT=$HOME/open3d_libcxx \
+    -DCATKIN_DEVEL_PREFIX=$HOME/Sunray_v2/devel
+  cmake --build build/open3d_loc --target global_localization_node -j$(nproc)
+  ```

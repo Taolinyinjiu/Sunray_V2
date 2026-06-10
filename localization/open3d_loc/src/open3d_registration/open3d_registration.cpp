@@ -30,6 +30,7 @@ namespace pcd_tools
         correspondence_checker.push_back(correspondence_checker_distance);
 
         open3d::pipelines::registration::RegistrationResult registration_result;
+        (void)seed_;
         registration_result = open3d::pipelines::registration::
             RegistrationRANSACBasedOnFeatureMatching(
                 *source, *target, *source_fpfh, *target_fpfh,
@@ -37,7 +38,7 @@ namespace pcd_tools
                 open3d::pipelines::registration::
                     TransformationEstimationPointToPoint(false),
                 4 /*最小3*/, correspondence_checker,
-                open3d::pipelines::registration::RANSACConvergenceCriteria(1000000, 0.999), seed_);
+                open3d::pipelines::registration::RANSACConvergenceCriteria(1000000, 0.999));
         return registration_result;
     }
 
