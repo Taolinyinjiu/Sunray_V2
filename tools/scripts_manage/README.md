@@ -31,6 +31,13 @@ tools/build_scripts/tui/check_dependencies.sh
 roslaunch sunray_system sunray_system.launch
 ```
 
+如果按机型加载 feature 配置，TUI 顶部会显示当前机型，功能详情中也会显示该功能对应的机型：
+
+```bash
+roslaunch sunray_system sunray_system.launch \
+  airframe_type:=sunray_150
+```
+
 再启动新版 GUI：
 
 ```bash
@@ -47,8 +54,8 @@ roslaunch scripts_manage scripts_manage_tui.launch
 
 - `↑/↓`：移动当前列表选择
 - `←/→` 或 `Tab`：切换分组/功能列表焦点
-- `Enter` / `F2`：启动当前功能
-- `F3`：停止当前功能
-- `F1`：切换后台启动/终端启动
+- `Enter` / `F1`：启动当前功能
+- `F2`：停止当前功能
+- `F3`：切换后台启动/终端启动
 - `F5`：刷新
 - `Esc` / `q`：退出

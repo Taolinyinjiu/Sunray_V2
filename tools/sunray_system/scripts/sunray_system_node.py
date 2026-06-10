@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import glob
+import copy
 import os
 import shlex
 import shutil
@@ -99,10 +100,12 @@ class SunraySystemSupervisor:
         self._runtime_dir = os.path.join("/tmp", "sunray_system_runtime")
         os.makedirs(self._runtime_dir, exist_ok=True)
 
-        self._config_file = rospy.get_param("~config_file")
+        self._requested_airframe_type = rospy.get_param("~airframe_type", "sunray_150").strip()
+        self._config_file = self._resolve_config_file()
         self._ros_setup_file = rospy.get_param("~ros_setup_file", "/opt/ros/noetic/setup.bash")
         self._workspace_setup_file = rospy.get_param("~workspace_setup_file", "")
         self._external_workspaces = self._normalize_workspace_list(rospy.get_param("~external_workspaces", []))
+        self._airframe_type = ""
         self._load_config(self._config_file)
 
         self._system_info_pub = rospy.Publisher("/sunray/system_info", SystemInfo, queue_size=1)
@@ -115,11 +118,25 @@ class SunraySystemSupervisor:
         self._monitor_timer = rospy.Timer(rospy.Duration(1.0), self._monitor_processes)
         self._system_info_timer = rospy.Timer(rospy.Duration(1.0), self._publish_system_info)
         self._autostart_features()
-        rospy.loginfo("sunray_system ready, loaded %d features from %s", len(self._features), self._config_file)
+        rospy.loginfo(
+            "sunray_system ready, airframe_type=%s, loaded %d features from %s",
+            self._airframe_type or "通用",
+            len(self._features),
+            self._config_file,
+        )
+
+    def _resolve_config_file(self):
+        configured_file = rospy.get_param("~config_file", "").strip()
+        if configured_file:
+            return configured_file
+
+        airframe_type = self._requested_airframe_type or "sunray_150"
+        config_filename = "features_%s.yaml" % airframe_type
+        return os.path.join(self._rospack.get_path("sunray_system"), "config", config_filename)
 
     def _load_config(self, path):
-        with open(path, "r") as handle:
-            data = yaml.safe_load(handle) or {}
+        data = self._load_config_data(os.path.abspath(os.path.expanduser(path)), [])
+        self._airframe_type = str(data.get("airframe_type", "")).strip()
 
         features = data.get("features", [])
         loaded = {}
@@ -127,12 +144,82 @@ class SunraySystemSupervisor:
             name = feature.get("name", "").strip()
             if not name:
                 raise ValueError("Feature entry missing non-empty name")
+            if not self._feature_matches_airframe(feature):
+                continue
             if name in loaded:
                 raise ValueError("Duplicate feature name: %s" % name)
-            loaded[name] = feature
+            loaded[name] = self._apply_airframe_to_feature(copy.deepcopy(feature))
             self._runtimes[name] = FeatureRuntime()
 
         self._features = loaded
+
+    def _load_config_data(self, path, visiting):
+        if path in visiting:
+            raise ValueError("cyclic config include detected: %s" % path)
+
+        with open(path, "r") as handle:
+            data = yaml.safe_load(handle) or {}
+
+        include_files = data.get("include", [])
+        if isinstance(include_files, str):
+            include_files = [include_files]
+
+        merged = {}
+        if include_files:
+            visiting.append(path)
+            merged_features = []
+            for include_file in include_files:
+                include_path = str(include_file).strip()
+                if not include_path:
+                    continue
+                if not os.path.isabs(include_path):
+                    include_path = os.path.join(os.path.dirname(path), include_path)
+                include_data = self._load_config_data(os.path.abspath(include_path), visiting)
+                merged_features.extend(include_data.get("features", []))
+                for key, value in include_data.items():
+                    if key not in ("include", "features"):
+                        merged.setdefault(key, value)
+            visiting.pop()
+            merged["features"] = merged_features
+
+        for key, value in data.items():
+            if key == "include":
+                continue
+            if key == "features" and "features" in merged:
+                merged["features"].extend(value or [])
+            else:
+                merged[key] = value
+
+        return merged
+
+    def _feature_matches_airframe(self, feature):
+        if not self._airframe_type:
+            return True
+
+        configured_airframes = feature.get("airframes", feature.get("airframe_types", []))
+        if not configured_airframes:
+            return True
+        if isinstance(configured_airframes, str):
+            configured_airframes = [configured_airframes]
+
+        allowed_airframes = [str(item).strip() for item in configured_airframes]
+        return self._airframe_type in allowed_airframes
+
+    def _apply_airframe_to_feature(self, feature):
+        if not self._airframe_type:
+            return feature
+
+        for launch in feature.get("launches", []):
+            if (
+                launch.get("package", "").strip() == "sunray_uav_control"
+                and launch.get("file", "").strip() == "uav_control.launch"
+            ):
+                args = list(launch.get("args", []))
+                args = [arg for arg in args if not str(arg).startswith("airframe_type:=")]
+                args.insert(0, "airframe_type:=%s" % self._airframe_type)
+                launch["args"] = args
+
+        return feature
 
     def _normalize_workspace_list(self, configured_workspaces):
         if isinstance(configured_workspaces, str):
@@ -833,6 +920,7 @@ class SunraySystemSupervisor:
     def _publish_system_info(self, _event):
         msg = SystemInfo()
         msg.header.stamp = rospy.Time.now()
+        msg.airframe_type = self._airframe_type
         msg.cpu_percent = self._read_cpu_percent()
         msg.memory_percent = self._read_memory_percent()
         msg.active_ros_nodes = self._get_active_ros_nodes()

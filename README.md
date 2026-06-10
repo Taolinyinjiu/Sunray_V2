@@ -53,14 +53,12 @@ https://tool.yundrone.cn/ble/
   ```bash
   cd ~/Sunray_v2
   source devel/setup.bash
-  roslaunch sunray_system sunray_system.launch
+  # 启动文件中需配置机型
+  roslaunch sunray_system sunray_system.launch airframe_type:=sunray_150
+  roslaunch sunray_system sunray_system.launch airframe_type:=sunray_300
   ```
 
-  如果需要修改启动任务，请查看：
-
-  ```text
-  tools/sunray_system/config/features.yaml
-  ```
+  系统会自动加载 `tools/sunray_system/config/features_<机型>.yaml`。
 
 - Sunray脚本启动器（TUI界面，通过SSH启动）
 

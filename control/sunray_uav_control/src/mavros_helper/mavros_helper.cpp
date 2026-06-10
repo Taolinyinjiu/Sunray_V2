@@ -82,6 +82,10 @@ void MavrosHelper::init() {
                                   10,
                                   &MavrosHelper::mavros_gps_raw_callback,
                                   this);
+    rc_in_sub_ = nh_.subscribe(uav_ns_ + "/mavros/rc/in",
+                                10,
+                                &MavrosHelper::mavros_rc_in_callback,
+                                this);
     // clang-format on
 
     vision_pose_pub_ =
@@ -504,6 +508,8 @@ bool MavrosHelper::pub_px4_state() {
         px4_state_msg.armed = mavros_state_data_.armed;
         px4_state_msg.flight_mode = static_cast<uint8_t>(mavros_state_data_.flight_mode);
         px4_state_msg.system_status = mavros_state_data_.system_status;
+        px4_state_msg.rc_channels = mavros_rc_data_.channels;
+        px4_state_msg.rc_rssi = mavros_rc_data_.rssi;
         px4_state_msg.landed_state = static_cast<uint8_t>(mavros_state_data_.landed_state);
         px4_state_msg.battery_voltage_v = mavros_state_data_.voltage;
         px4_state_msg.battery_current_a = mavros_state_data_.current;
@@ -654,4 +660,9 @@ void MavrosHelper::mavros_setpoint_attitude_callback(const mavros_msgs::Attitude
 void MavrosHelper::mavros_gps_raw_callback(const mavros_msgs::GPSRAW& msg) {
     std::unique_lock<std::shared_mutex> lock(data_mutex_);
     mavros_gps_ = control_common::Mavros_GPS(msg);
+}
+
+void MavrosHelper::mavros_rc_in_callback(const mavros_msgs::RCIn& msg) {
+    std::unique_lock<std::shared_mutex> lock(data_mutex_);
+    mavros_rc_data_ = control_common::Mavros_RC(msg);
 }

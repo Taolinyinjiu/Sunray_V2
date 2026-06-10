@@ -1,21 +1,18 @@
 #include "controller/px4_origin_controller.hpp"
+#include "utils/control_config_loader.hpp"
 #include "utils/orientation_utils.hpp"
-#include <yaml-cpp/yaml.h>
 #include <algorithm>
 #include <stdexcept>
 
 void PX4_OriginController::load_and_validate_config_or_throw() {
-    YAML::Node root;
-    try {
-        root = YAML::LoadFile(config_yamlfile_path_);
-    } catch (const YAML::Exception& e) {
-        throw std::runtime_error("Failed to load yaml file '" + config_yamlfile_path_ +
-                                 "': " + e.what());
-    }
+    sunray_config::ControlConfigPaths config_paths;
+    YAML::Node root =
+        sunray_config::load_control_config_or_throw("PX4_OriginController", &config_paths);
+    const std::string config_label = config_paths.merged_path_label;
 
     const YAML::Node basic_param = root["basic_param"];
     if (!basic_param || !basic_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+        throw std::runtime_error("yaml '" + config_label +
                                  "' is missing a valid 'basic_param' map");
     }
 
@@ -39,7 +36,7 @@ void PX4_OriginController::load_and_validate_config_or_throw() {
 
     const YAML::Node arrival_judge_param = root["arrival_judge_param"];
     if (!arrival_judge_param || !arrival_judge_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+        throw std::runtime_error("yaml '" + config_label +
                                  "' is missing a valid 'arrival_judge_param' map");
     }
     if (!arrival_judge_param["judge_stabile_time_s"]) {
@@ -89,7 +86,7 @@ void PX4_OriginController::load_and_validate_config_or_throw() {
 
     const YAML::Node velocity_param = root["velocity_param"];
     if (!velocity_param || !velocity_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+        throw std::runtime_error("yaml '" + config_label +
                                  "' is missing a valid 'velocity_param' map");
     }
     const YAML::Node max_velocity = velocity_param["max_velocity"];

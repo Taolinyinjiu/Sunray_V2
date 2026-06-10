@@ -1,13 +1,18 @@
 <launch>
-  <arg name="config_yamlfile_path"
-       default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
+  <arg name="airframe_type" default="sunray_150" />
+  <arg name="config_base_path"
+       default="$(find sunray_uav_control)/config/sunray_control_base.yaml" />
+  <arg name="airframe_config_path"
+       default="$(find sunray_uav_control)/config/airframes/$(arg airframe_type).yaml" />
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="agent_num" default="6" />
   <arg name="enable_monitor" default="true" />
 
   <include file="$(find sunray_uav_control)/launch/uav_control.launch">
-    <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <arg name="airframe_type" value="$(arg airframe_type)" />
+    <arg name="config_base_path" value="$(arg config_base_path)" />
+    <arg name="airframe_config_path" value="$(arg airframe_config_path)" />
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="$(arg agent_id)" />
     <arg name="node_name" value="$(eval 'uav_control_node_' + str(int(arg('agent_id'))))" />
@@ -18,7 +23,9 @@
 
   <include file="$(find sunray_uav_control)/launch/uav_control_swarm.launch"
            if="$(eval int(arg('agent_num')) > int(arg('agent_id')))">
-      <arg name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+      <arg name="airframe_type" value="$(arg airframe_type)" />
+      <arg name="config_base_path" value="$(arg config_base_path)" />
+      <arg name="airframe_config_path" value="$(arg airframe_config_path)" />
       <arg name="agent_name" value="$(arg agent_name)" />
       <arg name="agent_id" value="$(eval int(arg('agent_id')) + 1)" />
       <arg name="agent_num" value="$(arg agent_num)" />

@@ -42,7 +42,7 @@ namespace
 {
 constexpr double kDegToRad = 0.017453292519943295;
 constexpr double kRadToDeg = 57.29577951308232;
-constexpr int kContinuousCommandIntervalMs = 200;  // 5 Hz
+constexpr int kContinuousCommandIntervalMs = 100;  // 10 Hz
 
 struct GoalVisual
 {
@@ -371,47 +371,47 @@ class UAVControlPanel : public QMainWindow
         vel_y_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         vel_height_spin_ = makeSpin(1.5, -10.0, 100.0, 0.1);
         vel_yaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0);
-        auto *vel_btn = new QPushButton("持续发送 MOVE_VELOCITY");
+        auto *vel_btn = new QPushButton("10Hz持续发送 MOVE_VELOCITY");
         connect(vel_btn, &QPushButton::clicked, this, [this]() { publishMoveVelocity(); });
 
         body_vx_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         body_vy_spin_ = makeSpin(0.0, -5.0, 5.0, 0.1);
         body_vh_spin_ = makeSpin(1.5, -10.0, 100.0, 0.1);
         body_vyaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0);
-        auto *body_vel_btn = new QPushButton("持续发送 MOVE_VELOCITY_BODY");
+        auto *body_vel_btn = new QPushButton("10Hz持续发送 MOVE_VELOCITY_BODY");
         auto *stop_publish_btn = new QPushButton("停止持续发送");
         connect(body_vel_btn, &QPushButton::clicked, this, [this]() { publishMoveVelocityBody(); });
         connect(stop_publish_btn, &QPushButton::clicked, this, [this]() { stopContinuousCommand(); });
 
-        layout->addWidget(new QLabel("快捷指令"), 0, 0);
+        layout->addWidget(new QLabel("快捷指令(单次发布)"), 0, 0);
         layout->addWidget(takeoff_btn, 0, 1);
         layout->addWidget(land_btn, 0, 2);
         layout->addWidget(return_btn, 0, 3);
         layout->addWidget(hover_btn, 0, 4);
         layout->addWidget(kill_btn, 0, 5);
 
-        layout->addWidget(new QLabel("目标点 x/y/z/yaw(deg)"), 1, 0);
+        layout->addWidget(new QLabel("目标点 x/y/z/yaw(deg)(单次)"), 1, 0);
         layout->addWidget(point_x_spin_, 1, 1);
         layout->addWidget(point_y_spin_, 1, 2);
         layout->addWidget(point_z_spin_, 1, 3);
         layout->addWidget(point_yaw_spin_, 1, 4);
         layout->addWidget(point_btn, 1, 5);
 
-        layout->addWidget(new QLabel("机体系点 x/y/height/yaw(deg)"), 2, 0);
+        layout->addWidget(new QLabel("机体系点 x/y/height/yaw(deg)(单次)"), 2, 0);
         layout->addWidget(body_x_spin_, 2, 1);
         layout->addWidget(body_y_spin_, 2, 2);
         layout->addWidget(body_height_spin_, 2, 3);
         layout->addWidget(body_yaw_spin_, 2, 4);
         layout->addWidget(body_point_btn, 2, 5);
 
-        layout->addWidget(new QLabel("速度 vx/vy/height/yaw(deg)"), 3, 0);
+        layout->addWidget(new QLabel("速度 vx/vy/height/yaw(deg)(10Hz连续)"), 3, 0);
         layout->addWidget(vel_x_spin_, 3, 1);
         layout->addWidget(vel_y_spin_, 3, 2);
         layout->addWidget(vel_height_spin_, 3, 3);
         layout->addWidget(vel_yaw_spin_, 3, 4);
         layout->addWidget(vel_btn, 3, 5);
 
-        layout->addWidget(new QLabel("机体系速度 vx/vy/height/yaw(deg)"), 4, 0);
+        layout->addWidget(new QLabel("机体系速度 vx/vy/height/yaw(deg)(10Hz连续)"), 4, 0);
         layout->addWidget(body_vx_spin_, 4, 1);
         layout->addWidget(body_vy_spin_, 4, 2);
         layout->addWidget(body_vh_spin_, 4, 3);
@@ -566,7 +566,7 @@ class UAVControlPanel : public QMainWindow
         cmd.fixed_height = vel_height_spin_->value();
         cmd.desired_yaw = vel_yaw_spin_->value() * kDegToRad;
         publishCommand(cmd, true);
-        appendLog(QString("开始 5Hz 发布 MOVE_VELOCITY vx=%1 vy=%2 h=%3 yaw=%4deg")
+        appendLog(QString("开始 10Hz 连续发布 MOVE_VELOCITY vx=%1 vy=%2 h=%3 yaw=%4deg")
                       .arg(vel_x_spin_->value(), 0, 'f', 2)
                       .arg(vel_y_spin_->value(), 0, 'f', 2)
                       .arg(vel_height_spin_->value(), 0, 'f', 2)
@@ -581,7 +581,7 @@ class UAVControlPanel : public QMainWindow
         cmd.fixed_height = body_vh_spin_->value();
         cmd.desired_yaw = body_vyaw_spin_->value() * kDegToRad;
         publishCommand(cmd, true);
-        appendLog(QString("开始 5Hz 发布 MOVE_VELOCITY_BODY vx=%1 vy=%2 h=%3 yaw=%4deg")
+        appendLog(QString("开始 10Hz 连续发布 MOVE_VELOCITY_BODY vx=%1 vy=%2 h=%3 yaw=%4deg")
                       .arg(body_vx_spin_->value(), 0, 'f', 2)
                       .arg(body_vy_spin_->value(), 0, 'f', 2)
                       .arg(body_vh_spin_->value(), 0, 'f', 2)
@@ -598,7 +598,7 @@ class UAVControlPanel : public QMainWindow
             has_active_cmd_ = false;
         }
 
-        appendLog(was_active ? "停止 5Hz 持续发布" : "当前没有正在持续发布的指令");
+        appendLog(was_active ? "停止 10Hz 连续发布" : "当前没有正在持续发布的指令");
     }
 
     void publishCommand(sunray_msgs::UAVControlCMD cmd, const bool continuous)

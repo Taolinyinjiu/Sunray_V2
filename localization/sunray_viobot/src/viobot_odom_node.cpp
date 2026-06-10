@@ -49,16 +49,17 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "viobot_odom_node");
 
     ros::NodeHandle nh;
+    ros::NodeHandle private_nh("~");
 
     // 中断信号注册
     signal(SIGINT, MySigintHandler);
 
-    int uav_id = 0;
-    nh.param<int>("uav_id", uav_id, 1);
-    std::string odom_pub_topic = "/uav" + std::to_string(uav_id) + "/sunray/odometry";
-    viobot_odom_pub = nh.advertise<nav_msgs::Odometry>(odom_pub_topic, 10);
+    std::string odom_pub_topic;
+    std::string odom_sub_topic;
+    private_nh.param<std::string>("odom_pub_topic", odom_pub_topic, "sunray/odometry");
+    private_nh.param<std::string>("odom_sub_topic", odom_sub_topic, "/baton/stereo3/odometry");
 
-    std::string odom_sub_topic = "/baton/stereo3/odometry";
+    viobot_odom_pub = nh.advertise<nav_msgs::Odometry>(odom_pub_topic, 10);
     ros::Subscriber viobot_odom_sub = nh.subscribe(odom_sub_topic, 10, OdomCallback);
 
     SUNRAY_INFO("Subscribe odometry topic: {}", odom_sub_topic);

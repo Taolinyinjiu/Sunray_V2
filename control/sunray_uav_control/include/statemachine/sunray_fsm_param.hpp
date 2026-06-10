@@ -17,9 +17,6 @@ namespace sunray_fsm {
 
 // -------------------基本参数-----------------------
 struct basic_param_t {
-    double mass_kg{0.0};
-    double gravity{0.0};
-    double hover_thrust_percent{0.0};
     uint8_t controller_types{0};
     double controller_update_frequency{0.0};
     double supervisor_update_frequency{0.0};

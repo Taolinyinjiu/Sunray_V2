@@ -1,6 +1,9 @@
 <launch>
-  <arg name="config_yamlfile_path"
-       default="$(find sunray_uav_control)/config/sunray_control_config.yaml" />
+  <arg name="airframe_type" default="sunray_150" />
+  <arg name="config_base_path"
+       default="$(find sunray_uav_control)/config/sunray_control_base.yaml" />
+  <arg name="airframe_config_path"
+       default="$(find sunray_uav_control)/config/airframes/$(arg airframe_type).yaml" />
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="$(eval 'uav_control_node_' + str(int(arg('agent_id'))))" />
@@ -16,7 +19,9 @@
         type="uav_control_node"
         name="$(arg node_name)"
         output="screen">
-    <param name="config_yamlfile_path" value="$(arg config_yamlfile_path)" />
+    <param name="config_base_path" value="$(arg config_base_path)" />
+    <param name="airframe_config_path" value="$(arg airframe_config_path)" />
+    <param name="airframe_type" value="$(arg airframe_type)" />
     <param name="agent_name" value="$(arg agent_name)" />
     <param name="agent_id" value="$(arg agent_id)" />
     <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />

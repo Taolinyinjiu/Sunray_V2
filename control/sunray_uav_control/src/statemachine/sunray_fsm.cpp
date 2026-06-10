@@ -1,6 +1,7 @@
 #include "statemachine/sunray_fsm.hpp"
 #include "statemachine/sunray_fsm_loadparam.hpp"
 #include "agent_key_helper.hpp"
+#include "utils/control_config_loader.hpp"
 #include <cmath>
 #include <ros/ros.h>
 #include <stdexcept>
@@ -159,29 +160,8 @@ void Sunray_FSM::process() {
 
 // 从yaml文件中加载参数
 void Sunray_FSM::load_param() {
-    // 1. 读取config.yaml路径
-    // 读取节点名
-    std::string node_name = ros::this_node::getName();
-    // 构造私有节点句柄，用于读取节点私有参数,这里主要是config.yaml路径
-    ros::NodeHandle private_nh_("~");
-    std::string config_yamlfile_path_;
-    if (private_nh_.getParam("config_yamlfile_path", config_yamlfile_path_)) {
-        if (config_yamlfile_path_.empty()) {  // 路径为空，抛出异常
-            throw std::runtime_error("yaml_path connot be empty");
-        }
-    } else {  // 读取失败，抛出异常
-        throw std::runtime_error("missing param" + node_name + "/config_yamlfile_path");
-    }
-    // 2. 依据yaml_path,构造yaml节点读取文件，根据字段填充结构体
-    YAML::Node root;  // 构造一个YAML文件的根节点
-    // 由于读取的过程可能引发异常，因此使用try语法
-    try {
-        root =
-            YAML::LoadFile(config_yamlfile_path_);  // 从指定的路径中读取yaml文件并解析为YAML::Node
-    } catch (const YAML::Exception& e) {  // 如果解析的过程中发生错误，捕捉异常
-        throw std::runtime_error("Failed to load yaml file '" + config_yamlfile_path_ + ":" +
-                                 e.what());
-    }
+    // 读取 base 配置，并可选叠加 airframe 配置。airframe 中相同参数优先级更高。
+    YAML::Node root = sunray_config::load_control_config_or_throw("Sunray_FSM");
     // 顺利读取，取出各个字段对应的部分
     // 由于这里会写的很长，所以将他们分为几个不同的函数用来填充结构体
     loadBasicParam(root["basic_param"], fsm_config_.basic_param);
@@ -217,8 +197,6 @@ void Sunray_FSM::init_publisher() {
     // 状态机当前状态发布者
     sunray_fsm_state_pub_ =
         nh_.advertise<sunray_msgs::UAVControlState>(uav_ns_ + "/sunray/uav_control/control_state", 10);
-    sunray_odom_debug_pub_ =
-        nh_.advertise<nav_msgs::Odometry>(uav_ns_ + "/surnay/debug/odometrry", 10);
 }
 
 // 为状态机注册控制器

@@ -1,0 +1,41 @@
+# Airframe overlay: sunray_150
+#
+# 适用对象:
+#   - Sunray 150 级别小型实机。
+#   - 轻载、小轴距、响应相对快的飞机。
+#
+# 覆盖规则:
+#   - 先加载 ../sunray_control_base.yaml，再加载本文件。
+#   - 本文件中同名参数覆盖 base；数组整体覆盖，不做逐元素合并。
+#   - 本文件只写机型差异参数，公共参数不要复制到这里。
+#
+# 实飞前必须复核:
+#   - geometric_controller_param.mass_kg: 带电池、桨保护、载荷后的实际起飞重量。
+#   - geometric_controller_param.hover_thrust_percent: 从 PX4 日志读取悬停推力量级。
+#   - PID 与 max_acc: 首次飞行建议低速、低高度验证后再放开速度。
+
+geometric_controller_param:
+  # 150 级别默认质量，占位值。按实机称重更新。
+  mass_kg: 0.96
+
+  # 归一化悬停推力初值。写错会影响起飞贴地时间、降落软硬和推力估计收敛。
+  hover_thrust_percent: 0.375
+
+  # 位置环比例增益 [x, y, z]。小机型响应快，当前沿用 base 默认。
+  pos_kp: [1.5, 1.5, 3.0]
+
+  # 速度环比例增益 [x, y, z]。速度模式和位置控制中的速度误差都会用到。
+  vel_kp: [2.0, 2.0, 3.0]
+
+  # 反馈加速度限幅，单位 m/s^2。小机型可保留较高机动余量。
+  max_acc: 9.0
+
+  # 姿态响应时间常数，单位 s。越小越快，过小易抖。
+  attitude_tau: 0.30
+
+velocity_param:
+  # 代码控制最大速度，单位 m/s。实机首次调试建议保持保守。
+  max_velocity:
+    x_vel: 1.0
+    y_vel: 1.0
+    z_vel: 1.0

@@ -1,23 +1,20 @@
 #include "controller/geometric_controller.hpp"
+#include "utils/control_config_loader.hpp"
 #include "utils/orientation_utils.hpp"
-#include <yaml-cpp/yaml.h>
 #include <algorithm>
 #include <stdexcept>
 
 void Geometric_Controller::load_and_validate_config_or_throw() {
     // 读取 geometric controller 自身需要的参数。
     // 那些已经改为“类内默认值”的细调项，不再从 yaml 中加载。
-    YAML::Node root;
-    try {
-        root = YAML::LoadFile(config_yamlfile_path_);
-    } catch (const YAML::Exception& e) {
-        throw std::runtime_error("Failed to load yaml file '" + config_yamlfile_path_ +
-                                 "': " + e.what());
-    }
+    sunray_config::ControlConfigPaths config_paths;
+    YAML::Node root =
+        sunray_config::load_control_config_or_throw("Geometric_Controller", &config_paths);
+    const std::string config_label = config_paths.merged_path_label;
 
     const YAML::Node basic_param = root["basic_param"];
     if (!basic_param || !basic_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+        throw std::runtime_error("yaml '" + config_label +
                                  "' is missing a valid 'basic_param' map");
     }
 
@@ -37,34 +34,10 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         throw std::runtime_error("param 'basic_param.fuse_odom_frequency' must > 0");
     }
     fuse_odom_frequency = std::clamp(fuse_odom_frequency, 10.0, 200.0);
-    if (!basic_param["gravity"]) {
-        throw std::runtime_error("missing param 'basic_param.gravity'");
-    }
-    geometric_controller_param_.gravity = basic_param["gravity"].as<double>();
-    if (!basic_param["mass_kg"]) {
-        throw std::runtime_error("missing param 'basic_param.mass_kg'");
-    }
-    geometric_controller_param_.drone_mass = basic_param["mass_kg"].as<double>();
-    if (geometric_controller_param_.gravity <= 0.0) {
-        throw std::runtime_error("param 'basic_param.gravity' must > 0");
-    }
-    if (geometric_controller_param_.drone_mass <= 0.0) {
-        throw std::runtime_error("param 'basic_param.mass_kg' must > 0");
-    }
-
-    // 悬停推力初始化值直接来自 basic_param.hover_thrust_percent。
-    if (!basic_param["hover_thrust_percent"]) {
-        throw std::runtime_error("missing param 'basic_param.hover_thrust_percent'");
-    }
-    geometric_controller_param_.hover_thrust_init =
-        std::clamp(basic_param["hover_thrust_percent"].as<double>(), 0.05, 0.80);
-    geometric_controller_param_.hover_thrust_min = 0.05;
-    geometric_controller_param_.hover_thrust_max = 0.80;
-
     // ---------------- arrival_judge_param ----------------
     const YAML::Node arrival_judge_param = root["arrival_judge_param"];
     if (!arrival_judge_param || !arrival_judge_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+        throw std::runtime_error("yaml '" + config_label +
                                  "' is missing a valid 'arrival_judge_param' map");
     }
     if (!arrival_judge_param["judge_stabile_time_s"]) {
@@ -116,7 +89,7 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     // ------------------- velocity_param -------------------
     const YAML::Node velocity_param = root["velocity_param"];
     if (!velocity_param || !velocity_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
+        throw std::runtime_error("yaml '" + config_label +
                                  "' is missing a valid 'velocity_param' map");
     }
     const YAML::Node max_velocity = velocity_param["max_velocity"];
@@ -138,31 +111,55 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         throw std::runtime_error("param 'velocity_param.yaw_rate' must > 0");
     }
 
-    // ------------- sunray_controller_param --------------
-    const YAML::Node controller_param = root["sunray_controller_param"];
+    // ------------- geometric_controller_param --------------
+    const YAML::Node controller_param = root["geometric_controller_param"];
     if (!controller_param || !controller_param.IsMap()) {
-        throw std::runtime_error("yaml '" + config_yamlfile_path_ +
-                                 "' is missing a valid 'sunray_controller_param' map");
+        throw std::runtime_error("yaml '" + config_label +
+                                 "' is missing a valid 'geometric_controller_param' map");
     }
 
+    if (!controller_param["gravity"]) {
+        throw std::runtime_error("missing param 'geometric_controller_param.gravity'");
+    }
+    geometric_controller_param_.gravity = controller_param["gravity"].as<double>();
+    if (!controller_param["mass_kg"]) {
+        throw std::runtime_error("missing param 'geometric_controller_param.mass_kg'");
+    }
+    geometric_controller_param_.drone_mass = controller_param["mass_kg"].as<double>();
+    if (geometric_controller_param_.gravity <= 0.0) {
+        throw std::runtime_error("param 'geometric_controller_param.gravity' must > 0");
+    }
+    if (geometric_controller_param_.drone_mass <= 0.0) {
+        throw std::runtime_error("param 'geometric_controller_param.mass_kg' must > 0");
+    }
+
+    // 悬停推力初始化值直接来自 geometric_controller_param.hover_thrust_percent。
+    if (!controller_param["hover_thrust_percent"]) {
+        throw std::runtime_error("missing param 'geometric_controller_param.hover_thrust_percent'");
+    }
+    geometric_controller_param_.hover_thrust_init =
+        std::clamp(controller_param["hover_thrust_percent"].as<double>(), 0.05, 0.80);
+    geometric_controller_param_.hover_thrust_min = 0.05;
+    geometric_controller_param_.hover_thrust_max = 0.80;
+
     if (!controller_param["control_type"]) {
-        throw std::runtime_error("missing param 'sunray_controller_param.control_type'");
+        throw std::runtime_error("missing param 'geometric_controller_param.control_type'");
     }
     const int control_type = controller_param["control_type"].as<int>();
     if (control_type != 0 && control_type != 1) {
         throw std::runtime_error(
-            "param 'sunray_controller_param.control_type' must be 0 (attitude+thrust) or 1 "
+            "param 'geometric_controller_param.control_type' must be 0 (attitude+thrust) or 1 "
             "(bodyrate+thrust) for Geometric_Controller");
     }
     attitude_command_mode_ =
         (control_type == 0) ? AttitudeCommandMode::Attitude : AttitudeCommandMode::BodyRate;
 
     if (!controller_param["attitude_tau"]) {
-        throw std::runtime_error("missing param 'sunray_controller_param.attitude_tau'");
+        throw std::runtime_error("missing param 'geometric_controller_param.attitude_tau'");
     }
     geometric_controller_param_.attitude_tau = controller_param["attitude_tau"].as<double>();
     if (geometric_controller_param_.attitude_tau <= 0.0) {
-        throw std::runtime_error("param 'sunray_controller_param.attitude_tau' must > 0");
+        throw std::runtime_error("param 'geometric_controller_param.attitude_tau' must > 0");
     }
 
     // controller_update_frequency 由 basic_param 统一提供，这里只取值，不重复约束状态机语义。
@@ -177,7 +174,7 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     const auto load_vec3 = [&](const char* key, Eigen::Vector3d& out) {
         if (!controller_param[key] || !controller_param[key].IsSequence() ||
             controller_param[key].size() != 3) {
-            throw std::runtime_error(std::string("missing or invalid param 'sunray_controller_param.") +
+            throw std::runtime_error(std::string("missing or invalid param 'geometric_controller_param.") +
                                      key + "' (expected sequence of 3 values)");
         }
         out.x() = controller_param[key][0].as<double>();
@@ -195,13 +192,13 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     if (controller_param["max_acc"]) {
         geometric_controller_param_.max_acc = controller_param["max_acc"].as<double>();
         if (geometric_controller_param_.max_acc <= 0.0) {
-            throw std::runtime_error("param 'sunray_controller_param.max_acc' must > 0");
+            throw std::runtime_error("param 'geometric_controller_param.max_acc' must > 0");
         }
     }
     if (controller_param["max_d_acc"]) {
         geometric_controller_param_.max_d_acc = controller_param["max_d_acc"].as<double>();
         if (geometric_controller_param_.max_d_acc <= 0.0) {
-            throw std::runtime_error("param 'sunray_controller_param.max_d_acc' must > 0");
+            throw std::runtime_error("param 'geometric_controller_param.max_d_acc' must > 0");
         }
     } else {
         // 未配置时默认与 max_acc 一致，保持原有行为
@@ -213,18 +210,18 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         if (geometric_controller_param_.hover_thrust_estimator_type < 0 ||
             geometric_controller_param_.hover_thrust_estimator_type > 1) {
             throw std::runtime_error(
-                "param 'sunray_controller_param.hover_thrust_estimator_type' must be 0 (RLS) or 1 (EKFAccel)");
+                "param 'geometric_controller_param.hover_thrust_estimator_type' must be 0 (RLS) or 1 (EKFAccel)");
         }
     }
 
     // ---------------- takeoff_land_type 路由 ----------------
     if (!controller_param["takeoff_land_type"]) {
-        throw std::runtime_error("missing param 'sunray_controller_param.takeoff_land_type'");
+        throw std::runtime_error("missing param 'geometric_controller_param.takeoff_land_type'");
     }
     takeoff_land_type_ = controller_param["takeoff_land_type"].as<int>();
     if (takeoff_land_type_ != 0 && takeoff_land_type_ != 1) {
         throw std::runtime_error(
-            "param 'sunray_controller_param.takeoff_land_type' must be 0 (direct thrust) or 1 (AccFF)");
+            "param 'geometric_controller_param.takeoff_land_type' must be 0 (direct thrust) or 1 (AccFF)");
     }
 
     // ---------------- AccFF 起降参数:由 gravity / hover_thrust_init 推导 ----------------

@@ -89,7 +89,6 @@ class Geometric_Controller : public Controller_Interface {
     };
 
     // ----------------------配置相关-----------------------
-    std::string config_yamlfile_path_;
     Geometric_AttitudeControl_Param_t geometric_controller_param_;
     Geometric_AttitudeControl controller_;
     AttitudeCommandMode attitude_command_mode_{AttitudeCommandMode::BodyRate};

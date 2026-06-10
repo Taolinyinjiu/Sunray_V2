@@ -1,6 +1,13 @@
 <launch>
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="odom_sub_topic" default="/baton/stereo3/odometry" />
+  <arg name="odom_pub_topic" default="sunray/odometry" />
 
-  <node pkg="sunray_viobot" type="viobot_odom_node" name="viobot_odom_node" output="screen">
-    
-  </node>
+  <group ns="$(arg agent_name)$(arg agent_id)">
+    <node pkg="sunray_viobot" type="viobot_odom_node" name="viobot_odom_node" output="screen">
+      <param name="odom_sub_topic" value="$(arg odom_sub_topic)" />
+      <param name="odom_pub_topic" value="$(arg odom_pub_topic)" />
+    </node>
+  </group>
 </launch>

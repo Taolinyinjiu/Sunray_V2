@@ -100,6 +100,7 @@ class MavrosHelper {
     ros::Subscriber setpoint_local_sub_;
     ros::Subscriber setpoint_attitude_sub_;
     ros::Subscriber gps_raw_sub_;
+    ros::Subscriber rc_in_sub_;
 
     ros::Publisher vision_pose_pub_;
     ros::Publisher vision_odometry_pub_;
@@ -132,6 +133,7 @@ class MavrosHelper {
     control_common::Mavros_SetpointAttitude mavros_setpoint_attitude_data_;
     control_common::Mavros_GPS mavros_gps_;
     control_common::Mavros_IMU mavros_imu_data_;
+    control_common::Mavros_RC mavros_rc_data_;
 
     bool param_initialized_ = false;
 
@@ -146,6 +148,7 @@ class MavrosHelper {
     void mavros_setpoint_local_callback(const mavros_msgs::PositionTarget& msg);
     void mavros_setpoint_attitude_callback(const mavros_msgs::AttitudeTarget& msg);
     void mavros_gps_raw_callback(const mavros_msgs::GPSRAW& msg);
+    void mavros_rc_in_callback(const mavros_msgs::RCIn& msg);
 
     // 通过调用mavros提供的服务,向px4飞控写入参数
     bool set_param_raw(const char* name, int value);

@@ -1,0 +1,45 @@
+# Airframe overlay: sunray_300
+#
+# 适用对象:
+#   - Sunray 300 级别较大实机。
+#   - 相比 sunray_150，质量更大、惯量更大，通常需要更保守的速度、加速度和控制增益。
+#
+# 覆盖规则:
+#   - 本文件只覆盖机型差异。
+#   - 同名参数覆盖 base；数组整体覆盖，不做逐元素合并。
+#
+# 实飞前必须复核:
+#   - mass_kg 和 hover_thrust_percent 目前是预设占位。
+#   - hover_thrust_percent 应从 PX4 日志读取，否则起降手感会明显偏差。
+#   - 300 级别机型首次测试建议先保持 takeoff/land 速度较低。
+
+geometric_controller_param:
+  # 带电池、载荷后的起飞重量，单位 kg。当前为预设占位。
+  mass_kg: 1.80
+
+  # 较大机型通常悬停推力占比更高，具体值以 PX4 日志为准。
+  hover_thrust_percent: 0.45
+
+  # 较大机型降低位置环比例增益，减少超调和振荡风险。
+  pos_kp: [1.2, 1.2, 2.5]
+
+  # 较大机型降低速度环比例增益，避免速度误差修正过猛。
+  vel_kp: [1.8, 1.8, 2.6]
+
+  # 反馈加速度限幅，单位 m/s^2。比 sunray_150 更保守。
+  max_acc: 7.0
+
+  # 姿态响应时间常数，单位 s。略大表示响应更平缓。
+  attitude_tau: 0.35
+
+velocity_param:
+  # 最大速度，单位 m/s。300 级别默认比小机型保守。
+  max_velocity:
+    x_vel: 0.8
+    y_vel: 0.8
+    z_vel: 0.8
+
+takeoff_land_param:
+  # 起飞/降落速度更保守，降低大机型贴地阶段风险。
+  takeoff_max_velocity: 0.25
+  land_max_velocity: 0.25

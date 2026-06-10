@@ -1,5 +1,6 @@
 #include "controller/geometric_controller.hpp"
 #include "eigen_helper.hpp"
+#include "utils/control_config_loader.hpp"
 #include "utils/body_frame_reference_helper.hpp"
 #include "utils/orientation_utils.hpp"
 #include <ros/ros.h>
@@ -30,16 +31,7 @@ mavros_msgs::AttitudeTarget to_attitude_target_msg(
 // 构造函数
 // ─────────────────────────────────────────────────────────────────────────────
 Geometric_Controller::Geometric_Controller(ros::NodeHandle& nh) : nh_(nh) {
-    std::string node_name = ros::this_node::getName();
-    ros::NodeHandle private_nh_("~");
-
-    if (private_nh_.getParam("config_yamlfile_path", config_yamlfile_path_)) {
-        if (config_yamlfile_path_.empty()) {
-            throw std::runtime_error("yaml_path cannot be empty");
-        }
-    } else {
-        throw std::runtime_error("missing param " + node_name + "/config_yamlfile_path");
-    }
+    (void)sunray_config::get_control_config_paths_or_throw();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

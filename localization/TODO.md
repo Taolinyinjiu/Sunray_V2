@@ -6,8 +6,6 @@
 
 部分节点仍使用硬编码话题或 frame，例如：
 
-- `sunray_viobot` 固定订阅 `/baton/stereo3/odometry`。
-- `ekf_odometry` 固定发布 `/sunray/ekf_odometry`。
 - `fast_lio/src/transform_odom_pointCloud.cpp` 固定订阅 `/livox/imu`、`/Odometry`、`/PointCloud`。
 - `open3d_loc` 固定使用 `/Odometry_loc`、`/cloud_registered_1`、`map/odom/base_link` 等。
 
@@ -26,22 +24,6 @@
 - 对 odom 更新时刻做 IMU 插值或更严格的时间同步。
 - 将噪声参数、初始化帧数、发布话题全部参数化。
 
-## 4. 明确协方差语义
-
-多个节点发布 `nav_msgs/Odometry` 时没有填充 pose/twist covariance。对飞控、融合、诊断工具来说，协方差是判断定位可信度的重要信息。建议：
-
-- 动捕、VIO、FAST-LIO、EKF 输出都按来源填写合理协方差。
-- `localization_fusion` 转换外参时同步旋转协方差。
-- `OdomState` 中可增加定位质量、延迟、重定位置信度等字段。
-
-## 5. 降低第三方算法包和 Sunray 封装耦合
-
-`fast_lio`、`vins-fusion`、`open3d_loc` 中既有第三方算法代码，也有 Sunray 适配代码。建议：
-
-- 尽量不直接改第三方核心算法。
-- 把 Sunray 适配节点放在单独 wrapper 包或明确的 `sunray_*` 节点中。
-- 保留上游算法 README，另写 Sunray 使用说明。
-
 ## 6. 改善 CMake 和依赖配置
 
 当前可优化项：
@@ -50,18 +32,6 @@
 - `fast_lio/CMakeLists.txt` 同时设置 Debug 和 `-O3`，构建类型语义不清。
 - 多处重复 `-std=c++14` 或 `-std=c++0x`。
 - 建议统一 CMake 最低版本、C++ 标准和 install 规则。
-
-## 7. 完善 launch 覆盖
-
-`localization_fusion.launch` 中部分 `source_id` 目前只有占位注释，没有 include 实际启动源：
-
-- `source_id=0` VIOBOT
-- `source_id=2` VINS
-- `source_id=3` GAZEBO
-- `source_id=4` GAZEBO_ARUCO
-- `source_id=5` PENGYU_SIM
-
-建议补齐对应 `source_launch/start_*.launch`，让每个 source 都能一键启动或明确声明由外部系统提供。
 
 ## 8. 增加测试和回放验证
 

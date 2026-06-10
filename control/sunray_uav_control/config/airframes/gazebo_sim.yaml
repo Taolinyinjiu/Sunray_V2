@@ -1,0 +1,47 @@
+# Airframe overlay: gazebo_sim
+#
+# 适用对象:
+#   - Gazebo 仿真机型。
+#   - 主要用于功能流程、状态机、命令接口和可视化调试。
+#
+# 覆盖规则:
+#   - 仿真机型可以覆盖实机安全相关参数，但不要把仿真参数复制到实机 airframe。
+#   - 同名参数覆盖 base；数组整体覆盖。
+#
+# 注意:
+#   - 仿真模型的质量、推力映射、阻尼和真实飞机通常不一致。
+#   - gazebo_sim 中调好的 PID 不应直接作为实机参数使用。
+
+basic_param:
+  # 仿真中是否向 PX4 EKF 喂外部定位，取决于仿真链路。
+  #   0: 只让控制器使用 Sunray local odom，不额外喂 PX4 EKF。
+  #   1: 通过 /mavros/vision_pose/pose 喂 PX4 EKF。
+  # 当前保持为 1，便于测试外部定位融合链路。
+  fuse_odom_type: 1
+
+geometric_controller_param:
+  # Gazebo 模型质量，需与仿真 SDF/URDF 保持一致。
+  mass_kg: 1.00
+
+  # 仿真推力映射常与实机不同，按仿真模型悬停状态修正。
+  hover_thrust_percent: 0.50
+
+  # 仿真中保留 base 默认 PID，便于和实机默认行为对比。
+  pos_kp: [1.5, 1.5, 3.0]
+  vel_kp: [2.0, 2.0, 3.0]
+
+  # 仿真可适当放宽加速度，便于测试任务流程。
+  max_acc: 9.0
+  attitude_tau: 0.30
+
+velocity_param:
+  # 仿真默认速度稍高，用于提高调试效率。
+  max_velocity:
+    x_vel: 1.5
+    y_vel: 1.5
+    z_vel: 1.2
+
+protect_param:
+  # 仿真中通常不检查真实 PX4 参数和 RC 链路。
+  check_param: false
+  control_with_no_rc: true

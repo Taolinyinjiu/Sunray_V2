@@ -14,6 +14,8 @@
 #include <string>
 
 namespace {
+constexpr double kVelocityCommandRateHz = 20.0;
+
 double degToRad(const double deg) {
     return deg * M_PI / 180.0;
 }
@@ -22,6 +24,10 @@ double degToRad(const double deg) {
 static void printMenu() {
     std::cout << "\n===== UAV Terminal Control =====" << std::endl;
     std::cout << "Units: position[m], velocity[m/s], height[m], duration[s], yaw input[deg] -> publish[rad]" << std::endl;
+    std::cout << "Publish rule: TAKEOFF/LAND/RETURN/HOVER/MOVE_POINT/MOVE_POINT_BODY are sent once; "
+              << "MOVE_VELOCITY commands are streamed at " << kVelocityCommandRateHz
+              << "Hz for the requested duration." << std::endl;
+    std::cout << "Trajectory commands, if implemented by an upper planner, should be streamed at >=100Hz or planner rate." << std::endl;
     std::cout << "1 - TAKEOFF" << std::endl;
     std::cout << "2 - LAND" << std::endl;
     std::cout << "3 - RETURN" << std::endl;
@@ -64,7 +70,8 @@ static bool readVelocity(const std::string& title,
                          double& yaw_deg,
                          double& duration) {
     std::cout << title << std::endl;
-    std::cout << "Enter desired velocity vx[m/s] vy[m/s] vz[m/s] yaw[deg] duration[s]: ";
+    std::cout << "Enter desired velocity vx[m/s] vy[m/s] vz[m/s] yaw[deg] duration[s] "
+              << "(will stream at " << kVelocityCommandRateHz << "Hz): ";
     if (!(std::cin >> vx >> vy >> vz >> yaw_deg >> duration) || duration <= 0.0) {
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -81,7 +88,8 @@ static bool readBodyVelocity(const std::string& title,
                              double& yaw_deg,
                              double& duration) {
     std::cout << title << std::endl;
-    std::cout << "Enter desired body vx[m/s] vy[m/s] fixed_height[m] yaw[deg] duration[s]: ";
+    std::cout << "Enter desired body vx[m/s] vy[m/s] fixed_height[m] yaw[deg] duration[s] "
+              << "(will stream at " << kVelocityCommandRateHz << "Hz): ";
     if (!(std::cin >> vx >> vy >> height >> yaw_deg >> duration) || duration <= 0.0) {
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -94,7 +102,7 @@ static bool readBodyVelocity(const std::string& title,
 static void publishTimedVelocityCommand(ros::Publisher& control_pub,
                                         const sunray_msgs::UAVControlCMD& cmd,
                                         double duration_s) {
-    ros::Rate rate(20.0);
+    ros::Rate rate(kVelocityCommandRateHz);
     const ros::Time end_time = ros::Time::now() + ros::Duration(duration_s);
 
     while (ros::ok() && ros::Time::now() < end_time) {
@@ -224,8 +232,9 @@ int main(int argc, char** argv) {
             cmd.desired_vel.z = vz;
             timed_velocity_cmd = true;
             velocity_duration_s = duration;
-            ROS_INFO("Publish %s [vx=%.2fm/s, vy=%.2fm/s, vz=%.2fm/s, yaw=%.2fdeg -> %.3frad] for %.2fs",
+            ROS_INFO("Stream %s at %.1fHz [vx=%.2fm/s, vy=%.2fm/s, vz=%.2fm/s, yaw=%.2fdeg -> %.3frad] for %.2fs",
                      title.c_str(),
+                     kVelocityCommandRateHz,
                      vx,
                      vy,
                      vz,
@@ -248,8 +257,9 @@ int main(int argc, char** argv) {
             cmd.fixed_height = height;
             timed_velocity_cmd = true;
             velocity_duration_s = duration;
-            ROS_INFO("Publish %s [vx=%.2fm/s, vy=%.2fm/s, fixed_height=%.2fm, yaw=%.2fdeg -> %.3frad] for %.2fs",
+            ROS_INFO("Stream %s at %.1fHz [vx=%.2fm/s, vy=%.2fm/s, fixed_height=%.2fm, yaw=%.2fdeg -> %.3frad] for %.2fs",
                      title.c_str(),
+                     kVelocityCommandRateHz,
                      vx,
                      vy,
                      height,
@@ -265,7 +275,7 @@ int main(int argc, char** argv) {
 
         if (timed_velocity_cmd) {
             publishTimedVelocityCommand(control_pub, cmd, velocity_duration_s);
-            ROS_INFO("Velocity command finished, switched to HOVER");
+            ROS_INFO("Velocity stream finished, sent HOVER command");
         } else {
             control_pub.publish(cmd);
             ros::spinOnce();

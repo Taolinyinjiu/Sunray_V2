@@ -2,6 +2,7 @@
 #include "Eigen/src/Core/Matrix.h"
 #include "control_data_types/mavros_helper_data_types.hpp"
 #include "eigen_helper.hpp"
+#include "utils/control_config_loader.hpp"
 #include "utils/body_frame_reference_helper.hpp"
 #include "utils/orientation_utils.hpp"
 #include <ros/ros.h>
@@ -100,17 +101,7 @@ mavros_msgs::PositionTarget to_position_target_msg(
 
 // 构造函数，读取参数
 PX4_OriginController::PX4_OriginController(ros::NodeHandle& nh) : nh_(nh) {
-    // 读取节点名
-    std::string node_name = ros::this_node::getName();
-    // 构造私有节点句柄，用于读取节点私有参数,controller主要读取yaml路径
-    ros::NodeHandle private_nh_("~");
-    if (private_nh_.getParam("config_yamlfile_path", config_yamlfile_path_)) {
-        if (config_yamlfile_path_.empty()) {  // 路径为空，抛出异常
-            throw std::runtime_error("yaml_path connot be empty");
-        }
-    } else {  // 读取失败，抛出异常
-        throw std::runtime_error("missing param" + node_name + "/config_yamlfile_path");
-    }
+    (void)sunray_config::get_control_config_paths_or_throw();
 }
 
 bool PX4_OriginController::init() {

@@ -1,0 +1,339 @@
+# sunray_uav_control 公共基础配置
+#
+# 加载规则:
+#   1. uav_control.launch 先加载本文件。
+#   2. 再加载 config/airframes/<airframe_type>.yaml。
+#   3. airframe 文件中的同名参数会递归覆盖本文件。
+#   4. 数组整体覆盖，不做逐元素合并。例如 airframe 写 pos_kp，就必须写完整 [x, y, z]。
+#
+# 使用原则:
+#   - 本文件放所有机型默认一致的参数。
+#   - 具体飞机型号、仿真模型不同的参数，只写在 airframes/*.yaml。
+#   - 开发者调参时优先改 airframes/*.yaml；只有确认所有机型都应该变化时，才改本文件。
+
+# -------------------基本参数-----------------------
+# 本组只放所有控制器都会使用的通用参数。
+# 几何控制器专用的质量、重力、悬停推力、PID 等参数在 geometric_controller_param。
+basic_param:
+    # 控制器类型。
+    # 使用位置:
+    #   - Sunray_FSM::register_controller() 根据该值选择具体控制器。
+    # 取值:
+    #   0: PX4_OriginController
+    #      Sunray 输出 mavros_msgs/PositionTarget，由 PX4 原生位置控制器闭环。
+    #      优点是调参少；缺点是不会使用 geometric_controller_param 的姿态/推力 PID。
+    #   1: Geometric_Controller
+    #      Sunray 自己做位置/速度到 attitude/bodyrate + thrust 的控制。
+    #      会使用 geometric_controller_param。
+    # 注意:
+    #   - 当前加载代码只允许 0 或 1。
+    controller_types: 1
+
+    # 控制器高频循环频率，单位 Hz，必须 > 10。
+    # 使用位置:
+    #   - FSM 高频 controller_update_loop() 的循环频率。
+    #   - Geometric_Controller 会把它写入 controller_hz 给内部控制算法使用。
+    # 调参影响:
+    #   - 太低: setpoint/姿态控制不平滑，速度/轨迹命令响应差。
+    #   - 太高: 增加 CPU 与 MAVROS 通信压力。
+    # 建议:
+    #   - 实机常用 100 Hz；仿真可根据性能适当调整。
+    controller_update_frequency: 100
+
+    # FSM 低频监督循环频率，单位 Hz，必须 > 0。
+    # 使用位置:
+    #   - check_controller_ready()
+    #   - check_rosmsg_timeout()
+    #   - check_move_completed()
+    #   - control_state 发布
+    # 注意:
+    #   - 它不是控制输出频率；控制输出频率由 controller_update_frequency 决定。
+    supervisor_update_frequency: 10
+
+    # 外部里程计话题名称。
+    # 使用位置:
+    #   - Sunray_FSM::init_subscriber() 订阅该话题作为控制器 self odom。
+    # 替换规则:
+    #   - ${agent_key} 会被替换成当前智能体命名空间，例如 /uav1。
+    # 消息类型:
+    #   - nav_msgs/Odometry。
+    # 输入要求:
+    #   - header.stamp 不能为 0。
+    #   - position / velocity / angular velocity 必须是有限值。
+    #   - 当前代码会统计频率，并以 100 Hz 作为“达到目标频率”的参考。
+    odom_topic_name: "${agent_key}/sunray/localization/local_odom"
+
+    # 是否把外部里程计再喂给 PX4 EKF。
+    # 使用位置:
+    #   - PX4_OriginController 和 Geometric_Controller 都会读取。
+    #   - 控制器初始化时调用 mavros_helper_.set_vision_fuse_type(fuse_odom_type)。
+    #   - fuse_odom_type != 0 时创建定时器，周期发布外部定位给 MAVROS。
+    # 取值:
+    #   0: 关闭，不向 PX4 EKF 发布外部定位融合输入。
+    #   1: 发布到 /mavros/vision_pose/pose。
+    #      适合只有 pose、没有可靠协方差的外部定位源。
+    #   2: 发布到 /mavros/odometry/in。
+    #      适合有完整 odometry 信息，且 PX4/MAVROS 参数已正确配置的情况。
+    # 注意:
+    #   - 该参数只决定 Sunray 是否发布融合输入。
+    #   - PX4 是否真正融合，还取决于 EKF2_EV_CTRL / EKF2_HGT_REF 等 PX4 参数。
+    fuse_odom_type: 1
+
+    # 外部里程计喂给 MAVROS/PX4 的发布频率，单位 Hz。
+    # 使用位置:
+    #   - 控制器内部创建 pub_vision_pose_timer_。
+    # 代码行为:
+    #   - 控制器会把该值钳位到 [10, 200] Hz。
+    # 建议:
+    #   - 不要高于真实外部里程计更新频率。
+    #   - 常见外部定位 30~100 Hz；当前默认 50 Hz。
+    fuse_odom_frequency: 50
+
+# -------------------保护参数-----------------------
+# 当前状态:
+#   - 本组参数保留给 system_check/安全策略模块。
+#   - 当前 Sunray_FSM::load_param() 没有加载 protect_param。
+#   - check_allow_takeoff() 中也说明 protect_param 已迁移给 system_check。
+# 结论:
+#   - 只修改本组参数，当前 uav_control_node 内大概率不会改变飞行行为。
+#   - 若要真正生效，需要在 system_check 中实现策略，并通过 FSM 事件触发 LAND/RETURN/KILL。
+protect_param:
+    # 预留: 是否通过 MAVROS 服务检查 PX4 参数是否满足当前模式要求。
+    check_param: false
+
+    # 预留: 低电压阈值，单位 V。示例 13.2 约对应 4S 电池。
+    low_voltage: 13.2
+
+    # 预留: 触发低电压后的动作。
+    #   0: 无操作
+    #   1: 立即降落
+    #   2: 返航并降落
+    low_voltage_operate: 0
+
+    # 预留: 是否允许无 RC 时启动。
+    # 当前 FSM 起飞授权未检查该参数。
+    control_with_no_rc: false
+
+    # 预留: RC 从连接变为丢失后的动作。
+    #   0: 无操作
+    #   1: 降落
+    #   2: 返回
+    lost_with_rc: 1
+
+    # 预留: 是否允许代码解锁无人机。
+    # 当前实际解锁行为由控制器/MAVROS/PX4 流程决定，本字段未接入 FSM 授权。
+    arm_with_code: true
+
+    # 预留: 是否允许代码起飞。
+    # 当前 FSM 未使用该字段阻止 TAKEOFF 指令。
+    takeoff_with_code: true
+
+    # 预留: 是否进行倾倒/翻转检测。
+    check_flip: false
+
+    # 预留: 最大倾斜角，单位 deg。
+    # 只有 check_flip 相关逻辑接入后才会生效。
+    tilt_angle_max: 20
+
+    # 预留: 消息超时后的动作。
+    #   0: 无操作
+    #   1: 立即降落
+    #   2: 返航并降落
+    # 当前 check_rosmsg_timeout() 只标记 control_msg_lost_，没有按该字段自动 LAND/RETURN/KILL。
+    msg_timeout_operate: 1
+
+# -------------------消息超时参数-----------------------
+# 单位: 秒。
+# 定义:
+#   - 这里的“超时”是指曾经正常收到过数据，之后长时间没有新数据。
+msg_timeout_param:
+    # 外部里程计最大允许超时时间。
+    # 使用位置:
+    #   - check_controller_ready(): OFF -> INIT 前要求最近有效里程计没有超过该时间。
+    #   - pub_sunray_fsm_state(): 根据该时间填充 control_state.odometry_lost。
+    #   - check_rosmsg_timeout(): 检测里程计超时，但当前没有自动触发保护动作。
+    # 调参影响:
+    #   - 太小: 定位频率抖动时容易认为 odom_lost。
+    #   - 太大: 定位断流后状态发现较慢。
+    local_odometry: 0.5
+
+    # MAVROS 链路超时时间。
+    # 当前 FSM 配置结构会读取该字段，但本控制节点未直接用它判定 MAVROS 丢失。
+    # MAVROS 连接状态主要由 MavrosHelper::is_ready() 等控制器内部逻辑处理。
+    mavros_connect: 0.5
+
+    # 地面站链路超时时间。
+    # 当前未接入地面站心跳检测，仅作为后续 system_check/ground station 扩展预留。
+    sunray_station: 0.5
+
+# -------------------起飞降落相关参数-----------------------
+takeoff_land_param:
+    # 相对起飞时当前位置的目标高度，单位 m。
+    # 使用位置:
+    #   - FSM 收到 TAKEOFF 后调用 sunray_controller_->takeoff(relative_height, max_velocity)。
+    # 生效范围:
+    #   - controller_types=0: PX4_OriginController 生成位置 setpoint 起飞。
+    #   - controller_types=1: Geometric_Controller 使用 direct thrust 或 AccFF 起飞路径。
+    takeoff_relative_height: 0.6
+
+    # 起飞过程最大竖直速度，单位 m/s，必须 > 0。
+    # 调参影响:
+    #   - 太小: 起飞慢，容易长时间贴地。
+    #   - 太大: 起飞冲击变大，对定位和推力估计要求更高。
+    takeoff_max_velocity: 0.3
+
+    # 降落模式。
+    #   0: Sunray land，由当前控制器持续生成下降 setpoint/推力。
+    #   1: PX4 auto land，通过 MAVROS/PX4 自动降落流程处理。
+    # 注意:
+    #   - land_type=1 更依赖 PX4 参数和模式切换是否配置正确。
+    land_type: 0
+
+    # Sunray land 的最大下降速度，单位 m/s，必须 > 0。
+    # 使用位置:
+    #   - land_type=0 时用于降落参考/下降速度限制。
+    #   - land_type=1 PX4 auto land 时主要由 PX4 参数控制，当前值影响很小或不生效。
+    land_max_velocity: 0.30
+
+    # 触发 RETURN 时，到达返航点后是否自动进入 LAND。
+    # 当前 RETURN 使用 local home_point 语义，不是 GPS RTL。
+    return_with_land: true
+
+# -------------------到达稳定判定参数-----------------------
+# 使用位置:
+#   - PX4_OriginController 和 Geometric_Controller 都会读取。
+#   - 起飞完成判定、move_point / move_point_body / move_point_wgs84 到点判定使用本组参数。
+# 不适用:
+#   - 纯速度命令 MOVE_VELOCITY / MOVE_VELOCITY_BODY 不靠“到点”完成。
+#   - MOVE_TRAJECTORY 主要跟随外部持续给出的轨迹点，不用本组参数判断最终任务完成。
+arrival_judge_param:
+    # 误差进入阈值后需要保持的最短时间，单位 s。
+    judge_stabile_time_s: 1
+
+    # 位置误差阈值，单位 m。
+    pos_stabile_err_m: 0.08
+
+    # 速度误差阈值，单位 m/s。
+    # 避免“经过目标点但还在飞”被误判完成。
+    vel_stabile_err_mps: 0.12
+
+    # 最大允许位置误差，单位 m。
+    # 容错逻辑:
+    #   - 当速度误差满足阈值并保持约 3x judge_stabile_time_s 后，
+    #     如果位置误差小于该值，也可认为任务完成。
+    max_pos_err_m: 0.3
+
+    # yaw 到达阈值，单位 deg。
+    yaw_stabile_err_deg: 8.0
+
+    # yaw 角速度稳定阈值，单位 deg/s。
+    # 与 yaw_stabile_err_deg 一起使用，避免 yaw 正在快速转动时提前判定到达。
+    yaw_rate_stabile_err_deg_s: 10.0
+
+# -------------------电子围栏参数-----------------------
+# 当前状态:
+#   - FSM 会加载并校验 local_fence_param 的大小关系。
+#   - 当前控制流程没有实际用它限制目标点、速度或触发保护动作。
+# 坐标系说明:
+#   - local 系，ROS 常用右手系: X 前方，Y 左方，Z 向上。
+#   - 这里的前/左通常相对定位系初始化方向，不一定永远等于机头方向。
+local_fence_param:
+    x_max: 4.0
+    x_min: -4.0
+    y_max: 4.0
+    y_min: -4.0
+    z_max: 2.0
+    # 如果起飞点不是场地最低点，可以根据实际 local z 原点调整。
+    z_min: 0.0
+
+# -------------------飞行速度参数-----------------------
+velocity_param:
+    # 代码控制下的最大速度，单位 m/s，按 local/body 转换后的 x/y/z 分轴限幅。
+    # 使用位置:
+    #   - move_point 参考曲线生成时限制到目标点的速度。
+    #   - move_velocity / move_velocity_body 会把期望速度钳位到该范围。
+    #   - move_trajectory 如果给出的轨迹点速度超过该限制，会打印告警并拒绝该次轨迹点。
+    # 注意:
+    #   - 这是 setpoint 限幅，不保证实际飞机绝对不会超过该速度。
+    max_velocity:
+        x_vel: 1.0
+        y_vel: 1.0
+        z_vel: 1.0
+
+    # 预留: 遥控器控制时的最大速度，单位 m/s。
+    # 当前 FSM 会读取并校验该字段，但当前控制逻辑未完整接入 RC 手动速度控制路径。
+    max_velocity_with_rc:
+        x_vel: 1.0
+        y_vel: 1.0
+        z_vel: 1.0
+
+    # yaw 最大角速度，单位 deg/s，必须 > 0。
+    # 使用位置:
+    #   - SET_YAW: 目标 yaw 通过限速器以不超过该速度逼近。
+    #   - SET_YAWRATE: 输入 yaw_rate 会被钳位到 +/- yaw_rate。
+    #   - move_trajectory: 轨迹点 yaw_rate 超限时会触发轨迹速度限制检查。
+    # 注意:
+    #   - 这是参考值限幅，不是实际机体 yaw rate 的硬保证。
+    yaw_rate: 30
+
+# -------------------Geometric_Controller 默认参数-------------------
+# 生效范围:
+#   - 仅 basic_param.controller_types=1 时由 Geometric_Controller 读取。
+#   - basic_param.controller_types=0 时，PX4_OriginController 不使用本组参数。
+# airframes/*.yaml 通常会覆盖本组中的质量、悬停推力、速度和部分 PID。
+geometric_controller_param:
+  # 无人机整机质量，单位 kg。
+  # 当前核心推力归一化主要依赖 hover_thrust_percent，mass_kg 更多用于控制器物理参数完整性。
+  mass_kg: 0.96
+
+  # 重力加速度，单位 m/s^2。一般不需要修改。
+  gravity: 9.8
+
+  # 归一化悬停推力，范围建议在 (0, 1)。
+  # 含义:
+  #   - PX4 日志中的 hover thrust/actuator thrust 量级，例如 0.375 表示约 37.5% 推力可悬停。
+  # 使用位置:
+  #   - 作为 hover_thrust_init，并在代码中钳位到 [0.05, 0.80]。
+  #   - 起飞 PreLift、推力估计器初始化、降落推力锚点都会用到它。
+  # 调参影响:
+  #   - 写得过小: 起飞可能迟钝、贴地时间长，降落可能偏软。
+  #   - 写得过大: 起飞可能冲得快，降落可能不容易降下来。
+  hover_thrust_percent: 0.375
+
+  # 控制器输出类型。
+  #   0: attitude + thrust，输出期望姿态四元数和归一化推力。
+  #   1: bodyrate + thrust，输出机体系角速度和归一化推力，默认推荐。
+  control_type: 1
+
+  # 悬停推力估计器类型。
+  #   0: RLS 最小二乘估计。
+  #   1: EKF 加速度观测估计。
+  hover_thrust_estimator_type: 0
+
+  # 起降策略类型。
+  #   0: direct thrust，较直接地从推力/参考高度构造起降。
+  #   1: AccFF，基于加速度前馈构造起降。
+  # 注意:
+  #   - 仅 land_type=0 的 Sunray land 会走这里的降落策略。
+  #   - land_type=1 时会切到 PX4 auto land。
+  takeoff_land_type: 1
+
+  # 位置环 PID 参数，数组顺序为 [x, y, z]。
+  # move_point、hover、trajectory 等带位置误差的控制会使用位置环。
+  pos_kp: [1.5, 1.5, 3]
+  pos_ki: [0.0, 0.0, 0.0]
+  pos_kd: [0.0, 0.0, 0.0]
+
+  # 速度环 PID 参数，数组顺序为 [x, y, z]。
+  # move_velocity / move_velocity_body 主要依赖速度环。
+  vel_kp: [2.0, 2.0, 3]
+  vel_ki: [0.0, 0.0, 0.0]
+  vel_kd: [0.0, 0.0, 0.0]
+
+  # 位置/速度环反馈加速度限幅，单位 m/s^2。
+  # 太小会“跟不动”，太大可能动作激烈或振荡。
+  max_acc: 9.0
+
+  # 姿态控制时间常数，单位 s。
+  # 越小响应越快，太小容易抖动或振荡。建议 0.1~0.5。
+  attitude_tau: 0.3

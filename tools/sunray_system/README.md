@@ -140,6 +140,7 @@ rostopic echo /sunray/system_info
 
 `/sunray/system_info` 当前包含：
 
+- 当前机型 `airframe_type`
 - CPU 占用率
 - 内存占用率
 - 当前活跃的 ROS 节点名列表
@@ -160,13 +161,44 @@ roslaunch scripts_manage scripts_manage_tui.launch
 
 ## 配置
 
-默认配置文件：
+默认启动方式：
 
-```text
-tools/sunray_system/config/features.yaml
+```bash
+roslaunch sunray_system sunray_system.launch airframe_type:=sunray_150
 ```
 
+`airframe_type` 会自动映射到对应配置文件：
+
+```text
+tools/sunray_system/config/features_<airframe_type>.yaml
+```
+
+当前提供的机型配置：
+
+```text
+tools/sunray_system/config/features_sunray_150.yaml
+tools/sunray_system/config/features_sunray_300.yaml
+tools/sunray_system/config/features_test.yaml
+```
+
+这些机型配置中的 `sunray_uav_control/uav_control.launch` 会显式携带对应控制参数，例如 `airframe_type:=sunray_150`。`features_test.yaml` 作为测试配置保留，测试时可以直接修改其中的顶层 `airframe_type` 和各个 `uav_control.launch` 的 `airframe_type:=...`。
+
 每个 feature 由若干 launch 单元组成：
+
+```yaml
+airframe_type: "sunray_150"
+features:
+  - name: "single_uav_basic"
+    group: "单机无人机"
+    launches:
+      - name: "control"
+        package: "sunray_uav_control"
+        file: "uav_control.launch"
+        args:
+          - "airframe_type:=sunray_150"
+```
+
+完整 feature 列表示例：
 
 ```yaml
 features:
@@ -209,6 +241,8 @@ features:
 - `launches[].file`：launch 文件名，默认从对应 package 的 `launch/` 目录查找。
 - `launches[].args`：传给 `roslaunch` 的参数列表，格式为 `name:=value`。
 - `launches[].delay_sec`：当前 launch 单元启动后，到下一个 launch 单元启动前的延迟秒数。
+- 顶层 `airframe_type`：可选，设置当前配置对应的机型，用于 TUI 显示和 `airframes` / `airframe_types` 过滤。控制启动项仍建议在 `launches[].args` 里显式写 `airframe_type:=...`。
+- `airframes` / `airframe_types`：可选，写在单个 feature 下。配置了该字段后，只有当前 `airframe_type` 命中时才加载该 feature；不写则表示通用。
 
 ### 启动环境参数
 
@@ -254,7 +288,7 @@ roslaunch sunray_system sunray_system.launch \
 1. 打开配置文件：
 
 ```text
-tools/sunray_system/config/features.yaml
+tools/sunray_system/config/features_test.yaml
 ```
 
 2. 在 `features:` 下新增一项，至少包含：

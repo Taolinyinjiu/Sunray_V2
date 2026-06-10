@@ -9,6 +9,7 @@
 #include <map>
 #include <mutex>
 #include <sstream>
+#include <cctype>
 #include <string>
 #include <thread>
 #include <utility>
@@ -81,6 +82,45 @@ std::string join_strings(const std::vector<std::string>& values,
   return stream.str();
 }
 
+std::string extract_airframe_type(const std::vector<std::string>& commands) {
+  const std::string key = "airframe_type:=";
+  for (const std::string& command : commands) {
+    const size_t key_pos = command.find(key);
+    if (key_pos == std::string::npos) {
+      continue;
+    }
+
+    size_t value_pos = key_pos + key.size();
+    if (value_pos >= command.size()) {
+      continue;
+    }
+
+    char quote = '\0';
+    if (command[value_pos] == '\'' || command[value_pos] == '"') {
+      quote = command[value_pos];
+      ++value_pos;
+    }
+
+    size_t value_end = value_pos;
+    while (value_end < command.size()) {
+      const char current = command[value_end];
+      if ((quote != '\0' && current == quote) ||
+          (quote == '\0' &&
+           std::isspace(static_cast<unsigned char>(current)))) {
+        break;
+      }
+      ++value_end;
+    }
+
+    const std::string value = command.substr(value_pos, value_end - value_pos);
+    if (!value.empty()) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
 std::string format_float(float value, int precision = 1) {
   std::ostringstream stream;
   stream << std::fixed << std::setprecision(precision) << value;
@@ -131,6 +171,7 @@ class TerminalGuard {
 struct FeatureInfo {
   std::string name;
   std::string group = "未分组";
+  std::string airframe_type;
   bool running = false;
   bool auto_start = false;
   float stop_timeout_sec = 0.0F;
@@ -149,6 +190,7 @@ struct GroupInfo {
 
 struct SystemInfoSnapshot {
   bool valid = false;
+  std::string airframe_type;
   float cpu_percent = 0.0F;
   float memory_percent = 0.0F;
   std::vector<std::string> active_ros_nodes;
@@ -210,16 +252,16 @@ class ScriptsManageTui {
         screen.Exit();
         return true;
       }
-      if (event == Event::F1) {
-        toggle_terminal_mode();
-        return true;
-      }
-      if (event == Event::F2 || event == Event::Return) {
+      if (event == Event::F1 || event == Event::Return) {
         start_selected_feature();
         return true;
       }
-      if (event == Event::F3) {
+      if (event == Event::F2) {
         stop_selected_feature();
+        return true;
+      }
+      if (event == Event::F3) {
+        toggle_terminal_mode();
         return true;
       }
       if (event == Event::F5) {
@@ -305,6 +347,11 @@ class ScriptsManageTui {
         text(" "),
         text(start_with_terminal_ ? "终端启动" : "后台启动") | bold |
             color(start_with_terminal_ ? Color::Yellow : Color::Green),
+        text("  机型: ") | color(Color::GrayLight),
+        text(system_info_.airframe_type.empty() ? "等待"
+                                                : system_info_.airframe_type) |
+            bold |
+            color(Color::Yellow),
         filler(),
         text("最后刷新 " + format_time(last_refresh_wall_time_)) |
             color(Color::GrayLight),
@@ -337,7 +384,7 @@ class ScriptsManageTui {
         flex;
 
     Element key_guide =
-        text("↑/↓ 选择   ←/→/Tab 切换焦点   Enter/F2 启动   F3 停止   F1 启动模式   F5 刷新   Esc/q 退出") |
+        text("↑/↓ 选择   ←/→/Tab 切换焦点   Enter/F1 启动   F2 停止   F3 启动模式   F5 刷新   Esc/q 退出") |
         color(Color::GrayLight) | center;
 
     return vbox({
@@ -486,23 +533,10 @@ class ScriptsManageTui {
       }
     }
 
-    Element running =
-        text(feature->running ? "运行中" : "未运行") |
-        color(feature->running ? Color::Green : Color::Red) | bold;
-
     return window(
         text("当前功能详情") | bold,
         vbox({
             hbox({text("名称: ") | bold, text(feature->name)}),
-            hbox({text("分组: ") | bold, text(feature->group)}),
-            hbox({text("状态: ") | bold, running, text("    自动启动: ") | bold,
-                  text(feature->auto_start ? "是" : "否")}),
-            hbox({text("停止超时: ") | bold,
-                  text(format_float(feature->stop_timeout_sec) + "s"),
-                  text("    依赖功能: ") | bold,
-                  text(feature->depends_on.empty()
-                           ? "(无)"
-                           : join_strings(feature->depends_on, ", "))}),
             hbox({text("描述: ") | bold,
                   paragraph(feature->description.empty() ? "-" : feature->description) |
                       flex}),
@@ -526,7 +560,7 @@ class ScriptsManageTui {
 
     const int detail_width = std::max(24, main_width - 8);
     int lines = 2;  // window border
-    lines += 4;     // name/group/status/dependency rows
+    lines += 1;     // name row
     lines += estimate_wrapped_lines(feature->description.empty()
                                         ? "-"
                                         : feature->description,
@@ -567,10 +601,6 @@ class ScriptsManageTui {
       node_rows.push_back(text("(无活跃节点)") | dim);
     }
 
-    const auto age_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - system_info_.received_at)
-            .count();
     const float cpu_progress =
         std::max(0.0F, std::min(1.0F, system_info_.cpu_percent / 100.0F));
     const float mem_progress =
@@ -592,7 +622,6 @@ class ScriptsManageTui {
                  std::to_string(system_info_.active_ros_nodes.size()) + ")") |
                 bold | color(Color::Cyan),
             vbox(node_rows) | yframe | vscroll_indicator | flex,
-            text("更新: " + std::to_string(age_ms / 1000.0) + "s 前") | dim,
         }));
   }
 
@@ -619,6 +648,7 @@ class ScriptsManageTui {
   void on_system_info(const sunray_msgs::SystemInfo::ConstPtr& message) {
     std::lock_guard<std::recursive_mutex> lock(state_mutex_);
     system_info_.valid = true;
+    system_info_.airframe_type = message->airframe_type;
     system_info_.cpu_percent = message->cpu_percent;
     system_info_.memory_percent = message->memory_percent;
     system_info_.active_ros_nodes = message->active_ros_nodes;
@@ -642,7 +672,6 @@ class ScriptsManageTui {
       status_is_error_ = true;
       return;
     }
-
     std::vector<FeatureInfo> refreshed_features;
     refreshed_features.reserve(list_srv.response.feature_names.size());
 
@@ -664,6 +693,7 @@ class ScriptsManageTui {
         feature.depends_on = get_srv.response.depends_on;
         feature.preview_units = get_srv.response.start_preview_units;
         feature.preview_commands = get_srv.response.start_preview_commands;
+        feature.airframe_type = extract_airframe_type(feature.preview_commands);
       } else {
         feature.group = "查询失败";
         feature.description = "无法获取该功能详情";

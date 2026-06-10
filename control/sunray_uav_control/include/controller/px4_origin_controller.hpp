@@ -81,7 +81,6 @@ class PX4_OriginController : public Controller_Interface {
     };
 
     // ----------------------配置相关-----------------------
-    std::string config_yamlfile_path_;
     int fuse_odom_type_{0};
     double fuse_odom_frequency_{0.0};
     // ----------------------检查相关-----------------------

@@ -1,0 +1,47 @@
+# Airframe overlay: pengyu_sim
+#
+# 适用对象:
+#   - Pengyu 仿真机型。
+#   - 与 gazebo_sim 独立保留，方便不同仿真模型使用不同质量、推力映射和 PID。
+#
+# 覆盖规则:
+#   - 本文件只写 pengyu_sim 相对 base 的差异。
+#   - 同名参数覆盖 base；数组整体覆盖。
+#
+# 注意:
+#   - 仿真参数用于仿真链路调试，不建议直接迁移到实机。
+#   - 如果 Pengyu 仿真模型更新了质量/电机曲线，应同步更新 mass_kg 和 hover_thrust_percent。
+
+basic_param:
+  # Pengyu 仿真默认不额外向 PX4 EKF 喂融合输入。
+  # 如果仿真需要测试 PX4 外部视觉融合，可改为 1 或 2。
+  fuse_odom_type: 0
+
+geometric_controller_param:
+  # Pengyu 仿真模型质量，需与模型文件保持一致。
+  mass_kg: 1.20
+
+  # Pengyu 仿真推力悬停占比。按仿真悬停日志修正。
+  hover_thrust_percent: 0.42
+
+  # 相比 base 略降低位置环和速度环，适配更重/更慢的仿真模型。
+  pos_kp: [1.4, 1.4, 2.8]
+  vel_kp: [1.9, 1.9, 2.8]
+
+  # 加速度限幅，单位 m/s^2。
+  max_acc: 8.0
+
+  # 姿态响应时间常数，单位 s。
+  attitude_tau: 0.32
+
+velocity_param:
+  # 仿真最大速度，单位 m/s。
+  max_velocity:
+    x_vel: 1.2
+    y_vel: 1.2
+    z_vel: 1.0
+
+protect_param:
+  # 仿真中通常不检查真实 PX4 参数和 RC 链路。
+  check_param: false
+  control_with_no_rc: true

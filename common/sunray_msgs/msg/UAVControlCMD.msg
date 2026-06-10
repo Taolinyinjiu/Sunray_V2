@@ -21,16 +21,23 @@ uint8 cmd_source
 
 # ---------- control command ----------
 # ------------- 控制命令枚举 ------------
+# 发布频率规则：
+# - TAKEOFF / LAND / RETURN / KILL / HOVER / MOVE_POINT / MOVE_POINT_BODY / MOVE_POINT_WGS84：
+#   事件型命令，发送一次即可。
+# - MOVE_VELOCITY / MOVE_VELOCITY_BODY：
+#   连续型速度命令，需要持续发布，建议 >=10Hz；停止发布后控制节点会按超时逻辑切回悬停。
+# - MOVE_TRAJECTORY：
+#   连续型轨迹命令，需要持续发布，建议 >=100Hz 或与规划器输出频率一致。
 uint8 TAKEOFF=1                     # 起飞：发送一次即可，无人机原地起飞至起飞高度
 uint8 LAND=2                        # 降落：发送一次即可，无人机原地降落
 uint8 RETURN=3                      # 返航：发送一次即可，无人机返回起始点并降落
 uint8 KILL=4                        # 紧急锁桨：危险操作！发送一次即可，无人机立刻停止转动，自由落体掉落
 uint8 HOVER=5                       # 当前位置悬停：发送一次即可，无人机会读取当前位置并在当前位置悬停
 uint8 MOVE_POINT=6                  # 惯性系位置控制：发送一次即可，配合desired_pos、desired_yaw使用
-uint8 MOVE_VELOCITY=7               # 惯性系速度控制：话题频率建议≥10Hz，配合desired_vel、支持fixed_height（需要desired_pos.z）、支持yaw_mode
-uint8 MOVE_TRAJECTORY=8             # 惯性系轨迹控制：话题频率建议≥100Hz，配合desired_pos、desired_vel、desired_acc、支持yaw_mode
-uint8 MOVE_POINT_BODY=9             # 机体系位置控制：发送一次即可，配合desired_pos、desired_yaw使用（偏航角为惯性系设定值）
-uint8 MOVE_VELOCITY_BODY=10         # 机体系位置控制：发送一次即可，配合desired_vel、fixed_height默认为true（需要desired_pos.z）、desired_yaw使用（偏航角为惯性系设定值）
+uint8 MOVE_VELOCITY=7               # 惯性系速度控制：需要持续发布，建议>=10Hz；配合desired_vel、fixed_height、yaw_mode使用
+uint8 MOVE_TRAJECTORY=8             # 惯性系轨迹控制：需要持续发布，建议>=100Hz或与规划器频率一致；配合desired_pos、desired_vel、desired_acc、yaw_mode使用
+uint8 MOVE_POINT_BODY=9             # 机体系位置控制：发送一次即可，配合desired_body_xy_pos、fixed_height、desired_yaw使用（偏航角为惯性系设定值）
+uint8 MOVE_VELOCITY_BODY=10         # 机体系速度控制：需要持续发布，建议>=10Hz；配合desired_body_xy_vel、fixed_height、yaw_mode使用
 uint8 MOVE_POINT_WGS84=11           # WGS84系经纬高控制：发送一次即可，暂未支持。
 # 控制命令
 uint8 control_cmd

@@ -1,0 +1,474 @@
+airframe_type: sunray_300
+features:
+- name: Mavros(N150-ACM0)
+  group: Mavros模块
+  description: Mavros模块：启动Mavros ACM0 - 921600
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: mavros
+    package: sunray_mavros
+    file: mavros.launch
+    args:
+    - fcu_url:=/dev/ttyACM0:921600
+    - gcs_ip:=192.168.2.99:14551
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: Mavros(NX-THS0)
+  group: Mavros模块
+  description: Mavros模块：启动Mavros THS0 - 921600
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: mavros
+    package: sunray_mavros
+    file: mavros.launch
+    args:
+    - fcu_url:=/dev/ttyTHS0:921600
+    - gcs_ip:=192.168.2.99:14551
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: localization_mocap
+  group: 无人机定位模块
+  description: 无人机定位模块：基于MOCAP定位
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=1
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=true
+    delay_sec: 1.0
+- name: localization_fastlio
+  group: 无人机定位模块
+  description: 无人机定位模块：基于Fast_LIO_EKF定位
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=6
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=true
+    delay_sec: 1.0
+- name: localization_viobot
+  group: 无人机定位模块
+  description: 无人机定位模块：基于Viobot定位
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=0
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=true
+    delay_sec: 1.0
+- name: localization_vins
+  group: 无人机定位模块
+  description: 无人机定位模块：基于VINS定位
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=2
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=true
+    delay_sec: 1.0
+- name: uav_control_px4_origin(only)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于PX4原生控制器
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=0
+    delay_sec: 1.0
+- name: uav_control_attitude_controller(only)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于attitude_controller
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=1
+- name: uav_control_px4_raptor(only)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于PX4 Raptor控制器
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=2
+- name: uav_control_px4_origin(mocap)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于PX4原生控制器
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=1
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=false
+    delay_sec: 1.0
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=0
+    delay_sec: 1.0
+- name: uav_control_attitude_controller(mocap)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于attitude_controller
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=1
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=false
+    delay_sec: 1.0
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=1
+- name: uav_control_px4_raptor(mocap)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于PX4 Raptor控制器
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=1
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=false
+    delay_sec: 1.0
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=2
+- name: uav_control_px4_origin(fast-lio)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于PX4原生控制器
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=6
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=false
+    delay_sec: 1.0
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=0
+    delay_sec: 1.0
+- name: uav_control_attitude_controller(fast-lio)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于attitude_controller
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=6
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=false
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=1
+- name: uav_control_px4_raptor(fast-lio)
+  group: 无人机控制模块
+  description: 无人机控制模块：基于PX4 Raptor控制器
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: localization
+    package: localization_fusion
+    file: localization_fusion.launch
+    args:
+    - source_id:=6
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_monitor:=true
+    - enable_vision_pose:=false
+  - name: control
+    package: sunray_uav_control
+    file: uav_control.launch
+    args:
+    - airframe_type:=sunray_300
+    - agent_name:=uav
+    - agent_id:=1
+    - enable_single_monitor:=true
+    - basic_param/controller_types:=2
+- name: example_takeoff_land
+  group: 无人机控制示例
+  description: 无人机控制示例：起飞后悬停并降落
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: takeoff_land
+    package: sunray_uav_control_example
+    file: basic/takeoff_land.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_point
+  group: 无人机控制示例
+  description: 无人机控制示例：起飞后移动到指定点并降落
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_point
+    package: sunray_uav_control_example
+    file: MOVE_POINT/move_point.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_multipoint
+  group: 无人机控制示例
+  description: 无人机控制示例：按多航点依次飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_multipoint
+    package: sunray_uav_control_example
+    file: MOVE_POINT/move_multipoint.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_point_and_return
+  group: 无人机控制示例
+  description: 无人机控制示例：飞向目标点后返航
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_point_and_return
+    package: sunray_uav_control_example
+    file: MOVE_POINT/move_point_and_return.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_point_body
+  group: 无人机控制示例
+  description: 无人机控制示例：机体系定点移动
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_point_body
+    package: sunray_uav_control_example
+    file: MOVE_POINT_BODY/move_point_body.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_velocity
+  group: 无人机控制示例
+  description: 无人机控制示例：惯性系速度控制飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_velocity
+    package: sunray_uav_control_example
+    file: MOVE_VELOCITY/move_velocity.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_velocity_fixed_height
+  group: 无人机控制示例
+  description: 无人机控制示例：定高速度控制飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_velocity_fixed_height
+    package: sunray_uav_control_example
+    file: MOVE_VELOCITY/move_velocity_fixed_height.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_velocity_body
+  group: 无人机控制示例
+  description: 无人机控制示例：机体系速度控制飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_velocity_body
+    package: sunray_uav_control_example
+    file: MOVE_VELOCITY_BODY/move_velocity_body.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_circle_velocity
+  group: 无人机控制示例
+  description: 无人机控制示例：速度控制圆形飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: circle_velocity
+    package: sunray_uav_control_example
+    file: MOVE_VELOCITY/circle_velocity.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_circle_velocity_yaw
+  group: 无人机控制示例
+  description: 无人机控制示例：带偏航控制的圆形速度飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: circle_velocity_yaw
+    package: sunray_uav_control_example
+    file: MOVE_VELOCITY/circle_velocity_yaw.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_lemniscate_velocity
+  group: 无人机控制示例
+  description: 无人机控制示例：速度控制8字飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: lemniscate_velocity
+    package: sunray_uav_control_example
+    file: MOVE_VELOCITY/lemniscate_velocity.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_move_trajectory
+  group: 无人机控制示例
+  description: 无人机控制示例：轨迹跟踪飞行
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: move_trajectory
+    package: sunray_uav_control_example
+    file: MOVE_TRAJECTORY/move_trajectory.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_circle_trajectory
+  group: 无人机控制示例
+  description: 无人机控制示例：圆形轨迹跟踪
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: circle_trajectory
+    package: sunray_uav_control_example
+    file: MOVE_TRAJECTORY/circle_trajectory.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0
+- name: example_lemniscate_trajectory
+  group: 无人机控制示例
+  description: 无人机控制示例：8字轨迹跟踪
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: lemniscate_trajectory
+    package: sunray_uav_control_example
+    file: MOVE_TRAJECTORY/lemniscate_trajectory.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    delay_sec: 1.0

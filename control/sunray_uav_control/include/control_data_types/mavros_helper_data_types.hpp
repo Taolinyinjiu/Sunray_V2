@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <Eigen/Dense>
 #include <ros/time.h>
 
@@ -13,6 +14,7 @@
 #include <mavros_msgs/GPSRAW.h>
 #include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/AttitudeTarget.h>
+#include <mavros_msgs/RCIn.h>
 #include <sensor_msgs/Imu.h>
 
 namespace control_common {
@@ -124,6 +126,16 @@ struct Mavros_IMU {
 
     Mavros_IMU() = default;
     Mavros_IMU(const sensor_msgs::Imu& msg);
+};
+
+struct Mavros_RC {
+    std::vector<uint16_t> channels;
+    uint8_t rssi = 0;
+    ros::Time timestamp = ros::Time(0);
+    bool valid = false;
+
+    Mavros_RC() = default;
+    Mavros_RC(const mavros_msgs::RCIn& msg);
 };
 
 struct Mavros_SetpointLocal {
@@ -304,6 +316,13 @@ inline Mavros_IMU::Mavros_IMU(const sensor_msgs::Imu& msg) {
     bodyrate.x() = msg.angular_velocity.x;
     bodyrate.y() = msg.angular_velocity.y;
     bodyrate.z() = msg.angular_velocity.z;
+}
+
+inline Mavros_RC::Mavros_RC(const mavros_msgs::RCIn& msg) {
+    timestamp = msg.header.stamp;
+    channels = msg.channels;
+    rssi = msg.rssi;
+    valid = true;
 }
 
 inline Mavros_SetpointLocal::Mavros_SetpointLocal(const mavros_msgs::PositionTarget& msg) {
