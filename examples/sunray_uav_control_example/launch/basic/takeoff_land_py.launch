@@ -1,13 +1,13 @@
 <launch>
-  <!-- MOVE_POINT/move_point.cpp 启动入口 -->
-  <!-- 安全边界：默认飞到惯性系 (1.0, 0.0, 0.6)，到点后 LAND；实机首次建议缩小 Point_X。 -->
+  <!-- scripts/takeoff_land.py 启动入口 -->
+  <!-- 安全边界：不主动水平移动；执行 TAKEOFF，悬停 5s 后 LAND。起飞高度由 sunray_uav_control 配置决定。 -->
   <!-- 默认 use_private_agent_key=false 时读取全局 /agent_name 和 /agent_id；设为 true 时读取本 launch 参数。 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
-  <arg name="node_name" default="move_point_node" />
+  <arg name="node_name" default="takeoff_land_py_node" />
   <arg name="use_private_agent_key" default="false" />
 
-  <node pkg="sunray_uav_control_example" type="move_point_node" name="$(arg node_name)" output="screen">
+  <node pkg="sunray_uav_control_example" type="takeoff_land.py" name="$(arg node_name)" output="screen">
     <param name="agent_name" type="str" value="$(arg agent_name)" />
     <param name="agent_id" type="int" value="$(arg agent_id)" />
     <param name="use_private_agent_key" type="bool" value="$(arg use_private_agent_key)" />

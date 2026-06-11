@@ -2,19 +2,22 @@
  * @file move_velocity.cpp
  * @brief Sunray单个无人机示例系列 - takeoff -> move_velocity -> return
  * 运行要求：
- * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
+ * [仿真环境]：要求Gazebo仿真环境只存在一台Sunray无人机
  * [真实环境]：要求无人机周围无阻拦运动的障碍物，
  * 运行结果：
  * sunray系列无人机在当前位置起飞，使用惯性系速度控制命令move_velocity，移动到预定义的四个矩形角点，最后返航
  * 设计一个简单地反馈比例控制器，只有一个参数Kp，输入为当前位置和期望位置，输出为速度控制命令
  * [补充说明]:
  * 如需修改起飞降落的相关参数，请修改control文件夹中
- * sunray_uav_control文件夹下config文件夹中的sunray_control_config.yaml中对应参数
+ * sunray_uav_control/config/sunray_control_base.yaml 以及
+ * config/airframes/<airframe_type>.yaml 中对应参数
  *
  */
 
 // ros_msg_utils头文件，包含了大部分情况下需要的头文件
 #include <ros_msg_utils.h>
+
+#include <cmath>
 
 // 定义一些全局变量，后续使用
 std::string node_name;
@@ -22,6 +25,7 @@ std::string agent_key;
 sunray_msgs::UAVControlState uav_state;
 sunray_msgs::UAVControlCMD uav_cmd;
 nav_msgs::Odometry uav_odom;
+bool has_odom = false;
 
 // 全局使用的控制命令发布者
 ros::Publisher control_cmd_pub;
@@ -48,7 +52,7 @@ float min_vel = -0.5;
             2.  当前实际位置(里程计数据)
 */
 void velocity_controller_update(Eigen::Vector3d desired_pos, const nav_msgs::Odometry& odom) {
-    // 1. 期望与实际做差，得到三轴误差，这里做差的顺序决定了kp的zhegnfu
+    // 1. 期望与实际做差，得到三轴误差，这里做差的顺序决定了 kp 的正负
     // 我们用期望与实际做差，假设实际为(0,0)
     // 期望为(1,1)则做差结果为(1,1),按照惯性系的定义，此时无人机应该向左前飞，期望速度为正，因此kp也为正
     Eigen::Vector3d err_pos{Eigen::Vector3d::Zero()};
@@ -111,7 +115,7 @@ bool check_arrived(Eigen::Vector3d desired_pos, const nav_msgs::Odometry& odom) 
 
 // 退出信号捕获函数
 void mySignalHandler(int sig) {
-    std::cout << "sunray_uav_example [move_velocity] node exit..." << std::endl;
+    std::cout << "sunray_uav_example [move_velocity_fixed_height] node exit..." << std::endl;
     ros::shutdown();
     exit(EXIT_SUCCESS);  // 或者使用 exit(0)
 }
@@ -121,15 +125,22 @@ void uav_state_callback(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     uav_state = *msg;
 }
 
+bool is_odom_valid(const nav_msgs::Odometry& odom) {
+    return !odom.header.stamp.isZero() && std::isfinite(odom.pose.pose.position.x) &&
+           std::isfinite(odom.pose.pose.position.y) &&
+           std::isfinite(odom.pose.pose.position.z);
+}
+
 // 无人机里程计回调函数
 void uav_odom_callback(const nav_msgs::OdometryConstPtr& msg) {
     uav_odom = *msg;
+    has_odom = true;
 }
 
 // 主函数
 int main(int argc, char** argv) {
     // ros节点初始化
-    ros::init(argc, argv, "move_velocity_node");
+    ros::init(argc, argv, "move_velocity_fixed_height_node");
 
     // 创建全局句柄与私有句柄
     ros::NodeHandle nh;
@@ -165,7 +176,7 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_ERROR("uav control state can't init success ...");
+            ROS_ERROR("uav control state has not entered INIT yet...");
     }
     // 清理循环变量
     times = 0;
@@ -181,17 +192,24 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_INFO("uav is takeoffing and wait for enter hover ");
+            ROS_INFO("uav is taking off, waiting for HOVER...");
     }
     // 清理循环变量
     times = 0;
-    // 完成起飞后，发布move_point命令，移动到目标点
-    ROS_INFO("uav takeoff successfully and now move to defined points");
+    // 速度控制需要当前里程计参与闭环，进入任务前先等待有效 local_odom
+    while (ros::ok() && (!has_odom || !is_odom_valid(uav_odom))) {
+        ROS_WARN_THROTTLE(1.0, "waiting for valid local odom before MOVE_VELOCITY task...");
+        ros::spinOnce();
+        ros::Duration(0.1).sleep();
+    }
+    // 完成起飞后，持续发布 MOVE_VELOCITY 命令，移动到目标点
+    ROS_INFO("uav takeoff succeeded, moving to defined points");
     ROS_INFO("the first point is x: %f,y:%f,z:%f",
              Expect_Points[0].x(),
              Expect_Points[0].y(),
              Expect_Points[0].z());
-    // 此处进入速度控制模式，控制频率设定为20ms一次，也就是50Hz
+    // 此处进入速度控制模式，控制频率设定为50Hz
+    ros::Rate control_rate(50.0);
     while (ros::ok()) {
         // 进入航点循环，循环次数设定为航点容器的大小
         for (uint i = 0; i < Expect_Points.size();) {
@@ -207,11 +225,11 @@ int main(int argc, char** argv) {
                          Expect_Points[i].y(),
                          Expect_Points[i].z());
                 }else{
-                    ROS_INFO("move_velocity end and now to return ");
+                    ROS_INFO("move_velocity_fixed_height finished, now sending RETURN");
                 }
             }
             ros::spinOnce();
-            ros::Duration(0.02).sleep();
+            control_rate.sleep();
         }
         break;
     }
@@ -222,9 +240,10 @@ int main(int argc, char** argv) {
     control_cmd_pub.publish(uav_cmd);
     // 一次publish需要ros的spin才能实现，所以这里需要进行一次spin，如果觉得这样不保险，可以选择while循环查询进入到RETURN后再退出
     ros::spinOnce();
-    // RETURN可以在sunray_uav_config.yaml文件中被配置为自动降落或切入悬停，如果配置文件中设置为切入悬停，则会导致本节点会持续悬停
+    // RETURN 可以通过 sunray_uav_control/config/sunray_control_base.yaml 中 basic_param.return_with_land
+    // 配置为自动降落或切入悬停，config/airframes/<airframe_type>.yaml 也可以覆盖该参数
 
     // 直接结束节点或等待成功降落？
-    ROS_INFO("uav is enter land mode and [move_velocity] demo finished,quit !");
+    ROS_INFO("sent RETURN command and [move_velocity_fixed_height] demo finished, quit!");
     return 0;
 }

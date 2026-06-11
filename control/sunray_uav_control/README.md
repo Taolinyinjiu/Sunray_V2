@@ -64,10 +64,7 @@ roslaunch sunray_uav_control uav_control.launch
 指定编号和机型：
 
 ```bash
-roslaunch sunray_uav_control uav_control.launch \
-  agent_name:=uav \
-  agent_id:=1 \
-  airframe_type:=sunray_150
+roslaunch sunray_uav_control uav_control.launch agent_name:=uav agent_id:=1 airframe_type:=sunray_150
 ```
 
 常用 launch 参数：
@@ -82,7 +79,7 @@ roslaunch sunray_uav_control uav_control.launch \
 | `node_name` | `uav_control_node_<id>` | ROS 节点名 |
 | `set_global_params` | `true` | 是否写入全局 `/agent_name`、`/agent_id` |
 | `use_private_agent_key` | `false` | 是否从节点私有参数组合 agent key |
-| `enable_single_monitor` | `true` | 是否启动控制状态终端监控 |
+| `enable_uav_control_monitor` | `true` | 是否启动控制状态终端监控 |
 | `enable_rviz_visualization` | `true` | 是否启动 RViz marker 可视化辅助节点 |
 | `rviz_frame_id` | `world` | Marker 使用的 frame |
 
@@ -206,13 +203,34 @@ int main(int argc, char** argv) {
 任务结束发 HOVER 或 LAND
 ```
 
-仓库里也有现成工具可以参考：
+更完整的控制接口示例请优先参考：
 
 ```text
-control/control_tools/src/terminal_control/uav_terminal_control.cpp
-control/control_tools/src/uav_control_panel_node.cpp
-control/control_tools/src/velocity_test/triangle_velocity_test.cpp
+examples/sunray_uav_control_example/
 ```
+
+这个目录按 `UAVControlCMD.control_cmd` 类型拆分示例，适合小白开发者照着改：
+
+| 需求 | 建议先看 |
+| --- | --- |
+| 起飞、悬停、降落的最小流程 | `src/basic/takeoff_land.cpp` |
+| 惯性系位置点控制 | `src/MOVE_POINT/move_point.cpp`、`move_multipoint.cpp`、`move_point_and_return.cpp` |
+| 机体系相对位置控制 | `src/MOVE_POINT_BODY/move_point_body.cpp` |
+| 经纬高位置接口 | `src/MOVE_POINT_WGS84/move_point_wgs84.cpp` |
+| 惯性系速度控制 | `src/MOVE_VELOCITY/move_velocity.cpp`、`circle_velocity.cpp`、`lemniscate_velocity.cpp`、`move_velocity_fixed_height.cpp` |
+| 带 yaw 控制的速度示例 | `src/MOVE_VELOCITY/circle_velocity_yaw.cpp` |
+| 机体系速度控制 | `src/MOVE_VELOCITY_BODY/move_velocity_body.cpp` |
+| 轨迹控制 | `src/MOVE_TRAJECTORY/move_trajectory.cpp`、`circle_trajectory.cpp`、`lemniscate_trajectory.cpp` |
+
+`control/control_tools` 下面的代码也可以参考，但它们更偏“工具”和“测试”：
+
+| 文件 | 用途 |
+| --- | --- |
+| `control/control_tools/src/terminal_control/uav_terminal_control.cpp` | 终端交互式发命令，适合快速手动测试话题是否通 |
+| `control/control_tools/src/uav_control_panel_node.cpp` | Qt/RViz 控制面板，适合地面站 UI 操作和状态观察 |
+| `control/control_tools/src/velocity_test/triangle_velocity_test.cpp` | 速度闭环压力测试，不建议作为新手二次开发模板 |
+
+写自己的控制节点时，优先复制 `examples/sunray_uav_control_example` 中最接近需求的示例，再按任务修改目标点、速度、轨迹生成逻辑。注意发布频率规则保持一致：`TAKEOFF`、`LAND`、`RETURN`、`HOVER`、`MOVE_POINT`、`MOVE_POINT_BODY`、`MOVE_POINT_WGS84` 通常发一次即可；`MOVE_VELOCITY`、`MOVE_VELOCITY_BODY` 和 `MOVE_TRAJECTORY` 需要在任务执行期间持续发布。
 
 ## 5. 输出接口
 
@@ -434,8 +452,8 @@ config/airframes/<airframe_type>.yaml
 
 | `airframe_type` | 用途 |
 | --- | --- |
-| `sunray_150` | Sunray 150 级别实机 |
-| `sunray_300` | Sunray 300 级别实机 |
+| `sunray_150` | Sunray 150 系列实机 |
+| `sunray_300` | Sunray 300 系列实机 |
 | `gazebo_sim` | Gazebo 仿真 |
 | `pengyu_sim` | Pengyu 仿真 |
 
@@ -528,6 +546,19 @@ odom_topic_name: "${agent_key}/sunray/localization/local_odom"
 1. 订阅 `/uav1/sunray/uav_control/control_state`，知道当前状态。
 2. 发布 `/uav1/sunray/uav_control/control_cmd`，发送任务命令。
 3. 对速度和轨迹类命令持续发布，对起飞/降落/位置点命令发一次即可。
+
+建议从 `examples/sunray_uav_control_example` 开始阅读和复制代码，而不是直接从控制面板或终端工具改起。示例目录已经按命令类型分好类，代码更短，依赖更少，也更接近二次开发节点的真实写法：
+
+| 二次开发目标 | 推荐示例 |
+| --- | --- |
+| 最小起降流程 | `examples/sunray_uav_control_example/src/basic/takeoff_land.cpp` |
+| 发一个或多个位置点 | `examples/sunray_uav_control_example/src/MOVE_POINT/` |
+| 发机体系相对位置 | `examples/sunray_uav_control_example/src/MOVE_POINT_BODY/move_point_body.cpp` |
+| 发速度命令并自己做外环逻辑 | `examples/sunray_uav_control_example/src/MOVE_VELOCITY/` |
+| 发机体系速度 | `examples/sunray_uav_control_example/src/MOVE_VELOCITY_BODY/move_velocity_body.cpp` |
+| 接轨迹生成器或规划器 | `examples/sunray_uav_control_example/src/MOVE_TRAJECTORY/` |
+
+`control/control_tools/src/terminal_control/uav_terminal_control.cpp`、`control/control_tools/src/uav_control_panel_node.cpp` 和 `control/control_tools/src/velocity_test/triangle_velocity_test.cpp` 可以作为发布逻辑、UI 交互、测试流程的补充参考，但不建议作为新手第一份模板。
 
 推荐状态判断方式：
 

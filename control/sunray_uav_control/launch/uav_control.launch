@@ -9,7 +9,7 @@
   <arg name="node_name" default="$(eval 'uav_control_node_' + str(int(arg('agent_id'))))" />
   <arg name="set_global_params" default="true" />
   <arg name="use_private_agent_key" default="false" />
-  <arg name="enable_single_monitor" default="true" />
+  <arg name="enable_uav_control_monitor" default="true" />
   <arg name="monitor_stale_timeout" default="1.0" />
 
   <param if="$(arg set_global_params)" name="/agent_name" value="$(arg agent_name)" />
@@ -27,7 +27,7 @@
     <param name="use_private_agent_key" value="$(arg use_private_agent_key)" />
   </node>
 
-  <node if="$(arg enable_single_monitor)"
+  <node if="$(arg enable_uav_control_monitor)"
         pkg="sunray_uav_control"
         type="uav_control_monitor_node"
         name="$(arg agent_name)$(arg agent_id)_uav_control_monitor"

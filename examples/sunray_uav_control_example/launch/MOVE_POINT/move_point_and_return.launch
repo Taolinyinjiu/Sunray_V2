@@ -1,6 +1,7 @@
 <launch>
   <!-- MOVE_POINT/move_point_and_return.cpp 启动入口 -->
-  <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
+  <!-- 安全边界：默认飞到惯性系 (1.0, 0.0, 0.6)，到点后 RETURN；是否降落由 return_with_land 配置决定。 -->
+  <!-- 默认 use_private_agent_key=false 时读取全局 /agent_name 和 /agent_id；设为 true 时读取本 launch 参数。 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="move_point_and_return_node" />

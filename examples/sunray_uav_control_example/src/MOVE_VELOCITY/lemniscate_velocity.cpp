@@ -2,19 +2,22 @@
  * @file lemniscate_velocity.cpp
  * @brief Sunray单个无人机示例系列 - takeoff -> move lemniscate by velocity -> return
  * 运行要求：
- * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
+ * [仿真环境]：要求Gazebo仿真环境只存在一台Sunray无人机
  * [真实环境]：要求无人机周围无阻拦运动的障碍物，
  * 运行结果：
  * sunray系列无人机在当前位置起飞，使用惯性系速度控制命令move_velocity，
  * 沿局部坐标系8字轨迹飞行一圈，最后返航
  * [补充说明]:
  * 如需修改起飞降落的相关参数，请修改control文件夹中
- * sunray_uav_control文件夹下config文件夹中的sunray_control_config.yaml中对应参数
+ * sunray_uav_control/config/sunray_control_base.yaml 以及
+ * config/airframes/<airframe_type>.yaml 中对应参数
  *
  */
 
 // ros_msg_utils头文件，包含了大部分情况下需要的头文件
 #include <ros_msg_utils.h>
+
+#include <cmath>
 
 // 定义一些全局变量，后续使用
 std::string node_name;
@@ -22,6 +25,7 @@ std::string agent_key;
 sunray_msgs::UAVControlState uav_state;
 sunray_msgs::UAVControlCMD uav_cmd;
 nav_msgs::Odometry uav_odom;
+bool has_odom = false;
 
 // 全局使用的控制命令发布者
 ros::Publisher control_cmd_pub;
@@ -172,9 +176,16 @@ void uav_state_callback(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     uav_state = *msg;
 }
 
+bool is_odom_valid(const nav_msgs::Odometry& odom) {
+    return !odom.header.stamp.isZero() && std::isfinite(odom.pose.pose.position.x) &&
+           std::isfinite(odom.pose.pose.position.y) &&
+           std::isfinite(odom.pose.pose.position.z);
+}
+
 // 无人机里程计回调函数
 void uav_odom_callback(const nav_msgs::OdometryConstPtr& msg) {
     uav_odom = *msg;
+    has_odom = true;
 }
 
 // 主函数
@@ -212,7 +223,7 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_ERROR("uav control state can't init success ...");
+            ROS_ERROR("uav control state has not entered INIT yet...");
     }
     // 清理循环变量
     times = 0;
@@ -228,22 +239,29 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_INFO("uav is takeoffing and wait for enter hover ");
+            ROS_INFO("uav is taking off, waiting for HOVER...");
     }
     // 清理循环变量
     times = 0;
+    // 8字轨迹中心和闭环速度都依赖当前里程计，进入任务前先等待有效 local_odom
+    while (ros::ok() && (!has_odom || !is_odom_valid(uav_odom))) {
+        ROS_WARN_THROTTLE(1.0, "waiting for valid local odom before lemniscate velocity task...");
+        ros::spinOnce();
+        ros::Duration(0.1).sleep();
+    }
     // 完成起飞后，直接从当前位置作为双纽线中心开始轨迹追踪
-    ROS_INFO("uav takeoff successfully and now track lemniscate trajectory");
+    ROS_INFO("uav takeoff succeeded, tracking lemniscate velocity trajectory");
     // 设置当前位置为双纽线中心
     lemniscate_center.x() = uav_odom.pose.pose.position.x;
     lemniscate_center.y() = uav_odom.pose.pose.position.y;
     lemniscate_center.z() = uav_odom.pose.pose.position.z;
 
-    // 此处进入速度控制追踪双纽线轨迹，控制频率设定为20ms一次，也就是50Hz
+    // 此处进入速度控制追踪双纽线轨迹，控制频率设定为50Hz
     bool lemniscate_finished = false;
     const Eigen::Vector3d center_point = lemniscate_center;
     double lemniscate_phase = kLemniscateStartPhase;
     double lemniscate_phase_travel = 0.0;
+    ros::Rate control_rate(1.0 / kControlDt);
 
     while (ros::ok()) {
         // 如果双纽线轨迹还未结束
@@ -268,12 +286,12 @@ int main(int argc, char** argv) {
             // 如果双纽线轨迹完成了，应当稳定回中心交叉点，然后再进行return
             velocity_controller_update(center_point, Eigen::Vector3d::Zero(), uav_odom);
             if (check_arrived(center_point, uav_odom)) {
-                ROS_INFO("lemniscate example finished and now to return ");
+                ROS_INFO("lemniscate example finished, now sending RETURN");
                 break;
             }
         }
         ros::spinOnce();
-        ros::Duration(0.02).sleep();
+        control_rate.sleep();
     }
     // 发布返航命令
     uav_cmd.header.stamp = ros::Time::now();
@@ -281,9 +299,10 @@ int main(int argc, char** argv) {
     control_cmd_pub.publish(uav_cmd);
     // 一次publish需要ros的spin才能实现，所以这里需要进行一次spin，如果觉得这样不保险，可以选择while循环查询进入到RETURN后再退出
     ros::spinOnce();
-    // RETURN可以在sunray_uav_config.yaml文件中被配置为自动降落或切入悬停，如果配置文件中设置为切入悬停，则会导致本节点会持续悬停
+    // RETURN 可以通过 sunray_uav_control/config/sunray_control_base.yaml 中 basic_param.return_with_land
+    // 配置为自动降落或切入悬停，config/airframes/<airframe_type>.yaml 也可以覆盖该参数
 
     // 直接结束节点或等待成功降落？
-    ROS_INFO("uav is enter return mode and [lemniscate_velocity] demo finished,quit !");
+    ROS_INFO("sent RETURN command and [lemniscate_velocity] demo finished, quit!");
     return 0;
 }

@@ -1,6 +1,7 @@
 <launch>
   <!-- MOVE_VELOCITY/circle_velocity_yaw.cpp 启动入口 -->
-  <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
+  <!-- 安全边界：默认半径 1.0m，飞圆时同步控制 yaw 沿切线，完成后 RETURN；首次建议缩小半径。 -->
+  <!-- 默认 use_private_agent_key=false 时读取全局 /agent_name 和 /agent_id；设为 true 时读取本 launch 参数。 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="circle_velocity_yaw_node" />

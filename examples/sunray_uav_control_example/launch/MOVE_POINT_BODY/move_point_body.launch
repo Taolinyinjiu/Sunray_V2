@@ -1,6 +1,7 @@
 <launch>
   <!-- MOVE_POINT_BODY/move_point_body.cpp 启动入口 -->
-  <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
+  <!-- 安全边界：默认机体系相对目标 (1.0, 0.0, 0.6)，到点后 LAND；测试前确认机头方向和机体系坐标。 -->
+  <!-- 默认 use_private_agent_key=false 时读取全局 /agent_name 和 /agent_id；设为 true 时读取本 launch 参数。 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="move_point_body_node" />

@@ -2,14 +2,15 @@
  * @file circle_velocity_yaw.cpp
  * @brief Sunray单个无人机示例系列 - takeoff -> move circle by velocity with tangent yaw -> return
  * 运行要求：
- * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
+ * [仿真环境]：要求Gazebo仿真环境只存在一台Sunray无人机
  * [真实环境]：要求无人机周围无阻拦运动的障碍物
  * 运行结果：
  * sunray系列无人机在当前位置起飞，使用惯性系速度控制命令move_velocity，
  * 沿局部坐标系圆形轨迹飞行一圈，先对准切线方向，再通过绝对 yaw 持续保持机头沿圆轨迹切线方向，最后返航
  * [补充说明]:
  * 如需修改起飞降落的相关参数，请修改control文件夹中
- * sunray_uav_control文件夹下config文件夹中的sunray_control_config.yaml中对应参数
+ * sunray_uav_control/config/sunray_control_base.yaml 以及
+ * config/airframes/<airframe_type>.yaml 中对应参数
  *
  */
 
@@ -22,6 +23,7 @@ std::string agent_key;
 sunray_msgs::UAVControlState uav_state;
 sunray_msgs::UAVControlCMD uav_cmd;
 nav_msgs::Odometry uav_odom;
+bool has_odom = false;
 
 ros::Publisher control_cmd_pub;
 
@@ -164,8 +166,15 @@ void uav_state_callback(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     uav_state = *msg;
 }
 
+bool is_odom_valid(const nav_msgs::Odometry& odom) {
+    return !odom.header.stamp.isZero() && std::isfinite(odom.pose.pose.position.x) &&
+           std::isfinite(odom.pose.pose.position.y) &&
+           std::isfinite(odom.pose.pose.position.z);
+}
+
 void uav_odom_callback(const nav_msgs::OdometryConstPtr& msg) {
     uav_odom = *msg;
+    has_odom = true;
 }
 
 int main(int argc, char** argv) {
@@ -194,7 +203,7 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_ERROR("uav control state can't init success ...");
+            ROS_ERROR("uav control state has not entered INIT yet...");
     }
 
     times = 0;
@@ -211,11 +220,17 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_INFO("uav is takeoffing and wait for enter hover ");
+            ROS_INFO("uav is taking off, waiting for HOVER...");
     }
 
     times = 0;
-    ROS_INFO("uav takeoff successfully and now move to circle start point");
+    // 圆心和闭环速度都依赖当前里程计，进入任务前先等待有效 local_odom
+    while (ros::ok() && (!has_odom || !is_odom_valid(uav_odom))) {
+        ROS_WARN_THROTTLE(1.0, "waiting for valid local odom before circle velocity yaw task...");
+        ros::spinOnce();
+        ros::Duration(0.1).sleep();
+    }
+    ROS_INFO("uav takeoff succeeded, moving to circle start point");
     circle_center.x() = uav_odom.pose.pose.position.x;
     circle_center.y() = uav_odom.pose.pose.position.y;
     circle_center.z() = uav_odom.pose.pose.position.z;
@@ -227,13 +242,14 @@ int main(int argc, char** argv) {
     const double start_tangent_yaw = compute_yaw_from_velocity(
         Eigen::Vector3d(0.0, kCircleRadius * kCircleAngularSpeed, 0.0));
 
+    ros::Rate transit_rate(1.0 / kControlDt);
     while (ros::ok()) {
         velocity_controller_update(temp_aim, Eigen::Vector3d::Zero(), start_tangent_yaw, uav_odom);
         if (check_arrived(temp_aim, uav_odom)) {
             break;
         }
         ros::spinOnce();
-        ros::Duration(kControlDt).sleep();
+        transit_rate.sleep();
     }
 
     bool circle_finished = false;
@@ -242,6 +258,7 @@ int main(int argc, char** argv) {
     start_point.y() = uav_odom.pose.pose.position.y;
     start_point.z() = uav_odom.pose.pose.position.z;
     const ros::Time trajectory_start_time = ros::Time::now();
+    ros::Rate control_rate(1.0 / kControlDt);
 
     while (ros::ok()) {
         const double elapsed_time = (ros::Time::now() - trajectory_start_time).toSec();
@@ -257,12 +274,12 @@ int main(int argc, char** argv) {
         } else {
             velocity_controller_update(start_point, Eigen::Vector3d::Zero(), start_tangent_yaw, uav_odom);
             if (check_arrived(start_point, uav_odom)) {
-                ROS_INFO("circle yaw example finished and now to return ");
+                ROS_INFO("circle yaw example finished, now sending RETURN");
                 break;
             }
         }
         ros::spinOnce();
-        ros::Duration(kControlDt).sleep();
+        control_rate.sleep();
     }
 
     uav_cmd.header.stamp = ros::Time::now();
@@ -271,6 +288,6 @@ int main(int argc, char** argv) {
     control_cmd_pub.publish(uav_cmd);
     ros::spinOnce();
 
-    ROS_INFO("uav is enter return mode and [circle_velocity_yaw] demo finished,quit !");
+    ROS_INFO("sent RETURN command and [circle_velocity_yaw] demo finished, quit!");
     return 0;
 }

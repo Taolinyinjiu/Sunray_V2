@@ -18,7 +18,7 @@
     <arg name="node_name" value="$(eval 'uav_control_node_' + str(int(arg('agent_id'))))" />
     <arg name="set_global_params" value="false" />
     <arg name="use_private_agent_key" value="true" />
-    <arg name="enable_single_monitor" value="false" />
+    <arg name="enable_uav_control_monitor" value="false" />
   </include>
 
   <include file="$(find sunray_uav_control)/launch/uav_control_swarm.launch"

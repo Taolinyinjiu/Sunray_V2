@@ -1,6 +1,7 @@
 <launch>
   <!-- MOVE_POINT/move_multipoint.cpp 启动入口 -->
-  <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
+  <!-- 安全边界：默认航点为 +/-1m 矩形、高度 0.6m，完成后 RETURN；实机首次建议缩小到 +/-0.3m。 -->
+  <!-- 默认 use_private_agent_key=false 时读取全局 /agent_name 和 /agent_id；设为 true 时读取本 launch 参数。 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="move_multipoint_node" />

@@ -1,6 +1,7 @@
 <launch>
   <!-- MOVE_TRAJECTORY/circle_trajectory.cpp 启动入口 -->
-  <!-- 请注意，当launch中的agent_name与agent_id保持为空时，会从全局参数中读取 -->
+  <!-- 安全边界：默认半径 1.0m、切向速度约 0.2m/s，持续发布 pos/vel/acc/jerk，完成后 RETURN。 -->
+  <!-- 默认 use_private_agent_key=false 时读取全局 /agent_name 和 /agent_id；设为 true 时读取本 launch 参数。 -->
   <arg name="agent_name" default="uav" />
   <arg name="agent_id" default="1" />
   <arg name="node_name" default="circle_trajectory_node" />

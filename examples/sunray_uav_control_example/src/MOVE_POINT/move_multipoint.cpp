@@ -2,12 +2,14 @@
  * @file move_multipoint.cpp
  * @brief Sunray单个无人机示例系列 - takeoff -> hover -> move k point -> land
  * 运行要求：
- * [仿真环境]：要求Gazebo仿真环境只存在一台Surnay无人机
+ * [仿真环境]：要求Gazebo仿真环境只存在一台Sunray无人机
  * [真实环境]：要求无人机周围无阻拦运动的障碍物
  * 运行结果：
  * sunray系列无人机在当前位置起飞，达到指定高度后悬停5s，然后移动到指定位置悬停5s，随后移动到下一个指定位置悬停5s，依次类推，最后降落在第k个位置的下方
  *
- * [补充一句：这个文件用于教学/演示什么内容]
+ * 教学重点：
+ * 演示如何按顺序发送多个 MOVE_POINT 命令；每个位置点命令只需发布一次，
+ * 到达并重新进入 HOVER 后再发送下一个目标点。
  */
 // ros_msg_utils头文件，包含了大部分情况下需要的头文件
 #include <ros_msg_utils.h>
@@ -74,7 +76,7 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_ERROR("uav control state can't init success ...");
+            ROS_ERROR("uav control state has not entered INIT yet...");
     }
     // 清理循环变量
     times = 0;
@@ -90,13 +92,13 @@ int main(int argc, char** argv) {
         ros::spinOnce();
         ros::Duration(1.0).sleep();
         if (times++ > 5)
-            ROS_INFO("uav is takeoffing and wait for enter hover ");
+            ROS_INFO("uav is taking off, waiting for HOVER...");
     }
     // 清理循环变量
     times = 0;
-    // 完成起飞后，发布move_point命令，移动到目标点
+    // 完成起飞后，按顺序发布 MOVE_POINT 命令
     ROS_INFO(
-        "uav takeoff successfully and now move to defined points");
+        "uav takeoff succeeded, moving to defined points");
 
     for (int i = 0; i < Expect_Points.size(); i++) {
         uav_cmd.header.stamp = ros::Time::now();
@@ -105,17 +107,17 @@ int main(int argc, char** argv) {
         uav_cmd.desired_pos.y = Expect_Points[i].y();
         uav_cmd.desired_pos.z = Expect_Points[i].z();
         control_cmd_pub.publish(uav_cmd);
-        ROS_INFO("uav will move to point x: %f, y:%f, z:%f",Expect_Points[i].x(),Expect_Points[i].y(),Expect_Points[i].z());
-        // 首先判断是否会成功切换为move_point
+        ROS_INFO("uav will move to point x: %f, y: %f, z: %f",
+                 Expect_Points[i].x(), Expect_Points[i].y(), Expect_Points[i].z());
+        // 首先判断是否会成功切换为 MOVE
         while (ros::ok() &&
                (uav_state.control_state != sunray_msgs::UAVControlState::MOVE)) {
             ros::spinOnce();
             ros::Duration(1.0).sleep();
-            // 如果超过5s还没有进入到move模式，那么我们认为可能是system_check模块认为当前无法进行运动，需要检查日志
+            // 如果超过5s还没有进入 MOVE，可能是 system_check 模块认为当前无法运动，需要检查日志
             // 发布降落命令
             if (times++ > 5) {
-                ROS_ERROR("Error : sunray control module can't checkout move state,please check "
-                          "sunray log");
+                ROS_ERROR("sunray control module failed to enter MOVE state, please check Sunray log");
                 uav_cmd.header.stamp = ros::Time::now();
                 uav_cmd.control_cmd = sunray_msgs::UAVControlCMD::LAND;
                 control_cmd_pub.publish(uav_cmd);
@@ -130,13 +132,13 @@ int main(int argc, char** argv) {
             ros::spinOnce();
             ros::Duration(1.0).sleep();
             if (times++ > 5)
-                ROS_INFO("uav is moving and wait for enter hover ");
+                ROS_INFO("uav is moving, waiting for HOVER...");
         }
         // 清理循环变量
         times = 0;
 
         // 日志打印，到达目标点
-        ROS_INFO("uav is moved point successfully ,and then enter return state");
+        ROS_INFO("uav reached current target point");
     }
     // 发布返航命令
     uav_cmd.header.stamp = ros::Time::now();
@@ -144,9 +146,10 @@ int main(int argc, char** argv) {
     control_cmd_pub.publish(uav_cmd);
     // 一次publish需要ros的spin才能实现，所以这里需要进行一次spin，如果觉得这样不保险，可以选择while循环查询进入到RETURN后再退出
     ros::spinOnce();
-    // RETURN可以在sunray_uav_config.yaml文件中被配置为自动降落或切入悬停，如果配置文件中设置为切入悬停，则会导致本节点会持续悬停
+    // RETURN 可以通过 sunray_uav_control/config/sunray_control_base.yaml 中 basic_param.return_with_land
+    // 配置为自动降落或切入悬停，config/airframes/<airframe_type>.yaml 也可以覆盖该参数
 
     // 直接结束节点或等待成功降落？
-    ROS_INFO("uav is enter land mode and [move_multipoint] demo finished,quit !");
+    ROS_INFO("sent RETURN command and [move_multipoint] demo finished, quit!");
     return 0;
 }
