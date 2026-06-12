@@ -44,10 +44,9 @@ bool ImuProcess::ImuInit(const ImuData& input_imu_data) {
     mean_imu_gyr_ += (cur_imu_gyr - mean_imu_gyr_) / iter_num;
 
     // 累计100帧数据后，完成IMU初始化
-    if (iter_num > 100) {
+    if (iter_num > 99) {
 
         gravity_ = -mean_imu_acc_ / mean_imu_acc_.norm() * G_m_s2;
-
         return true;
 
     } else {

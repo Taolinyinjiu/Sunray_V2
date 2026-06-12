@@ -51,10 +51,10 @@ class EkfFilter {
     EkfState x_;
 
     //协方差矩阵
-    Eigen::Matrix<double, 18, 18> P_;
+    Eigen::Matrix<double, 18, 18> P_ = Eigen::Matrix<double, 18, 18>::Zero();
 
     //状态转移噪声协方差矩阵
-    Eigen::Matrix<double, 12, 12> Q_;
+    Eigen::Matrix<double, 12, 12> Q_ = Eigen::Matrix<double, 12, 12>::Zero();
 
     //观测噪声
     double R_ = 0.001;

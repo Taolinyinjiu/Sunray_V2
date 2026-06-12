@@ -4,6 +4,7 @@
 #include <deque>
 #include <csignal>
 #include <condition_variable>
+#include <cmath>
 #include "imu_process.h"
 #include "ekf_filter.h"
 
@@ -78,21 +79,24 @@ int main(int argc, char** argv) {
     std::string imu_topic, odom_topic;
 
     nh.param<std::string>("imu_topic", imu_topic, "/livox/imu");
-    nh.param<std::string>("odom_topic", odom_topic, "/sunray/odometry");
+    nh.param<std::string>("odom_topic", odom_topic, "/Odometry");
 
     // Setup subscriber
     ros::Subscriber imu_sub = nh.subscribe(imu_topic, 100, ImuCallback);
     ros::Subscriber odom_sub = nh.subscribe(odom_topic, 10, OdomCallback);
 
     // Setup publisher
-    ros::Publisher ekf_odom_pub = nh.advertise<nav_msgs::Odometry>("/sunray/ekf_odometry", 10);
+    ros::Publisher ekf_odom_pub = nh.advertise<nav_msgs::Odometry>("/ekf_odometry", 100);
 
     ROS_INFO("EKF Odometry Node Starting...");
     ROS_INFO("Subscribing to IMU topic: %s", imu_topic.c_str());
     ROS_INFO("Subscribing to Odometry topic: %s", odom_topic.c_str());
-    ROS_INFO("Publishing to: /sunray/ekf_odometry");
+    ROS_INFO("Publishing to: /ekf_odometry");
 
-    ros::Rate rate(200);
+    signal(SIGINT, SigHandle);
+
+    ros::Rate rate(300);
+    const double max_odom_delay = 0.15;
 
     // 初始化IMU重力，陀螺仪偏置
     std::shared_ptr<ImuProcess> imu_process = std::make_shared<ImuProcess>();
@@ -171,6 +175,8 @@ int main(int argc, char** argv) {
                 }
             }
         }
+
+        rate.sleep();
     }
 
     while (ros::ok()) {
@@ -180,25 +186,39 @@ int main(int argc, char** argv) {
 
         ros::spinOnce();
 
-        // EKF预测-更新循环
-        while (!imu_buffer.empty() && !odom_buffer.empty()) {
+        // EKF预测-更新循环：IMU驱动发布，odom只在时间到达时校正
+        if (!imu_buffer.empty()) {
 
             auto cur_imu = imu_buffer.front();
-            auto cur_odom = odom_buffer.front();
 
-            if (cur_imu.first < cur_odom.first) {
+            while (!odom_buffer.empty() && odom_buffer.front().first <= cur_imu.first) {
 
-                ImuData imu_data;
-                double dt = 0;
-                imu_process->ProcessIMU(cur_imu.second, imu_data, dt);
-                imu_buffer.pop_front();
+                double odom_delay = cur_imu.first - odom_buffer.front().first;
+
+                if (odom_delay > max_odom_delay) {
+
+                    ROS_WARN_THROTTLE(1.0, "Drop stale odom, delay: %.3f s", odom_delay);
+                    odom_buffer.pop_front();
+                    continue;
+                }
+
+                ekf_filter->Update(odom_buffer.front().second);
+                odom_buffer.pop_front();
+            }
+
+            ImuData imu_data;
+            double dt = 0.0;
+            imu_process->ProcessIMU(cur_imu.second, imu_data, dt);
+            imu_buffer.pop_front();
+
+            if (dt > 0.0 && std::isfinite(dt)) {
+
                 ekf_filter->Predict(imu_data, dt);
                 PublishOdometry(ekf_odom_pub, ekf_filter->GetEkfState());
 
             } else {
 
-                ekf_filter->Update(cur_odom.second);
-                odom_buffer.pop_front();
+                ROS_WARN_THROTTLE(1.0, "Skip IMU frame with invalid dt: %.9f", dt);
             }
         }
 
