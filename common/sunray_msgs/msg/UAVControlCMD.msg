@@ -58,6 +58,12 @@ Vector2 desired_body_xy_vel
 # MOVE_VELOCITY模式下，当fixed_height不为零和负值时，使用fixed_height锁定z轴高度，不再使用desired_vel字段中的z轴数据
 float32 fixed_height
 
+# TAKEOFF模式下可选填写。大于0时覆盖控制节点yaml中的默认起飞参数；小于等于0时使用yaml默认值。
+float32 takeoff_relative_height
+float32 takeoff_max_velocity
+# LAND模式下可选填写。大于0时覆盖控制节点yaml中的默认降落速度；小于等于0时使用yaml默认值。
+float32 land_max_velocity
+
 geographic_msgs/GeoPoint desired_wgs84_pos # 经纬高
 
 # ---------- yaw mode ----------
@@ -70,3 +76,8 @@ uint8 yaw_mode
 # yaw角相关控制指令
 float32 desired_yaw
 float32 desired_yaw_rate
+
+# ---------- YunLink metadata ----------
+uint64 yunlink_session_id
+uint64 yunlink_message_id
+uint64 yunlink_correlation_id

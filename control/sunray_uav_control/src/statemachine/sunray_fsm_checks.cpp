@@ -33,10 +33,30 @@ void Sunray_FSM::check_controller_ready() {
 }
 
 // 检查是否允许起飞
-bool Sunray_FSM::check_allow_takeoff() {
-    // protect_param 已迁移给 system_check，当前 FSM 不再承担起飞授权策略。
-    // 在 system_check 接管前，这里仅保持最小行为：控制器就绪后允许 TAKEOFF 转移。
-    allow_takeoff_ = true;
+bool Sunray_FSM::check_allow_takeoff(double relative_takeoff_height,
+                                     double max_takeoff_velocity) {
+    const bool takeoff_param_valid =
+        std::isfinite(relative_takeoff_height) && relative_takeoff_height > 0.0 &&
+        std::isfinite(max_takeoff_velocity) && max_takeoff_velocity > 0.0;
+    if (!takeoff_param_valid) {
+        allow_takeoff_ = false;
+        return allow_takeoff_;
+    }
+
+    bool odom_ready = false;
+    {
+        std::lock_guard<std::mutex> lk(odom_mutex_);
+        odom_ready = has_valid_odometry_ &&
+                     !last_valid_odom_receive_time_.isZero() &&
+                     (ros::Time::now() - last_valid_odom_receive_time_).toSec() <=
+                         fsm_config_.msg_timeout_param.local_odometry;
+    }
+    const bool controller_ready =
+        sunray_controller_ != nullptr && sunray_controller_->is_ready();
+
+    // protect_param 已迁移给 system_check，当前 FSM 不再承担复杂授权策略。
+    // 在 system_check 接管前，这里至少保证 TAKEOFF 参数、里程计和控制器就绪状态有效。
+    allow_takeoff_ = takeoff_param_valid && odom_ready && controller_ready;
     return allow_takeoff_;
 }
 
@@ -87,12 +107,38 @@ void Sunray_FSM::check_move_completed() {
     if (current_state == sunray_fsm::SunrayState::TAKEOFF) {
         bool takeoff_state = sunray_controller_->is_takeoff_complete();
         if (takeoff_state) {
+            {
+                std::lock_guard<std::mutex> lk(command_status_mutex_);
+                mark_command_terminal_locked(true,
+                                             control_common::CommandExecutionState::Succeeded,
+                                             0,
+                                             "takeoff completed");
+            }
             enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_COMPLETED);
+        } else {
+            std::lock_guard<std::mutex> lk(command_status_mutex_);
+            mark_command_waiting_physical_state_locked("waiting for takeoff completion", 90);
         }
     } else if (current_state == sunray_fsm::SunrayState::LAND) {
         bool land_state = sunray_controller_->is_land_complete();
         if (land_state) {
+            {
+                std::lock_guard<std::mutex> lk(command_status_mutex_);
+                mark_command_terminal_locked(true,
+                                             control_common::CommandExecutionState::Succeeded,
+                                             0,
+                                             "land completed");
+            }
             enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_COMPLETED);
+        } else {
+            std::lock_guard<std::mutex> lk(command_status_mutex_);
+            mark_command_waiting_physical_state_locked("waiting for PX4 ON_GROUND", 90);
+        }
+    } else if (current_state == sunray_fsm::SunrayState::RETURN) {
+        std::lock_guard<std::mutex> lk(command_status_mutex_);
+        if (command_status_.active &&
+            command_status_.command_kind == sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN) {
+            mark_command_waiting_physical_state_locked("returning to home point", 90);
         }
     }
     // 对运动是否完成的判断，存在前提条件： control_cmd没有保持10Hz的发布频率
@@ -116,9 +162,23 @@ void Sunray_FSM::check_move_completed() {
         current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84) {
         bool move_state = sunray_controller_->is_point_complete();
         if (move_state) {
+            {
+                std::lock_guard<std::mutex> lk(command_status_mutex_);
+                mark_command_terminal_locked(true,
+                                             control_common::CommandExecutionState::Succeeded,
+                                             0,
+                                             "point command completed");
+            }
             enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_COMPLETED);
         }
     } else {
+        {
+            std::lock_guard<std::mutex> lk(command_status_mutex_);
+            mark_command_terminal_locked(true,
+                                         control_common::CommandExecutionState::Succeeded,
+                                         0,
+                                         "continuous command fell back to hover");
+        }
         enqueue_fsm_event(sunray_fsm::SunrayEvent::HOVER_REQUEST);
     }
 }

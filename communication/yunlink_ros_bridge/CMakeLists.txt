@@ -7,12 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(catkin REQUIRED COMPONENTS
+  diagnostic_msgs
   geographic_msgs
   geometry_msgs
-  mavros_msgs
   nav_msgs
   roscpp
   std_msgs
+  std_srvs
   sunray_msgs
 )
 
@@ -43,19 +44,35 @@ endif()
 catkin_package()
 
 include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${catkin_INCLUDE_DIRS}
 )
 
 add_executable(yunlink_ros_bridge_node
   src/main.cpp
+  src/diagnostics/bridge_monitor_state.cpp
+  src/diagnostics/bridge_runtime_diagnostics.cpp
+  src/discovery/bridge_endpoint_discovery.cpp
   src/bridge_mapping.cpp
-  src/bridge_node_core.cpp
   src/bridge_commands.cpp
+  src/bridge_system_services.cpp
   src/bridge_topics.cpp
+  src/runtime/bridge_control_publish.cpp
+  src/runtime/bridge_runtime_core.cpp
+  src/runtime/bridge_runtime_session.cpp
 )
 add_dependencies(yunlink_ros_bridge_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(yunlink_ros_bridge_node
   ${catkin_LIBRARIES}
   yunlink
   Threads::Threads
+)
+
+add_executable(yunlink_ros_bridge_tui_node
+  src/tui/bridge_tui_main.cpp
+  src/tui/bridge_tui_node.cpp
+)
+add_dependencies(yunlink_ros_bridge_tui_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(yunlink_ros_bridge_tui_node
+  ${catkin_LIBRARIES}
 )

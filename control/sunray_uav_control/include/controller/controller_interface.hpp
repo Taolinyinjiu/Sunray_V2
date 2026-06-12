@@ -50,6 +50,9 @@ class Controller_Interface {
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_land_complete() = 0;
     virtual bool is_point_complete() = 0;
+    virtual uint8_t current_px4_landed_state() const {
+        return 0;
+    }
     // ---------------------底层控制输出查询接口-----------------------
     virtual bool get_last_position_target(mavros_msgs::PositionTarget& msg) const {
         (void)msg;

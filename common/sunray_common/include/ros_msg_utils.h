@@ -39,6 +39,7 @@
 #include <sunray_msgs/PlanningWaypoint.h>
 #include <sunray_msgs/Px4State.h>
 #include <sunray_msgs/UAVControlCMD.h>
+#include <sunray_msgs/UAVCommandExecutionStatus.h>
 #include <sunray_msgs/UAVControlState.h>
 #include <sunray_msgs/UAVPlanningCMD.h>
 #include <sunray_msgs/UAVPlanningState.h>

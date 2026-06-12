@@ -694,6 +694,10 @@ bool PX4_OriginController::is_land_complete() {
     return land_complete_.load(std::memory_order_relaxed);
 }
 
+uint8_t PX4_OriginController::current_px4_landed_state() const {
+    return static_cast<uint8_t>(mavros_helper_.get_state().landed_state);
+}
+
 bool PX4_OriginController::set_hover_point(control_common::UAVStateEstimate current_odom) {
     clear_motion_curve();
     reset_point_motion_context();

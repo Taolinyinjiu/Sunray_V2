@@ -123,7 +123,7 @@ void MavrosHelper::init() {
     param_initialized_ = true;
 }
 
-control_common::Mavros_State MavrosHelper::get_state() {
+control_common::Mavros_State MavrosHelper::get_state() const {
     std::shared_lock<std::shared_mutex> lock(data_mutex_);
     return mavros_state_data_;
 }

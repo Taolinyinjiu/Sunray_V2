@@ -71,6 +71,7 @@ class PX4_OriginController : public Controller_Interface {
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
     bool is_point_complete() override;
+    uint8_t current_px4_landed_state() const override;
     bool get_last_position_target(mavros_msgs::PositionTarget& msg) const override;
   private:
     enum class MotionCurveOwner {

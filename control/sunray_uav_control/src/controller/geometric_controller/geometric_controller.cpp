@@ -789,6 +789,16 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
     const ros::Time now = ros::Time::now();
     const double nominal_dt =
         1.0 / std::max(1.0, geometric_controller_param_.controller_hz);
+    const double commanded_height = std::max(relative_takeoff_height, 0.05);
+    const double commanded_vmax = std::max(max_takeoff_velocity, 0.05);
+    const double prelift_height_guard =
+        std::min(takeoff_accff_tuning_.liftoff_detect_h_m, 0.35 * commanded_height);
+    const double prelift_vz_guard =
+        std::min(takeoff_accff_tuning_.liftoff_detect_vz_mps, 0.8 * commanded_vmax);
+    const double velocity_limited_a_target =
+        geometric_controller_param_.gravity + std::clamp(commanded_vmax, 0.10, 0.60);
+    const double prelift_a_target =
+        std::min(takeoff_accff_tuning_.a_target_mps2, velocity_limited_a_target);
 
     // ── 首次进入：初始化曲线、锁存起飞参数与 PreLift 状态 ────────────────────
     if (motion_curve_owner_ != MotionCurveOwner::Takeoff) {
@@ -796,9 +806,9 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         begin_motion_curve(MotionCurveOwner::Takeoff);
         motion_curve_.set_start_trajpoint(uav_odometry_.position, Eigen::Vector3d::Zero());
         motion_curve_.set_end_trajpoint(uav_odometry_.position +
-                                            Eigen::Vector3d(0.0, 0.0, relative_takeoff_height),
+                                            Eigen::Vector3d(0.0, 0.0, commanded_height),
                                         Eigen::Vector3d::Zero());
-        motion_curve_.set_curve_maxvel(max_takeoff_velocity);
+        motion_curve_.set_curve_maxvel(commanded_vmax);
         ground_height_ref_ = uav_odometry_.position.z();
         takeoff_accff_state_.reset();
         takeoff_accff_state_.yaw = uav_odometry_.get_yaw();
@@ -860,8 +870,8 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
     }
 
     const double rel_height = uav_odometry_.position.z() - ground_height_ref_;
-    const bool airborne = rel_height > takeoff_accff_tuning_.liftoff_detect_h_m ||
-                          uav_odometry_.velocity.z() > takeoff_accff_tuning_.liftoff_detect_vz_mps;
+    const bool airborne =
+        rel_height > prelift_height_guard || uav_odometry_.velocity.z() > prelift_vz_guard;
 
     // ── 阶段 3：PreLift  jerk-bounded S-curve a_start → a_target ────────────
     if (takeoff_accff_state_.phase == takeoff_land::TakeoffPhaseAccFF::PreLift) {
@@ -886,7 +896,7 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
             takeoff_accff_state_.last_update = now;
             const double a_ff = takeoff_land::advance_s_curve_acc(
                 takeoff_accff_state_.a_ff_prev,
-                takeoff_accff_tuning_.a_target_mps2,
+                prelift_a_target,
                 dt,
                 takeoff_accff_tuning_.jerk_max_mps3,
                 takeoff_accff_tuning_.a_min_mps2,
@@ -922,13 +932,22 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
             cache_attitude_setpoint(setpoint);
 
             ROS_INFO_THROTTLE(0.5,
-                              "[takeoff_accff] PreLift a_ff=%.2f thrust=%.3f rel_h=%.3f vz=%.3f",
-                              a_ff, setpoint.thrust, rel_height, uav_odometry_.velocity.z());
+                              "[takeoff_accff] PreLift a_ff=%.2f thrust=%.3f rel_h=%.3f vz=%.3f "
+                              "cmd_h=%.3f cmd_vmax=%.3f h_guard=%.3f vz_guard=%.3f "
+                              "a_target=%.2f",
+                              a_ff,
+                              setpoint.thrust,
+                              rel_height,
+                              uav_odometry_.velocity.z(),
+                              commanded_height,
+                              commanded_vmax,
+                              prelift_height_guard,
+                              prelift_vz_guard,
+                              prelift_a_target);
 
             const double elapsed = (now - takeoff_accff_state_.phase_start).toSec();
             if (elapsed > 1.5 * takeoff_accff_tuning_.ramp_time_s &&
-                takeoff_accff_state_.a_ff_prev <
-                    0.99 * takeoff_accff_tuning_.a_target_mps2) {
+                takeoff_accff_state_.a_ff_prev < 0.99 * prelift_a_target) {
                 ROS_WARN_THROTTLE(
                     1.0,
                     "[takeoff_accff] PreLift ramp 未达 a_target,可能需要增大 jerk_max_mps3 或 ramp_time_s");
@@ -940,7 +959,25 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
     // ── 阶段 4：AirborneCurve  rebase + 五次项曲线 + UseFixedAnchor ─────────
     {
         maybe_rebase_takeoff_curve_start_accff();
-        const curve::QuinticCurveState curve_result = motion_curve_.get_result();
+        curve::QuinticCurveState curve_result = motion_curve_.get_result();
+        if (!curve_result.valid) {
+            const double fallback_vmax =
+                std::max(commanded_vmax, std::abs(uav_odometry_.velocity.z()) + 0.05);
+            motion_curve_.set_curve_maxvel(fallback_vmax);
+            curve_result = motion_curve_.get_result();
+            ROS_WARN_THROTTLE(
+                1.0,
+                "[takeoff_accff] AirborneCurve invalid, fallback_vmax=%.3f current_vz=%.3f "
+                "cmd_vmax=%.3f",
+                fallback_vmax,
+                uav_odometry_.velocity.z(),
+                commanded_vmax);
+        }
+        if (!curve_result.valid) {
+            ROS_ERROR_THROTTLE(1.0,
+                               "[takeoff_accff] AirborneCurve remains invalid after fallback");
+            return false;
+        }
 
         controller_data_types::TargetTrajectoryPoint_t des_state;
         des_state.position = curve_result.position;
@@ -1421,6 +1458,10 @@ bool Geometric_Controller::is_land_complete() {
 
 bool Geometric_Controller::is_point_complete() {
     return point_complete_.load(std::memory_order_relaxed);
+}
+
+uint8_t Geometric_Controller::current_px4_landed_state() const {
+    return static_cast<uint8_t>(mavros_helper_.get_state().landed_state);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

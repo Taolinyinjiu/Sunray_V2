@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <Eigen/Dense>
 #include <geographic_msgs/GeoPoint.h>
+#include <string>
 #include <sunray_msgs/UAVControlCMD.h>
 namespace control_common {
 struct UavControlCmd {
@@ -62,6 +63,14 @@ struct UavControlCmd {
     // body系控制时，z轴使用世界系固定高度语义
     // velocity控制时，可选使用fixed_height让z轴高度保持不变
     double fixed_height{0.0};
+    // TAKEOFF控制时可选覆盖yaml默认起飞参数；<=0表示使用yaml默认值
+    double takeoff_relative_height{0.0};
+    double takeoff_max_velocity{0.0};
+    // LAND控制时可选覆盖yaml默认降落速度；<=0表示使用yaml默认值
+    double land_max_velocity{0.0};
+    uint64_t yunlink_session_id{0};
+    uint64_t yunlink_message_id{0};
+    uint64_t yunlink_correlation_id{0};
     // 设计一个辅助的构造函数，用来快速的提取控制话题中的数据
     UavControlCmd() = default;
     UavControlCmd(const sunray_msgs::UAVControlCMD& msg);
@@ -108,6 +117,12 @@ inline UavControlCmd::UavControlCmd(const sunray_msgs::UAVControlCMD& msg) {
     wgs84_position.latitude = msg.desired_wgs84_pos.latitude;
     wgs84_position.longitude = msg.desired_wgs84_pos.longitude;
     fixed_height = msg.fixed_height;
+    takeoff_relative_height = msg.takeoff_relative_height;
+    takeoff_max_velocity = msg.takeoff_max_velocity;
+    land_max_velocity = msg.land_max_velocity;
+    yunlink_session_id = msg.yunlink_session_id;
+    yunlink_message_id = msg.yunlink_message_id;
+    yunlink_correlation_id = msg.yunlink_correlation_id;
 };
 
 };  // namespace control_common

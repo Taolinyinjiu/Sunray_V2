@@ -22,6 +22,7 @@ add_message_files(
   PlanningWaypoint.msg
   SystemInfo.msg
   UAVControlCMD.msg
+  UAVCommandExecutionStatus.msg
   UAVControlState.msg
   UAVPlanningCMD.msg
   UAVPlanningState.msg
