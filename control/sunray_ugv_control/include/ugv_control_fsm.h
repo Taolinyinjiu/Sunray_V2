@@ -9,7 +9,9 @@
 #include <sunray_msgs/UGVControlState.h>
 #include <memory>
 #include <Eigen/Eigen>
+#include <cstdint>
 #include <string>
+#include "ugv_control_config.h"
 #include "ugv_controller.h"
 
 namespace sunray_ugv_control {
@@ -24,17 +26,13 @@ private:
   enum State {
     INIT,
     HOLD,
-    RETURN,
     MOVE
   };
 
   // ROS节点
   ros::NodeHandle nh_;
-  std::string agent_name_;    // 机器人类型名，例如 ugv
-  int agent_id_;              // 机器人编号，从1开始
+  UGVControlConfig config_;
   std::string agent_prefix_;  // 统一话题前缀，例如 /ugv1
-  int drive_type_;
-  std::string drive_type_name_;
   ros::Subscriber sub_odom_;
   ros::Subscriber sub_odom_state_;
   ros::Subscriber sub_control_cmd_;
@@ -55,6 +53,8 @@ private:
 
   // 控制指令
   sunray_msgs::UGVControlCMD ugv_control_cmd_;
+  uint8_t diagnostic_level_;
+  std::string diagnostic_msg_;
 
   // 最后发布的控制指令
   geometry_msgs::Twist last_cmd_vel;
@@ -63,19 +63,6 @@ private:
   Eigen::Vector3d hold_point_;
   double hold_yaw_;
   bool hold_target_valid_;
-
-  // 返航点
-  Eigen::Vector3d return_point_;
-  double return_yaw_;
-
-  // 地理围栏
-  Eigen::Vector3d fence_min_;
-  Eigen::Vector3d fence_max_;
-
-  // 时间参数
-  double WAIT_VELCMD_TIME_;
-  double point_pos_tolerance_;
-  double point_yaw_tolerance_;
 
   // 定时器
   ros::Timer control_timer_;
@@ -91,14 +78,20 @@ private:
   // 状态机处理函数
   void process_init();
   void process_hold();
-  void process_return();
   void process_move();
 
   // 辅助函数
   bool is_point_reached(const sunray_msgs::UGVControlCMD& cmd) const;
+  bool is_inside_geo_fence() const;
+  bool is_velocity_command(uint8_t control_cmd) const;
+  std::string agent_log_prefix() const;
+  std::string command_name(uint8_t control_cmd) const;
+  void print_config() const;
+  void set_diagnostic(uint8_t level, const std::string& msg);
+  void clear_diagnostic(const std::string& msg = "OK");
   void capture_hold_target_from_current_state();
   void set_hold_target(const Eigen::Vector3d& pos, double yaw);
-  void switch_to_hold();
+  void switch_to_hold(bool keep_move_point_target = true);
   void publish_fsm_state();
   void publish_debug();
 };

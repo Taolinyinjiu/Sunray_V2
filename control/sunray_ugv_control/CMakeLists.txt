@@ -128,6 +128,7 @@ install(TARGETS
 
 install(FILES
   include/ugv_control_fsm.h
+  include/ugv_control_config.h
   src/controller/ugv_controller.h
   src/controller/differential_controller.h
   src/controller/mecanum_controller.h

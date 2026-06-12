@@ -2,6 +2,7 @@
   <!-- UGV控制节点启动文件 -->
   <arg name="agent_name" default="ugv" />
   <arg name="agent_id" default="1" />
+  <arg name="airframe" default="mecanum_default" />
   <arg name="node_name" default="ugv_control_node" />
   <arg name="enable_monitor" default="true" />
   <arg name="enable_rviz_visualization" default="true" />
@@ -19,8 +20,12 @@
     这里仅隔离参数；实际收发话题仍由程序内部按 /ugv1、/ugv2 ... 这样的绝对前缀生成。
   -->
   <group ns="$(arg node_name)_cfg">
-    <!-- 加载配置文件 -->
-    <rosparam file="$(find sunray_ugv_control)/config/ugv_control_config.yaml" />
+    <!--
+      加载参数文件，后加载的 airframe 会覆盖 base 中的同名参数。
+      agent_name / agent_id 再由 launch 参数覆盖，避免多车启动时被 YAML 写死。
+    -->
+    <rosparam file="$(find sunray_ugv_control)/config/ugv_control_base.yaml" />
+    <rosparam file="$(find sunray_ugv_control)/config/airframes/$(arg airframe).yaml" />
     <param name="agent_name" type="str" value="$(arg agent_name)" />
     <param name="agent_id" type="int" value="$(arg agent_id)" />
 

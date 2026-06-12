@@ -42,10 +42,13 @@ Eigen::Vector2d UGVControllerBase::world_to_body(const Eigen::Vector2d& world_ve
 }
 
 void UGVControllerBase::init_params() {
-  nh_.param<double>("kp_linear", params_.kp_linear, 0.5);
-  nh_.param<double>("kp_angular", params_.kp_angular, 1.0);
-  nh_.param<double>("max_linear_vel", params_.max_linear_vel, 1.0);
-  nh_.param<double>("max_angular_vel", params_.max_angular_vel, 1.0);
+  params_ = UGVControllerParams::loadFromRos(nh_);
+  ROS_INFO("UGV controller params: kp_linear=%.3f, kp_angular=%.3f, "
+           "max_linear_vel=%.3fm/s, max_angular_vel=%.3frad/s",
+           params_.kp_linear,
+           params_.kp_angular,
+           params_.max_linear_vel,
+           params_.max_angular_vel);
 }
 
 }  // namespace sunray_ugv_control

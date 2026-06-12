@@ -5,11 +5,11 @@
 namespace sunray_ugv_control {
 
 DifferentialController::DifferentialController(ros::NodeHandle& nh) : UGVControllerBase(nh) {
-  nh_.param<bool>("enable_reverse", enable_reverse_, true);
-  nh_.param<double>("reverse_angle_threshold", reverse_angle_threshold_, 2.09);
-  nh_.param<double>("reverse_distance_threshold", reverse_distance_threshold_, 0.8);
-  nh_.param<double>("reverse_speed_ratio", reverse_speed_ratio_, 0.6);
-  nh_.param<double>("final_yaw_distance_threshold", final_yaw_distance_threshold_, 0.05);
+  nh_.param<bool>("differential_controller/enable_reverse", enable_reverse_, true);
+  nh_.param<double>("differential_controller/reverse_angle_threshold", reverse_angle_threshold_, 2.09);
+  nh_.param<double>("differential_controller/reverse_distance_threshold", reverse_distance_threshold_, 0.8);
+  nh_.param<double>("differential_controller/reverse_speed_ratio", reverse_speed_ratio_, 0.6);
+  nh_.param<double>("differential_controller/final_yaw_distance_threshold", final_yaw_distance_threshold_, 0.05);
 }
 
 DifferentialController::~DifferentialController() {

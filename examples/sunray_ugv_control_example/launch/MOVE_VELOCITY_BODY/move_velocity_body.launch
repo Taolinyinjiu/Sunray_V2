@@ -1,0 +1,29 @@
+<launch>
+  <!--
+    持续发布 MOVE_VELOCITY_BODY 车体系速度命令。
+    速度类命令必须持续发布，并且每帧都要更新 header.stamp。
+    示例结束后会自动发布 HOLD。
+  -->
+  <arg name="agent_name" default="ugv" />
+  <arg name="agent_id" default="1" />
+  <arg name="node_name" default="ugv_move_velocity_body_example_node" />
+
+  <arg name="vx" default="0.2" />
+  <arg name="vy" default="0.0" />
+  <arg name="wz_deg_s" default="0.0" />
+  <arg name="duration" default="3.0" />
+  <arg name="publish_hz" default="20.0" />
+
+  <node pkg="sunray_ugv_control_example"
+        type="ugv_move_velocity_body_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+    <param name="vx" value="$(arg vx)" />
+    <param name="vy" value="$(arg vy)" />
+    <param name="wz_deg_s" value="$(arg wz_deg_s)" />
+    <param name="duration" value="$(arg duration)" />
+    <param name="publish_hz" value="$(arg publish_hz)" />
+  </node>
+</launch>

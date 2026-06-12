@@ -520,7 +520,6 @@ QString coloredUgvControlStateName(const uint8_t state)
     {
     case sunray_msgs::UGVControlState::FSM_HOLD:
         return htmlSpan("HOLD", kHtmlGoodColor, true);
-    case sunray_msgs::UGVControlState::FSM_RETURN:
     case sunray_msgs::UGVControlState::FSM_MOVE:
         return htmlSpan(ugvControlStateName(state), kHtmlWarnColor, true);
     case sunray_msgs::UGVControlState::FSM_INIT:
@@ -558,7 +557,6 @@ QString coloredUgvCmdName(const uint8_t cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return htmlSpan("HOLD", kHtmlGoodColor, true);
-    case sunray_msgs::UGVControlCMD::RETURN:
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
@@ -567,6 +565,30 @@ QString coloredUgvCmdName(const uint8_t cmd)
     default:
         return htmlSpan(ugvCmdName(cmd), kHtmlMutedColor, true);
     }
+}
+
+QString coloredUgvDiagnosticText(const sunray_msgs::UGVControlState &state)
+{
+    QString level = "UNKNOWN";
+    const char *color = kHtmlBadColor;
+    switch (state.diagnostic_level)
+    {
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_OK:
+        level = "OK";
+        color = kHtmlGoodColor;
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_WARN:
+        level = "WARN";
+        color = kHtmlWarnColor;
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR:
+        level = "ERROR";
+        color = kHtmlBadColor;
+        break;
+    default:
+        break;
+    }
+    return htmlSpan(level, color, true) + "  " + QString::fromStdString(state.diagnostic_msg);
 }
 
 QString coloredUavSwarmStateName(const uint8_t state)
@@ -1019,8 +1041,6 @@ QString ugvControlStateName(const uint8_t state)
         return "INIT";
     case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlState::FSM_RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
@@ -1080,8 +1100,6 @@ QString ugvCmdName(const uint8_t cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlCMD::RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
         return "MOVE_POINT";
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
@@ -1189,8 +1207,6 @@ QString ugvRawControlInputText(const sunray_msgs::UGVControlCMD &cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return "HOLD: 无额外输入参数";
-    case sunray_msgs::UGVControlCMD::RETURN:
-        return "RETURN: 使用内部返航点";
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
         return QString("desired_pos=%1 m  yaw=%2 deg")
             .arg(pointText(cmd.desired_pos))
@@ -2484,9 +2500,7 @@ class SunrayMonitorPanel : public QMainWindow
         });
 
         auto *hold_btn = new QPushButton("HOLD");
-        auto *return_btn = new QPushButton("RETURN");
         connect(hold_btn, &QPushButton::clicked, this, [this]() { publishUgvHold(); });
-        connect(return_btn, &QPushButton::clicked, this, [this]() { publishUgvReturn(); });
 
         ugv_point_x_spin_ = makeSpin(0.0, -100.0, 100.0, 0.1);
         ugv_point_y_spin_ = makeSpin(0.0, -100.0, 100.0, 0.1);
@@ -2547,7 +2561,7 @@ class SunrayMonitorPanel : public QMainWindow
                              ugv_wgs84_lat_spin_,
                              ugv_wgs84_lon_spin_,
                              ugv_wgs84_alt_spin_});
-        for (QPushButton *button : {hold_btn, return_btn})
+        for (QPushButton *button : {hold_btn})
         {
             button->setMinimumWidth(86);
             button->setMaximumWidth(86);
@@ -2563,7 +2577,6 @@ class SunrayMonitorPanel : public QMainWindow
         auto *quick_layout = new QHBoxLayout();
         quick_layout->setSpacing(6);
         quick_layout->addWidget(hold_btn);
-        quick_layout->addWidget(return_btn);
         layout->addLayout(quick_layout);
 
         auto *point_grid = new QGridLayout();
@@ -3769,6 +3782,7 @@ class SunrayMonitorPanel : public QMainWindow
                                           .arg(ugvCmdSourceName(state.active_ugv_control_cmd.cmd_source))) +
                                  coloredUgvCmdName(state.active_ugv_control_cmd.control_cmd));
         lines << htmlLine("原始输入", ugvRawControlInputText(state.active_ugv_control_cmd));
+        lines << htmlLineRaw("诊断信息", coloredUgvDiagnosticText(state));
         lines << htmlLineRaw("控制目标",
                              state.target_valid
                                  ? htmlSpan(QString("x=%1 m  y=%2 m  yaw=%3 deg")
@@ -4516,12 +4530,14 @@ class SunrayMonitorPanel : public QMainWindow
             return "no UGVControlState";
         }
         const sunray_msgs::UGVControlState &state = agent.ugv_control_state;
-        return QString("state=%1 cmd=%2 odom_valid=%3 cmd_valid=%4 fence=%5 target=%6 cmd_vel=(%7,%8,%9)")
+        return QString("state=%1 cmd=%2 odom_valid=%3 cmd_valid=%4 fence=%5 diag=%6:%7 target=%8 cmd_vel=(%9,%10,%11)")
             .arg(ugvControlStateName(state.fsm_state))
             .arg(ugvCmdName(state.active_ugv_control_cmd.control_cmd))
             .arg(boolText(state.odom_valid))
             .arg(boolText(state.control_cmd_valid))
             .arg(boolText(state.inside_geo_fence))
+            .arg(static_cast<int>(state.diagnostic_level))
+            .arg(QString::fromStdString(state.diagnostic_msg))
             .arg(state.target_valid ? pointText(state.target_pos) : "--")
             .arg(formatDouble(state.controller_cmd_vel.linear.x))
             .arg(formatDouble(state.controller_cmd_vel.linear.y))
@@ -4763,14 +4779,6 @@ class SunrayMonitorPanel : public QMainWindow
                           makeUgvBaseCommand(sunray_msgs::UGVControlCMD::HOLD),
                           false,
                           "HOLD");
-    }
-
-    void publishUgvReturn()
-    {
-        publishUgvCommand(ugvTargetId(),
-                          makeUgvBaseCommand(sunray_msgs::UGVControlCMD::RETURN),
-                          false,
-                          "RETURN");
     }
 
     void publishMovePoint()

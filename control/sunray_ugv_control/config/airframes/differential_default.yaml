@@ -1,0 +1,26 @@
+# 默认差速轮车型参数
+#
+# 适用场景：
+#   - 真实差速轮底盘
+#   - 只接受车体系 vx + wz 的底盘驱动
+#
+# 注意：
+#   - 差速轮不支持 MOVE_VELOCITY 世界系速度控制。
+#   - 差速轮收到 MOVE_VELOCITY_BODY.linear.y 时会忽略横向速度并发布诊断告警。
+
+drive_type: 2
+
+kp_linear: 0.5
+kp_angular: 1.0
+max_linear_vel: 0.8
+max_angular_vel: 1.0
+
+differential_controller:
+  enable_reverse: true
+  reverse_angle_threshold: 2.09
+  reverse_distance_threshold: 0.8
+  reverse_speed_ratio: 0.6
+  final_yaw_distance_threshold: 0.05
+
+point_pos_tolerance: 0.05
+point_yaw_tolerance: 0.10

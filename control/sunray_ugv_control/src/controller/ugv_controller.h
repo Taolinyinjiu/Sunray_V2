@@ -5,6 +5,7 @@
 #include <geometry_msgs/Twist.h>
 #include <sunray_msgs/UGVControlCMD.h>
 #include <Eigen/Eigen>
+#include "ugv_control_config.h"
 
 namespace sunray_ugv_control {
 
@@ -14,13 +15,6 @@ public:
     Eigen::Vector3d pos;
     Eigen::Vector3d vel;
     double yaw;
-  };
-
-  struct ControllerParams {
-    double kp_linear;
-    double kp_angular;
-    double max_linear_vel;
-    double max_angular_vel;
   };
 
   virtual ~UGVController() {}
@@ -42,7 +36,7 @@ public:
 protected:
   ros::NodeHandle nh_;
   State current_state_;
-  ControllerParams params_;
+  UGVControllerParams params_;
 
   static double wrap_angle(double angle);
   static double clamp(double value, double lower, double upper);

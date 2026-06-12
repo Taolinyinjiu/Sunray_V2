@@ -1,0 +1,24 @@
+<launch>
+  <!--
+    发布一次 MOVE_POINT 点位控制命令。
+    坐标为本地世界坐标系，单位 m；yaw 参数用 deg 输入，源码里转换为 rad。
+  -->
+  <arg name="agent_name" default="ugv" />
+  <arg name="agent_id" default="1" />
+  <arg name="node_name" default="ugv_move_point_example_node" />
+
+  <arg name="target_x" default="1.0" />
+  <arg name="target_y" default="0.0" />
+  <arg name="target_yaw_deg" default="0.0" />
+
+  <node pkg="sunray_ugv_control_example"
+        type="ugv_move_point_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+    <param name="target_x" value="$(arg target_x)" />
+    <param name="target_y" value="$(arg target_y)" />
+    <param name="target_yaw_deg" value="$(arg target_yaw_deg)" />
+  </node>
+</launch>

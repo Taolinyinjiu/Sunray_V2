@@ -1,0 +1,14 @@
+<launch>
+  <!-- 发布一次 HOLD 停车命令。运行前请先启动 sunray_ugv_control。 -->
+  <arg name="agent_name" default="ugv" />
+  <arg name="agent_id" default="1" />
+  <arg name="node_name" default="ugv_hold_example_node" />
+
+  <node pkg="sunray_ugv_control_example"
+        type="ugv_hold_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="agent_name" value="$(arg agent_name)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+  </node>
+</launch>

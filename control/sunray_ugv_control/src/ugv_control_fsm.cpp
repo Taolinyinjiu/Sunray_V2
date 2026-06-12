@@ -28,44 +28,24 @@ UGVControlFSM::UGVControlFSM(ros::NodeHandle& nh) : nh_(nh) {
   hold_point_.setZero();
   hold_yaw_ = 0.0;
   hold_target_valid_ = false;
+  diagnostic_level_ = sunray_msgs::UGVControlState::DIAGNOSTIC_OK;
+  diagnostic_msg_ = "OK";
 
-  // 机器人身份参数：统一使用 agent_name + agent_id 生成话题前缀，例如 /ugv1。
-  nh_.param<std::string>("agent_name", agent_name_, "ugv");
-  nh_.param<int>("agent_id", agent_id_, 1);
-  if (agent_id_ < 1) {
-    ROS_WARN("agent_id=%d is invalid, fallback to 1.", agent_id_);
-    agent_id_ = 1;
-  }
-  agent_prefix_ = "/" + agent_name_ + std::to_string(agent_id_);
+  config_ = UGVControlConfig::loadFromRos(nh_);
+  agent_prefix_ = "/" + config_.agent_name + std::to_string(config_.agent_id);
 
-  nh_.param<double>("wait_velcmd_time", WAIT_VELCMD_TIME_, 5.0);
-  nh_.param<double>("point_pos_tolerance", point_pos_tolerance_, 0.05);
-  nh_.param<double>("point_yaw_tolerance", point_yaw_tolerance_, 0.10);
-
-  drive_type_ = 2;
-  nh_.param<int>("drive_type", drive_type_, 2);
-  if (drive_type_ == 2) {
-    drive_type_name_ = "differential";
+  if (config_.drive_type == 2) {
     controller_.reset(new DifferentialController(nh_));
   } else {
-    if (drive_type_ != 1) {
-      ROS_WARN("Unknown drive_type=%d, fallback to mecanum(1).", drive_type_);
+    if (config_.drive_type != 1) {
+      ROS_WARN("%s[CONFIG] invalid drive_type=%d, fallback to mecanum(1).",
+               agent_log_prefix().c_str(),
+               config_.drive_type);
+      config_.drive_type = 1;
     }
-    drive_type_name_ = "mecanum";
     controller_.reset(new MecanumController(nh_));
   }
-
-  // 初始化地理围栏
-  nh_.param<double>("fence_min_x", fence_min_.x(), -10.0);
-  nh_.param<double>("fence_min_y", fence_min_.y(), -10.0);
-  nh_.param<double>("fence_min_z", fence_min_.z(), -1.0);
-  nh_.param<double>("fence_max_x", fence_max_.x(), 10.0);
-  nh_.param<double>("fence_max_y", fence_max_.y(), 10.0);
-  nh_.param<double>("fence_max_z", fence_max_.z(), 1.0);
-
-  // 初始化返航点
-  return_point_.setZero();
-  return_yaw_ = 0.0;
+  print_config();
 
   // 初始化订阅器
   sub_odom_ = nh_.subscribe(agent_prefix_ + "/sunray/localization/local_odom", 10, &UGVControlFSM::odom_callback, this);
@@ -119,24 +99,41 @@ void UGVControlFSM::control_cmd_callback(const sunray_msgs::UGVControlCMD::Const
   // 根据控制指令切换状态
   switch (msg->control_cmd) {
     case sunray_msgs::UGVControlCMD::HOLD:
+      clear_diagnostic("HOLD command accepted");
       capture_hold_target_from_current_state();
       current_state_ = HOLD;
       break;
-    case sunray_msgs::UGVControlCMD::RETURN:
-      current_state_ = RETURN;
-      break;
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
+      clear_diagnostic("MOVE_POINT command accepted");
+      current_state_ = MOVE;
+      break;
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
+      clear_diagnostic("velocity command accepted");
+      current_state_ = MOVE;
+      break;
     case sunray_msgs::UGVControlCMD::MOVE_WGS84:
+      set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_WARN,
+                     "MOVE_WGS84 is reserved and not executed by sunray_ugv_control");
       current_state_ = MOVE;
       break;
     default:
+      set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR,
+                     "unknown UGVControlCMD.control_cmd, command ignored");
       break;
   }
 }
 
 void UGVControlFSM::control_timer_callback(const ros::TimerEvent& event) {
+  if (config_.enable_geo_fence_protection && have_odom_ && !is_inside_geo_fence() && current_state_ != HOLD) {
+    ROS_WARN_THROTTLE(1.0,
+                      "%s[GEO_FENCE] rejected: current position is outside fence, switch to HOLD.",
+                      agent_log_prefix().c_str());
+    set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR,
+                   "outside geo fence, switched to HOLD");
+    switch_to_hold(false);
+  }
+
   // 处理状态机逻辑
   switch (current_state_) {
     case INIT:
@@ -144,9 +141,6 @@ void UGVControlFSM::control_timer_callback(const ros::TimerEvent& event) {
       break;
     case HOLD:
       process_hold();
-      break;
-    case RETURN:
-      process_return();
       break;
     case MOVE:
       process_move();
@@ -175,38 +169,35 @@ void UGVControlFSM::process_hold() {
   pub_cmd_vel_.publish(last_cmd_vel);
 }
 
-void UGVControlFSM::process_return() {
-  // RETURN状态：移动到返航点
-  sunray_msgs::UGVControlCMD return_cmd;
-  return_cmd.control_cmd = sunray_msgs::UGVControlCMD::MOVE_POINT;
-  return_cmd.desired_pos.x = return_point_.x();
-  return_cmd.desired_pos.y = return_point_.y();
-  return_cmd.desired_pos.z = return_point_.z();
-  return_cmd.desired_yaw = return_yaw_;
-
-  // 计算控制量
-  geometry_msgs::Twist twist = controller_->move_point(return_cmd);
-  last_cmd_vel = twist;
-  pub_cmd_vel_.publish(twist);
-
-  // 检查是否到达目标点
-  // 这里需要根据实际情况添加到达检测逻辑
-  // 简化处理：假设到达目标点后切换到HOLD状态
-  // if (到达目标点) {
-  //   current_state_ = HOLD;
-  // }
-}
-
 void UGVControlFSM::process_move() {
   geometry_msgs::Twist twist;
 
   // 检查命令是否超时
-  ros::Duration time_since_cmd = ros::Time::now() - ugv_control_cmd_.header.stamp;
-  if ((ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_VELOCITY ||
-       ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY) &&
-      time_since_cmd.toSec() > WAIT_VELCMD_TIME_) {
-    switch_to_hold();
-    return;
+  if (is_velocity_command(ugv_control_cmd_.control_cmd)) {
+    if (ugv_control_cmd_.header.stamp.isZero()) {
+      ROS_WARN_THROTTLE(1.0,
+                        "%s[%s] rejected: header.stamp is zero, switch to HOLD.",
+                        agent_log_prefix().c_str(),
+                        command_name(ugv_control_cmd_.control_cmd).c_str());
+      set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR,
+                     "velocity command header.stamp is zero, switched to HOLD");
+      switch_to_hold(false);
+      return;
+    }
+
+    const ros::Duration time_since_cmd = ros::Time::now() - ugv_control_cmd_.header.stamp;
+    if (time_since_cmd.toSec() > config_.wait_velcmd_time) {
+      ROS_WARN_THROTTLE(1.0,
+                        "%s[%s] timeout: %.2fs > %.2fs, switch to HOLD.",
+                        agent_log_prefix().c_str(),
+                        command_name(ugv_control_cmd_.control_cmd).c_str(),
+                        time_since_cmd.toSec(),
+                        config_.wait_velcmd_time);
+      set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR,
+                     "velocity command timeout, switched to HOLD");
+      switch_to_hold(false);
+      return;
+    }
   }
 
   // 根据控制命令类型处理
@@ -223,9 +214,13 @@ void UGVControlFSM::process_move() {
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
       if (!controller_->supports_world_velocity()) {
         ROS_WARN_THROTTLE(1.0,
-                          "differential_drive does not support VELOCITY (world-frame vx/vy). "
-                          "Use POINT or VELOCITY_BODY with vx/wz instead.");
-        switch_to_hold();
+                          "%s[%s] rejected: differential drive does not support world-frame velocity, "
+                          "use MOVE_POINT or MOVE_VELOCITY_BODY with vx/wz, switch to HOLD.",
+                          agent_log_prefix().c_str(),
+                          command_name(ugv_control_cmd_.control_cmd).c_str());
+        set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR,
+                       "differential drive does not support MOVE_VELOCITY, switched to HOLD");
+        switch_to_hold(false);
         break;
       }
       twist = controller_->move_velocity(ugv_control_cmd_);
@@ -238,8 +233,12 @@ void UGVControlFSM::process_move() {
       if (!controller_->supports_lateral_velocity()) {
         if (std::fabs(twist.linear.y) > 1.0e-6) {
           ROS_WARN_THROTTLE(1.0,
-                            "differential_drive ignores VELOCITY_BODY linear.y=%.3f and uses 0.0 instead.",
+                            "%s[%s] degraded: differential drive ignores linear.y=%.3f and uses 0.0.",
+                            agent_log_prefix().c_str(),
+                            command_name(ugv_control_cmd_.control_cmd).c_str(),
                             twist.linear.y);
+          set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_WARN,
+                         "differential drive ignores MOVE_VELOCITY_BODY linear.y");
         }
         twist.linear.y = 0.0;
       }
@@ -248,8 +247,13 @@ void UGVControlFSM::process_move() {
       break;
     case sunray_msgs::UGVControlCMD::MOVE_WGS84:
       // 保留接口，不做处理
+      set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_WARN,
+                     "MOVE_WGS84 is reserved and not executed by sunray_ugv_control");
       break;
     default:
+      set_diagnostic(sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR,
+                     "unknown command in MOVE state, switched to HOLD");
+      switch_to_hold(false);
       break;
   }
 }
@@ -262,7 +266,75 @@ bool UGVControlFSM::is_point_reached(const sunray_msgs::UGVControlCMD& cmd) cons
   const Eigen::Vector3d desired_pos(cmd.desired_pos.x, cmd.desired_pos.y, cmd.desired_pos.z);
   const double pos_error = (desired_pos - current_pos_).head<2>().norm();
   const double yaw_error = std::fabs(wrapAngle(cmd.desired_yaw - current_yaw_));
-  return pos_error <= point_pos_tolerance_ && yaw_error <= point_yaw_tolerance_;
+  return pos_error <= config_.point_pos_tolerance && yaw_error <= config_.point_yaw_tolerance;
+}
+
+bool UGVControlFSM::is_inside_geo_fence() const {
+  if (!have_odom_) {
+    return true;
+  }
+
+  return current_pos_.x() >= config_.fence_min.x() && current_pos_.x() <= config_.fence_max.x() &&
+         current_pos_.y() >= config_.fence_min.y() && current_pos_.y() <= config_.fence_max.y() &&
+         current_pos_.z() >= config_.fence_min.z() && current_pos_.z() <= config_.fence_max.z();
+}
+
+bool UGVControlFSM::is_velocity_command(const uint8_t control_cmd) const {
+  return control_cmd == sunray_msgs::UGVControlCMD::MOVE_VELOCITY ||
+         control_cmd == sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY;
+}
+
+std::string UGVControlFSM::agent_log_prefix() const {
+  return "[" + config_.agent_name + std::to_string(config_.agent_id) + "]";
+}
+
+std::string UGVControlFSM::command_name(const uint8_t control_cmd) const {
+  switch (control_cmd) {
+    case sunray_msgs::UGVControlCMD::UNDEFINE:
+      return "UNDEFINE";
+    case sunray_msgs::UGVControlCMD::HOLD:
+      return "HOLD";
+    case sunray_msgs::UGVControlCMD::MOVE_POINT:
+      return "MOVE_POINT";
+    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
+      return "MOVE_VELOCITY";
+    case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
+      return "MOVE_VELOCITY_BODY";
+    case sunray_msgs::UGVControlCMD::MOVE_WGS84:
+      return "MOVE_WGS84";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+void UGVControlFSM::print_config() const {
+  ROS_INFO("UGV control config: agent=%s%d, drive_type=%d(%s), wait_velcmd_time=%.2fs, "
+           "point_tolerance=(pos %.3fm, yaw %.3frad), geo_fence_protection=%s, "
+           "fence_min=(%.2f, %.2f, %.2f), fence_max=(%.2f, %.2f, %.2f)",
+           config_.agent_name.c_str(),
+           config_.agent_id,
+           config_.drive_type,
+           config_.driveTypeName().c_str(),
+           config_.wait_velcmd_time,
+           config_.point_pos_tolerance,
+           config_.point_yaw_tolerance,
+           config_.enable_geo_fence_protection ? "true" : "false",
+           config_.fence_min.x(),
+           config_.fence_min.y(),
+           config_.fence_min.z(),
+           config_.fence_max.x(),
+           config_.fence_max.y(),
+           config_.fence_max.z());
+}
+
+void UGVControlFSM::set_diagnostic(const uint8_t level, const std::string& msg) {
+  diagnostic_level_ = level;
+  diagnostic_msg_ = msg;
+}
+
+void UGVControlFSM::clear_diagnostic(const std::string& msg) {
+  diagnostic_level_ = sunray_msgs::UGVControlState::DIAGNOSTIC_OK;
+  diagnostic_msg_ = msg;
 }
 
 void UGVControlFSM::capture_hold_target_from_current_state() {
@@ -278,9 +350,9 @@ void UGVControlFSM::set_hold_target(const Eigen::Vector3d& pos, const double yaw
   hold_target_valid_ = true;
 }
 
-void UGVControlFSM::switch_to_hold() {
+void UGVControlFSM::switch_to_hold(const bool keep_move_point_target) {
   // 对于点位控制，到点后保持原目标点更直观；其他场景退回当前点。
-  if (ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_POINT) {
+  if (keep_move_point_target && ugv_control_cmd_.control_cmd == sunray_msgs::UGVControlCMD::MOVE_POINT) {
     set_hold_target(Eigen::Vector3d(ugv_control_cmd_.desired_pos.x,
                                     ugv_control_cmd_.desired_pos.y,
                                     ugv_control_cmd_.desired_pos.z),
@@ -298,10 +370,10 @@ void UGVControlFSM::publish_fsm_state() {
   sunray_msgs::UGVControlState state_msg;
   state_msg.header.stamp = ros::Time::now();
 
-  state_msg.agent_name = agent_name_;
-  state_msg.agent_id = static_cast<uint8_t>(agent_id_);
-  state_msg.drive_type = (drive_type_ == 1) ? sunray_msgs::UGVControlState::DRIVE_MECANUM
-                                            : sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL;
+  state_msg.agent_name = config_.agent_name;
+  state_msg.agent_id = static_cast<uint8_t>(config_.agent_id);
+  state_msg.drive_type = (config_.drive_type == 1) ? sunray_msgs::UGVControlState::DRIVE_MECANUM
+                                                   : sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL;
 
   switch (current_state_) {
     case INIT:
@@ -309,9 +381,6 @@ void UGVControlFSM::publish_fsm_state() {
       break;
     case HOLD:
       state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_HOLD;
-      break;
-    case RETURN:
-      state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_RETURN;
       break;
     case MOVE:
       state_msg.fsm_state = sunray_msgs::UGVControlState::FSM_MOVE;
@@ -335,30 +404,22 @@ void UGVControlFSM::publish_fsm_state() {
     state_msg.target_pos.y = hold_point_.y();
     state_msg.target_pos.z = hold_point_.z();
     state_msg.target_yaw = hold_yaw_;
-  } else if (current_state_ == RETURN) {
-    state_msg.target_valid = true;
-    state_msg.target_pos.x = return_point_.x();
-    state_msg.target_pos.y = return_point_.y();
-    state_msg.target_pos.z = return_point_.z();
-    state_msg.target_yaw = return_yaw_;
   }
 
   state_msg.controller_cmd_vel = last_cmd_vel;
 
   state_msg.odom_valid = have_odom_;
   state_msg.control_cmd_valid = ugv_control_cmd_.control_cmd != sunray_msgs::UGVControlCMD::UNDEFINE;
-  state_msg.inside_geo_fence =
-      !have_odom_ ||
-      (current_pos_.x() >= fence_min_.x() && current_pos_.x() <= fence_max_.x() &&
-       current_pos_.y() >= fence_min_.y() && current_pos_.y() <= fence_max_.y() &&
-       current_pos_.z() >= fence_min_.z() && current_pos_.z() <= fence_max_.z());
+  state_msg.inside_geo_fence = is_inside_geo_fence();
+  state_msg.diagnostic_level = diagnostic_level_;
+  state_msg.diagnostic_msg = diagnostic_msg_;
 
-  state_msg.geo_fence_min.x = fence_min_.x();
-  state_msg.geo_fence_min.y = fence_min_.y();
-  state_msg.geo_fence_min.z = fence_min_.z();
-  state_msg.geo_fence_max.x = fence_max_.x();
-  state_msg.geo_fence_max.y = fence_max_.y();
-  state_msg.geo_fence_max.z = fence_max_.z();
+  state_msg.geo_fence_min.x = config_.fence_min.x();
+  state_msg.geo_fence_min.y = config_.fence_min.y();
+  state_msg.geo_fence_min.z = config_.fence_min.z();
+  state_msg.geo_fence_max.x = config_.fence_max.x();
+  state_msg.geo_fence_max.y = config_.fence_max.y();
+  state_msg.geo_fence_max.z = config_.fence_max.z();
 
   pub_fsm_state_.publish(state_msg);
 }

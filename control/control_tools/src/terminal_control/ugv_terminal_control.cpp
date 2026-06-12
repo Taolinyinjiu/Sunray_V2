@@ -1,7 +1,7 @@
 /*
 本程序功能：
     1.实现无人车终端控制命令的发布
-    2.提供停止、返航、点位移动、速度控制等命令
+    2.提供停止、点位移动、速度控制等命令
     3.用于测试 sunray_msgs/UGVControlCMD 控制命令
 */
 
@@ -35,13 +35,12 @@ static void printMenu(const DriveType drive_type, const std::string& agent_prefi
     std::cout << "Drive type: " << driveTypeName(drive_type) << std::endl;
     std::cout << "Units: position[m], velocity[m/s], duration[s], yaw input[deg] -> publish[rad], angular_z input[deg/s] -> publish[rad/s]" << std::endl;
     std::cout << "1 - HOLD (停止)" << std::endl;
-    std::cout << "2 - RETURN (返航)" << std::endl;
-    std::cout << "3 - MOVE_POINT (点位置控制)" << std::endl;
+    std::cout << "2 - MOVE_POINT (点位置控制)" << std::endl;
     if (drive_type == DriveType::MECANUM) {
-        std::cout << "4 - MOVE_VELOCITY (速度控制)" << std::endl;
-        std::cout << "5 - MOVE_VELOCITY_BODY (机体系速度控制)" << std::endl;
+        std::cout << "3 - MOVE_VELOCITY (速度控制)" << std::endl;
+        std::cout << "4 - MOVE_VELOCITY_BODY (机体系速度控制)" << std::endl;
     } else {
-        std::cout << "4 - MOVE_VELOCITY_BODY (机体系速度控制, vx+wz)" << std::endl;
+        std::cout << "3 - MOVE_VELOCITY_BODY (机体系速度控制, vx+wz)" << std::endl;
     }
     std::cout << "0 - quit" << std::endl;
     std::cout << "Please input: ";
@@ -201,9 +200,6 @@ int main(int argc, char** argv) {
             cmd.control_cmd = sunray_msgs::UGVControlCMD::HOLD;
             ROS_INFO("Publish HOLD");
         } else if (input == 2) {
-            cmd.control_cmd = sunray_msgs::UGVControlCMD::RETURN;
-            ROS_INFO("Publish RETURN");
-        } else if (input == 3) {
             double x, y, yaw;
             std::string title = "MOVE_POINT";
             if (!readPoint(title, x, y, yaw)) {
@@ -220,7 +216,7 @@ int main(int argc, char** argv) {
                      y,
                      yaw,
                      cmd.desired_yaw);
-        } else if (drive_type == DriveType::MECANUM && input == 4) {
+        } else if (drive_type == DriveType::MECANUM && input == 3) {
             double vx, vy, yaw, duration;
             const std::string title = "MOVE_VELOCITY";
             if (!readVelocity(title, vx, vy, yaw, duration)) {
@@ -240,8 +236,8 @@ int main(int argc, char** argv) {
                      yaw,
                      cmd.desired_yaw,
                      duration);
-        } else if ((drive_type == DriveType::MECANUM && input == 5) ||
-                   (drive_type == DriveType::DIFFERENTIAL && input == 4)) {
+        } else if ((drive_type == DriveType::MECANUM && input == 4) ||
+                   (drive_type == DriveType::DIFFERENTIAL && input == 3)) {
             double vx, vy, wz, duration;
             const std::string title = "MOVE_VELOCITY_BODY";
             if (drive_type == DriveType::DIFFERENTIAL) {

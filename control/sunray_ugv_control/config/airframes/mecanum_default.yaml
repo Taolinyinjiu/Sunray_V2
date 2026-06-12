@@ -1,0 +1,17 @@
+# 默认麦克纳姆轮车型参数
+#
+# 适用场景：
+#   - 实车麦克纳姆轮底盘
+#   - 需要横向速度 linear.y 的全向运动场景
+#
+# 本文件只覆盖和该车型有关的差异参数，其余参数继承 ugv_control_base.yaml。
+
+drive_type: 1
+
+kp_linear: 0.5
+kp_angular: 1.0
+max_linear_vel: 1.0
+max_angular_vel: 1.0
+
+point_pos_tolerance: 0.05
+point_yaw_tolerance: 0.10

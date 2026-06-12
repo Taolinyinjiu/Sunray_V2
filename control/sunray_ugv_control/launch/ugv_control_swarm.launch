@@ -1,6 +1,7 @@
 <launch>
   <arg name="agent_name" default="ugv" />
   <arg name="swarm_num" default="3" />
+  <arg name="airframe" default="mecanum_default" />
 
   <arg name="enable_monitor" default="true" />
   <arg name="enable_rviz_visualization" default="false" />
@@ -27,6 +28,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="1" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_1" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -41,6 +43,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="2" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_2" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -55,6 +58,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="3" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_3" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -69,6 +73,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="4" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_4" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -83,6 +88,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="5" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_5" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -97,6 +103,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="6" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_6" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -111,6 +118,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="7" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_7" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -125,6 +133,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="8" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_8" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -139,6 +148,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="9" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_9" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />
@@ -153,6 +163,7 @@
            file="$(find sunray_ugv_control)/launch/ugv_control.launch">
     <arg name="agent_name" value="$(arg agent_name)" />
     <arg name="agent_id" value="10" />
+    <arg name="airframe" value="$(arg airframe)" />
     <arg name="node_name" value="ugv_control_node_10" />
     <arg name="enable_single_monitor" value="false" />
     <arg name="enable_rviz_visualization" value="$(arg enable_rviz_visualization)" />

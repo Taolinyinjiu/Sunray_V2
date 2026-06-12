@@ -19,10 +19,17 @@ uint8 drive_type                  # 底盘类型枚举
 bool control_cmd_valid            # 是否已收到有效 UGVControlCMD
 bool inside_geo_fence             # true 表示当前在地理围栏内；odom_valid=false 时默认 true
 
+# ---------- diagnostic ----------
+# 诊断信息用于告诉上层、控制面板和二次开发程序“当前为什么停车/拒绝/降级执行”。
+uint8 DIAGNOSTIC_OK=0             # 正常，无需要特别处理的问题
+uint8 DIAGNOSTIC_WARN=1           # 告警，命令可能被降级执行，例如差速车忽略 linear.y
+uint8 DIAGNOSTIC_ERROR=2          # 错误，命令被拒绝或控制器已切换 HOLD
+uint8 diagnostic_level
+string diagnostic_msg             # 面向开发者的简短诊断文本
+
 # ---------- fsm state ----------
 uint8 FSM_INIT=0                  # 未收到有效输入或尚未进入控制
 uint8 FSM_HOLD=1                  # 保持/停车
-uint8 FSM_RETURN=2                # 返航
 uint8 FSM_MOVE=3                  # 执行 MOVE_POINT / MOVE_VELOCITY / MOVE_VELOCITY_BODY / MOVE_WGS84
 uint8 fsm_state
 

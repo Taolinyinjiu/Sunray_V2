@@ -1,0 +1,33 @@
+# pengyu_sim 仿真 UGV 参数
+#
+# 适用场景：
+#   - pengyu_sim 仿真环境
+#   - 多车/集群仿真中需要更保守速度限制的场景
+#
+# 当前默认按差速轮处理，避免仿真底盘不支持横向速度时产生误用。
+
+drive_type: 2
+
+kp_linear: 0.45
+kp_angular: 1.0
+max_linear_vel: 0.7
+max_angular_vel: 0.9
+
+differential_controller:
+  enable_reverse: true
+  reverse_angle_threshold: 2.09
+  reverse_distance_threshold: 0.8
+  reverse_speed_ratio: 0.5
+  final_yaw_distance_threshold: 0.05
+
+wait_velcmd_time: 5.0
+point_pos_tolerance: 0.05
+point_yaw_tolerance: 0.10
+
+enable_geo_fence_protection: false
+fence_min_x: -20.0
+fence_min_y: -20.0
+fence_min_z: -2.0
+fence_max_x: 20.0
+fence_max_y: 20.0
+fence_max_z: 2.0

@@ -20,6 +20,7 @@
 #include <QMainWindow>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -55,8 +56,6 @@ QString fsmName(const uint8_t state)
         return "INIT";
     case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlState::FSM_RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
@@ -70,8 +69,6 @@ QString cmdName(const uint8_t cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlCMD::RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
         return "MOVE_POINT";
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
@@ -133,6 +130,26 @@ QString driveTypeName(const uint8_t drive_type)
     }
 }
 
+QString diagnosticText(const sunray_msgs::UGVControlState &state)
+{
+    QString level = "UNKNOWN";
+    switch (state.diagnostic_level)
+    {
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_OK:
+        level = "OK";
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_WARN:
+        level = "WARN";
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR:
+        level = "ERROR";
+        break;
+    default:
+        break;
+    }
+    return QString("%1  %2").arg(level).arg(QString::fromStdString(state.diagnostic_msg));
+}
+
 class UGVControlPanel : public QMainWindow
 {
   public:
@@ -186,9 +203,7 @@ class UGVControlPanel : public QMainWindow
         auto *layout = new QGridLayout(group);
 
         auto *hold_btn = new QPushButton("HOLD 停车");
-        auto *return_btn = new QPushButton("RETURN 返航");
         connect(hold_btn, &QPushButton::clicked, this, [this]() { publishSimple(sunray_msgs::UGVControlCMD::HOLD); });
-        connect(return_btn, &QPushButton::clicked, this, [this]() { publishSimple(sunray_msgs::UGVControlCMD::RETURN); });
 
         point_x_spin_ = makeSpin(0.0, -100.0, 100.0, 0.1);
         point_y_spin_ = makeSpin(0.0, -100.0, 100.0, 0.1);
@@ -205,8 +220,8 @@ class UGVControlPanel : public QMainWindow
         world_vx_spin_ = makeSpin(0.0, -3.0, 3.0, 0.1);
         world_vy_spin_ = makeSpin(0.0, -3.0, 3.0, 0.1);
         world_yaw_spin_ = makeSpin(0.0, -180.0, 180.0, 5.0);
-        auto *world_vel_btn = new QPushButton("发送 MOVE_VELOCITY");
-        connect(world_vel_btn, &QPushButton::clicked, this, [this]() { publishWorldVelocity(); });
+        world_vel_btn_ = new QPushButton("发送 MOVE_VELOCITY");
+        connect(world_vel_btn_, &QPushButton::clicked, this, [this]() { publishWorldVelocity(); });
 
         wgs84_lat_spin_ = makeSpin(0.0, -90.0, 90.0, 0.000001, 7);
         wgs84_lon_spin_ = makeSpin(0.0, -180.0, 180.0, 0.000001, 7);
@@ -216,7 +231,6 @@ class UGVControlPanel : public QMainWindow
 
         layout->addWidget(new QLabel("快捷指令"), 0, 0);
         layout->addWidget(hold_btn, 0, 1);
-        layout->addWidget(return_btn, 0, 2);
 
         layout->addWidget(new QLabel("目标点 x/y/yaw(deg)"), 1, 0);
         layout->addWidget(point_x_spin_, 1, 1);
@@ -234,7 +248,7 @@ class UGVControlPanel : public QMainWindow
         layout->addWidget(world_vx_spin_, 3, 1);
         layout->addWidget(world_vy_spin_, 3, 2);
         layout->addWidget(world_yaw_spin_, 3, 3);
-        layout->addWidget(world_vel_btn, 3, 4);
+        layout->addWidget(world_vel_btn_, 3, 4);
 
         layout->addWidget(new QLabel("WGS84 lat/lon/alt"), 4, 0);
         layout->addWidget(wgs84_lat_spin_, 4, 1);
@@ -254,6 +268,7 @@ class UGVControlPanel : public QMainWindow
         pose_label_ = new QLabel("-");
         target_label_ = new QLabel("-");
         cmd_label_ = new QLabel("-");
+        diagnostic_label_ = new QLabel("-");
         output_label_ = new QLabel("-");
 
         layout->addWidget(new QLabel("机器人"), 0, 0);
@@ -266,8 +281,10 @@ class UGVControlPanel : public QMainWindow
         layout->addWidget(target_label_, 3, 1);
         layout->addWidget(new QLabel("输入命令"), 4, 0);
         layout->addWidget(cmd_label_, 4, 1);
-        layout->addWidget(new QLabel("输出速度"), 5, 0);
-        layout->addWidget(output_label_, 5, 1);
+        layout->addWidget(new QLabel("诊断信息"), 5, 0);
+        layout->addWidget(diagnostic_label_, 5, 1);
+        layout->addWidget(new QLabel("输出速度"), 6, 0);
+        layout->addWidget(output_label_, 6, 1);
         layout->setColumnStretch(1, 1);
         return group;
     }
@@ -331,12 +348,13 @@ class UGVControlPanel : public QMainWindow
     {
         sunray_msgs::UGVControlCMD cmd = makeBaseCmd(sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY);
         cmd.cmd_vel.linear.x = body_vx_spin_->value();
-        cmd.cmd_vel.linear.y = body_vy_spin_->value();
+        cmd.cmd_vel.linear.y =
+            (last_drive_type_ == sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL) ? 0.0 : body_vy_spin_->value();
         cmd.cmd_vel.angular.z = body_wz_spin_->value() * kDegToRad;
         cmd_pub_.publish(cmd);
         appendLog(QString("发布 MOVE_VELOCITY_BODY vx=%1 vy=%2 wz=%3deg/s")
                       .arg(body_vx_spin_->value(), 0, 'f', 2)
-                      .arg(body_vy_spin_->value(), 0, 'f', 2)
+                      .arg(cmd.cmd_vel.linear.y, 0, 'f', 2)
                       .arg(body_wz_spin_->value(), 0, 'f', 2));
     }
 
@@ -428,10 +446,49 @@ class UGVControlPanel : public QMainWindow
             target_label_->setText("无明确目标点");
         }
         cmd_label_->setText(activeCmdText(state.active_ugv_control_cmd));
+        diagnostic_label_->setText(diagnosticText(state));
         output_label_->setText(QString("vx=%1  vy=%2  wz=%3")
                                    .arg(state.controller_cmd_vel.linear.x, 0, 'f', 2)
                                    .arg(state.controller_cmd_vel.linear.y, 0, 'f', 2)
                                    .arg(state.controller_cmd_vel.angular.z, 0, 'f', 2));
+        updateDriveCapabilityUi(state.drive_type);
+    }
+
+    void updateDriveCapabilityUi(const uint8_t drive_type)
+    {
+        if (drive_type == last_drive_type_)
+        {
+            return;
+        }
+        last_drive_type_ = drive_type;
+
+        const bool differential = drive_type == sunray_msgs::UGVControlState::DRIVE_DIFFERENTIAL;
+        if (world_vel_btn_ != nullptr)
+        {
+            world_vel_btn_->setEnabled(!differential);
+            world_vel_btn_->setToolTip(differential ? "差速底盘不支持 MOVE_VELOCITY 世界系速度控制"
+                                                    : "麦克纳姆底盘支持 MOVE_VELOCITY 世界系速度控制");
+        }
+        if (body_vy_spin_ != nullptr)
+        {
+            body_vy_spin_->setEnabled(!differential);
+            body_vy_spin_->setToolTip(differential ? "差速底盘不支持横向速度 linear.y，发布时会强制为 0"
+                                                   : "麦克纳姆底盘支持横向速度 linear.y");
+            if (differential && std::fabs(body_vy_spin_->value()) > 1.0e-6)
+            {
+                const QSignalBlocker blocker(body_vy_spin_);
+                body_vy_spin_->setValue(0.0);
+            }
+        }
+
+        if (differential)
+        {
+            appendLog("差速底盘：MOVE_VELOCITY 和 linear.y 不可用，已在面板中禁用");
+        }
+        else if (drive_type == sunray_msgs::UGVControlState::DRIVE_MECANUM)
+        {
+            appendLog("麦克纳姆底盘：支持 MOVE_VELOCITY 和 linear.y");
+        }
     }
 
     ros::NodeHandle nh_;
@@ -451,6 +508,7 @@ class UGVControlPanel : public QMainWindow
     QDoubleSpinBox *world_vx_spin_{nullptr};
     QDoubleSpinBox *world_vy_spin_{nullptr};
     QDoubleSpinBox *world_yaw_spin_{nullptr};
+    QPushButton *world_vel_btn_{nullptr};
     QDoubleSpinBox *wgs84_lat_spin_{nullptr};
     QDoubleSpinBox *wgs84_lon_spin_{nullptr};
     QDoubleSpinBox *wgs84_alt_spin_{nullptr};
@@ -459,6 +517,7 @@ class UGVControlPanel : public QMainWindow
     QLabel *pose_label_{nullptr};
     QLabel *target_label_{nullptr};
     QLabel *cmd_label_{nullptr};
+    QLabel *diagnostic_label_{nullptr};
     QLabel *output_label_{nullptr};
     QPlainTextEdit *log_view_{nullptr};
     QTimer *refresh_timer_{nullptr};
@@ -466,6 +525,7 @@ class UGVControlPanel : public QMainWindow
     std::mutex state_mutex_;
     sunray_msgs::UGVControlState state_;
     bool has_state_{false};
+    uint8_t last_drive_type_{sunray_msgs::UGVControlState::DRIVE_UNKNOWN};
 };
 } // namespace
 

@@ -1,0 +1,92 @@
+# sunray_ugv_control 基础配置文件
+#
+# 本文件只放“所有 UGV 控制器都应共享”的默认参数。
+# 具体车型差异放在 config/airframes/*.yaml 中，并由 launch 参数 airframe 选择。
+#
+# 参数加载优先级：
+#   1. ugv_control_base.yaml
+#   2. config/airframes/<airframe>.yaml
+#   3. launch 参数 agent_name / agent_id
+#
+# 因此 airframe 文件可以覆盖这里的同名参数，launch 中的 agent_name/agent_id 最终覆盖 YAML。
+
+# ---------------- robot identity ----------------
+# 这两个值会被 launch 参数覆盖，通常不需要在这里修改。
+# 程序使用 agent_name + agent_id 生成话题前缀，例如 /ugv1。
+agent_name: "ugv"
+agent_id: 1
+
+# ---------------- drive base ----------------
+# 底盘类型：
+#   1 = 麦克纳姆轮，支持 MOVE_POINT / MOVE_VELOCITY / MOVE_VELOCITY_BODY，支持横向速度 linear.y。
+#   2 = 差速轮，支持 MOVE_POINT / MOVE_VELOCITY_BODY，只使用 vx + wz，不支持横向速度。
+# 默认值会被 airframe 文件覆盖。
+drive_type: 1
+
+# ---------------- common controller gains ----------------
+# kp_linear:
+#   MOVE_POINT 中位置误差到线速度的比例增益。
+#   麦克纳姆轮会同时作用于车体系 x/y；差速轮主要作用于前向速度。
+# kp_angular:
+#   yaw 误差到角速度 wz 的比例增益。
+kp_linear: 0.5
+kp_angular: 1.0
+
+# ---------------- common velocity limits ----------------
+# max_linear_vel:
+#   控制器输出线速度限幅，单位 m/s。
+#   麦克纳姆轮限制合速度范数；差速轮限制 linear.x。
+# max_angular_vel:
+#   控制器输出角速度限幅，单位 rad/s。
+max_linear_vel: 1.0
+max_angular_vel: 1.0
+
+# ---------------- command timeout ----------------
+# 速度类命令 MOVE_VELOCITY / MOVE_VELOCITY_BODY 需要持续发布。
+# 如果当前时间 - cmd.header.stamp > wait_velcmd_time，状态机会切换 HOLD。
+# 发布速度类命令时必须填写 cmd.header.stamp = ros::Time::now()。
+wait_velcmd_time: 5.0
+
+# ---------------- point arrival tolerance ----------------
+# MOVE_POINT 到达判定阈值。
+# point_pos_tolerance 只检查 x/y 平面误差，单位 m。
+# point_yaw_tolerance 检查 yaw 误差绝对值，单位 rad。
+point_pos_tolerance: 0.05
+point_yaw_tolerance: 0.10
+
+# ---------------- differential controller only ----------------
+# differential_controller 分组下的参数只对 drive_type=2 的 DifferentialController 生效。
+# 麦克纳姆轮控制器会读取通用 kp/max 参数，不使用该分组。
+#
+# enable_reverse:
+#   true 时，目标点在车身后方且距离较近时，差速车允许倒车抵达。
+# reverse_angle_threshold:
+#   触发倒车的最小后方夹角，单位 rad；2.09rad 约等于 120deg。
+# reverse_distance_threshold:
+#   只有目标距离不超过该值时才允许倒车，单位 m。
+# reverse_speed_ratio:
+#   倒车速度相对 max_linear_vel 的比例。
+# final_yaw_distance_threshold:
+#   距目标多近时停止平移，仅原地调整最终 yaw，单位 m。
+differential_controller:
+  enable_reverse: true
+  reverse_angle_threshold: 2.09
+  reverse_distance_threshold: 0.8
+  reverse_speed_ratio: 0.6
+  final_yaw_distance_threshold: 0.05
+
+# ---------------- geo fence ----------------
+# enable_geo_fence_protection:
+#   false: 只在 UGVControlState.inside_geo_fence 中反馈是否越界。
+#   true:  收到有效 odom 后，如果车辆越出围栏，状态机会自动切换 HOLD 并发布零速度。
+# 默认 false 是为了保持旧行为；真实车辆调试稳定后可按安全需求开启。
+enable_geo_fence_protection: false
+
+# 地理围栏边界，单位 m。
+# 当前仅按 local_odom 位置判断是否在 [min, max] 范围内。
+fence_min_x: -10.0
+fence_min_y: -10.0
+fence_min_z: -1.0
+fence_max_x: 10.0
+fence_max_y: 10.0
+fence_max_z: 1.0

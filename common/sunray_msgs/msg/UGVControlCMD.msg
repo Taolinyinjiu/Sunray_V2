@@ -28,7 +28,6 @@ uint8 cmd_source
 
 # ---------- control command：控制命令枚举 ----------
 uint8 HOLD=1                # 保持/停车：控制器持续发布零速度；不读取其他期望字段
-uint8 RETURN=2              # 返航：移动到 sunray_ugv_control 内部记录的 return point
 uint8 MOVE_POINT=3          # 点位控制：读取 desired_pos.x/y 和 desired_yaw；desired_pos.z 通常填 0
 uint8 MOVE_VELOCITY=4       # 世界系速度控制：读取 desired_vel.x/y 和 desired_yaw；适合全向底盘，差速底盘默认不支持
 uint8 MOVE_VELOCITY_BODY=5  # 车体系速度控制：读取 cmd_vel；差速底盘只使用 cmd_vel.linear.x + cmd_vel.angular.z

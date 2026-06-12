@@ -1,0 +1,27 @@
+# Gazebo 仿真 UGV 参数
+#
+# 适用场景：
+#   - Gazebo 中的 UGV 底盘模型
+#   - 首次联调控制链路、话题和 RViz 可视化
+#
+# 当前默认按麦克纳姆轮处理，便于测试世界系速度和横向速度。
+# 如果 Gazebo 模型是差速底盘，可把 drive_type 改为 2，并参考 differential_default.yaml。
+
+drive_type: 1
+
+kp_linear: 0.45
+kp_angular: 1.0
+max_linear_vel: 0.8
+max_angular_vel: 1.0
+
+wait_velcmd_time: 5.0
+point_pos_tolerance: 0.05
+point_yaw_tolerance: 0.10
+
+enable_geo_fence_protection: false
+fence_min_x: -20.0
+fence_min_y: -20.0
+fence_min_z: -2.0
+fence_max_x: 20.0
+fence_max_y: 20.0
+fence_max_z: 2.0

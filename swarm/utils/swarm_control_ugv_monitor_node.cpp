@@ -125,8 +125,6 @@ const char *controlCmdName(const uint8_t cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlCMD::RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
         return "MOVE_POINT";
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:

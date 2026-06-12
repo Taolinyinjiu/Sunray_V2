@@ -56,6 +56,21 @@ std::string okText(const bool ok)
     return ok ? colorText("正常", kAnsiGood) : colorText("异常", kAnsiBad);
 }
 
+std::string diagnosticText(const sunray_msgs::UGVControlState &state)
+{
+    switch (state.diagnostic_level)
+    {
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_OK:
+        return colorText("OK", kAnsiGood) + "  " + state.diagnostic_msg;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_WARN:
+        return colorText("WARN", kAnsiWarn) + "  " + state.diagnostic_msg;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR:
+        return colorText("ERROR", kAnsiBad) + "  " + state.diagnostic_msg;
+    default:
+        return colorText("UNKNOWN", kAnsiBad) + "  " + state.diagnostic_msg;
+    }
+}
+
 double yawFromOdom(const nav_msgs::Odometry &odom)
 {
     const auto &q = odom.pose.pose.orientation;
@@ -83,8 +98,6 @@ std::string fsmName(const uint8_t state)
         return "INIT";
     case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlState::FSM_RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
@@ -98,8 +111,6 @@ std::string cmdName(const uint8_t cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlCMD::RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
         return "MOVE_POINT";
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
@@ -142,7 +153,6 @@ std::string coloredFsmName(const uint8_t state)
     {
     case sunray_msgs::UGVControlState::FSM_HOLD:
         return colorText("HOLD", kAnsiGood);
-    case sunray_msgs::UGVControlState::FSM_RETURN:
     case sunray_msgs::UGVControlState::FSM_MOVE:
         return colorText(fsmName(state), kAnsiWarn);
     case sunray_msgs::UGVControlState::FSM_INIT:
@@ -157,7 +167,6 @@ std::string coloredCmdName(const uint8_t cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return colorText("HOLD", kAnsiGood);
-    case sunray_msgs::UGVControlCMD::RETURN:
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY:
     case sunray_msgs::UGVControlCMD::MOVE_VELOCITY_BODY:
@@ -190,8 +199,6 @@ std::string rawControlInputText(const sunray_msgs::UGVControlCMD &cmd)
     {
     case sunray_msgs::UGVControlCMD::HOLD:
         return "HOLD：无额外输入参数";
-    case sunray_msgs::UGVControlCMD::RETURN:
-        return "RETURN：使用内部返航点";
     case sunray_msgs::UGVControlCMD::MOVE_POINT:
         ss << "desired_pos = (" << cmd.desired_pos.x << ", " << cmd.desired_pos.y << ", " << cmd.desired_pos.z
            << ") m  desired_yaw = " << cmd.desired_yaw * kRadToDeg << " deg";
@@ -286,6 +293,9 @@ std::string buildPanel(const sunray_msgs::UGVControlState &state)
 
     ss << "           "
        << "原始输入 -> " << rawControlInputText(state.active_ugv_control_cmd) << "\n";
+
+    ss << "           "
+       << "诊断信息 -> " << diagnosticText(state) << "\n";
 
     ss << "           "
        << "控制目标 -> " << currentTargetText(state) << "\n";

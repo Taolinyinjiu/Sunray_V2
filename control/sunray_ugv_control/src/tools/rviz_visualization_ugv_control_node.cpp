@@ -46,13 +46,31 @@ std::string fsmName(const uint8_t state)
         return "INIT";
     case sunray_msgs::UGVControlState::FSM_HOLD:
         return "HOLD";
-    case sunray_msgs::UGVControlState::FSM_RETURN:
-        return "RETURN";
     case sunray_msgs::UGVControlState::FSM_MOVE:
         return "MOVE";
     default:
         return "UNKNOWN";
     }
+}
+
+std::string diagnosticText(const sunray_msgs::UGVControlState &state)
+{
+    std::string level = "UNKNOWN";
+    switch (state.diagnostic_level)
+    {
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_OK:
+        level = "OK";
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_WARN:
+        level = "WARN";
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR:
+        level = "ERROR";
+        break;
+    default:
+        break;
+    }
+    return "DIAG " + level + ": " + state.diagnostic_msg;
 }
 
 visualization_msgs::Marker makeBaseMarker(const sunray_msgs::UGVControlState &state,
@@ -228,6 +246,38 @@ void stateCallback(const sunray_msgs::UGVControlState::ConstPtr &msg)
     ss << "/" << msg->agent_name << static_cast<int>(msg->agent_id) << "  " << fsmName(msg->fsm_state);
     text.text = ss.str();
     markers.markers.push_back(text);
+
+    visualization_msgs::Marker diagnostic_text =
+        makeBaseMarker(*msg, base_id + 11, "ugv_diagnostic_text", visualization_msgs::Marker::TEXT_VIEW_FACING);
+    diagnostic_text.pose.position = pos;
+    diagnostic_text.pose.position.z += 0.48;
+    diagnostic_text.scale.z = 0.14;
+    diagnostic_text.color.a = 1.0;
+    switch (msg->diagnostic_level)
+    {
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_OK:
+        diagnostic_text.color.r = 0.25;
+        diagnostic_text.color.g = 1.0;
+        diagnostic_text.color.b = 0.35;
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_WARN:
+        diagnostic_text.color.r = 1.0;
+        diagnostic_text.color.g = 0.82;
+        diagnostic_text.color.b = 0.18;
+        break;
+    case sunray_msgs::UGVControlState::DIAGNOSTIC_ERROR:
+        diagnostic_text.color.r = 1.0;
+        diagnostic_text.color.g = 0.18;
+        diagnostic_text.color.b = 0.18;
+        break;
+    default:
+        diagnostic_text.color.r = 0.9;
+        diagnostic_text.color.g = 0.9;
+        diagnostic_text.color.b = 0.9;
+        break;
+    }
+    diagnostic_text.text = diagnosticText(*msg);
+    markers.markers.push_back(diagnostic_text);
 
     visualization_msgs::Marker heading =
         makeBaseMarker(*msg, base_id + 3, "ugv_heading", visualization_msgs::Marker::ARROW);

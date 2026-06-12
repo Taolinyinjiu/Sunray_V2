@@ -55,6 +55,11 @@ modules:
     source_path: "examples/sunray_uav_control_example"
     build_path: "build/sunray_uav_control_example"
     dependencies: [sunray_msgs, uav_control, sunray_common]
+  sunray_ugv_control_example:
+    description: "sunray项目中ugv单机控制示例 - 面向新手的UGV控制接口示例"
+    source_path: "examples/sunray_ugv_control_example"
+    build_path: "build/sunray_ugv_control_example"
+    dependencies: [sunray_msgs, ugv_control]
 
   # 规划模块功能包
 
@@ -224,7 +229,7 @@ groups:
   # common测试
   test:
     description: "测试"
-    modules: ["sunray_msgs","sunray_common","sunray_mavros","livox_ros_driver2","vrpn_client_ros","localization_fusion","sunray_mocap","ekf_odometry","fast_lio","uav_control","control_tools","sunray_launcher_panel","sunray_monitor_tools","sunray_system","scripts_manage","yunlink_ros_bridge","sunray_uav_control_example","sunray_swarm_control"]
+    modules: ["sunray_msgs","sunray_common","sunray_mavros","livox_ros_driver2","vrpn_client_ros","localization_fusion","sunray_mocap","ekf_odometry","fast_lio","uav_control","ugv_control","control_tools","sunray_launcher_panel","sunray_monitor_tools","sunray_system","scripts_manage","yunlink_ros_bridge","sunray_uav_control_example","sunray_ugv_control_example","sunray_swarm_control"]
 
   # control测试
   control_test:
