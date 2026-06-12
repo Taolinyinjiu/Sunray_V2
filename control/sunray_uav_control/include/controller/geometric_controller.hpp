@@ -74,6 +74,7 @@ class Geometric_Controller : public Controller_Interface {
     bool is_takeoff_complete() override;
     bool is_land_complete() override;
     bool is_point_complete() override;
+    uint8_t current_px4_landed_state() const override;
     bool get_last_attitude_target(mavros_msgs::AttitudeTarget& msg) const override;
 
   private:

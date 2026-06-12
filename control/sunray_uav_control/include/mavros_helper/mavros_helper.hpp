@@ -42,7 +42,7 @@ class MavrosHelper {
     void init();
     // 检查mavros_helper是否稳定工作
     bool is_ready();
-    control_common::Mavros_State get_state();
+    control_common::Mavros_State get_state() const;
     control_common::Mavros_Estimator get_estimator_status();
     control_common::UAVStateEstimate get_odometry();
     control_common::Mavros_Pose get_local_pose();

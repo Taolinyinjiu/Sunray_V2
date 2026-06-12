@@ -3,11 +3,31 @@
 #include "bridge_mapping.hpp"
 
 void YunlinkRosBridgeNode::onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg) {
+    {
+        std::lock_guard<std::mutex> lock(diag_mu_);
+        recordRosToYunlinkEvent(&local_odom_diag_,
+                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp);
+    }
     const yunlink::LocalOdomSnapshot payload = mapLocalOdom(*msg);
     publishSnapshot("local_odom", &yunlink::Runtime::publish_local_odom, payload);
 }
 
 void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& msg) {
+    {
+        std::lock_guard<std::mutex> lock(diag_mu_);
+        std::string detail = "external_source=" + std::to_string(msg->external_source) +
+                             " odometry_valid=" + std::string(msg->odometry_valid ? "true" : "false");
+        recordRosToYunlinkEvent(&odom_state_diag_,
+                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                detail);
+        external_odom_diag_.topic = msg->subtopic_name_external_odom;
+        external_odom_diag_.configured = !msg->subtopic_name_external_odom.empty();
+        external_odom_diag_.detail = msg->subtopic_name_external_relocalization;
+        global_odom_diag_.topic = msg->pubtopic_name_global_odom;
+        global_odom_diag_.configured = !msg->pubtopic_name_global_odom.empty();
+        local_odom_diag_.topic = msg->pubtopic_name_local_odom;
+        local_odom_diag_.configured = !msg->pubtopic_name_local_odom.empty();
+    }
     yunlink::OdomStateSnapshot payload{};
     payload.header = mapHeader(msg->header);
     payload.external_source = msg->external_source;
@@ -29,7 +49,24 @@ void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& m
     publishSnapshot("odom_state", &yunlink::Runtime::publish_odom_state, payload);
 }
 
+void YunlinkRosBridgeNode::onControlCmd(const sunray_msgs::UAVControlCMD::ConstPtr& msg) {
+    {
+        std::lock_guard<std::mutex> lock(diag_mu_);
+        recordRosToYunlinkEvent(&uav_control_cmd_diag_,
+                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                "control_cmd=" + std::to_string(msg->control_cmd));
+    }
+    const auto payload = mapControlCmd(*msg);
+    publishSnapshot("uav_control_cmd", &yunlink::Runtime::publish_uav_control_cmd, payload);
+}
+
 void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg) {
+    {
+        std::lock_guard<std::mutex> lock(diag_mu_);
+        recordRosToYunlinkEvent(&uav_control_state_diag_,
+                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                "fsm=" + std::to_string(msg->control_state));
+    }
     yunlink::UavControlStateSnapshot payload{};
     payload.header = mapHeader(msg->header);
     payload.agent_name = msg->agent_name;
@@ -51,16 +88,12 @@ void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::Co
     publishSnapshot("uav_control_state", &yunlink::Runtime::publish_uav_control_state, payload);
 }
 
-void YunlinkRosBridgeNode::onMavrosState(const mavros_msgs::State::ConstPtr& msg) {
-    yunlink::MavrosStateSnapshot payload{};
-    payload.header = mapHeader(msg->header);
-    payload.connected = msg->connected;
-    payload.armed = msg->armed;
-    payload.guided = msg->guided;
-    payload.manual_input = msg->manual_input;
-    payload.mode = msg->mode;
-    payload.system_status = msg->system_status;
-    publishSnapshot("mavros_state", &yunlink::Runtime::publish_mavros_state, payload);
+void YunlinkRosBridgeNode::onCommandExecutionStatus(
+    const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg) {
+    const auto payload = mapCommandExecutionStatus(*msg);
+    publishSnapshot("command_execution_status",
+                    &yunlink::Runtime::publish_command_execution_status,
+                    payload);
 }
 
 void YunlinkRosBridgeNode::onPx4State(const sunray_msgs::Px4State::ConstPtr& msg) {
@@ -68,6 +101,13 @@ void YunlinkRosBridgeNode::onPx4State(const sunray_msgs::Px4State::ConstPtr& msg
         std::lock_guard<std::mutex> lock(px4_state_mu_);
         latest_px4_height_m_ = static_cast<float>(msg->local_pose.position.z);
         has_px4_height_ = true;
+    }
+    {
+        std::lock_guard<std::mutex> lock(diag_mu_);
+        recordRosToYunlinkEvent(&px4_state_diag_,
+                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                "armed=" + std::string(msg->armed ? "true" : "false") +
+                                    " mode=" + std::to_string(msg->flight_mode));
     }
 
     yunlink::Px4StateSnapshot payload{};

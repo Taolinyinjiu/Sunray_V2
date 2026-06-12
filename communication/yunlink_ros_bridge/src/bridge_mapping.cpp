@@ -3,6 +3,10 @@
 yunlink::HeaderSnapshot mapHeader(const std_msgs::Header& msg) {
     yunlink::HeaderSnapshot out{};
     out.frame_id = msg.frame_id;
+    if (!msg.stamp.isZero()) {
+        out.stamp_ns =
+            static_cast<uint64_t>(msg.stamp.sec) * 1000000000ULL + static_cast<uint64_t>(msg.stamp.nsec);
+    }
     return out;
 }
 
@@ -98,25 +102,27 @@ yunlink::UavControlCmdSnapshot mapControlCmd(const sunray_msgs::UAVControlCMD& m
     return out;
 }
 
-yunlink::PositionTargetSnapshot mapPositionTarget(const mavros_msgs::PositionTarget& msg) {
-    yunlink::PositionTargetSnapshot out{};
+yunlink::CommandExecutionStatusSnapshot
+mapCommandExecutionStatus(const sunray_msgs::UAVCommandExecutionStatus& msg) {
+    yunlink::CommandExecutionStatusSnapshot out{};
     out.header = mapHeader(msg.header);
-    out.coordinate_frame = msg.coordinate_frame;
-    out.type_mask = msg.type_mask;
-    out.position_m = mapVector3(msg.position);
-    out.velocity_mps = mapVector3(msg.velocity);
-    out.acceleration_or_force = mapVector3(msg.acceleration_or_force);
-    out.yaw_rad = msg.yaw;
-    out.yaw_rate_radps = msg.yaw_rate;
-    return out;
-}
-
-yunlink::AttitudeTargetSnapshot mapAttitudeTarget(const mavros_msgs::AttitudeTarget& msg) {
-    yunlink::AttitudeTargetSnapshot out{};
-    out.header = mapHeader(msg.header);
-    out.type_mask = msg.type_mask;
-    out.orientation = mapQuaternion(msg.orientation);
-    out.body_rate_radps = mapVector3(msg.body_rate);
-    out.thrust = msg.thrust;
+    out.agent_name = msg.agent_name;
+    out.agent_id = msg.agent_id;
+    out.session_id = msg.yunlink_session_id;
+    out.command_message_id = msg.yunlink_message_id;
+    out.command_correlation_id = msg.yunlink_correlation_id;
+    out.command_kind = static_cast<yunlink::CommandKind>(msg.command_kind);
+    out.execution_state = msg.execution_state;
+    out.progress_percent = msg.progress_percent;
+    out.active = msg.active;
+    out.terminal = msg.terminal;
+    out.success = msg.success;
+    out.result_code = msg.result_code;
+    out.detail = msg.detail;
+    out.control_state = msg.control_state;
+    out.px4_landed_state = msg.px4_landed_state;
+    out.ready_for_takeoff = msg.ready_for_takeoff;
+    out.ready_for_land = msg.ready_for_land;
+    out.busy_reason = msg.busy_reason;
     return out;
 }

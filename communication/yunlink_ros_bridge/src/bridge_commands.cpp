@@ -5,6 +5,8 @@
 void YunlinkRosBridgeNode::onTakeoffCommand(
     const yunlink::InboundCommandView<yunlink::TakeoffCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(sunray_msgs::UAVControlCMD::TAKEOFF);
+    cmd.takeoff_relative_height = view.payload.relative_height_m;
+    cmd.takeoff_max_velocity = view.payload.max_velocity_mps;
     publishControlCmd("takeoff",
                       cmd,
                       view.inbound.envelope.session_id,
@@ -17,6 +19,7 @@ void YunlinkRosBridgeNode::onTakeoffCommand(
 void YunlinkRosBridgeNode::onLandCommand(
     const yunlink::InboundCommandView<yunlink::LandCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(sunray_msgs::UAVControlCMD::LAND);
+    cmd.land_max_velocity = view.payload.max_velocity_mps;
     publishControlCmd("land",
                       cmd,
                       view.inbound.envelope.session_id,

@@ -11,6 +11,8 @@
 
 #include "statemachine/sunray_fsm.hpp"
 #include "utils/orientation_utils.hpp"
+#include <algorithm>
+#include <cmath>
 #include <ros/ros.h>
 
 // -------------------------控制指令执行函数------------------
@@ -59,8 +61,8 @@ void Sunray_FSM::update_controller_output() {
     // 起飞阶段
     case sunray_fsm::SunrayState::TAKEOFF: {
         // 实际上takeoff函数是一个bool类型的函数
-        sunray_controller_->takeoff(fsm_config_.takeoff_land_param.takeoff_relative_height,
-                                    fsm_config_.takeoff_land_param.takeoff_max_velocity);
+        sunray_controller_->takeoff(active_takeoff_relative_height_.load(),
+                                    active_takeoff_max_velocity_.load());
         break;
     }
     // 悬停阶段
@@ -70,9 +72,10 @@ void Sunray_FSM::update_controller_output() {
     }
     // 降落阶段
     case sunray_fsm::SunrayState::LAND: {
-        // 降落状态下，我们疯狂调用takeoff函数
+        const double land_velocity = effective_land_max_velocity(uav_control_cmd);
+        active_land_max_velocity_.store(land_velocity);
         sunray_controller_->land(fsm_config_.takeoff_land_param.land_type,
-                                 fsm_config_.takeoff_land_param.land_max_velocity);
+                                 land_velocity);
         break;
     }
     // 返航阶段
@@ -94,6 +97,17 @@ void Sunray_FSM::update_controller_output() {
         sunray_controller_->move_point(home_target);
         // 如果到达了返航点,则根据参数配置,决定是降落还是切换为hover
         if (sunray_controller_->is_point_complete()) {
+            {
+                std::lock_guard<std::mutex> lk(command_status_mutex_);
+                if (command_status_.active &&
+                    command_status_.command_kind ==
+                        sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN) {
+                    mark_command_terminal_locked(true,
+                                                 control_common::CommandExecutionState::Succeeded,
+                                                 0,
+                                                 "return completed");
+                }
+            }
             if (fsm_config_.takeoff_land_param.return_with_land == true) {
                 enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_REQUEST);
             } else {
@@ -227,8 +241,96 @@ bool Sunray_FSM::update_home_point() {
     }
     // 更新home点
     home_point_ = odom_snapshot.position;
-    home_point_.z() = fsm_config_.takeoff_land_param.takeoff_relative_height;
+    control_common::UavControlCmd cmd_snapshot;
+    {
+        std::lock_guard<std::mutex> lk(cmd_mutex_);
+        cmd_snapshot = last_control_cmd_;
+    }
+    double takeoff_height = fsm_config_.takeoff_land_param.takeoff_relative_height;
+    double takeoff_velocity = fsm_config_.takeoff_land_param.takeoff_max_velocity;
+    // update_home_point 在 TAKEOFF_REQUEST 转移 action 中调用，此时 guard 已完成校验；
+    // 这里若仍解析失败，则回退到 config 当前值，避免 action 失败打断合法起飞。
+    (void)resolve_takeoff_command_params(cmd_snapshot, &takeoff_height, &takeoff_velocity, nullptr);
+    active_takeoff_relative_height_.store(takeoff_height);
+    active_takeoff_max_velocity_.store(takeoff_velocity);
+    home_point_.z() = takeoff_height;
     return true;
+}
+
+bool Sunray_FSM::resolve_takeoff_command_params(const control_common::UavControlCmd& cmd,
+                                                double* relative_takeoff_height,
+                                                double* max_takeoff_velocity,
+                                                std::string* reject_reason) const {
+    auto set_reject_reason = [reject_reason](const std::string& reason) {
+        if (reject_reason != nullptr) {
+            *reject_reason = reason;
+        }
+    };
+    if (relative_takeoff_height == nullptr || max_takeoff_velocity == nullptr) {
+        set_reject_reason("internal error: null takeoff parameter output");
+        return false;
+    }
+
+    double resolved_height = fsm_config_.takeoff_land_param.takeoff_relative_height;
+    double resolved_velocity = fsm_config_.takeoff_land_param.takeoff_max_velocity;
+    const bool is_takeoff_cmd =
+        cmd.control_cmd == control_common::UavControlCmd::ControlCmd::TAKEOFF;
+
+    if (is_takeoff_cmd && std::isfinite(cmd.takeoff_relative_height) &&
+        cmd.takeoff_relative_height > 0.0) {
+        resolved_height = cmd.takeoff_relative_height;
+    }
+    if (!std::isfinite(resolved_height) || resolved_height <= 0.0) {
+        set_reject_reason("takeoff_relative_height must be finite and > 0");
+        return false;
+    }
+
+    const double max_takeoff_height =
+        std::max(0.0, fsm_config_.local_fence_param.z_max - fsm_config_.local_fence_param.z_min);
+    if (max_takeoff_height <= 0.0) {
+        set_reject_reason("invalid local_fence z range, cannot derive takeoff height clamp");
+        return false;
+    }
+    resolved_height = std::clamp(resolved_height, 0.0, max_takeoff_height);
+    if (resolved_height <= 0.0) {
+        set_reject_reason("takeoff_relative_height clamp result must be > 0");
+        return false;
+    }
+
+    if (cmd.control_cmd == control_common::UavControlCmd::ControlCmd::TAKEOFF &&
+        std::isfinite(cmd.takeoff_max_velocity) &&
+        cmd.takeoff_max_velocity > 0.0) {
+        resolved_velocity = cmd.takeoff_max_velocity;
+    }
+    if (!std::isfinite(resolved_velocity) || resolved_velocity <= 0.0) {
+        set_reject_reason("takeoff_max_velocity must be finite and > 0");
+        return false;
+    }
+
+    const double max_vertical_velocity = fsm_config_.velocity_param.max_velocity.z();
+    if (!std::isfinite(max_vertical_velocity) || max_vertical_velocity <= 0.0) {
+        set_reject_reason("velocity_param.max_velocity.z must be finite and > 0");
+        return false;
+    }
+    resolved_velocity = std::clamp(resolved_velocity, 0.0, max_vertical_velocity);
+    if (resolved_velocity <= 0.0) {
+        set_reject_reason("takeoff_max_velocity clamp result must be > 0");
+        return false;
+    }
+
+    *relative_takeoff_height = resolved_height;
+    *max_takeoff_velocity = resolved_velocity;
+    return true;
+}
+
+double Sunray_FSM::effective_land_max_velocity(
+    const control_common::UavControlCmd& cmd) const {
+    if (cmd.control_cmd == control_common::UavControlCmd::ControlCmd::LAND &&
+        std::isfinite(cmd.land_max_velocity) &&
+        cmd.land_max_velocity > 0.0) {
+        return cmd.land_max_velocity;
+    }
+    return fsm_config_.takeoff_land_param.land_max_velocity;
 }
 
 // 设置Hover点，用于 Move -> Hover
