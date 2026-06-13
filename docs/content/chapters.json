@@ -1,0 +1,243 @@
+[
+  {
+    "group": "项目总览",
+    "title": "项目总览",
+    "files": ["overview/index.md"],
+    "sections": [
+      {"id": "intro", "title": "手册定位"},
+      {"id": "repo-map", "title": "仓库地图"},
+      {"id": "build-run", "title": "编译启动"},
+      {"id": "dev-path", "title": "学习路线"}
+    ]
+  },
+  {
+    "group": "Common 模块",
+    "title": "Common 模块",
+    "files": [
+      "common/sunray_msgs.md",
+      "common/sunray_common.md",
+      "common/sunray_log.md"
+    ],
+    "sections": [
+      {"id": "common-sunray-msgs", "title": "sunray_msgs"},
+      {"id": "common-sunray-common", "title": "sunray_common"},
+      {"id": "common-sunray-log", "title": "sunray_log"}
+    ]
+  },
+  {
+    "group": "定位模块",
+    "title": "定位模块",
+    "files": [
+      "localization/overview.md",
+      "localization/localization_fusion.md",
+      "localization/sunray_mocap.md",
+      "localization/sunray_viobot.md",
+      "localization/fast_lio.md",
+      "localization/ekf_odometry.md",
+      "localization/open3d_loc.md",
+      "localization/vins_fusion.md",
+      "localization/vins_fusion_gpu.md",
+      "localization/extension_debug.md"
+    ],
+    "sections": [
+      {"id": "localization-overview", "title": "定位总览"},
+      {"id": "localization-fusion", "title": "localization_fusion"},
+      {"id": "sunray-mocap", "title": "sunray_mocap"},
+      {"id": "sunray-viobot", "title": "sunray_viobot"},
+      {"id": "fast-lio", "title": "fast_lio"},
+      {"id": "ekf-odometry", "title": "ekf_odometry"},
+      {"id": "open3d-loc", "title": "open3d_loc"},
+      {"id": "vins-fusion", "title": "vins-fusion"},
+      {"id": "vins-fusion-gpu", "title": "vins-fusion-gpu"},
+      {"id": "localization-extension-debug", "title": "扩展与排错"}
+    ]
+  },
+  {
+    "group": "控制模块",
+    "title": "控制模块",
+    "files": [
+      "control/sunray_uav_control.md",
+      "control/sunray_ugv_control.md",
+      "control/control_tools.md"
+    ],
+    "sections": [
+      {"id": "sunray-uav-control", "title": "无人机控制"},
+      {"id": "sunray-ugv-control", "title": "无人车控制"},
+      {"id": "control-tools", "title": "控制工具"}
+    ]
+  },
+  {
+    "group": "示例程序",
+    "title": "示例程序",
+    "files": [
+      "examples/overview.md",
+      "examples/uav_control_example.md",
+      "examples/ugv_control_example.md",
+      "examples/uav_planning_example.md",
+      "examples/swarm_control_example.md"
+    ],
+    "sections": [
+      {"id": "examples-overview", "title": "示例程序总览"},
+      {"id": "examples-uav-control", "title": "无人机控制示例"},
+      {"id": "examples-ugv-control", "title": "无人车控制示例"},
+      {"id": "examples-uav-planning", "title": "无人机规划示例"},
+      {"id": "examples-swarm-control", "title": "集群控制示例"}
+    ]
+  },
+  {
+    "group": "规划模块",
+    "title": "规划模块",
+    "files": [
+      "planning/overview.md",
+      "planning/sunray_planning.md",
+      "planning/sunray_planner_msgs.md",
+      "planning/sunray_planner_tools.md",
+      "planning/ego_planner_swarm.md",
+      "planning/diff_planner.md",
+      "planning/fuel.md",
+      "planning/super.md"
+    ],
+    "sections": [
+      {"id": "planning-overview", "title": "规划总览"},
+      {"id": "sunray-planning", "title": "sunray_planning"},
+      {"id": "sunray-planner-msgs", "title": "sunray_planner_msgs"},
+      {"id": "sunray-planner-tools", "title": "sunray_planner_tools"},
+      {"id": "ego-planner-swarm", "title": "ego_planner_swarm"},
+      {"id": "diff-planner", "title": "diff_planner"},
+      {"id": "fuel-planner", "title": "FUEL"},
+      {"id": "super-planner", "title": "SUPER"}
+    ]
+  },
+  {
+    "group": "集群模块",
+    "title": "集群模块",
+    "files": [
+      "swarm/overview.md",
+      "swarm/nodes_launch.md",
+      "swarm/formation_orca.md"
+    ],
+    "sections": [
+      {"id": "swarm-overview", "title": "集群总览与架构"},
+      {"id": "swarm-nodes-launch", "title": "节点接口与启动"},
+      {"id": "swarm-formation-orca", "title": "Formation/ORCA 与扩展"}
+    ]
+  },
+  {
+    "group": "驱动模块",
+    "title": "驱动模块",
+    "files": [
+      "drivers/overview.md",
+      "drivers/sunray_mavros.md",
+      "drivers/livox_ros_driver2.md",
+      "drivers/realsense2_camera.md",
+      "drivers/sunray_gimbal.md",
+      "drivers/vrpn_client_ros.md",
+      "drivers/web_cam.md",
+      "drivers/turn_on_wheeltec_robot.md",
+      "drivers/librealsense2.md"
+    ],
+    "sections": [
+      {"id": "drivers-overview", "title": "驱动总览"},
+      {"id": "driver-sunray-mavros", "title": "sunray_mavros"},
+      {"id": "driver-livox-ros-driver2", "title": "livox_ros_driver2"},
+      {"id": "driver-realsense2-camera", "title": "realsense2_camera"},
+      {"id": "driver-sunray-gimbal", "title": "sunray_gimbal"},
+      {"id": "driver-vrpn-client-ros", "title": "vrpn_client_ros"},
+      {"id": "driver-web-cam", "title": "web_cam"},
+      {"id": "driver-turn-on-wheeltec-robot", "title": "turn_on_wheeltec_robot"},
+      {"id": "driver-librealsense2", "title": "librealsense2"}
+    ]
+  },
+  {
+    "group": "视觉感知模块",
+    "title": "视觉感知模块",
+    "files": [
+      "perception/overview.md",
+      "perception/sunray_perception.md",
+      "perception/code_analysis.md"
+    ],
+    "sections": [
+      {"id": "perception-overview", "title": "视觉感知总览"},
+      {"id": "perception-sunray-perception", "title": "sunray_perception"},
+      {"id": "perception-code-analysis", "title": "功能代码分析"}
+    ]
+  },
+  {
+    "group": "仿真模块",
+    "title": "仿真模块",
+    "files": ["simulation/index.md"],
+    "sections": [
+      {"id": "simulation", "title": "仿真"}
+    ]
+  },
+  {
+    "group": "工具模块",
+    "title": "工具模块",
+    "files": [
+      "tools/overview.md",
+      "tools/sunray_launcher_panel.md",
+      "tools/sunray_monitor_tools.md",
+      "tools/sunray_system.md",
+      "tools/scripts_manage.md",
+      "tools/px4_param_check.md",
+      "tools/build_scripts.md",
+      "tools/code_intel.md"
+    ],
+    "sections": [
+      {"id": "tools-overview", "title": "工具总览"},
+      {"id": "tools-sunray-launcher-panel", "title": "sunray_launcher_panel"},
+      {"id": "tools-sunray-monitor-tools", "title": "sunray_monitor_tools"},
+      {"id": "tools-sunray-system", "title": "sunray_system"},
+      {"id": "tools-scripts-manage", "title": "scripts_manage"},
+      {"id": "tools-px4-param-check", "title": "px4_param_check"},
+      {"id": "tools-build-scripts", "title": "build_scripts"},
+      {"id": "tools-code-intel", "title": "code_intel"}
+    ]
+  },
+  {
+    "group": "通信模块",
+    "title": "通信模块",
+    "files": [
+      "communication/yunlink_ros_bridge.md",
+      "communication/sunray_communication.md"
+    ],
+    "sections": [
+      {"id": "communication-yunlink-ros-bridge", "title": "yunlink_ros_bridge"},
+      {"id": "communication-sunray-communication", "title": "sunray_communication"}
+    ]
+  },
+  {
+    "group": "附录",
+    "title": "附录",
+    "files": [
+      "appendix/px4.md",
+      "appendix/mavlink.md",
+      "appendix/mavros.md"
+    ],
+    "sections": [
+      {"id": "appendix-px4", "title": "PX4"},
+      {"id": "appendix-mavlink", "title": "MAVLink"},
+      {"id": "appendix-mavros", "title": "MAVROS"}
+    ]
+  },
+  {
+    "group": "TODO",
+    "title": "TODO",
+    "files": [
+      "todo/overview.md",
+      "todo/control.md",
+      "todo/localization.md",
+      "todo/planning.md",
+      "todo/examples.md",
+      "todo/swarm.md"
+    ],
+    "sections": [
+      {"id": "todo-overview", "title": "TODO 总览"},
+      {"id": "todo-control", "title": "控制模块"},
+      {"id": "todo-localization", "title": "定位模块"},
+      {"id": "todo-planning", "title": "规划模块"},
+      {"id": "todo-examples", "title": "示例程序"},
+      {"id": "todo-swarm", "title": "集群示例"}
+    ]
+  }
+]

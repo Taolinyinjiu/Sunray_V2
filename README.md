@@ -28,6 +28,47 @@ bash <(curl -fsSL https://install.yundrone.cn/ble-wifi-tool.sh)
 https://tool.yundrone.cn/ble/
 ```
 
+## 二次开发与使用手册
+
+本仓库已经提供新版手册，入口在：
+
+```text
+docs/index.html
+```
+
+手册按功能包和开发链路组织，建议新手按“项目总览 -> Sunray 消息 -> 定位 -> 控制 -> 示例 -> 规划/集群/驱动/仿真/工具”的顺序阅读。
+
+### 直接打开
+
+```bash
+cd ~/Sunray_v2
+xdg-open docs/index.html
+```
+
+### 通过本地网页服务查看
+
+如果浏览器限制本地文件访问，或希望用更接近网站部署的方式查看：
+
+```bash
+cd ~/Sunray_v2/docs
+python3 -m http.server 8080
+```
+
+然后在浏览器打开：
+
+```text
+http://127.0.0.1:8080
+```
+
+### 修改手册后同步
+
+正文 Markdown 位于 `docs/content/`。修改 Markdown 后，请重新生成 `docs/assets/doc-data.js`，这样双击打开 `docs/index.html` 时也能看到最新内容：
+
+```bash
+cd ~/Sunray_v2
+python3 docs/assets/sync-doc-data.py
+```
+
 
 ## 仿真使用
 

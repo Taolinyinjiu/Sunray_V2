@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sunray_v2 二次开发与使用手册</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">SR</div>
+        <div>
+          <p class="brand-title">Sunray_v2 手册</p>
+          <p class="brand-subtitle">使用与二次开发指南</p>
+        </div>
+      </div>
+      <nav id="doc-nav"></nav>
+    </aside>
+
+    <main class="main">
+      <header class="hero">
+        <div class="hero-inner">
+          <p class="eyebrow">Sunray Open Source UAV Platform</p>
+          <h1>Sunray_v2 二次开发与使用手册</h1>
+          <p class="lead">
+            <strong>Sunray</strong> 是云纵科技 “<strong>Sunray 系列科研无人机</strong>” 的配套开源代码，为无人机智能化和自主化飞行提供 <strong>全套解决方案</strong>。
+          </p>
+        </div>
+      </header>
+
+      <div class="doc-shell">
+        <div class="content" id="doc-content" aria-live="polite">
+          <div class="loading-panel">
+            <h2>正在加载文档</h2>
+            <p>正在读取 Markdown 内容...</p>
+          </div>
+        </div>
+        <aside class="toc-sidebar" aria-label="当前页面目录">
+          <p class="toc-title">本页目录</p>
+          <nav id="page-toc"></nav>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <script src="assets/vendor/marked.min.js"></script>
+  <script src="assets/doc-data.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
