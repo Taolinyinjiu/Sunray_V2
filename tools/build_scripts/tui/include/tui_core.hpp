@@ -458,6 +458,16 @@ struct UIState {
    * - 搜索条件变化时
    */
   void update_group_render_items();
+
+  /**
+   * @brief 判断左栏指定索引是否是可选择的组行
+   */
+  bool is_selectable_group_index(int index) const;
+
+  /**
+   * @brief 查找下一个可选择组行
+   */
+  int find_next_selectable_group_index(int start_index, int direction) const;
   
   /**
    * @brief 更新右栏渲染项目列表（模块显示器）
@@ -475,6 +485,16 @@ struct UIState {
    * - 冲突状态更新时
    */
   void update_module_render_items();
+
+  /**
+   * @brief 判断右栏指定索引是否是可选择的模块行
+   */
+  bool is_selectable_module_index(int index) const;
+
+  /**
+   * @brief 查找下一个可选择模块行
+   */
+  int find_next_selectable_module_index(int start_index, int direction) const;
   
   /**
    * @brief 确保未分组模块的处理

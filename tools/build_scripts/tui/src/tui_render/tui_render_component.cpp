@@ -112,9 +112,9 @@ ftxui::Component UIRenderer::create_component() {
       animation::RequestAnimationFrame();
     }
 
-    // 动态计算UI区域高度
-    int debug_lines = calculate_debug_content_lines();
-    int key_guide_lines = calculate_key_guide_content_lines();
+    // 动态计算UI区域高度。调试窗口默认不显示，避免占用底部空间。
+    const int debug_lines = 0;
+    const int key_guide_lines = calculate_key_guide_content_lines();
 
     // 构建主要内容区域
     std::vector<Element> main_content;
@@ -153,8 +153,13 @@ ftxui::Component UIRenderer::create_component() {
     }
     const int extra_desc_lines = std::min(3, std::max(0, desc_lines - 1));
 
-    // 固定UI高度 = 标题(1) + 分隔符(1) + 栏目标题(1) + 分隔符(1) + 详情区(4+extra) + 分隔符(1) + 按钮(1) + 分隔符(1) + 按键指南(3) + 调试(5) + 边框(2)
-    const int fixed_ui_height = 1 + 1 + 1 + 1 + (4 + extra_desc_lines) + 1 + 1 + 1 + 3 + 5 + 2;
+    // 固定UI高度只统计双栏列表之外的内容，双栏内部标题和边框已经包含在
+    // available_height_for_columns 对应的列表高度里。
+    const int key_guide_height = key_guide_lines > 0 ? 1 + key_guide_lines : 0;
+    const int debug_height = debug_lines > 0 ? 1 + debug_lines + 2 : 0;
+    const int fixed_ui_height =
+        1 + 1 + 1 + (1 + extra_desc_lines) + 3 + 1 + 1 +
+        key_guide_height + debug_height;
     const int available_height_for_columns = std::max(8, terminal_height - fixed_ui_height);
 
     // 创建左栏内容
@@ -177,8 +182,11 @@ ftxui::Component UIRenderer::create_component() {
     right_column_elements.push_back(text("所有模块") | bold | center);
     right_column_elements.push_back(separator());
     
-    // 重新计算可见数量并填充右栏内容
-    state_.calculate_module_visible_count();
+    // 按当前真实布局计算右栏可见行数，避免终端缩放后与旧高度公式不一致。
+    const int column_content_height = std::max(3, available_height_for_columns - 4);
+    state_.module_visible_count =
+        std::max(3, std::min(column_content_height,
+                             static_cast<int>(state_.module_render_items.size())));
     state_.ensure_module_selection_visible();
     
     if (!state_.module_render_items.empty()) {

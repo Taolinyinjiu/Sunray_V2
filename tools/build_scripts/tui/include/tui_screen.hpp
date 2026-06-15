@@ -8,6 +8,7 @@ namespace sunray_tui {
 /// 屏幕元素类型
 enum class ElementType {
   GROUP_HEADER,
+  LABEL_HEADER,
   MODULE_ITEM,
   SEPARATOR,
   INFO_TEXT,

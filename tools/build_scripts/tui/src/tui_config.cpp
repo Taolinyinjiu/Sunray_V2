@@ -26,6 +26,7 @@ std::unique_ptr<ConfigData> load_config(const std::string &file_path) {
       Module module;
       module.name = item.first.as<std::string>();
       const auto &props = item.second;
+      module.label = props["label"].as<std::string>("");
       module.description = props["description"].as<std::string>("");
       module.source_path = props["source_path"].as<std::string>("");
       module.build_path = props["build_path"].as<std::string>("");
@@ -51,6 +52,7 @@ std::unique_ptr<ConfigData> load_config(const std::string &file_path) {
       ModuleGroup group;
       group.name = item.first.as<std::string>();
       const auto &props = item.second;
+      group.label = props["label"].as<std::string>("");
       group.description = props["description"].as<std::string>("");
       if (props["modules"] && props["modules"].IsSequence()) {
         const auto &modules = props["modules"];

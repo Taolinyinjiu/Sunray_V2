@@ -1,5 +1,6 @@
 #include "tui_render.hpp"
 #include "ftxui/component/event.hpp"
+#include "ftxui/screen/terminal.hpp"
 
 using namespace ftxui;
 
@@ -138,6 +139,9 @@ bool UIRenderer::handle_dual_column_mouse_click(const Mouse &mouse) {
             static_cast<int>(state_.group_render_items.size())) {
       // 设置组选择索引并触发组激活
       state_.group_selection_index = element.render_item_index;
+      if (!state_.is_selectable_group_index(state_.group_selection_index)) {
+        return false;
+      }
       state_.left_pane_focused = true;  // 点击左栏时设置左栏焦点
       state_.build_button_focused = false;  // 鼠标点击列表时，按钮失焦
       return state_.handle_group_activation();
@@ -151,6 +155,9 @@ bool UIRenderer::handle_dual_column_mouse_click(const Mouse &mouse) {
             static_cast<int>(state_.module_render_items.size())) {
       // 设置模块选择索引并触发模块选择
       state_.module_selection_index = element.render_item_index;
+      if (!state_.is_selectable_module_index(state_.module_selection_index)) {
+        return false;
+      }
       state_.left_pane_focused = false;  // 点击右栏时设置右栏焦点
       state_.build_button_focused = false;  // 鼠标点击列表时，按钮失焦
       return state_.handle_module_selection();
@@ -198,12 +205,21 @@ bool UIRenderer::handle_mouse_wheel(const Mouse &mouse) {
     state_.debug_info.last_scroll = "Down";
   }
 
-  // 检查鼠标位置是否在右栏（模块列表）区域
+  // 检查鼠标位置是否在右栏（模块列表）区域。label 行和空白行也允许滚动。
   ElementInfo element =
       state_.coordinate_mapper.get_element_at(mouse.y, mouse.x);
+  int terminal_width = 80;
+  try {
+    auto terminal_size = ftxui::Terminal::Size();
+    terminal_width = terminal_size.dimx;
+  } catch (...) {}
+  const int right_column_start_x = (terminal_width - 1) / 2;
 
-  // 如果鼠标在模块区域或者右栏焦点激活时，处理滚轮事件
-  bool in_module_area = (element.type == ElementType::MODULE_ITEM);
+  // 如果鼠标在右栏区域或者右栏焦点激活时，处理滚轮事件
+  bool in_module_area =
+      (mouse.x >= right_column_start_x) ||
+      (element.type == ElementType::MODULE_ITEM) ||
+      (element.type == ElementType::LABEL_HEADER);
   bool right_pane_active = !state_.left_pane_focused;
 
   if (in_module_area || right_pane_active) {
@@ -214,7 +230,7 @@ bool UIRenderer::handle_mouse_wheel(const Mouse &mouse) {
       scroll_direction = -3; // 一次滚动3行
     } else if (mouse.button == Mouse::WheelDown) {
       // 向下滚动：向后滚动列表（显示较晚的项目）
-      scroll_direction = 1; // 一次滚动3行
+      scroll_direction = 3; // 一次滚动3行
     }
 
     if (scroll_direction != 0) {
@@ -223,12 +239,13 @@ bool UIRenderer::handle_mouse_wheel(const Mouse &mouse) {
 
       // 如果选择项不在可视范围内，调整选择位置
       if (state_.module_selection_index < state_.module_scroll_offset) {
-        state_.module_selection_index = state_.module_scroll_offset;
+        state_.module_selection_index = state_.find_next_selectable_module_index(
+            state_.module_scroll_offset, 1);
         state_.module_hover_index = state_.module_selection_index;
       } else if (state_.module_selection_index >=
                  state_.module_scroll_offset + state_.module_visible_count) {
-        state_.module_selection_index =
-            state_.module_scroll_offset + state_.module_visible_count - 1;
+        state_.module_selection_index = state_.find_next_selectable_module_index(
+            state_.module_scroll_offset + state_.module_visible_count - 1, -1);
         state_.module_hover_index = state_.module_selection_index;
       }
 

@@ -191,6 +191,8 @@ void UILogic::load_last_selection() {
 
     // 应用上次选择到当前状态
     state_.view.selected_modules.clear();
+    state_.view.selected_groups.clear();
+    state_.view.active_group.clear();
     for (const auto &module : loaded_modules) {
       state_.view.selected_modules.insert(module);
     }

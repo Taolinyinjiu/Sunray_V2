@@ -10,7 +10,7 @@ namespace sunray_tui {
 struct ModuleGroup;
 
 struct Module {
-  std::string name, description, source_path, build_path;
+  std::string name, label, description, source_path, build_path;
   std::vector<std::string> dependencies, conflicts_with;
   std::string display_name() const { return name + " - " + description; }
   bool has_conflicts() const { return !conflicts_with.empty(); }
@@ -24,7 +24,7 @@ struct ModuleState {
 };
 
 struct ModuleGroup {
-  std::string name, description;
+  std::string name, label, description;
   std::vector<std::string> modules;
   std::string display_name() const {
     return name + " (" + std::to_string(modules.size()) + " modules) - " + description;
@@ -34,16 +34,22 @@ struct ModuleGroup {
 struct ViewState {
   std::string active_group, search_filter;
   std::unordered_set<std::string> selected_modules;
+  std::unordered_set<std::string> selected_groups;
   int scroll_offset = 0;
 
   bool is_module_selected(const std::string &name) const { return selected_modules.count(name) > 0; }
   bool is_group_active(const std::string &name) const { return active_group == name; }
+  bool is_group_selected(const std::string &name) const { return selected_groups.count(name) > 0; }
   void set_active_group(const std::string &name) { active_group = name; }
   void toggle_module_selection(const std::string &name) {
     if (is_module_selected(name)) selected_modules.erase(name);
     else selected_modules.insert(name);
   }
-  void clear_selection() { selected_modules.clear(); }
+  void clear_selection() {
+    selected_modules.clear();
+    selected_groups.clear();
+    active_group.clear();
+  }
   size_t selected_count() const { return selected_modules.size(); }
   size_t selected_count_in_group(const std::string &group_name, const std::vector<ModuleGroup> &groups) const {
     for (const auto &group : groups) {
@@ -59,7 +65,7 @@ struct ViewState {
 };
 
 struct RenderItem {
-  enum Type { GROUP_HEADER, MODULE_ITEM, SEPARATOR, INFO_TEXT };
+  enum Type { GROUP_HEADER, LABEL_HEADER, MODULE_ITEM, SEPARATOR, INFO_TEXT };
   Type type;
   std::string text, identifier, counter_text;
   bool is_selectable = false, has_selected_items = false, is_disabled = false;
@@ -67,6 +73,9 @@ struct RenderItem {
 
   static RenderItem group_header(const std::string &name, const std::string &text, const std::string &counter) {
     return {GROUP_HEADER, text, name, counter, true, false, false, 0};
+  }
+  static RenderItem label_header(const std::string &name, const std::string &text, const std::string &counter) {
+    return {LABEL_HEADER, text, name, counter, false, false, false, 0};
   }
   static RenderItem module_item(const std::string &name, const std::string &text, bool selected, int indent = 1) {
     return {MODULE_ITEM, (selected ? "■ " : "□ ") + text, name, "", true, false, false, indent};
