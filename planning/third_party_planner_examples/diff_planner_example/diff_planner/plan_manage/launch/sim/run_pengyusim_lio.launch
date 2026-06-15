@@ -1,0 +1,240 @@
+<launch>
+  <!-- PengyuSim 兼容入口，保留原始仿真链路。 -->
+  <arg name="drone_id" default="0"/>
+  <arg name="map_size_x" default="200.0"/>
+  <arg name="map_size_y" default="200.0"/>
+  <arg name="map_size_z" default="3.0"/>
+  <!-- poscmd_2_odom 的初始位姿偏置。 -->
+  <arg name="init_x" default="-15.0"/>
+  <arg name="init_y" default="0.0"/>
+  <arg name="init_z" default="1.0"/>
+  <arg name="flight_type" default="1"/>
+  <!-- true 时 FSM 会等待额外触发；false 时收到目标即可规划。 -->
+  <arg name="require_start_trigger" default="false"/>
+  <!-- 是否固定用于地图更新和 FSM 判定的飞行高度。 -->
+  <arg name="fix_agent_height" default="true"/>
+  <arg name="agent_height" default="1.0"/>
+  <!-- 是否固定输出轨迹高度。 -->
+  <arg name="fix_height" default="true"/>
+  <arg name="fixed_height" default="1.0"/>
+  <!-- false 为 360 度显示点云；true 为只显示机头前方约 60 度。 -->
+  <arg name="front_vis" default="false"/>
+  <!-- 固定 waypoint 目标。 -->
+  <arg name="point_num" default="1"/>
+  <arg name="target0_x" default="0.0"/>
+  <arg name="target0_y" default="0.0"/>
+  <arg name="target0_z" default="0.0"/>
+  <arg name="target1_x" default="0.0"/>
+  <arg name="target1_y" default="0.0"/>
+  <arg name="target1_z" default="0.0"/>
+  <arg name="target2_x" default="0.0"/>
+  <arg name="target2_y" default="0.0"/>
+  <arg name="target2_z" default="0.0"/>
+  <arg name="target3_x" default="0.0"/>
+  <arg name="target3_y" default="0.0"/>
+  <arg name="target3_z" default="0.0"/>
+  <arg name="target4_x" default="0.0"/>
+  <arg name="target4_y" default="0.0"/>
+  <arg name="target4_z" default="0.0"/>
+  <arg name="odom_topic" default="visual_slam/odom" />
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_manual_takeover" default="true"/>
+
+  <!-- 随机森林环境生成器。 -->
+  <node pkg="map_generator" name="random_forest" type="random_forest" output="screen">
+    <param name="map/x_size" value="26" />
+    <param name="map/y_size" value="20" />
+    <param name="map/z_size" value="3" />
+    <param name="map/resolution" value="0.1"/>
+    <param name="ObstacleShape/seed" value="1"/>
+    <param name="map/obs_num" value="100"/>
+    <param name="ObstacleShape/lower_rad" value="0.5"/>
+    <param name="ObstacleShape/upper_rad" value="0.7"/>
+    <param name="ObstacleShape/lower_hei" value="0.0"/>
+    <param name="ObstacleShape/upper_hei" value="3.0"/>
+    <param name="map/circle_num" value="100"/>
+    <param name="ObstacleShape/radius_l" value="0.7"/>
+    <param name="ObstacleShape/radius_h" value="0.5"/>
+    <param name="ObstacleShape/z_l" value="0.7"/>
+    <param name="ObstacleShape/z_h" value="0.8"/>
+    <param name="ObstacleShape/theta" value="0.5"/>
+    <param name="pub_rate" value="1.0"/>
+    <param name="min_distance" value="0.8"/>
+  </node>
+
+  <!-- Diff Planner 主节点，PengyuSim 下直接手写参数而不是走 advanced_param.xml。 -->
+  <node pkg="diff_planner" name="drone_$(arg drone_id)_diff_planner_node" type="diff_planner_node" output="screen">
+    <remap from="~odom_world" to="/drone_$(arg drone_id)_$(arg odom_topic)"/>
+    <remap from="~mandatory_stop" to="/mandatory_stop_to_planner"/>
+    <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory"/>
+    <remap from="~planning/data_display" to="/drone_$(arg drone_id)_planning/data_display"/>
+    <remap from="~planning/broadcast_traj_send" to="/broadcast_traj_from_planner"/>
+    <remap from="~planning/broadcast_traj_recv" to="/broadcast_traj_to_planner"/>
+    <remap from="~planning/heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>
+    <remap from="~grid_map/odom" to="/drone_$(arg drone_id)_$(arg odom_topic)"/>
+    <remap from="~grid_map/cloud" to="/drone_$(arg drone_id)_pcl_render_node/cloud"/>
+    <remap from="~grid_map/pose" to="/drone_$(arg drone_id)_pcl_render_node/camera_pose"/>
+    <remap from="~grid_map/depth" to="/drone_$(arg drone_id)_pcl_render_node/depth"/>
+
+    <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/>
+    <param name="fsm/thresh_replan_time" value="1.0" type="double"/>
+    <param name="fsm/planning_horizon" value="7.5" type="double"/>
+    <param name="fsm/emergency_time" value="1.0" type="double"/>
+    <param name="fsm/realworld_experiment" value="$(arg require_start_trigger)"/>
+    <param name="fsm/fail_safe" value="true"/>
+    <param name="fsm/fix_agent_height" value="$(arg fix_agent_height)"/>
+    <param name="fsm/agent_height" value="$(arg agent_height)"/>
+    <param name="fsm/mondify_final_goal" value="true"/>
+    <param name="fsm/enable_stuck_detect" value="true"/>
+    <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
+    <param name="fsm/waypoint0_x" value="$(arg target0_x)" type="double"/>
+    <param name="fsm/waypoint0_y" value="$(arg target0_y)" type="double"/>
+    <param name="fsm/waypoint0_z" value="$(arg target0_z)" type="double"/>
+    <param name="fsm/waypoint1_x" value="$(arg target1_x)" type="double"/>
+    <param name="fsm/waypoint1_y" value="$(arg target1_y)" type="double"/>
+    <param name="fsm/waypoint1_z" value="$(arg target1_z)" type="double"/>
+    <param name="fsm/waypoint2_x" value="$(arg target2_x)" type="double"/>
+    <param name="fsm/waypoint2_y" value="$(arg target2_y)" type="double"/>
+    <param name="fsm/waypoint2_z" value="$(arg target2_z)" type="double"/>
+    <param name="fsm/waypoint3_x" value="$(arg target3_x)" type="double"/>
+    <param name="fsm/waypoint3_y" value="$(arg target3_y)" type="double"/>
+    <param name="fsm/waypoint3_z" value="$(arg target3_z)" type="double"/>
+    <param name="fsm/waypoint4_x" value="$(arg target4_x)" type="double"/>
+    <param name="fsm/waypoint4_y" value="$(arg target4_y)" type="double"/>
+    <param name="fsm/waypoint4_z" value="$(arg target4_z)" type="double"/>
+
+    <param name="grid_map/resolution" value="0.1" />
+    <param name="grid_map/map_size_x" value="$(arg map_size_x)" />
+    <param name="grid_map/map_size_y" value="$(arg map_size_y)" />
+    <param name="grid_map/map_size_z" value="$(arg map_size_z)" />
+    <param name="grid_map/local_update_range_x" value="5.5" />
+    <param name="grid_map/local_update_range_y" value="5.5" />
+    <param name="grid_map/local_update_range_z" value="2.0" />
+    <!-- 默认障碍物膨胀半径改为 0.2m。 -->
+    <param name="grid_map/obstacles_inflation" value="0.2" />
+    <param name="grid_map/local_map_margin" value="10"/>
+    <param name="grid_map/enable_virtual_wall" value="false"/>
+    <param name="grid_map/virtual_ceil" value="3.0"/>
+    <param name="grid_map/virtual_ground" value="-0.1"/>
+    <param name="grid_map/ground_height" value="-0.01"/>
+    <param name="grid_map/cx" value="321.04638671875"/>
+    <param name="grid_map/cy" value="243.44969177246094"/>
+    <param name="grid_map/fx" value="387.229248046875"/>
+    <param name="grid_map/fy" value="387.229248046875"/>
+    <param name="grid_map/use_depth_filter" value="true"/>
+    <param name="grid_map/depth_filter_tolerance" value="0.15"/>
+    <param name="grid_map/depth_filter_maxdist" value="5.0"/>
+    <param name="grid_map/depth_filter_mindist" value="0.2"/>
+    <param name="grid_map/depth_filter_margin" value="2"/>
+    <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
+    <param name="grid_map/skip_pixel" value="2"/>
+    <param name="grid_map/p_hit" value="0.65"/>
+    <param name="grid_map/p_miss" value="0.35"/>
+    <param name="grid_map/p_min" value="0.12"/>
+    <param name="grid_map/p_max" value="0.90"/>
+    <param name="grid_map/p_occ" value="0.80"/>
+    <param name="grid_map/lidar_p_hit" value="0.9"/>
+    <param name="grid_map/lidar_p_miss" value="0.49"/>
+    <param name="grid_map/lidar_p_min" value="0.12"/>
+    <param name="grid_map/lidar_p_max" value="0.98"/>
+    <param name="grid_map/lidar_p_occ" value="0.85"/>
+    <param name="grid_map/cloud_enable_raycast" value="true"/>
+    <param name="grid_map/front_vis" value="$(arg front_vis)"/>
+    <param name="grid_map/fading_time" value="1000.0"/>
+    <param name="grid_map/min_ray_length" value="0.1"/>
+    <param name="grid_map/max_ray_length" value="4.5"/>
+    <param name="grid_map/visualization_truncate_height" value="1.9"/>
+    <param name="grid_map/show_occ_time" value="true"/>
+    <param name="grid_map/pose_type" value="1"/>
+    <param name="grid_map/frame_id" value="world"/>
+
+    <param name="manager/max_vel" value="1.5" type="double"/>
+    <param name="manager/max_acc" value="6.0" type="double"/>
+    <param name="manager/polyTraj_piece_length" value="1.5" type="double"/>
+    <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
+    <param name="manager/planning_horizon" value="7.5" type="double"/>
+    <param name="manager/use_multitopology_trajs" value="false" type="bool"/>
+    <param name="manager/fix_height" value="$(arg fix_height)" type="bool"/>
+    <param name="manager/fixed_height" value="$(arg fixed_height)" type="double"/>
+    <param name="manager/drone_id" value="$(arg drone_id)"/>
+
+    <param name="optimization/constraint_points_perPiece" value="5" type="int"/>
+    <param name="optimization/weight_obstacle" value="10000.0" type="double"/>
+    <param name="optimization/weight_obstacle_soft" value="5000.0" type="double"/>
+    <param name="optimization/weight_swarm" value="10000.0" type="double"/>
+    <param name="optimization/weight_feasibility" value="10000.0" type="double"/>
+    <param name="optimization/weight_sqrvariance" value="10000.0" type="double"/>
+    <param name="optimization/weight_time" value="10.0" type="double"/>
+    <param name="optimization/obstacle_clearance" value="0.1" type="double"/>
+    <param name="optimization/obstacle_clearance_soft" value="0.5" type="double"/>
+    <param name="optimization/swarm_clearance" value="0.15000000000000002" type="double"/>
+    <param name="optimization/max_vel" value="1.5" type="double"/>
+    <param name="optimization/vel_tolerance" value="1.0" type="double"/>
+    <param name="optimization/max_acc" value="6.0" type="double"/>
+    <param name="optimization/acc_tolerance" value="1.0" type="double"/>
+    <param name="optimization/max_jer" value="20.0" type="double"/>
+    <param name="optimization/record_opt" value="true"/>
+  </node>
+
+  <!-- 将规划得到的 pos_cmd 回放成仿真 odom。 -->
+  <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+    <remap from="position_cmd" to="drone_$(arg drone_id)_planning/pos_cmd"/>
+    <remap from="~planning/trajectory" to="drone_$(arg drone_id)_planning/trajectory"/>
+    <remap from="~planning/yaw" to="/drone_$(arg drone_id)_planning/yaw"/>
+    <remap from="~heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>
+    <param name="traj_server/time_forward" value="1.0" type="double"/>
+  </node>
+
+  <!-- 用规划输出驱动仿真位姿。 -->
+  <node pkg="poscmd_2_odom" name="drone_$(arg drone_id)_poscmd_2_odom" type="poscmd_2_odom" output="screen">
+    <param name="init_x" value="$(arg init_x)"/>
+    <param name="init_y" value="$(arg init_y)"/>
+    <param name="init_z" value="$(arg init_z)"/>
+    <remap from="~command" to="drone_$(arg drone_id)_planning/pos_cmd"/>
+    <remap from="~odometry" to="drone_$(arg drone_id)_$(arg odom_topic)"/>
+  </node>
+
+  <!-- 仿真 odom 可视化。 -->
+  <node pkg="odom_visualization" name="drone_$(arg drone_id)_odom_visualization" type="odom_visualization" output="screen">
+    <remap from="~odom" to="/drone_$(arg drone_id)_$(arg odom_topic)"/>
+    <param name="color/a" value="1.0"/>
+    <param name="color/r" value="0.0"/>
+    <param name="color/g" value="0.0"/>
+    <param name="color/b" value="0.0"/>
+    <param name="covariance_scale" value="100.0"/>
+    <param name="robot_scale" value="0.35"/>
+    <param name="tf45" value="false"/>
+    <param name="drone_id" value="$(arg drone_id)"/>
+  </node>
+
+  <!-- 本地点云渲染节点，为规划器生成深度/点云观测。 -->
+  <node pkg="local_sensing_node" type="pcl_render_node" name="drone_$(arg drone_id)_pcl_render_node" output="screen">
+    <rosparam command="load" file="$(find local_sensing_node)/params/camera.yaml" />
+    <param name="sensing_horizon" value="5.0" />
+    <param name="sensing_rate" value="30.0"/>
+    <param name="estimation_rate" value="30.0"/>
+    <param name="map/x_size" value="$(arg map_size_x)"/>
+    <param name="map/y_size" value="$(arg map_size_y)"/>
+    <param name="map/z_size" value="$(arg map_size_z)"/>
+    <remap from="~global_map" to="/map_generator/global_cloud"/>
+    <remap from="~odometry" to="/drone_$(arg drone_id)_$(arg odom_topic)"/>
+    <remap from="~pcl_render_node/cloud" to="/drone_$(arg drone_id)_pcl_render_node/cloud"/>
+  </node>
+
+  <!-- PengyuSim 的多点任务支持。 -->
+  <include file="$(find multipoint)/launch/multipointplan_sim.launch" />
+
+  <!-- 保留原始手动接管节点，便于调试。 -->
+  <include if="$(arg enable_manual_takeover)" file="$(find manual_take_over)/launch/take_over_drone.launch">
+    <arg name="drone_id" value="$(arg drone_id)"/>
+    <arg name="cmd_topic" value="drone_$(arg drone_id)_planning/pos_cmd"/>
+  </include>
+
+  <!-- 使用精简后的单机 RViz 配置。 -->
+  <node if="$(arg enable_rviz)"
+        name="rviz"
+        pkg="rviz"
+        type="rviz"
+        args="-d $(find diff_planner)/launch/rviz_config/single.rviz"
+        required="true" />
+</launch>

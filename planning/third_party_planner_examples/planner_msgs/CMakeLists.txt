@@ -14,6 +14,7 @@ add_message_files(
   DiffGoalSet.msg
   DiffPositionCommand.msg
   EgoPositionCommand.msg
+  FuelPositionCommand.msg
 )
 
 generate_messages(

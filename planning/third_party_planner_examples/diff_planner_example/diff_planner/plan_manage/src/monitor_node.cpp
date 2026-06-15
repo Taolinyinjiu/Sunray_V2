@@ -3,7 +3,7 @@
 #include <future>
 #include <thread>
 #include <Eigen/Eigen>
-#include <diff_planner_msgs/GoalSet.h>
+#include <planner_msgs/DiffGoalSet.h>
 using namespace Eigen;
 ros::Timer cmd_timer;
 ros::Publisher waypointPub_;
@@ -42,7 +42,7 @@ void monitorCallback(const ros::TimerEvent &e)
         cmd_timer.stop();
         ROS_ERROR("[monitor] Lost heartbeat from the planner, planner maybe dead !!! will restart diff_planner !!!");
         std::string process_name = "diff_planner";                                                          
-        std::string start_command = "roslaunch diff_planner single_drone_interactive.launch"; 
+        std::string start_command = "roslaunch diff_planner run_exp_single_lio.launch"; 
         std::future<void> kill_future = std::async(std::launch::async, kill_process, process_name);
         kill_future.wait();
         std::future<void> start_future = std::async(std::launch::async, restart_process, start_command);
@@ -59,7 +59,7 @@ void monitorCallback(const ros::TimerEvent &e)
             count = 0;  
             if (flag_have_recived_waypoint_)
             {
-                sunray_planner_msgs::DiffGoalSet msg;
+                planner_msgs::DiffGoalSet msg;
                 msg.goal[0] = record_wp_(0); 
                 msg.goal[1] = record_wp_(1);
                 msg.goal[2] = record_wp_(2);
@@ -72,7 +72,7 @@ void monitorCallback(const ros::TimerEvent &e)
         }
     }
 }
-  void waypointCallback(const sunray_planner_msgs::DiffGoalSetPtr &msg)
+  void waypointCallback(const planner_msgs::DiffGoalSetPtr &msg)
   {
     if (msg->goal[2] < -0.1 || msg->goal[1] > 20000 || msg->goal[0] > 20000) 
       return;
@@ -88,7 +88,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh("~");
     ros::Subscriber heartbeat_sub = nh.subscribe("/drone_0_traj_server/heartbeat", 10, heartbeatCallback);
     ros::Subscriber waypoint_sub_ = nh.subscribe("/goal_with_id", 1, waypointCallback);
-    waypointPub_ = nh.advertise<sunray_planner_msgs::DiffGoalSet>("/goal_with_id", 10);
+    waypointPub_ = nh.advertise<planner_msgs::DiffGoalSet>("/goal_with_id", 10);
     ros::Timer monitor_timer = nh.createTimer(ros::Duration(1.0), monitorCallback);
     ros::Duration(1.0).sleep();
     ROS_INFO("[monitor:] monitor node is ready.");

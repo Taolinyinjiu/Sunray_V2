@@ -1,0 +1,207 @@
+<launch>
+  <!-- 多机/多实例场景下的规划器编号。 -->
+  <arg name="drone_id" default="0"/>
+  <!-- 主里程计输入，Diff Planner 和 grid_map 都基于该世界系位姿工作。 -->
+  <arg name="odom_topic"/>
+  <!-- 仅深度模式使用的相机位姿输入；纯雷达模式下传入占位字符串即可。 -->
+  <arg name="camera_pose_topic" default="no_use0"/>
+  <!-- 深度图输入；纯雷达模式下传入占位字符串即可。 -->
+  <arg name="depth_topic" default="no_use1"/>
+  <!-- 点云输入；纯深度模式下传入占位字符串即可。 -->
+  <arg name="cloud_topic" default="no_use2"/>
+  <!-- RViz 2D Nav Goal 使用的话题名。 -->
+  <arg name="goal_name" default="/move_base_simple/goal"/>
+  <!-- 轨迹服务器输出的位置指令话题。 -->
+  <arg name="position_cmd_topic" default="/uav1/pos_cmd"/>
+
+  <!-- 深度相机内参。雷达模式下通常不会使用，但保留统一接口。 -->
+  <arg name="cx" default="321.04638671875"/>
+  <arg name="cy" default="243.44969177246094"/>
+  <arg name="fx" default="387.229248046875"/>
+  <arg name="fy" default="387.229248046875"/>
+
+  <!-- 规划器动力学约束。 -->
+  <arg name="max_vel" default="0.5"/>
+  <arg name="max_acc" default="3.0"/>
+  <arg name="max_jer" default="20.0"/>
+  <arg name="planning_horizon" default="7.5"/>
+
+  <!-- 局部地图尺寸与栅格参数。 -->
+  <arg name="local_map_size_x" default="5.5"/>
+  <arg name="local_map_size_y" default="5.5"/>
+  <arg name="local_map_size_z" default="2.0"/>
+  <!-- 是否启用虚拟地板/天花板，用于约束飞行高度范围。 -->
+  <arg name="enable_virtual_wall" default="true"/>
+  <arg name="virtual_ceil" default="2.0"/>
+  <arg name="virtual_ground" default="0.1"/>
+  <arg name="map_resolution" default="0.2"/>
+  <!-- 障碍物膨胀半径，默认 0.2m。 -->
+  <arg name="inflation_size" default="0.2"/>
+  <!-- 是否对点云做射线投射更新，占用清空更积极，但对点云质量更敏感。 -->
+  <arg name="cloud_enable_raycast" default="false"/>
+  <!-- 是否只显示机头前方点云；false 为 360 度显示，true 为前向约 60 度显示。 -->
+  <arg name="front_vis" default="false"/>
+
+  <!-- 传感器点云整体平移补偿，通常保持 0 即可。 -->
+  <arg name="init_x" default="0.0"/>
+  <arg name="init_y" default="0.0"/>
+  <arg name="init_z" default="0.0"/>
+  <!-- 是否固定 FSM / grid_map 使用的无人机高度。 -->
+  <arg name="fix_agent_height" default="true"/>
+  <arg name="agent_height" default="1.0"/>
+  <!-- 是否固定最终优化轨迹的 z 高度。 -->
+  <arg name="fix_height" default="true"/>
+  <arg name="fixed_height" default="1.0"/>
+
+  <!-- flight_type=1 时使用 waypoint / RViz 目标进行飞行。 -->
+  <arg name="flight_type" default="1"/>
+  <!-- true 时 FSM 会等待外部触发；false 时可直接接收目标开始规划。 -->
+  <arg name="require_start_trigger" default="false"/>
+  <!-- 固定 waypoint 模式下的目标点数量与坐标。 -->
+  <arg name="point_num" default="1"/>
+  <arg name="point0_x" default="1.0"/>
+  <arg name="point0_y" default="0.0"/>
+  <arg name="point0_z" default="0.0"/>
+  <arg name="point1_x" default="0.0"/>
+  <arg name="point1_y" default="0.0"/>
+  <arg name="point1_z" default="0.0"/>
+  <arg name="point2_x" default="0.0"/>
+  <arg name="point2_y" default="0.0"/>
+  <arg name="point2_z" default="0.0"/>
+  <arg name="point3_x" default="0.0"/>
+  <arg name="point3_y" default="0.0"/>
+  <arg name="point3_z" default="0.0"/>
+  <arg name="point4_x" default="0.0"/>
+  <arg name="point4_y" default="0.0"/>
+  <arg name="point4_z" default="0.0"/>
+
+  <!-- Diff Planner 主节点。 -->
+  <node pkg="diff_planner" name="drone_$(arg drone_id)_diff_planner_node" type="diff_planner_node" output="screen">
+    <!-- 由于节点内部使用私有 NodeHandle，这里必须显式把 RViz 的全局 goal 重映射进来。 -->
+    <remap from="~odom_world" to="$(arg odom_topic)"/>
+    <remap from="~move_base_simple/goal" to="$(arg goal_name)"/>
+    <remap from="~mandatory_stop" to="/mandatory_stop_to_planner"/>
+    <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory"/>
+    <remap from="~planning/data_display" to="/drone_$(arg drone_id)_planning/data_display"/>
+    <remap from="~planning/broadcast_traj_send" to="/broadcast_traj_from_planner"/>
+    <remap from="~planning/broadcast_traj_recv" to="/broadcast_traj_to_planner"/>
+    <remap from="~planning/heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>
+    <remap from="~grid_map/odom" to="$(arg odom_topic)"/>
+    <remap from="~grid_map/cloud" to="$(arg cloud_topic)"/>
+    <remap from="~grid_map/pose" to="$(arg camera_pose_topic)"/>
+    <remap from="~grid_map/depth" to="$(arg depth_topic)"/>
+
+    <!-- FSM 行为参数。 -->
+    <param name="fsm/flight_type" value="$(arg flight_type)" type="int"/>
+    <param name="fsm/thresh_replan_time" value="1.0" type="double"/>
+    <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+    <param name="fsm/emergency_time" value="0.8" type="double"/>
+    <param name="fsm/realworld_experiment" value="$(arg require_start_trigger)"/>
+    <param name="fsm/fail_safe" value="true"/>
+    <param name="fsm/fix_agent_height" value="$(arg fix_agent_height)" type="bool"/>
+    <param name="fsm/agent_height" value="$(arg agent_height)" type="double"/>
+    <param name="fsm/mondify_final_goal" value="true"/>
+    <param name="fsm/enable_stuck_detect" value="true"/>
+    <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
+    <param name="fsm/waypoint0_x" value="$(arg point0_x)" type="double"/>
+    <param name="fsm/waypoint0_y" value="$(arg point0_y)" type="double"/>
+    <param name="fsm/waypoint0_z" value="$(arg point0_z)" type="double"/>
+    <param name="fsm/waypoint1_x" value="$(arg point1_x)" type="double"/>
+    <param name="fsm/waypoint1_y" value="$(arg point1_y)" type="double"/>
+    <param name="fsm/waypoint1_z" value="$(arg point1_z)" type="double"/>
+    <param name="fsm/waypoint2_x" value="$(arg point2_x)" type="double"/>
+    <param name="fsm/waypoint2_y" value="$(arg point2_y)" type="double"/>
+    <param name="fsm/waypoint2_z" value="$(arg point2_z)" type="double"/>
+    <param name="fsm/waypoint3_x" value="$(arg point3_x)" type="double"/>
+    <param name="fsm/waypoint3_y" value="$(arg point3_y)" type="double"/>
+    <param name="fsm/waypoint3_z" value="$(arg point3_z)" type="double"/>
+    <param name="fsm/waypoint4_x" value="$(arg point4_x)" type="double"/>
+    <param name="fsm/waypoint4_y" value="$(arg point4_y)" type="double"/>
+    <param name="fsm/waypoint4_z" value="$(arg point4_z)" type="double"/>
+
+    <!-- 局部地图与占据栅格参数。 -->
+    <param name="grid_map/resolution" value="$(arg map_resolution)" />
+    <param name="grid_map/local_update_range_x" value="$(arg local_map_size_x)" />
+    <param name="grid_map/local_update_range_y" value="$(arg local_map_size_y)" />
+    <param name="grid_map/local_update_range_z" value="$(arg local_map_size_z)" />
+    <param name="grid_map/obstacles_inflation" value="$(arg inflation_size)" />
+    <param name="grid_map/enable_virtual_wall" value="$(arg enable_virtual_wall)"/>
+    <param name="grid_map/virtual_ceil" value="$(arg virtual_ceil)"/>
+    <param name="grid_map/virtual_ground" value="$(arg virtual_ground)"/>
+    <param name="grid_map/ground_height" value="-0.01"/>
+    <param name="grid_map/cx" value="$(arg cx)"/>
+    <param name="grid_map/cy" value="$(arg cy)"/>
+    <param name="grid_map/fx" value="$(arg fx)"/>
+    <param name="grid_map/fy" value="$(arg fy)"/>
+    <param name="grid_map/use_depth_filter" value="true"/>
+    <param name="grid_map/depth_filter_tolerance" value="0.15"/>
+    <param name="grid_map/depth_filter_maxdist" value="5.0"/>
+    <param name="grid_map/depth_filter_mindist" value="0.2"/>
+    <param name="grid_map/depth_filter_margin" value="2"/>
+    <param name="grid_map/k_depth_scaling_factor" value="1000.0"/>
+    <param name="grid_map/skip_pixel" value="2"/>
+    <param name="grid_map/p_hit" value="0.65"/>
+    <param name="grid_map/p_miss" value="0.35"/>
+    <param name="grid_map/p_min" value="0.12"/>
+    <param name="grid_map/p_max" value="0.90"/>
+    <param name="grid_map/p_occ" value="0.80"/>
+    <param name="grid_map/lidar_p_hit" value="0.9"/>
+    <param name="grid_map/lidar_p_miss" value="0.49"/>
+    <param name="grid_map/lidar_p_min" value="0.12"/>
+    <param name="grid_map/lidar_p_max" value="0.98"/>
+    <param name="grid_map/lidar_p_occ" value="0.85"/>
+    <param name="grid_map/cloud_enable_raycast" value="$(arg cloud_enable_raycast)"/>
+    <param name="grid_map/front_vis" value="$(arg front_vis)"/>
+    <param name="grid_map/fading_time" value="-1.0"/>
+    <param name="grid_map/min_ray_length" value="0.1"/>
+    <param name="grid_map/max_ray_length" value="4.5"/>
+    <param name="grid_map/visualization_truncate_height" value="1.9"/>
+    <param name="grid_map/show_occ_time" value="false"/>
+    <param name="grid_map/pose_type" value="2"/>
+    <param name="grid_map/frame_id" value="world"/>
+    <param name="grid_map/init_x" value="$(arg init_x)" />
+    <param name="grid_map/init_y" value="$(arg init_y)" />
+    <param name="grid_map/init_z" value="$(arg init_z)" />
+
+    <!-- 轨迹管理器约束。 -->
+    <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
+    <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>
+    <param name="manager/max_jer" value="$(arg max_jer)" type="double"/>
+    <param name="manager/polyTraj_piece_length" value="1.5" type="double"/>
+    <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
+    <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+    <param name="manager/use_multitopology_trajs" value="false" type="bool"/>
+    <param name="manager/fix_height" value="$(arg fix_height)" type="bool"/>
+    <param name="manager/fixed_height" value="$(arg fixed_height)" type="double"/>
+    <param name="manager/drone_id" value="$(arg drone_id)"/>
+
+    <!-- 轨迹优化权重。 -->
+    <param name="optimization/constraint_points_perPiece" value="5" type="int"/>
+    <param name="optimization/weight_obstacle" value="10000.0" type="double"/>
+    <param name="optimization/weight_obstacle_soft" value="5000.0" type="double"/>
+    <param name="optimization/weight_swarm" value="10000.0" type="double"/>
+    <param name="optimization/weight_feasibility" value="10000.0" type="double"/>
+    <param name="optimization/weight_sqrvariance" value="10000.0" type="double"/>
+    <param name="optimization/weight_time" value="10.0" type="double"/>
+    <param name="optimization/obstacle_clearance" value="0.1" type="double"/>
+    <param name="optimization/obstacle_clearance_soft" value="0.5" type="double"/>
+    <param name="optimization/swarm_clearance" value="0.15000000000000002" type="double"/>
+    <param name="optimization/max_vel" value="$(arg max_vel)" type="double"/>
+    <param name="optimization/vel_tolerance" value="1.0" type="double"/>
+    <param name="optimization/max_acc" value="$(arg max_acc)" type="double"/>
+    <param name="optimization/acc_tolerance" value="1.0" type="double"/>
+    <param name="optimization/max_jer" value="$(arg max_jer)" type="double"/>
+    <param name="optimization/record_opt" value="true"/>
+  </node>
+
+  <!-- 轨迹服务器：将规划结果转成 position_cmd。 -->
+  <node pkg="diff_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">
+    <remap from="position_cmd" to="$(arg position_cmd_topic)"/>
+    <remap from="~planning/trajectory" to="/drone_$(arg drone_id)_planning/trajectory"/>
+    <remap from="~planning/yaw" to="/drone_$(arg drone_id)_planning/yaw"/>
+    <remap from="~heartbeat" to="/drone_$(arg drone_id)_traj_server/heartbeat"/>
+    <param name="traj_server/time_forward" value="1.0" type="double"/>
+    <param name="traj_server/yaw_dot_max" value="3.14" type="double"/>
+    <param name="traj_server/yaw_dot_dot_max" value="15.71" type="double"/>
+  </node>
+</launch>

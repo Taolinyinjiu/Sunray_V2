@@ -1,0 +1,52 @@
+<launch>
+    <arg name="uav_id" default="1"/>
+    <arg name="map_size_x" default="45.0"/>
+    <arg name="map_size_y" default="45.0"/>
+    <arg name="map_size_z" default="5.0"/>
+    <arg name="local_pointcloud_topic" default="/uav$(arg uav_id)/livox/lidar"/>
+    <arg name="global_pointcloud_topic" default="/uav$(arg uav_id)/global_points"/>
+    <arg name="odom_topic" default="/uav$(arg uav_id)/sunray/gazebo_pose"/>
+    <arg name="sensor_pose_topic" default="/uav$(arg uav_id)/mavros/local_position/pose"/>
+    <arg name="position_cmd_topic" default="/uav$(arg uav_id)/pos_cmd"/>
+    <arg name="world_frame" default="world"/>
+    <arg name="max_vel" default="1.0"/>
+    <arg name="max_acc" default="1.0"/>
+    <arg name="enable_rviz" default="true"/>
+    <arg name="enable_fuel_adapter" default="true"/>
+    <arg name="control_cmd_topic" default="/uav$(arg uav_id)/sunray/uav_control/control_cmd"/>
+    <arg name="use_yaw_rate" default="false"/>
+    <arg name="ready_only" default="true"/>
+    <!-- 启动点云转换节点，将Gazebo中无人机三维激光雷达插件产生的点云转换为World坐标系下 -->
+    <include file="$(find planner_tools)/launch/point_cloud_transform.launch">
+        <arg name="input_point_topic" value="$(arg local_pointcloud_topic)"/>
+        <arg name="output_point_topic" value="$(arg global_pointcloud_topic)"/>
+        <arg name="odom_topic" value="$(arg odom_topic)"/>
+        <arg name="frame_id" value="$(arg world_frame)"/>
+        <arg name="child_frame_id" value="uav$(arg uav_id)/base_link"/>
+    </include>
+    <include file="$(find fuel_planner)/launch/include/advanced_param.xml">
+        <arg name="map_size_x" value="$(arg map_size_x)"/>
+        <arg name="map_size_y" value="$(arg map_size_y)"/>
+        <arg name="map_size_z" value="$(arg map_size_z)"/>
+        <arg name="odom_topic" value="$(arg odom_topic)"/>
+        <arg name="cloud_topic" value="$(arg global_pointcloud_topic)"/>
+        <arg name="sensor_pose_topic" value="$(arg sensor_pose_topic)"/>
+        <arg name="position_cmd_topic" value="$(arg position_cmd_topic)"/>
+        <arg name="max_vel" value="$(arg max_vel)"/>
+        <arg name="max_acc" value="$(arg max_acc)"/>
+    </include>
+    <include if="$(arg enable_fuel_adapter)" file="$(find sunray_fuel_adapter)/launch/Fuel2Sunray.launch">
+        <arg name="agent_name" value="uav"/>
+        <arg name="agent_id" value="$(arg uav_id)"/>
+        <arg name="input_topic" value="$(arg position_cmd_topic)"/>
+        <arg name="output_topic" value="$(arg control_cmd_topic)"/>
+        <arg name="use_yaw_rate" value="$(arg use_yaw_rate)"/>
+        <arg name="ready_only" value="$(arg ready_only)"/>
+    </include>
+    <node if="$(arg enable_rviz)"
+          name="rviz"
+          pkg="rviz"
+          type="rviz"
+          args="-d $(find fuel_planner)/launch/rviz_config/single.rviz"
+          required="true" />
+</launch>

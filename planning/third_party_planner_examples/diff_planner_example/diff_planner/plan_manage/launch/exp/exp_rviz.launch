@@ -1,4 +1,0 @@
-<!-- 实机RVIZ配置 -->
-<launch>
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find diff_planner)/launch/include/exp.rviz" required="true" />
-</launch>

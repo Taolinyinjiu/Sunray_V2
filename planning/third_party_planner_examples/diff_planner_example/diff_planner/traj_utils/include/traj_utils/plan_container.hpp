@@ -96,6 +96,10 @@ namespace diff_planner
     bool touch_goal;
     int drone_id; // single drone: drone_id <= -1, swarm: drone_id >= 0
 
+    /* 2D planning parameters */
+    bool fix_height_ = false;   // Whether to force the optimized trajectory to a fixed z.
+    double fixed_height_ = 1.0; // Fixed z used when fix_height_ is enabled.
+
     /* processing time */
     double time_search_ = 0.0;
     double time_optimize_ = 0.0;

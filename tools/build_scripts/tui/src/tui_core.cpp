@@ -122,14 +122,11 @@ void UIState::build_indices() {
 void UIState::toggle_module_selection_with_conflicts(
     const std::string &module_name) {
   if (interaction_manager) {
-    // 1. 使用新的交互管理器处理选择逻辑
     interaction_manager->toggle_module_selection(module_name);
-
-    // 2. 同步更新传统的视图状态 - 保持两套系统一致性
-    if (interaction_manager->is_module_selected(module_name)) {
-      view.selected_modules.insert(module_name);
-    } else {
-      view.selected_modules.erase(module_name);
+    view.selected_modules.clear();
+    for (const auto &selected_module :
+         interaction_manager->get_selected_modules()) {
+      view.selected_modules.insert(selected_module);
     }
   }
 }

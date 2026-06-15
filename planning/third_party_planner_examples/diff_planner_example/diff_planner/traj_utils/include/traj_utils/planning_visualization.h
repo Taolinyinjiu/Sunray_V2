@@ -38,7 +38,7 @@ namespace diff_planner
   public:
     PlanningVisualization(/* args */) {}
     ~PlanningVisualization() {}
-    PlanningVisualization(ros::NodeHandle &nh, const std::string &uav_ns);
+    PlanningVisualization(ros::NodeHandle &nh);
 
     typedef std::shared_ptr<PlanningVisualization> Ptr;
 

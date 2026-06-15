@@ -1,20 +1,93 @@
-<!-- 值得注意的是，Diff_Planner配置文件中并没有看到与坐标系有关的参数，因此我们可以得到的推断是，Diff_Planner要求输入的数据，默认使用world坐标系 -->
 <launch>
-  <!-- 里程计话题名 -->
-  <arg name="odom_topic" default="${uav_ns}/sunray/localization/local_odom" />
-  <!-- 全局点云 -->
-  <arg name="cloud_topic" default="${uav_ns}/sunray/localization/global_points" />
-  <arg name="front_vis" default="false" />
+  <!-- 与 EGO/FUEL 包装层保持一致的单机命名方式。 -->
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <!-- Diff Planner 内部使用的编号。 -->
+  <arg name="drone_id" default="0"/>
+  <!-- Sunray 提供的里程计输入。 -->
+  <arg name="odom_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/local_odom"/>
+  <!-- 已经转换到世界系的点云输入。 -->
+  <arg name="cloud_topic" default="/laserMapping/cloud_registered"/>
+  <!-- 规划器输出的位置指令。 -->
+  <arg name="position_cmd_topic" default="/$(arg agent_name)$(arg agent_id)/pos_cmd"/>
+  <!-- 规划器动力学约束。 -->
+  <arg name="max_vel" default="0.5"/>
+  <arg name="max_acc" default="3.0"/>
+  <arg name="max_jer" default="20.0"/>
+  <arg name="planning_horizon" default="7.5"/>
+  <!-- true 时 FSM 会等待额外触发；false 时收到目标即可规划。 -->
+  <arg name="require_start_trigger" default="false"/>
+  <!-- 是否固定用于地图更新和 FSM 判定的飞行高度。 -->
+  <arg name="fix_agent_height" default="true"/>
+  <arg name="agent_height" default="1.0"/>
+  <!-- 是否固定输出轨迹高度。 -->
+  <arg name="fix_height" default="true"/>
+  <arg name="fixed_height" default="1.0"/>
+  <!-- false 为 360 度显示点云；true 为只显示机头前方约 60 度。 -->
+  <arg name="front_vis" default="false"/>
+  <!-- 是否启动 RViz。 -->
+  <arg name="enable_rviz" default="true"/>
+  <!-- 是否加载 Sunray 控制接口适配器。 -->
+  <arg name="enable_diff_adapter" default="true"/>
+  <arg name="control_cmd_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/uav_control/control_cmd"/>
+  <arg name="use_yaw_rate" default="false"/>
+  <arg name="ready_only" default="true"/>
 
-  <arg name="enable_rviz" default="true" />
-
-  <!-- 向文件advanced_param_exp.xml中传递参数，并在xml文件中执行Diff_Planner的主节点 -->
-  <include file="$(find diff_planner)/launch/include/advanced_param_exp.xml">
-    <arg name="odom_topic" value="$(arg odom_topic)" />
-    <arg name="cloud_topic" value="$(arg cloud_topic)" />
-    <arg name="front_vis" value="$(arg front_vis)" />
+  <!-- LIO 实机入口：只使用点云和里程计，不使用深度图。 -->
+  <include file="$(find diff_planner)/launch/include/advanced_param.xml">
+    <arg name="drone_id" value="$(arg drone_id)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="camera_pose_topic" value="no_use0"/>
+    <arg name="depth_topic" value="no_use1"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+    <arg name="position_cmd_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="cx" value="319.31427001953125"/>
+    <arg name="cy" value="239.09725952148438"/>
+    <arg name="fx" value="386.2706298828125"/>
+    <arg name="fy" value="386.2706298828125"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
+    <arg name="max_jer" value="$(arg max_jer)"/>
+    <arg name="planning_horizon" value="$(arg planning_horizon)"/>
+    <arg name="local_map_size_x" value="5.5"/>
+    <arg name="local_map_size_y" value="5.5"/>
+    <arg name="local_map_size_z" value="2.0"/>
+    <arg name="enable_virtual_wall" value="true"/>
+    <arg name="virtual_ceil" value="2.0"/>
+    <arg name="virtual_ground" value="0.1"/>
+    <arg name="map_resolution" value="0.2"/>
+    <arg name="inflation_size" value="0.2"/>
+    <arg name="front_vis" value="$(arg front_vis)"/>
+    <arg name="init_x" value="0.0"/>
+    <arg name="init_y" value="0.0"/>
+    <arg name="init_z" value="0.0"/>
+    <arg name="fix_agent_height" value="$(arg fix_agent_height)"/>
+    <arg name="agent_height" value="$(arg agent_height)"/>
+    <arg name="fix_height" value="$(arg fix_height)"/>
+    <arg name="fixed_height" value="$(arg fixed_height)"/>
+    <arg name="flight_type" value="1"/>
+    <arg name="require_start_trigger" value="$(arg require_start_trigger)"/>
+    <arg name="point_num" value="1"/>
+    <arg name="point0_x" value="1.0"/>
+    <arg name="point0_y" value="0.0"/>
+    <arg name="point0_z" value="0.0"/>
   </include>
 
-  <node if="$(arg enable_rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find diff_planner)/launch/include/single.rviz" required="true" />
+  <!-- 将 Diff Planner 的 pos_cmd 转成 Sunray 控制命令。 -->
+  <include if="$(arg enable_diff_adapter)" file="$(find sunray_diff_adapter)/launch/Diff2Sunray.launch">
+    <arg name="agent_name" value="$(arg agent_name)"/>
+    <arg name="agent_id" value="$(arg agent_id)"/>
+    <arg name="input_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="output_topic" value="$(arg control_cmd_topic)"/>
+    <arg name="use_yaw_rate" value="$(arg use_yaw_rate)"/>
+    <arg name="ready_only" value="$(arg ready_only)"/>
+  </include>
 
+  <!-- 使用精简后的单机 RViz 配置。 -->
+  <node if="$(arg enable_rviz)"
+        name="rviz"
+        pkg="rviz"
+        type="rviz"
+        args="-d $(find diff_planner)/launch/rviz_config/single.rviz"
+        required="true" />
 </launch>

@@ -1,0 +1,107 @@
+<launch>
+  <!-- Gazebo 单机仿真入口。 -->
+  <arg name="uav_id" default="1"/>
+  <!-- Diff Planner 内部使用的编号。 -->
+  <arg name="drone_id" default="0"/>
+  <!-- 这三个参数目前主要给环境/传感器侧使用，规划器局部地图尺寸在 include 中单独配置。 -->
+  <arg name="map_size_x" default="45.0"/>
+  <arg name="map_size_y" default="45.0"/>
+  <arg name="map_size_z" default="5.0"/>
+  <!-- 机体系原始点云输入。 -->
+  <arg name="local_pointcloud_topic" default="/uav$(arg uav_id)/livox/lidar"/>
+  <!-- 经过点云变换节点后，输出到世界系的点云。 -->
+  <arg name="global_pointcloud_topic" default="/uav$(arg uav_id)/global_points"/>
+  <!-- Gazebo 位姿输入。 -->
+  <arg name="odom_topic" default="/uav$(arg uav_id)/sunray/gazebo_pose"/>
+  <!-- 规划器输出的位置指令。 -->
+  <arg name="position_cmd_topic" default="/uav$(arg uav_id)/pos_cmd"/>
+  <!-- 点云变换后的世界坐标系。 -->
+  <arg name="world_frame" default="world"/>
+  <!-- 规划器动力学约束。 -->
+  <arg name="max_vel" default="0.5"/>
+  <arg name="max_acc" default="3.0"/>
+  <arg name="max_jer" default="20.0"/>
+  <arg name="planning_horizon" default="7.5"/>
+  <!-- true 时 FSM 会等待额外触发；false 时收到目标即可规划。 -->
+  <arg name="require_start_trigger" default="false"/>
+  <!-- 是否固定用于地图更新和 FSM 判定的飞行高度。 -->
+  <arg name="fix_agent_height" default="true"/>
+  <arg name="agent_height" default="1.0"/>
+  <!-- 是否固定输出轨迹高度。 -->
+  <arg name="fix_height" default="true"/>
+  <arg name="fixed_height" default="1.0"/>
+  <!-- false 为 360 度显示点云；true 为只显示机头前方约 60 度。 -->
+  <arg name="front_vis" default="false"/>
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_diff_adapter" default="true"/>
+  <arg name="control_cmd_topic" default="/uav$(arg uav_id)/sunray/uav_control/control_cmd"/>
+  <arg name="use_yaw_rate" default="false"/>
+  <arg name="ready_only" default="true"/>
+
+  <!-- 将机体系点云结合里程计转换到世界系，供 Diff Planner 直接使用。 -->
+  <include file="$(find planner_tools)/launch/point_cloud_transform.launch">
+    <arg name="input_point_topic" value="$(arg local_pointcloud_topic)"/>
+    <arg name="output_point_topic" value="$(arg global_pointcloud_topic)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="frame_id" value="$(arg world_frame)"/>
+    <arg name="child_frame_id" value="uav$(arg uav_id)/base_link"/>
+  </include>
+
+  <!-- Gazebo + LIO 入口：只使用点云和里程计，不使用深度图。 -->
+  <include file="$(find diff_planner)/launch/include/advanced_param.xml">
+    <arg name="drone_id" value="$(arg drone_id)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="camera_pose_topic" value="no_use0"/>
+    <arg name="depth_topic" value="no_use1"/>
+    <arg name="cloud_topic" value="$(arg global_pointcloud_topic)"/>
+    <arg name="position_cmd_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="cx" value="319.31427001953125"/>
+    <arg name="cy" value="239.09725952148438"/>
+    <arg name="fx" value="386.2706298828125"/>
+    <arg name="fy" value="386.2706298828125"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
+    <arg name="max_jer" value="$(arg max_jer)"/>
+    <arg name="planning_horizon" value="$(arg planning_horizon)"/>
+    <arg name="local_map_size_x" value="5.5"/>
+    <arg name="local_map_size_y" value="5.5"/>
+    <arg name="local_map_size_z" value="2.0"/>
+    <arg name="enable_virtual_wall" value="true"/>
+    <arg name="virtual_ceil" value="2.0"/>
+    <arg name="virtual_ground" value="0.1"/>
+    <arg name="map_resolution" value="0.2"/>
+    <arg name="inflation_size" value="0.2"/>
+    <arg name="front_vis" value="$(arg front_vis)"/>
+    <arg name="init_x" value="0.0"/>
+    <arg name="init_y" value="0.0"/>
+    <arg name="init_z" value="0.0"/>
+    <arg name="fix_agent_height" value="$(arg fix_agent_height)"/>
+    <arg name="agent_height" value="$(arg agent_height)"/>
+    <arg name="fix_height" value="$(arg fix_height)"/>
+    <arg name="fixed_height" value="$(arg fixed_height)"/>
+    <arg name="flight_type" value="1"/>
+    <arg name="require_start_trigger" value="$(arg require_start_trigger)"/>
+    <arg name="point_num" value="1"/>
+    <arg name="point0_x" value="1.0"/>
+    <arg name="point0_y" value="0.0"/>
+    <arg name="point0_z" value="1.0"/>
+  </include>
+
+  <!-- 将 Diff Planner 的 pos_cmd 转成 Sunray 控制命令。 -->
+  <include if="$(arg enable_diff_adapter)" file="$(find sunray_diff_adapter)/launch/Diff2Sunray.launch">
+    <arg name="agent_name" value="uav"/>
+    <arg name="agent_id" value="$(arg uav_id)"/>
+    <arg name="input_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="output_topic" value="$(arg control_cmd_topic)"/>
+    <arg name="use_yaw_rate" value="$(arg use_yaw_rate)"/>
+    <arg name="ready_only" value="$(arg ready_only)"/>
+  </include>
+
+  <!-- 使用精简后的单机 RViz 配置。 -->
+  <node if="$(arg enable_rviz)"
+        name="rviz"
+        pkg="rviz"
+        type="rviz"
+        args="-d $(find diff_planner)/launch/rviz_config/single.rviz"
+        required="true" />
+</launch>

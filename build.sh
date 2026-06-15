@@ -233,6 +233,12 @@ main() {
     print_status "解析模块依赖关系..."
     local resolved_modules=($(resolve_dependencies "${SELECTED_MODULES[@]}"))
     [[ ${#resolved_modules[@]} -eq 0 ]] && { print_error "没有找到要构建的模块"; exit 1; }
+
+    print_status "检查互斥模块产物..."
+    prepare_mutex_build_environment "${resolved_modules[@]}" || {
+        print_error "互斥模块清理失败"
+        exit 1
+    }
     
     echo -e "\n${CYAN}=== 开始构建 ===${NC}\n构建模块: ${resolved_modules[*]}\n并行任务: $BUILD_JOBS\n"
     

@@ -5,8 +5,8 @@
 #include <iostream>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Joy.h>
+#include <planner_msgs/DiffGoalSet.h>
 #include <traj_utils/MINCOTraj.h>
-#include <diff_planner_msgs/GoalSet.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <unistd.h>
 #include "reliable_bridge.hpp"
@@ -141,7 +141,7 @@ void joystick_sub_cb(const sensor_msgs::JoyPtr &msg)
   send_to_all_drone_except_me("/joystick",*msg);
 }
 
-void goal_sub_cb(const diff_planner_msgs::GoalSetPtr &msg)
+void goal_sub_cb(const planner_msgs::DiffGoalSetPtr &msg)
 {
   if (msg->drone_id==self_id_in_bridge_)
   {
@@ -155,7 +155,7 @@ void goal_sub_cb(const diff_planner_msgs::GoalSetPtr &msg)
   }
 }
 
-void goal_exploration_sub_cb(const diff_planner_msgs::GoalSetPtr &msg)
+void goal_exploration_sub_cb(const planner_msgs::DiffGoalSetPtr &msg)
 {
   if (bridge->send_msg_to_all("/goal_exploration",*msg))
   {
@@ -201,7 +201,7 @@ void object_odom_bridge_cb(int ID, ros::SerializedMessage& m)
 
 void goal_bridge_cb(int ID, ros::SerializedMessage& m)
 {
-  diff_planner_msgs::GoalSet goal_msg_;
+  planner_msgs::DiffGoalSet goal_msg_;
   ros::serialization::deserializeMessage(m,goal_msg_);
   goal_pub_.publish(goal_msg_);
 }
@@ -222,7 +222,7 @@ void joystick_bridge_cb(int ID, ros::SerializedMessage& m)
 
 void goal_exploration_bridge_cb(int ID, ros::SerializedMessage& m)
 {
-  diff_planner_msgs::GoalSet goal_msg_;
+  planner_msgs::DiffGoalSet goal_msg_;
   ros::serialization::deserializeMessage(m,goal_msg_);
   goal_exploration_pub_.publish(goal_msg_);
 }
@@ -296,11 +296,11 @@ int main(int argc, char **argv)
   register_callbak_to_all_groundstation("/joystick",joystick_bridge_cb);
 
   goal_sub_ = nh.subscribe("/goal_user2brig", 100, goal_sub_cb, ros::TransportHints().tcpNoDelay());
-  goal_pub_ = nh.advertise<diff_planner_msgs::GoalSet>("/goal_brig2plner", 100);
+  goal_pub_ = nh.advertise<planner_msgs::DiffGoalSet>("/goal_brig2plner", 100);
   register_callbak_to_all_groundstation("/goal",goal_bridge_cb);
 
   // goal_exploration_sub_ = nh.subscribe("/goal_with_id", 100, goal_exploration_sub_udp_cb, ros::TransportHints().tcpNoDelay());
-  // goal_exploration_pub_ = nh.advertise<diff_planner_msgs::GoalSet>("/goal_with_id_to_planner", 100);
+  // goal_exploration_pub_ = nh.advertise<planner_msgs::DiffGoalSet>("/goal_with_id_to_planner", 100);
   // bridge->register_callback_for_all("/goal_exploration",goal_exploration_bridge_cb);
 
   // star_cvx_sub_ = nh.subscribe("/free_map/star_cvx", 100, star_cvx_sub_udp_cb, ros::TransportHints().tcpNoDelay());

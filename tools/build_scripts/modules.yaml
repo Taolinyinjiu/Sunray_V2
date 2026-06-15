@@ -123,18 +123,6 @@ modules:
     dependencies: []
 
   # ----- planning: Sunray 自研规划器、规划消息和第三方规划器适配示例 -----
-  sunray_planner_msgs:
-    description: "Sunray 规划模块内部消息定义，用于统一规划器之间的数据接口"
-    label: planning
-    source_path: "planning/sunray_planner/sunray_planner_msgs"
-    build_path: "build/sunray_planner_msgs"
-    dependencies: []
-  sunray_planning:
-    description: "Sunray 自研统一规划入口，连接任务输入、规划输出和控制接口"
-    label: planning
-    source_path: "planning/sunray_planner/sunray_planning"
-    build_path: "build/sunray_planning"
-    dependencies: ["sunray_msgs", "sunray_common", "sunray_planner_msgs"]
   planner_msgs:
     description: "EGO planner 示例依赖的 planner_msgs 消息包"
     label: planning
@@ -147,24 +135,52 @@ modules:
     source_path: "planning/third_party_planner_examples/planner_tools"
     build_path: "build/planner_tools"
     dependencies: ["sunray_msgs"]
+
   ego_planner_swarm:
     description: "EGO planner 第三方源码示例包，用于轨迹规划功能验证"
     label: planning
     source_path: "planning/third_party_planner_examples/ego_planner_example/ego-planner-swarm"
     build_path: "build/ego_planner_swarm"
     dependencies: ["planner_msgs"]
+    conflicts_with: ["fuel_planner", "diff_planner", "sunray_fuel_adapter", "sunray_diff_adapter"]
   sunray_ego_adapter:
     description: "EGO planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
     label: planning
     source_path: "planning/third_party_planner_examples/ego_planner_example/sunray_ego_adapter"
     build_path: "build/sunray_ego_adapter"
     dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_fuel_adapter", "sunray_diff_adapter", "fuel_planner", "diff_planner"]
+  
+  sunray_fuel_adapter:
+    description: "FUEL planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/fuel_planner_example/sunray_fuel_adapter"
+    build_path: "build/sunray_fuel_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_diff_adapter", "ego_planner_swarm", "diff_planner"]
+  fuel_planner:
+    description: "FUEL planner 第三方源码示例包，用于轨迹规划功能验证"
+    label: planning
+    source_path: "planning/third_party_planner_examples/fuel_planner_example/fuel_planner"
+    build_path: "build/fuel_planner"
+    dependencies: ["planner_msgs", "planner_tools", "sunray_fuel_adapter"]
+    conflicts_with: ["ego_planner_swarm", "diff_planner", "sunray_ego_adapter", "sunray_diff_adapter"]
+  
   diff_planner:
     description: "Diff Planner 第三方规划器示例包，用于规划算法对接测试"
     label: planning
     source_path: "planning/third_party_planner_examples/diff_planner_example/diff_planner"
     build_path: "build/diff_planner"
-    dependencies: ["sunray_planner_msgs"]
+    dependencies: ["planner_msgs", "planner_tools", "sunray_diff_adapter"]
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "sunray_ego_adapter", "sunray_fuel_adapter"]
+  sunray_diff_adapter:
+    description: "Diff planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/diff_planner_example/sunray_diff_adapter"
+    build_path: "build/sunray_diff_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_fuel_adapter", "ego_planner_swarm", "fuel_planner"]
+
   super_planner:
     description: "SUPER/MARS Lab 第三方规划器示例包，当前仍处于适配阶段"
     label: planning
