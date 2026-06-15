@@ -210,7 +210,7 @@ int main(int argc, char** argv) {
 更完整的控制接口示例请优先参考：
 
 ```text
-examples/sunray_uav_control_example/
+uav_control/sunray_uav_control_example/
 ```
 
 这个目录按 `UAVControlCMD.control_cmd` 类型拆分示例，适合小白开发者照着改：
@@ -226,15 +226,15 @@ examples/sunray_uav_control_example/
 | 机体系速度控制 | `src/MOVE_VELOCITY_BODY/move_velocity_body.cpp` |
 | 轨迹控制 | `src/MOVE_TRAJECTORY/move_trajectory.cpp`、`circle_trajectory.cpp`、`lemniscate_trajectory.cpp` |
 
-`control/control_tools` 下面的代码也可以参考，但它们更偏“工具”和“测试”：
+`uav_control/uav_control_tools` 下面的代码也可以参考，但它们更偏“工具”和“测试”：
 
 | 文件 | 用途 |
 | --- | --- |
-| `control/control_tools/src/terminal_control/uav_terminal_control.cpp` | 终端交互式发命令，适合快速手动测试话题是否通 |
-| `control/control_tools/src/uav_control_panel_node.cpp` | Qt/RViz 控制面板，适合地面站 UI 操作和状态观察 |
-| `control/control_tools/src/velocity_test/triangle_velocity_test.cpp` | 速度闭环压力测试，不建议作为新手二次开发模板 |
+| `uav_control/uav_control_tools/src/terminal_control/uav_terminal_control.cpp` | 终端交互式发命令，适合快速手动测试话题是否通 |
+| `uav_control/uav_control_tools/src/uav_control_panel_node.cpp` | Qt/RViz 控制面板，适合地面站 UI 操作和状态观察 |
+| `uav_control/uav_control_tools/src/velocity_test/triangle_velocity_test.cpp` | 速度闭环压力测试，不建议作为新手二次开发模板 |
 
-写自己的控制节点时，优先复制 `examples/sunray_uav_control_example` 中最接近需求的示例，再按任务修改目标点、速度、轨迹生成逻辑。注意发布频率规则保持一致：`TAKEOFF`、`LAND`、`RETURN`、`HOVER`、`MOVE_POINT`、`MOVE_POINT_BODY`、`MOVE_POINT_WGS84` 通常发一次即可；`MOVE_VELOCITY`、`MOVE_VELOCITY_BODY` 和 `MOVE_TRAJECTORY` 需要在任务执行期间持续发布。
+写自己的控制节点时，优先复制 `uav_control/sunray_uav_control_example` 中最接近需求的示例，再按任务修改目标点、速度、轨迹生成逻辑。注意发布频率规则保持一致：`TAKEOFF`、`LAND`、`RETURN`、`HOVER`、`MOVE_POINT`、`MOVE_POINT_BODY`、`MOVE_POINT_WGS84` 通常发一次即可；`MOVE_VELOCITY`、`MOVE_VELOCITY_BODY` 和 `MOVE_TRAJECTORY` 需要在任务执行期间持续发布。
 
 ## 5. 输出接口
 
@@ -551,18 +551,18 @@ odom_topic_name: "${agent_key}/sunray/localization/local_odom"
 2. 发布 `/uav1/sunray/uav_control/control_cmd`，发送任务命令。
 3. 对速度和轨迹类命令持续发布，对起飞/降落/位置点命令发一次即可。
 
-建议从 `examples/sunray_uav_control_example` 开始阅读和复制代码，而不是直接从控制面板或终端工具改起。示例目录已经按命令类型分好类，代码更短，依赖更少，也更接近二次开发节点的真实写法：
+建议从 `uav_control/sunray_uav_control_example` 开始阅读和复制代码，而不是直接从控制面板或终端工具改起。示例目录已经按命令类型分好类，代码更短，依赖更少，也更接近二次开发节点的真实写法：
 
 | 二次开发目标 | 推荐示例 |
 | --- | --- |
-| 最小起降流程 | `examples/sunray_uav_control_example/src/basic/takeoff_land.cpp` |
-| 发一个或多个位置点 | `examples/sunray_uav_control_example/src/MOVE_POINT/` |
-| 发机体系相对位置 | `examples/sunray_uav_control_example/src/MOVE_POINT_BODY/move_point_body.cpp` |
-| 发速度命令并自己做外环逻辑 | `examples/sunray_uav_control_example/src/MOVE_VELOCITY/` |
-| 发机体系速度 | `examples/sunray_uav_control_example/src/MOVE_VELOCITY_BODY/move_velocity_body.cpp` |
-| 接轨迹生成器或规划器 | `examples/sunray_uav_control_example/src/MOVE_TRAJECTORY/` |
+| 最小起降流程 | `uav_control/sunray_uav_control_example/src/basic/takeoff_land.cpp` |
+| 发一个或多个位置点 | `uav_control/sunray_uav_control_example/src/MOVE_POINT/` |
+| 发机体系相对位置 | `uav_control/sunray_uav_control_example/src/MOVE_POINT_BODY/move_point_body.cpp` |
+| 发速度命令并自己做外环逻辑 | `uav_control/sunray_uav_control_example/src/MOVE_VELOCITY/` |
+| 发机体系速度 | `uav_control/sunray_uav_control_example/src/MOVE_VELOCITY_BODY/move_velocity_body.cpp` |
+| 接轨迹生成器或规划器 | `uav_control/sunray_uav_control_example/src/MOVE_TRAJECTORY/` |
 
-`control/control_tools/src/terminal_control/uav_terminal_control.cpp`、`control/control_tools/src/uav_control_panel_node.cpp` 和 `control/control_tools/src/velocity_test/triangle_velocity_test.cpp` 可以作为发布逻辑、UI 交互、测试流程的补充参考，但不建议作为新手第一份模板。
+`uav_control/uav_control_tools/src/terminal_control/uav_terminal_control.cpp`、`uav_control/uav_control_tools/src/uav_control_panel_node.cpp` 和 `uav_control/uav_control_tools/src/velocity_test/triangle_velocity_test.cpp` 可以作为发布逻辑、UI 交互、测试流程的补充参考，但不建议作为新手第一份模板。
 
 推荐状态判断方式：
 
@@ -586,7 +586,7 @@ desired_acc = 规划器加速度
 yaw_mode = SET_YAW 或 SET_YAWRATE
 ```
 
-发布频率建议接近控制器频率，至少不要低于轨迹本身的更新频率。仓库里的 `examples/sunray_uav_planning_example` 已经有 `position_cmd -> UAVControlCMD` 的转换思路。
+发布频率建议接近控制器频率，至少不要低于轨迹本身的更新频率。仓库里的 `planning/sunray_uav_planning_example` 已经有 `position_cmd -> UAVControlCMD` 的转换思路。
 
 ### 8.3 新增一种控制命令
 

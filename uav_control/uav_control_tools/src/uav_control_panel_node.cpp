@@ -483,12 +483,12 @@ class UAVControlPanel : public QMainWindow
                 width: 20px;
             }
             QDoubleSpinBox::up-arrow, QAbstractSpinBox::up-arrow {
-                image: url(:/control_tools/icons/spin_up.svg);
+                image: url(:/uav_control_tools/icons/spin_up.svg);
                 width: 10px;
                 height: 10px;
             }
             QDoubleSpinBox::down-arrow, QAbstractSpinBox::down-arrow {
-                image: url(:/control_tools/icons/spin_down.svg);
+                image: url(:/uav_control_tools/icons/spin_down.svg);
                 width: 10px;
                 height: 10px;
             }

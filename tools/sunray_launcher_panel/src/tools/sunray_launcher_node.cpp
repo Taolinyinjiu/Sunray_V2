@@ -2284,16 +2284,16 @@ private:
 
     std::string resolvePackagePath(const std::string &package_name) const
     {
+        const auto external_it = external_package_paths_.find(package_name);
+        if (external_it != external_package_paths_.end())
+        {
+            return external_it->second;
+        }
+
         const std::string package_path = ros::package::getPath(package_name);
         if (!package_path.empty())
         {
             return package_path;
-        }
-
-        const auto it = external_package_paths_.find(package_name);
-        if (it != external_package_paths_.end())
-        {
-            return it->second;
         }
         return "";
     }

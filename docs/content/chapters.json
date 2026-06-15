@@ -53,35 +53,31 @@
     ]
   },
   {
-    "group": "控制模块",
-    "title": "控制模块",
+    "group": "无人机控制模块",
+    "title": "无人机控制模块",
     "files": [
-      "control/sunray_uav_control.md",
-      "control/sunray_ugv_control.md",
-      "control/control_tools.md"
+      "uav_control/sunray_uav_control.md",
+      "uav_control/sunray_uav_control_example.md",
+      "uav_control/uav_control_tools.md"
     ],
     "sections": [
-      {"id": "sunray-uav-control", "title": "无人机控制"},
-      {"id": "sunray-ugv-control", "title": "无人车控制"},
-      {"id": "control-tools", "title": "控制工具"}
+      {"id": "sunray-uav-control", "title": "sunray_uav_control"},
+      {"id": "examples-uav-control", "title": "sunray_uav_control_example"},
+      {"id": "uav-control-tools", "title": "uav_control_tools"}
     ]
   },
   {
-    "group": "示例程序",
-    "title": "示例程序",
+    "group": "无人车控制模块",
+    "title": "无人车控制模块",
     "files": [
-      "examples/overview.md",
-      "examples/uav_control_example.md",
-      "examples/ugv_control_example.md",
-      "examples/uav_planning_example.md",
-      "examples/swarm_control_example.md"
+      "ugv_control/sunray_ugv_control.md",
+      "ugv_control/sunray_ugv_control_example.md",
+      "ugv_control/ugv_control_tools.md"
     ],
     "sections": [
-      {"id": "examples-overview", "title": "示例程序总览"},
-      {"id": "examples-uav-control", "title": "无人机控制示例"},
-      {"id": "examples-ugv-control", "title": "无人车控制示例"},
-      {"id": "examples-uav-planning", "title": "无人机规划示例"},
-      {"id": "examples-swarm-control", "title": "集群控制示例"}
+      {"id": "sunray-ugv-control", "title": "sunray_ugv_control"},
+      {"id": "examples-ugv-control", "title": "sunray_ugv_control_example"},
+      {"id": "ugv-control-tools", "title": "ugv_control_tools"}
     ]
   },
   {
@@ -92,6 +88,7 @@
       "planning/sunray_planning.md",
       "planning/sunray_planner_msgs.md",
       "planning/sunray_planner_tools.md",
+      "planning/sunray_uav_planning_example.md",
       "planning/ego_planner_swarm.md",
       "planning/diff_planner.md",
       "planning/fuel.md",
@@ -102,6 +99,7 @@
       {"id": "sunray-planning", "title": "sunray_planning"},
       {"id": "sunray-planner-msgs", "title": "sunray_planner_msgs"},
       {"id": "sunray-planner-tools", "title": "sunray_planner_tools"},
+      {"id": "examples-uav-planning", "title": "sunray_uav_planning_example"},
       {"id": "ego-planner-swarm", "title": "ego_planner_swarm"},
       {"id": "diff-planner", "title": "diff_planner"},
       {"id": "fuel-planner", "title": "FUEL"},
@@ -114,12 +112,14 @@
     "files": [
       "swarm/overview.md",
       "swarm/nodes_launch.md",
-      "swarm/formation_orca.md"
+      "swarm/formation_orca.md",
+      "swarm/sunray_swarm_control_example.md"
     ],
     "sections": [
       {"id": "swarm-overview", "title": "集群总览与架构"},
       {"id": "swarm-nodes-launch", "title": "节点接口与启动"},
-      {"id": "swarm-formation-orca", "title": "Formation/ORCA 与扩展"}
+      {"id": "swarm-formation-orca", "title": "Formation/ORCA 与扩展"},
+      {"id": "examples-swarm-control", "title": "sunray_swarm_control_example"}
     ]
   },
   {

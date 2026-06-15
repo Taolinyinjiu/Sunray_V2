@@ -6,18 +6,23 @@ modules:
   # Sunray重构 UAV_Control
   uav_control:
     description: "Sunray 重构中的uav_control"
-    source_path: "control/sunray_uav_control"
+    source_path: "uav_control/sunray_uav_control"
     build_path: "build/sunray_uav_control"
     dependencies: [sunray_msgs, sunray_common]
   ugv_control:
     description: "Sunray 重构中的ugv_control"
-    source_path: "control/sunray_ugv_control"
+    source_path: "ugv_control/sunray_ugv_control"
     build_path: "build/sunray_ugv_control"
     dependencies: [sunray_msgs, sunray_common]
-  control_tools:
-    description: "为控制模块设计的一些工具"
-    source_path: "control/control_tools"
-    build_path: "build/control_tools"
+  uav_control_tools:
+    description: "UAV 控制终端、面板和速度测试工具"
+    source_path: "uav_control/uav_control_tools"
+    build_path: "build/uav_control_tools"
+    dependencies: [sunray_msgs, sunray_common]
+  ugv_control_tools:
+    description: "UGV 控制终端工具"
+    source_path: "ugv_control/ugv_control_tools"
+    build_path: "build/ugv_control_tools"
     dependencies: [sunray_msgs, sunray_common]
 
   # tools
@@ -52,12 +57,12 @@ modules:
   # uav_control_example
   sunray_uav_control_example:
     description: "sunray项目中uav单机控制示例 - 无其他模块辅助，属于基本实例部分"
-    source_path: "examples/sunray_uav_control_example"
+    source_path: "uav_control/sunray_uav_control_example"
     build_path: "build/sunray_uav_control_example"
     dependencies: [sunray_msgs, uav_control, sunray_common]
   sunray_ugv_control_example:
     description: "sunray项目中ugv单机控制示例 - 面向新手的UGV控制接口示例"
-    source_path: "examples/sunray_ugv_control_example"
+    source_path: "ugv_control/sunray_ugv_control_example"
     build_path: "build/sunray_ugv_control_example"
     dependencies: [sunray_msgs, ugv_control]
 
@@ -67,23 +72,23 @@ modules:
     description: "planning模块内部使用消息,用于适配多个planner的自定义消息"
     source_path: "planning/sunray_planner_msgs"
     build_path: "build/sunray_planner_msgs"
-    dependencies: [""]
+    dependencies: []
 
   planner_msgs:
     description: "uav planning example 内部使用的 planner_msgs"
-    source_path: "examples/sunray_uav_planning_example/source_planners/planner_msgs"
+    source_path: "planning/sunray_uav_planning_example/source_planners/planner_msgs"
     build_path: "build/planner_msgs"
-    dependencies: [""]
+    dependencies: []
 
   ego_planner_swarm:
     description: "ego_planner_swarm 功能包"
-    source_path: "examples/sunray_uav_planning_example/source_planners/ego-planner-swarm"
+    source_path: "planning/sunray_uav_planning_example/source_planners/ego-planner-swarm"
     build_path: "build/ego_planner_swarm"
     dependencies: ["planner_msgs"]
 
   ego_example:
     description: "EGO planner position_cmd 到 uav_control 的桥接示例"
-    source_path: "examples/sunray_uav_planning_example/ego_example"
+    source_path: "planning/sunray_uav_planning_example/ego_example"
     build_path: "build/ego_example"
     dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
 
@@ -140,7 +145,7 @@ modules:
     description: "sunray_simulator 功能包"
     source_path: "simulation/sunray_simulator"
     build_path: "build/sunray_simulator"
-    dependencies: ["gazebo_plugin"]
+    dependencies: ["gazebo_plugin", "sunray_common", "sunray_msgs"]
   # 驱动模块功能包
 
   sunray_mavros:
@@ -219,7 +224,7 @@ modules:
   # 集群功能包
   sunray_swarm_control:
     description: "sunray_swarm_control 功能包"
-    source_path: "swarm/"
+    source_path: "swarm/sunray_swarm_control"
     build_path: "build/sunray_swarm_control"
     dependencies: [sunray_msgs]
 
@@ -229,7 +234,7 @@ groups:
   # common测试
   test:
     description: "测试"
-    modules: ["sunray_msgs","sunray_common","sunray_mavros","livox_ros_driver2","vrpn_client_ros","localization_fusion","sunray_mocap","ekf_odometry","fast_lio","uav_control","ugv_control","control_tools","sunray_launcher_panel","sunray_monitor_tools","sunray_system","scripts_manage","yunlink_ros_bridge","sunray_uav_control_example","sunray_ugv_control_example","sunray_swarm_control"]
+    modules: ["sunray_msgs","sunray_common","sunray_mavros","livox_ros_driver2","vrpn_client_ros","localization_fusion","sunray_mocap","ekf_odometry","fast_lio","uav_control","ugv_control","uav_control_tools","ugv_control_tools","sunray_launcher_panel","sunray_monitor_tools","sunray_system","scripts_manage","yunlink_ros_bridge","sunray_uav_control_example","sunray_ugv_control_example","sunray_swarm_control"]
 
   # control测试
   control_test:
@@ -246,11 +251,11 @@ groups:
     modules: ["sunray_simulator", "sunray_launcher_panel"]
 
   # 机型分类
-  S-150-Basic:
+  S_150_Basic:
     description: "Sunray-150-基础款功能包"
     modules: ["sunray_mavros", "vrpn_client_ros", "web_cam", "sunray_mocap"]
 
-  S-150-Lidar:
+  S_150_Lidar:
     description: "Sunray-150-三维激光雷达款功能包"
     modules:
       [
@@ -262,12 +267,12 @@ groups:
         "fast_lio",
       ]
 
-  S-150-Stereo:
+  S_150_Stereo:
     description: "Sunray-150-双目款功能包"
     modules:
       ["sunray_mavros", "vrpn_client_ros", "sunray_mocap", "sunray_viobot"]
 
-  S-300-Standard:
+  S_300_Standard:
     description: "Sunray-300-标准款功能包"
     modules:
       [
@@ -298,7 +303,7 @@ groups:
     description: "UGV 控制、定位、仿真与底盘驱动功能包"
     modules:
       [
-        "control_tools",
+        "ugv_control_tools",
         "sunray_common",
         "sunray_msgs",
         "vrpn_client_ros",

@@ -1,37 +1,34 @@
-<!-- title: control_tools -->
+<!-- title: uav_control_tools -->
 
-<section id="control-tools">
+<section id="uav-control-tools">
 
-## control_tools
+## uav_control_tools
 
-`control/control_tools` 是 Sunray 控制模块的通用调试工具包。它不实现无人机或无人车的底层控制律，而是提供终端、面板和测试节点，用来向 `sunray_uav_control`、`sunray_ugv_control` 发布控制命令并观察状态。
+`uav_control/uav_control_tools` 是 UAV 控制调试工具包。它不实现底层控制律，而是面向调试、教学和接口验证，提供终端控制、Qt 控制面板和速度压力测试节点。
 
-对小白开发者来说，这个包适合用来“验证接口是否通”，但正式二次开发更推荐参考 `examples/` 中的示例包：
+正式二次开发时，更推荐优先参考：
 
 ```text
-examples/sunray_uav_control_example/
-examples/sunray_ugv_control_example/
+uav_control/sunray_uav_control_example/
 ```
 
-工具节点通常有较多交互逻辑和 UI 代码，不如示例程序适合直接复制成业务节点。
+示例程序更短，业务逻辑更清楚；工具节点通常混合了输入解析、显示、日志、状态订阅和命令发布，不适合直接改成长期维护的任务节点。
 
 ### 目录结构
 
 ```text
-control/control_tools/
+uav_control/uav_control_tools/
 ├── include/
 │   └── terminal_control/
 │       └── terminal_control.hpp
 ├── launch/
-│   ├── uav_control_panel.launch
-│   └── ugv_terminal_control.launch
+│   └── uav_control_panel.launch
 ├── resources/
-│   ├── control_tools.qrc
+│   ├── uav_control_tools.qrc
 │   └── icons/
 └── src/
     ├── terminal_control/
-    │   ├── uav_terminal_control.cpp
-    │   └── ugv_terminal_control.cpp
+    │   └── uav_terminal_control.cpp
     ├── uav_control_panel_node.cpp
     └── velocity_test/
         └── triangle_velocity_test.cpp
@@ -42,19 +39,18 @@ control/control_tools/
 | 工具 | 代码 | 用途 |
 | --- | --- | --- |
 | UAV 终端控制 | `src/terminal_control/uav_terminal_control.cpp` | 终端交互式发布 `UAVControlCMD`。 |
-| UGV 终端控制 | `src/terminal_control/ugv_terminal_control.cpp` | 终端交互式发布 `UGVControlCMD`。 |
 | UAV 控制面板 | `src/uav_control_panel_node.cpp` | Qt 面板，发布 UAV 命令、订阅控制状态和里程计，并发布 RViz marker。 |
-| 三角速度测试 | `src/velocity_test/triangle_velocity_test.cpp` | 自动执行起飞、速度闭环三角轨迹、悬停和降落，用于压力测试速度控制链路。 |
+| 三角速度测试 | `src/velocity_test/triangle_velocity_test.cpp` | 自动执行起飞、速度三角轨迹、悬停和降落，用于压力测试速度控制链路。 |
 
 ### UAV 终端控制
 
 源码：
 
 ```text
-control/control_tools/src/terminal_control/uav_terminal_control.cpp
+uav_control/uav_control_tools/src/terminal_control/uav_terminal_control.cpp
 ```
 
-功能：在终端里选择命令类型，发布到：
+功能：在终端里选择命令类型，并发布到：
 
 ```text
 /uav1/sunray/uav_control/control_cmd
@@ -78,70 +74,29 @@ sunray_msgs/UAVControlCMD
 | --- | --- | --- |
 | `TAKEOFF` | 发一次即可 | 起飞。 |
 | `LAND` | 发一次即可 | 降落。 |
-| `RETURN` | 发一次即可 | UAV 控制层当前仍有返航命令。 |
+| `RETURN` | 发一次即可 | 返航类命令，上层任务应谨慎使用。 |
+| `HOVER` | 发一次即可 | 进入悬停。 |
 | `MOVE_POINT` | 发一次即可 | 输入目标位置和 yaw。 |
 | `MOVE_POINT_BODY` | 发一次即可 | 输入机体系相对位置和固定高度。 |
+| `MOVE_POINT_WGS84` | 发一次即可 | 输入经纬高目标点。 |
 | `MOVE_VELOCITY` | 持续发布 | 工具会按持续时间循环发布速度命令。 |
 | `MOVE_VELOCITY_BODY` | 持续发布 | 工具会按持续时间循环发布机体系速度命令。 |
+| `MOVE_TRAJECTORY` | 持续发布 | 轨迹跟踪类命令需要持续给控制器提供期望状态。 |
 
-速度类命令必须持续发布；位置、起降、悬停类命令通常发一次即可。这个规则应与 `UAVControlCMD.msg`、控制面板和终端工具保持一致。
-
-### UGV 终端控制
-
-启动：
-
-```bash
-roslaunch control_tools ugv_terminal_control.launch agent_name:=ugv agent_id:=1
-```
-
-源码：
-
-```text
-control/control_tools/src/terminal_control/ugv_terminal_control.cpp
-```
-
-发布话题：
-
-```text
-/ugv1/sunray/ugv_control/control_cmd
-```
-
-消息类型：
-
-```text
-sunray_msgs/UGVControlCMD
-```
-
-launch 参数：
-
-| 参数 | 默认值 | 说明 |
-| --- | --- | --- |
-| `agent_name` | `ugv` | 车辆名前缀。 |
-| `agent_id` | `1` | 车辆编号。 |
-| `node_name` | `ugv_terminal_control_node` | ROS 节点名。 |
-| `launch_prefix` | 空 | 可用于 `xterm -e`、调试前缀等。 |
-
-支持命令：
-
-| 命令 | 发布规则 | 说明 |
-| --- | --- | --- |
-| `HOLD` | 发一次即可 | 停车。 |
-| `MOVE_POINT` | 发一次即可 | 本地坐标目标点。 |
-| `MOVE_VELOCITY` | 持续发布 | 世界系速度，适合麦克纳姆轮；差速轮默认不支持。 |
-| `MOVE_VELOCITY_BODY` | 持续发布 | 车体系速度，差速轮建议使用该命令。 |
+速度类和轨迹类命令必须持续发布；位置、起降、悬停类命令通常发一次即可。这个规则应与 `UAVControlCMD.msg`、控制面板和示例程序保持一致。
 
 ### UAV 控制面板
 
 启动：
 
 ```bash
-roslaunch control_tools uav_control_panel.launch uav_id:=1
+roslaunch uav_control_tools uav_control_panel.launch uav_id:=1
 ```
 
 源码：
 
 ```text
-control/control_tools/src/uav_control_panel_node.cpp
+uav_control/uav_control_tools/src/uav_control_panel_node.cpp
 ```
 
 默认参数：
@@ -169,7 +124,7 @@ control/control_tools/src/uav_control_panel_node.cpp
 源码：
 
 ```text
-control/control_tools/src/velocity_test/triangle_velocity_test.cpp
+uav_control/uav_control_tools/src/velocity_test/triangle_velocity_test.cpp
 ```
 
 用途：自动测试 UAV 速度控制链路。它会等待状态、发起飞命令、按三角形路径持续发布 `MOVE_VELOCITY`，最后悬停并降落。
@@ -204,12 +159,5 @@ control/control_tools/src/velocity_test/triangle_velocity_test.cpp
 ```text
 /uav1/sunray/uav_control/control_cmd
 ```
-
-### 二次开发建议
-
-- 想写自己的任务节点时，优先复制 `examples/sunray_uav_control_example` 或 `examples/sunray_ugv_control_example`。
-- 想做手动调试时，用本包的终端工具和面板。
-- 想验证速度控制稳定性时，用 `triangle_velocity_test`。
-- 不建议把 UI 工具直接改成正式业务逻辑；工具节点通常混合了输入解析、显示、日志和命令发布，不利于长期维护。
 
 </section>

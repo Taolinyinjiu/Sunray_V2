@@ -4,7 +4,7 @@
   <arg name="rviz_frame_id" default="world" />
   <arg name="marker_topic" default="/uav$(arg uav_id)/sunray/uav_control_panel/markers" />
 
-  <node pkg="control_tools"
+  <node pkg="uav_control_tools"
         type="uav_control_panel_node"
         name="$(arg node_name)"
         output="screen">

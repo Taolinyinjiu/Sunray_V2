@@ -253,16 +253,18 @@ main() {
 post_build_actions() {
     print_status "执行构建后处理..."
     
-    [[ -f "devel/setup.bash" ]] && {
+    if [[ -f "devel/setup.bash" ]]; then
         print_status "ROS工作空间设置文件已生成: devel/setup.bash"
         echo "使用以下命令设置环境: ${CYAN}source devel/setup.bash${NC}"
-    }
+    fi
     
     local available_gb=$(($(df "$WORKSPACE_ROOT" | awk 'NR==2 {print $4}') / 1024 / 1024))
-    [[ $available_gb -lt 1 ]] && {
+    if [[ $available_gb -lt 1 ]]; then
         print_warning "磁盘空间不足 (剩余 ${available_gb}GB)，建议清理构建缓存"
         print_status "使用以下命令清理: $0 --clean"
-    }
+    fi
+
+    return 0
 }
 
 # 显示版本信息

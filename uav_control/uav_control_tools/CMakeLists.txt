@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(control_tools)
+project(uav_control_tools)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -13,8 +13,9 @@ find_package(catkin REQUIRED COMPONENTS
   sunray_msgs
 )
 find_package(Qt5 REQUIRED COMPONENTS Widgets)
-qt5_add_resources(CONTROL_TOOLS_QRC
-  resources/control_tools.qrc
+
+qt5_add_resources(UAV_CONTROL_TOOLS_QRC
+  resources/uav_control_tools.qrc
 )
 
 catkin_package(
@@ -35,19 +36,9 @@ target_link_libraries(uav_terminal_control_node
 
 add_dependencies(uav_terminal_control_node ${catkin_EXPORTED_TARGETS})
 
-add_executable(ugv_terminal_control_node
-  src/terminal_control/ugv_terminal_control.cpp
-)
-
-target_link_libraries(ugv_terminal_control_node
-  ${catkin_LIBRARIES}
-)
-
-add_dependencies(ugv_terminal_control_node ${catkin_EXPORTED_TARGETS})
-
 add_executable(uav_control_panel_node
   src/uav_control_panel_node.cpp
-  ${CONTROL_TOOLS_QRC}
+  ${UAV_CONTROL_TOOLS_QRC}
 )
 
 target_link_libraries(uav_control_panel_node
@@ -66,6 +57,13 @@ target_link_libraries(triangle_velocity_test
 )
 
 add_dependencies(triangle_velocity_test ${catkin_EXPORTED_TARGETS})
+
+install(TARGETS
+  uav_terminal_control_node
+  uav_control_panel_node
+  triangle_velocity_test
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch

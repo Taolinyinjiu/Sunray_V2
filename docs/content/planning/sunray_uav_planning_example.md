@@ -7,7 +7,7 @@
 路径：
 
 ```text
-examples/sunray_uav_planning_example
+planning/sunray_uav_planning_example
 ```
 
 `sunray_uav_planning_example` 用于验证外部规划器与 Sunray 无人机控制链路的集成。当前示例以 `ego_planner` 为规划器：`ego_planner` 根据定位和点云生成 `position_cmd`，`ego_example` 中的 `Ego2Sunray` 节点再把该指令转换为 `sunray_msgs/UAVControlCMD`，发送给 `sunray_uav_control` 执行。
@@ -247,10 +247,10 @@ roslaunch sunray_uav_control uav_control.launch agent_name:=uav agent_id:=1
 
 后续起飞、降落和规划轨迹都会通过该控制指令话题进入控制模块。
 
-4. 启动 control_tools 发送起飞/降落指令：
+4. 启动 uav_control_tools 发送起飞/降落指令：
 
 ```bash
-roslaunch control_tools uav_control_panel.launch uav_id:=1
+roslaunch uav_control_tools uav_control_panel.launch uav_id:=1
 ```
 
 使用该工具先发送起飞指令，使无人机进入可执行轨迹控制的状态。任务结束后也可以通过该工具发送降落指令。

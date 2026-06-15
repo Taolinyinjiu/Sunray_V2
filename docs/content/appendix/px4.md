@@ -27,7 +27,7 @@ Sunray 与 PX4 的关系可以理解为“上层智能任务”和“底层飞�
 | 层级 | 主要负责 | Sunray 中的位置 |
 | --- | --- | --- |
 | 任务层 | 航点、跟踪、搜索、编队、实验逻辑 | `examples`、`planning`、`swarm`、用户自定义节点 |
-| Sunray 控制层 | 把任务命令转换成 PX4 能执行的 setpoint 或服务调用 | `control/sunray_uav_control` |
+| Sunray 控制层 | 把任务命令转换成 PX4 能执行的 setpoint 或服务调用 | `uav_control/sunray_uav_control` |
 | ROS/MAVLink 桥 | 把 ROS topic/service 转成 MAVLink 消息 | `drivers/sunray_mavros` + MAVROS |
 | PX4 飞控 | 模式、解锁、安全保护、估计器、姿态/位置控制、电机输出 | 飞控板内部固件 |
 
@@ -85,7 +85,7 @@ Sunray 中和 Offboard 强相关的地方：
 
 | 文件/模块 | 作用 |
 | --- | --- |
-| `control/sunray_uav_control` | 控制状态机、PX4 原生控制器、几何控制器、MAVROS helper。 |
+| `uav_control/sunray_uav_control` | 控制状态机、PX4 原生控制器、几何控制器、MAVROS helper。 |
 | `drivers/sunray_mavros` | 启动 MAVROS，并加载 setpoint、state、command、param 等插件。 |
 | `common/sunray_msgs/msg/UAVControlCMD.msg` | 用户发布的 Sunray 控制命令。 |
 | `common/sunray_msgs/msg/Px4State.msg` | MAVROS/PX4 状态汇总，方便开发者调试。 |

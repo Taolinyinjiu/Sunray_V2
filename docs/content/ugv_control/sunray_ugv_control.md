@@ -495,7 +495,7 @@ src/tools/ugv_control_panel_node.cpp
 仓库中也提供了可直接运行的 UGV 控制示例包：
 
 ```text
-examples/sunray_ugv_control_example
+ugv_control/sunray_ugv_control_example
 ```
 
 该示例包包含 `HOLD`、`MOVE_POINT`、`MOVE_VELOCITY_BODY` 三个最基础例程，并配套 launch 和 README。小白用户建议先运行这些示例，再复制其中最接近需求的源码做二次开发。

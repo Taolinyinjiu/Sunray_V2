@@ -20,7 +20,7 @@ roslaunch sunray_planning sunray_planning.launch planner_type:=ego cloud_topic:=
 roslaunch sunray_uav_control uav_control.launch 
 > pengyu_sim的动力学模模型与gazebo似乎相差一些，主要表现在悬停油门，pengyu_sim似乎只需要0.2左右而gazebo是0.375附近，geometric_controller由于对悬停油门较为敏感，很难说在pengyu_sim上能否有好的表现，可以考虑先用px4_original_controller做测试，后续优化geometric_controller
 5. 启动控制终端（这一步只是为了起飞，用别的方式也行）
-rosrun control_tools uav_terminal_control_node
+rosrun uav_control_tools uav_terminal_control_node
 
 在这一步后，应该检查无人机是否顺利起飞并进入hover状态， 如果进入了hover状态就可以通过rviz实现给目标点
 > 1.rviz的目标点捕获使用的是move_simple_goal话题

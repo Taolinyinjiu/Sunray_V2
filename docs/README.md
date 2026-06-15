@@ -43,7 +43,10 @@ docs/
 └── content/
     ├── chapters.json
     ├── overview/index.md
-    ├── sunray-msgs/index.md
+    ├── common/sunray_msgs.md
+    ├── localization/overview.md
+    ├── uav_control/sunray_uav_control.md
+    ├── ugv_control/sunray_ugv_control.md
     └── ...
 ```
 

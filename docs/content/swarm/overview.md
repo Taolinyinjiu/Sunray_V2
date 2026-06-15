@@ -322,7 +322,7 @@ UAV 和 UGV 集群控制节点当前都是分布式节点。仿真中通过一�
 | `sunray_uav_control` | 下游 | UAV 集群输出 `UAVControlCMD`，由单机控制器执行。 |
 | `sunray_ugv_control` | 下游 | UGV 集群输出 `UGVControlCMD`，由单机控制器执行。 |
 | `sunray_msgs` | 接口桥梁 | `Formation`、`UAVSwarmCMD`、`UGVSwarmCMD`、`UAVSwarmState`、`UGVSwarmState`。 |
-| `control_tools` / monitor | 工具 | 面板或终端工具负责发布命令和观察状态。 |
+| `uav_control_tools` / `ugv_control_tools` / monitor | 工具 | 面板或终端工具负责发布命令和观察状态。 |
 | `communication/yunlink_ros_bridge` | 可选外部链路 | 地面站或外部系统可以通过桥接发送集群命令。 |
 
 如果集群命令发出后没有动作，不要一开始就改 `formation` 或 ORCA。推荐排查顺序：

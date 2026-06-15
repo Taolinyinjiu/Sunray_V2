@@ -10,7 +10,7 @@ Sunray_v2 是云纵科技 “Sunray 系列科研无人机” 的配套开源代�
 
 | 问题 | 应该先看哪里 |
 | --- | --- |
-| 我想控制无人机或无人车，该发什么消息？ | `common/sunray_msgs`、控制模块、示例程序。 |
+| 我想控制无人机或无人车，该发什么消息？ | `common/sunray_msgs`、无人机控制模块、无人车控制模块。 |
 | 我想换定位源、仿真器或传感器，应该改哪里？ | 定位模块、驱动模块、仿真模块。 |
 | 我想把自己的算法接入 Sunray，应该放在哪一层？ | 先看本页架构，再根据算法类型进入规划、感知、集群或示例章节。 |
 
@@ -61,7 +61,8 @@ Sunray_v2 是一个多功能包 ROS/catkin 工程。顶层目录可以按“接�
 | 目录 | 作用 | 主要输出 |
 | --- | --- | --- |
 | `localization` | 把动捕、VIO、FAST-LIO、仿真真值、全局重定位等转换成统一里程计和 TF。 | `local_odom`、`global_odom`、`OdomState`。 |
-| `control` | UAV/UGV 单机控制状态机和控制工具。 | UAV MAVROS setpoint、UGV `cmd_vel`、`ControlState`。 |
+| `uav_control` | UAV 单机控制、UAV 控制示例和 UAV 调试工具。 | UAV MAVROS setpoint、`UAVControlState`、UAV 示例命令。 |
+| `ugv_control` | UGV 单车控制、UGV 控制示例和 UGV 调试工具。 | UGV `cmd_vel`、`UGVControlState`、UGV 示例命令。 |
 | `planning` | 把上层目标点和外部 planner 输出转换成 UAV 轨迹控制命令。 | `UAVControlCMD::MOVE_TRAJECTORY`、`UAVPlanningState`。 |
 | `swarm` | 多 UAV/UGV 编队、ORCA 避障、集群状态机和集群工具。 | 单机控制命令、`UAVSwarmState`、`UGVSwarmState`。 |
 | `perception` | ArUco/NPU 检测和跟踪。 | `DetectionArray`、`Tracking`。 |
@@ -81,11 +82,10 @@ Sunray_v2 是一个多功能包 ROS/catkin 工程。顶层目录可以按“接�
 
 | 目录 | 作用 | 使用方式 |
 | --- | --- | --- |
-| `examples` | UAV/UGV/规划/集群示例程序。 | 新手优先复制这里的代码做二次开发。 |
 | `tools` | 启动面板、监控工具、真机系统功能管理、脚本管理、PX4 参数检查。 | 用于调试、部署、启动和现场排错。 |
 | `communication` | YunLink ROS 桥和通信库。 | 用于和地面站或外部系统交换状态和命令。 |
 
-示例程序是学习入口，工具模块是调试入口，通信模块是外部系统接入口。
+示例程序已经并入对应功能模块：UAV 示例在 `uav_control/sunray_uav_control_example`，UGV 示例在 `ugv_control/sunray_ugv_control_example`，规划示例在 `planning/sunray_uav_planning_example`，集群示例在 `swarm/sunray_swarm_control_example`。示例程序是学习入口，工具模块是调试入口，通信模块是外部系统接入口。
 
 </section>
 
@@ -206,7 +206,7 @@ rostopic echo /ugv1/sunray/ugv_control/control_cmd
 
 1. 读 `common/sunray_msgs`，理解 `UAVControlCMD`、`UGVControlCMD`、`ControlState`、`OdomState`。
 2. 读控制模块中对应平台的页面，确认话题名、命令类型和发布频率。
-3. 运行 `examples/sunray_uav_control_example` 或 `examples/sunray_ugv_control_example`。
+3. 运行 `uav_control/sunray_uav_control_example` 或 `ugv_control/sunray_ugv_control_example`。
 4. 复制最接近的示例，改目标点、速度、高度和结束动作。
 
 这一阶段不要改控制器内部逻辑。
@@ -247,8 +247,8 @@ rostopic echo /ugv1/sunray/ugv_control/control_cmd
 | 需求 | 修改位置 |
 | --- | --- |
 | 新增跨包状态或命令字段 | `common/sunray_msgs`，并同步所有使用者。 |
-| 新增 UAV 控制模式 | `control/sunray_uav_control`、控制面板、终端工具、示例。 |
-| 新增 UGV 底盘类型 | `control/sunray_ugv_control/src/controller` 和 airframe YAML。 |
+| 新增 UAV 控制模式 | `uav_control/sunray_uav_control`、控制面板、终端工具、示例。 |
+| 新增 UGV 底盘类型 | `ugv_control/sunray_ugv_control/src/controller` 和 airframe YAML。 |
 | 新增定位源 | `localization/localization_fusion/config/localization_sources.yaml` 和适配节点。 |
 | 新增 planner | `planning/sunray_planning` 的 planner adapter。 |
 | 新增集群阵型 | `swarm/formation`、`Formation.msg`、终端/Qt/RViz 工具。 |

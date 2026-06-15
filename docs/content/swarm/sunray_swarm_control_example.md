@@ -7,7 +7,7 @@
 路径：
 
 ```text
-examples/sunray_swarm_control_example
+swarm/sunray_swarm_control_example
 ```
 
 当前该目录只有 `.gitkeep`，说明它是预留目录，还没有可运行示例节点或 launch。
@@ -17,7 +17,7 @@ examples/sunray_swarm_control_example
 后续如果完善集群示例，建议按下面结构组织：
 
 ```text
-examples/sunray_swarm_control_example/
+swarm/sunray_swarm_control_example/
 ├── README.md
 ├── launch/
 │   ├── uav_swarm_takeoff_land.launch

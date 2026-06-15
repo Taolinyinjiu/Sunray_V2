@@ -7,7 +7,7 @@
 路径：
 
 ```text
-examples/sunray_uav_control_example
+uav_control/sunray_uav_control_example
 ```
 
 这个包集中演示如何通过 `sunray_msgs/UAVControlCMD` 调用 `sunray_uav_control` 的上层控制接口。它比控制包正文更具体：重点讲每个示例怎么启动、会做什么、代码里该改哪里，以及新手最容易踩到的点。
@@ -82,13 +82,13 @@ use_private_agent_key:=true
 当前源码空间下，推荐直接使用 launch 文件路径启动示例：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/basic/takeoff_land.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/basic/takeoff_land.launch \
   use_private_agent_key:=true \
   agent_name:=uav \
   agent_id:=1
 ```
 
-这种路径写法已经在当前仓库环境中验证过。`roslaunch sunray_uav_control_example basic/takeoff_land.launch` 这类“包名 + 子目录 launch”的写法在当前环境下不能直接解析到文件。
+这种路径写法已经在当前仓库环境中验证过。不要写成 `roslaunch sunray_uav_control_example basic/takeoff_land.launch` 这类“包名 + 子目录 launch”的形式；当前环境下它不能直接解析到文件。
 
 ### 命令发布频率规则
 
@@ -175,7 +175,7 @@ Sunray 示例节点通常不直接控制电机，而是通过 `control_cmd` 触�
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/basic/takeoff_land.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/basic/takeoff_land.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -216,7 +216,7 @@ roslaunch examples/sunray_uav_control_example/launch/basic/takeoff_land.launch \
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/basic/takeoff_land_py.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/basic/takeoff_land_py.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -249,7 +249,7 @@ roslaunch examples/sunray_uav_control_example/launch/basic/takeoff_land_py.launc
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_POINT/move_point.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_POINT/move_point.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -289,7 +289,7 @@ INIT -> TAKEOFF -> HOVER
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_POINT/move_point_and_return.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_POINT/move_point_and_return.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -319,7 +319,7 @@ roslaunch examples/sunray_uav_control_example/launch/MOVE_POINT/move_point_and_r
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_POINT/move_multipoint.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_POINT/move_multipoint.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -353,7 +353,7 @@ Eigen::Vector3d Point_4(-1, 1, 0.6);
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_POINT_BODY/move_point_body.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_POINT_BODY/move_point_body.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -412,7 +412,7 @@ launch/MOVE_POINT_WGS84/move_point_wgs84.launch
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/move_velocity.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_VELOCITY/move_velocity.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -456,7 +456,7 @@ velocity_cmd.xy = kp * err_pos.xy
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/move_velocity_fixed_height.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_VELOCITY/move_velocity_fixed_height.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -490,7 +490,7 @@ uav_cmd.fixed_height = fixed_height;
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/circle_velocity.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_VELOCITY/circle_velocity.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -527,7 +527,7 @@ roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/circle_veloci
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/circle_velocity_yaw.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_VELOCITY/circle_velocity_yaw.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -558,7 +558,7 @@ uav_cmd.desired_yaw = desired_yaw;
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/lemniscate_velocity.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_VELOCITY/lemniscate_velocity.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -591,7 +591,7 @@ roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY/lemniscate_ve
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_VELOCITY_BODY/move_velocity_body.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_VELOCITY_BODY/move_velocity_body.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -639,7 +639,7 @@ desired_yaw / desired_yaw_rate
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_TRAJECTORY/move_trajectory.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_TRAJECTORY/move_trajectory.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -671,7 +671,7 @@ roslaunch examples/sunray_uav_control_example/launch/MOVE_TRAJECTORY/move_trajec
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_TRAJECTORY/circle_trajectory.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_TRAJECTORY/circle_trajectory.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -702,7 +702,7 @@ roslaunch examples/sunray_uav_control_example/launch/MOVE_TRAJECTORY/circle_traj
 启动：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/MOVE_TRAJECTORY/lemniscate_trajectory.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/MOVE_TRAJECTORY/lemniscate_trajectory.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 
@@ -746,7 +746,7 @@ roslaunch examples/sunray_uav_control_example/launch/MOVE_TRAJECTORY/lemniscate_
 解决方式：
 
 ```bash
-roslaunch examples/sunray_uav_control_example/launch/basic/takeoff_land.launch \
+roslaunch uav_control/sunray_uav_control_example/launch/basic/takeoff_land.launch \
   use_private_agent_key:=true agent_name:=uav agent_id:=1
 ```
 

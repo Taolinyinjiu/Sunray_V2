@@ -7,7 +7,7 @@
 路径：
 
 ```text
-examples/sunray_ugv_control_example
+ugv_control/sunray_ugv_control_example
 ```
 
 这个包集中演示如何通过 `sunray_msgs/UGVControlCMD` 调用 `sunray_ugv_control` 的无人车控制接口。它比控制包正文更具体，重点讲每个示例程序怎么启动、会发布什么命令、代码里哪些字段最重要，以及新手二次开发时应该复制哪一段。
@@ -119,7 +119,7 @@ cmd.header.stamp = ros::Time::now();
 启动：
 
 ```bash
-roslaunch examples/sunray_ugv_control_example/launch/basic/hold.launch \
+roslaunch ugv_control/sunray_ugv_control_example/launch/basic/hold.launch \
   agent_name:=ugv \
   agent_id:=1
 ```
@@ -143,7 +143,7 @@ cmd_pub.publish(cmd);
 启动：
 
 ```bash
-roslaunch examples/sunray_ugv_control_example/launch/MOVE_POINT/move_point.launch \
+roslaunch ugv_control/sunray_ugv_control_example/launch/MOVE_POINT/move_point.launch \
   agent_name:=ugv \
   agent_id:=1 \
   target_x:=1.0 \
@@ -179,7 +179,7 @@ cmd_pub.publish(cmd);
 启动：
 
 ```bash
-roslaunch examples/sunray_ugv_control_example/launch/MOVE_VELOCITY_BODY/move_velocity_body.launch \
+roslaunch ugv_control/sunray_ugv_control_example/launch/MOVE_VELOCITY_BODY/move_velocity_body.launch \
   agent_name:=ugv \
   agent_id:=1 \
   vx:=0.2 \

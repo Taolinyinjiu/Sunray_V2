@@ -5,7 +5,7 @@
   <arg name="node_name" default="ugv_terminal_control_node" />
   <arg name="launch_prefix" default="" />
 
-  <node pkg="control_tools"
+  <node pkg="ugv_control_tools"
         type="ugv_terminal_control_node"
         name="$(arg node_name)"
         output="screen"

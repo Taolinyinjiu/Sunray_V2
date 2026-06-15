@@ -108,7 +108,7 @@ launch_groups:
         description: "启动多架无人机控制节点和统一监控，使用 gazebo_sim 机型参数。"
 
       - title: "无人机控制面板"
-        package: "control_tools"
+        package: "uav_control_tools"
         launch: "uav_control_panel.launch"
         description: "启动 UAV Control Panel，用于下发 UAVControlCMD 并查看控制状态。"
 

@@ -28,8 +28,8 @@ catkin_package()
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${CURSES_INCLUDE_DIR}
-  ${PROJECT_SOURCE_DIR}/../common/sunray_log/
-  ${PROJECT_SOURCE_DIR}/../common/sunray_log/spdlog/include
+  ${PROJECT_SOURCE_DIR}/../../common/sunray_log/
+  ${PROJECT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
   ${PROJECT_SOURCE_DIR}/swarm_control_uav
   ${PROJECT_SOURCE_DIR}/swarm_control_ugv
   ${PROJECT_SOURCE_DIR}/formation

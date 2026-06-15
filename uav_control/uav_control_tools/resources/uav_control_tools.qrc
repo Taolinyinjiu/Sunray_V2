@@ -1,5 +1,5 @@
 <RCC>
-  <qresource prefix="/control_tools">
+  <qresource prefix="/uav_control_tools">
     <file>icons/spin_up.svg</file>
     <file>icons/spin_down.svg</file>
   </qresource>
