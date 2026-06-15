@@ -12,7 +12,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-ros::Publisher odom_pub, pointCloud_pub;
+ros::Publisher odom_pub, ekf_odom_pub, pointCloud_pub;
 bool calculation_done = false;
 Eigen::Vector3d mc_pos = Eigen::Vector3d::Zero();
 Eigen::Quaterniond rotation = Eigen::Quaterniond::Identity(), mc_attitude = Eigen::Quaterniond::Identity();
@@ -155,6 +155,63 @@ void odomCallback(const nav_msgs::Odometry::ConstPtr &msg) {
 
     std::cout << "yaw : " << yaw / M_PI * 180   << "  pitch: " << pitch / M_PI * 180   << "  roll: " << roll / M_PI * 180   << "  x: " << pos[0]    << "  y: " << pos[1]    << "  z: " << pos[2] << std::endl;
 }
+
+void ekfOdomCallback(const nav_msgs::Odometry::ConstPtr &msg) {
+
+    if (!calculation_done) return;
+    
+    static Eigen::Matrix4d odom_first = Eigen::Matrix4d::Identity();
+    static bool odom_first_flag = true;
+
+    if (odom_first_flag) {
+
+        odom_first = poseToTransformMatrix(msg); 
+        odom_first_flag = false;
+    } 
+
+    Eigen::Matrix4d odom_current = poseToTransformMatrix(msg);
+    Eigen::Matrix4d odom_relative = odom_first.inverse() * odom_current;
+
+    Eigen::Vector3d pos = odom_relative.block<3, 1>(0, 3);
+    Eigen::Quaterniond attitude = Eigen::Quaterniond(odom_relative.block<3, 3>(0, 0));
+
+    attitude = rotation * attitude * rotation.inverse();
+    tf2::Matrix3x3 m(tf2::Quaternion(attitude.x(), attitude.y(), attitude.z(), attitude.w()));
+    double roll, pitch, yaw;
+    m.getRPY(roll, pitch, yaw);
+
+    pos = rotation * pos;
+
+    Eigen::Vector3d linear_vel(msg->twist.twist.linear.x,
+                               msg->twist.twist.linear.y,
+                               msg->twist.twist.linear.z);
+    linear_vel = rotation * linear_vel;
+
+    // 发布矫正后的EKF odom
+    nav_msgs::Odometry odom_msg;
+    odom_msg.header = msg->header;
+    odom_msg.header.frame_id = "world";
+    odom_msg.pose.pose.orientation.w = attitude.w();
+    odom_msg.pose.pose.orientation.x = attitude.x();
+    odom_msg.pose.pose.orientation.y = attitude.y();
+    odom_msg.pose.pose.orientation.z = attitude.z();
+    odom_msg.pose.pose.position.x = pos[0];
+    odom_msg.pose.pose.position.y = pos[1];
+    odom_msg.pose.pose.position.z = pos[2];
+    odom_msg.twist.twist.linear.x = linear_vel.x();
+    odom_msg.twist.twist.linear.y = linear_vel.y();
+    odom_msg.twist.twist.linear.z = linear_vel.z();
+    ekf_odom_pub.publish(odom_msg);
+
+    static int index = 0;
+
+    if (index++ % 10 != 0) {
+
+        return;
+    } 
+
+    std::cout << "ekf yaw : " << yaw / M_PI * 180   << "  pitch: " << pitch / M_PI * 180   << "  roll: " << roll / M_PI * 180   << "  x: " << pos[0]    << "  y: " << pos[1]    << "  z: " << pos[2] << std::endl;
+}
     
 void pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg) { 
 
@@ -209,9 +266,11 @@ int main(int argc, char** argv) {
 
     ros::Subscriber imu_sub  = nh.subscribe("/livox/imu", 10, imuCallback);
     ros::Subscriber odom_sub = nh.subscribe("/Odometry", 1, odomCallback);
+    ros::Subscriber ekf_odom_sub = nh.subscribe("/ekf_odometry", 1, ekfOdomCallback);
     ros::Subscriber pointCloud_sub = nh.subscribe("/PointCloud", 1, pointCloudCallback);
 
     odom_pub = nh.advertise<nav_msgs::Odometry>("/sunray/odometry", 1);
+    ekf_odom_pub = nh.advertise<nav_msgs::Odometry>("/sunray/ekf_odometry", 1);
     pointCloud_pub = nh.advertise<sensor_msgs::PointCloud2>("/sunray/pointCloud", 1);
 
     std::cout.setf(std::ios::fixed);

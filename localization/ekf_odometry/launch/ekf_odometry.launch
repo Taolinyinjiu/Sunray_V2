@@ -10,10 +10,8 @@
         <param name="odom_topic" type="string" value="/Odometry" />
     </node>
 
-    <!-- <node pkg="ekf_odometry" type="transform_odom_pointCloud" name="transform_odom" output="$(arg log_type)" /> -->
-
-    <node pkg="ekf_odometry" type="mocap_odom_node" name="mocap_odom_node" output="$(arg log_type)">
+    <!-- <node pkg="ekf_odometry" type="mocap_odom_node" name="mocap_odom_node" output="$(arg log_type)">
         <param name="uav_id" type="int" value="$(arg uav_id)" />
-    </node>
+    </node> -->
     
 </launch>
