@@ -19,6 +19,11 @@ modules:
     source_path: "common/sunray_msgs"
     build_path: "build/sunray_msgs"
     dependencies: []
+  yunlink_msgs:
+    description: "YunLink 协议侧 ROS 消息定义"
+    source_path: "common/yunlink_msgs"
+    build_path: "build/yunlink_msgs"
+    dependencies: []
   sunray_common:
     description: "Sunray 通用工具库，提供控制、定位和示例代码复用的基础函数"
     label: common

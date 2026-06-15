@@ -60,6 +60,27 @@ void YunlinkRosBridgeNode::onControlCmd(const sunray_msgs::UAVControlCMD::ConstP
     publishSnapshot("uav_control_cmd", &yunlink::Runtime::publish_uav_control_cmd, payload);
 }
 
+void YunlinkRosBridgeNode::onLocalCommandExecutionStatus(
+    const sunray_msgs::UAVControlCommandStatus::ConstPtr& msg) {
+    yunlink_msgs::CommandMeta meta;
+    {
+        std::lock_guard<std::mutex> lock(command_meta_mu_);
+        const auto it = command_meta_by_token_.find(msg->tracking_token);
+        if (it == command_meta_by_token_.end()) {
+            ROS_WARN_THROTTLE(5.0,
+                              "yunlink_ros_bridge missing CommandMeta for tracking_token=%llu",
+                              static_cast<unsigned long long>(msg->tracking_token));
+            return;
+        }
+        meta = it->second;
+        if (msg->terminal) {
+            command_meta_by_token_.erase(it);
+        }
+    }
+    const auto status_msg = mapLocalCommandExecutionStatusMsg(*msg, meta);
+    publishCommandExecutionStatus(status_msg);
+}
+
 void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
@@ -88,9 +109,10 @@ void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::Co
     publishSnapshot("uav_control_state", &yunlink::Runtime::publish_uav_control_state, payload);
 }
 
-void YunlinkRosBridgeNode::onCommandExecutionStatus(
-    const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg) {
-    const auto payload = mapCommandExecutionStatus(*msg);
+void YunlinkRosBridgeNode::publishCommandExecutionStatus(
+    const yunlink_msgs::CommandExecutionStatus& msg) {
+    canonical_command_execution_status_pub_.publish(msg);
+    const auto payload = mapCommandExecutionStatus(msg);
     publishSnapshot("command_execution_status",
                     &yunlink::Runtime::publish_command_execution_status,
                     payload);

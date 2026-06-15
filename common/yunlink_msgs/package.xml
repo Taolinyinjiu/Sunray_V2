@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>yunlink_msgs</name>
+  <version>0.1.0</version>
+  <description>ROS message definitions for YunLink protocol semantics.</description>
+
+  <maintainer email="taolin@todo.todo">taolin</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>message_generation</build_depend>
+  <build_export_depend>message_runtime</build_export_depend>
+  <exec_depend>message_runtime</exec_depend>
+
+  <depend>std_msgs</depend>
+
+  <export/>
+</package>

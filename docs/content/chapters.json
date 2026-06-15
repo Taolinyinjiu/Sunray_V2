@@ -15,11 +15,13 @@
     "title": "Common 模块",
     "files": [
       "common/sunray_msgs.md",
+      "common/yunlink_msgs.md",
       "common/sunray_common.md",
       "common/sunray_log.md"
     ],
     "sections": [
       {"id": "common-sunray-msgs", "title": "sunray_msgs"},
+      {"id": "common-yunlink-msgs", "title": "yunlink_msgs"},
       {"id": "common-sunray-common", "title": "sunray_common"},
       {"id": "common-sunray-log", "title": "sunray_log"}
     ]

@@ -137,7 +137,7 @@ void Sunray_FSM::check_move_completed() {
     } else if (current_state == sunray_fsm::SunrayState::RETURN) {
         std::lock_guard<std::mutex> lk(command_status_mutex_);
         if (command_status_.active &&
-            command_status_.command_kind == sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN) {
+            command_status_.command_kind == control_common::CommandKind::Return) {
             mark_command_waiting_physical_state_locked("returning to home point", 90);
         }
     }

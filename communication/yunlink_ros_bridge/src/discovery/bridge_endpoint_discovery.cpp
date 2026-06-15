@@ -1,9 +1,11 @@
 #include "discovery/bridge_endpoint_discovery.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <random>
 
 #include <ros/console.h>
@@ -33,12 +35,43 @@ std::vector<std::string> default_capabilities(bool enable_system_services) {
     return capabilities;
 }
 
+bool parse_agent_id_text(const std::string& text, uint32_t* agent_id) {
+    if (text.empty()) {
+        return false;
+    }
+    for (char ch : text) {
+        if (!std::isdigit(static_cast<unsigned char>(ch))) {
+            return false;
+        }
+    }
+
+    std::size_t parsed = 0;
+    const unsigned long long value = std::stoull(text, &parsed, 10);
+    if (parsed != text.size() || value == 0 ||
+        value > static_cast<unsigned long long>(std::numeric_limits<uint32_t>::max())) {
+        return false;
+    }
+    if (agent_id != nullptr) {
+        *agent_id = static_cast<uint32_t>(value);
+    }
+    return true;
+}
+
 }  // namespace
 
 BridgeEndpointDiscovery::BridgeEndpointDiscovery() = default;
 
 BridgeEndpointDiscovery::~BridgeEndpointDiscovery() {
     stop();
+}
+
+bool BridgeEndpointDiscovery::resolve_agent_id(bool enable_auto_agent_id,
+                                               int configured_agent_id,
+                                               const std::string& path,
+                                               uint32_t* resolved_agent_id,
+                                               std::string* error) {
+    return load_or_create_agent_id(
+        enable_auto_agent_id, configured_agent_id, path, resolved_agent_id, error);
 }
 
 bool BridgeEndpointDiscovery::configure(const BridgeParams& params, std::string* error) {
@@ -122,6 +155,43 @@ std::string BridgeEndpointDiscovery::endpoint_id() const {
     return advertisement_.endpoint_id;
 }
 
+bool BridgeEndpointDiscovery::load_or_create_agent_id(bool enable_auto_agent_id,
+                                                      int configured_agent_id,
+                                                      const std::string& path,
+                                                      uint32_t* resolved_agent_id,
+                                                      std::string* error) {
+    if (!enable_auto_agent_id) {
+        if (configured_agent_id < 0) {
+            set_error(error, "manual agent id must be >= 0 when auto agent id is disabled");
+            return false;
+        }
+        const uint32_t manual_agent_id = static_cast<uint32_t>(configured_agent_id);
+        if (resolved_agent_id != nullptr) {
+            *resolved_agent_id = manual_agent_id;
+        }
+        return true;
+    }
+
+    if (read_agent_id_file(path, resolved_agent_id, error)) {
+        return true;
+    }
+    if (!ensure_parent_directory(path, error)) {
+        return false;
+    }
+
+    uint32_t generated = 0;
+    if (!allocate_next_agent_id(path, &generated, error)) {
+        return false;
+    }
+    if (!write_agent_id_file(path, generated, error)) {
+        return false;
+    }
+    if (resolved_agent_id != nullptr) {
+        *resolved_agent_id = generated;
+    }
+    return true;
+}
+
 bool BridgeEndpointDiscovery::load_or_create_endpoint_id(const std::string& path,
                                                          std::string* endpoint_id,
                                                          std::string* error) {
@@ -141,6 +211,43 @@ bool BridgeEndpointDiscovery::load_or_create_endpoint_id(const std::string& path
         *endpoint_id = generated;
     }
     return true;
+}
+
+bool BridgeEndpointDiscovery::allocate_next_agent_id(const std::string& path,
+                                                     uint32_t* agent_id,
+                                                     std::string* error) {
+    const std::string next_path = next_agent_id_path(path);
+    uint32_t next_value = 0;
+
+    std::ifstream input(next_path);
+    if (input.is_open()) {
+        std::string value;
+        std::getline(input, value);
+        if (!value.empty() && !parse_agent_id_text(value, &next_value)) {
+            set_error(error, "next agent id file is invalid");
+            return false;
+        }
+    }
+
+    std::ofstream output(next_path, std::ios::trunc);
+    if (!output.is_open()) {
+        set_error(error, "open next agent id file for write failed");
+        return false;
+    }
+    output << (next_value + 1U);
+    if (!output.good()) {
+        set_error(error, "write next agent id file failed");
+        return false;
+    }
+
+    if (agent_id != nullptr) {
+        *agent_id = next_value;
+    }
+    return true;
+}
+
+std::string BridgeEndpointDiscovery::next_agent_id_path(const std::string& path) {
+    return path + ".next";
 }
 
 std::string BridgeEndpointDiscovery::generate_endpoint_id() {
@@ -169,6 +276,40 @@ bool BridgeEndpointDiscovery::ensure_parent_directory(const std::string& path, s
         set_error(error, std::string("create endpoint id parent dir failed: ") + ex.what());
         return false;
     }
+}
+
+bool BridgeEndpointDiscovery::read_agent_id_file(const std::string& path,
+                                                 uint32_t* agent_id,
+                                                 std::string* error) {
+    std::ifstream input(path);
+    if (!input.is_open()) {
+        set_error(error, "agent id file not found");
+        return false;
+    }
+
+    std::string value;
+    std::getline(input, value);
+    if (!parse_agent_id_text(value, agent_id)) {
+        set_error(error, "agent id file is invalid");
+        return false;
+    }
+    return true;
+}
+
+bool BridgeEndpointDiscovery::write_agent_id_file(const std::string& path,
+                                                  uint32_t agent_id,
+                                                  std::string* error) {
+    std::ofstream output(path, std::ios::trunc);
+    if (!output.is_open()) {
+        set_error(error, "open agent id file for write failed");
+        return false;
+    }
+    output << agent_id;
+    if (!output.good()) {
+        set_error(error, "write agent id file failed");
+        return false;
+    }
+    return true;
 }
 
 bool BridgeEndpointDiscovery::read_endpoint_id_file(const std::string& path,
