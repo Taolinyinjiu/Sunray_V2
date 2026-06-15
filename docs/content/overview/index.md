@@ -85,7 +85,7 @@ Sunray_v2 是一个多功能包 ROS/catkin 工程。顶层目录可以按“接�
 | `tools` | 启动面板、监控工具、真机系统功能管理、脚本管理、PX4 参数检查。 | 用于调试、部署、启动和现场排错。 |
 | `communication` | YunLink ROS 桥和通信库。 | 用于和地面站或外部系统交换状态和命令。 |
 
-示例程序已经并入对应功能模块：UAV 示例在 `uav_control/sunray_uav_control_example`，UGV 示例在 `ugv_control/sunray_ugv_control_example`，规划示例在 `planning/sunray_uav_planning_example`，集群示例在 `swarm/sunray_swarm_control_example`。示例程序是学习入口，工具模块是调试入口，通信模块是外部系统接入口。
+示例程序已经并入对应功能模块：UAV 示例在 `uav_control/sunray_uav_control_example`，UGV 示例在 `ugv_control/sunray_ugv_control_example`，规划示例在 `planning/third_party_planner_examples/ego_planner_example`，集群示例在 `swarm/sunray_swarm_control_example`。示例程序是学习入口，工具模块是调试入口，通信模块是外部系统接入口。
 
 </section>
 
@@ -250,7 +250,7 @@ rostopic echo /ugv1/sunray/ugv_control/control_cmd
 | 新增 UAV 控制模式 | `uav_control/sunray_uav_control`、控制面板、终端工具、示例。 |
 | 新增 UGV 底盘类型 | `ugv_control/sunray_ugv_control/src/controller` 和 airframe YAML。 |
 | 新增定位源 | `localization/localization_fusion/config/localization_sources.yaml` 和适配节点。 |
-| 新增 planner | `planning/sunray_planning` 的 planner adapter。 |
+| 新增 planner | `planning/sunray_planner/sunray_planning` 的 planner adapter。 |
 | 新增集群阵型 | `swarm/formation`、`Formation.msg`、终端/Qt/RViz 工具。 |
 
 修改底层接口时要同步文档、示例和工具 UI。否则新功能虽然能跑，但小白用户很难知道怎么正确调用。

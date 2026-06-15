@@ -18,7 +18,7 @@
 ### 目录结构
 
 ```text
-planning/sunray_planning/
+planning/sunray_planner/sunray_planning/
 ├── include/
 │   ├── planner_datatypes.hpp
 │   ├── planner_interface/

@@ -586,7 +586,7 @@ desired_acc = 规划器加速度
 yaw_mode = SET_YAW 或 SET_YAWRATE
 ```
 
-发布频率建议接近控制器频率，至少不要低于轨迹本身的更新频率。仓库里的 `planning/sunray_uav_planning_example` 已经有 `position_cmd -> UAVControlCMD` 的转换思路。
+发布频率建议接近控制器频率，至少不要低于轨迹本身的更新频率。仓库里的 `planning/third_party_planner_examples/ego_planner_example` 已经有 `position_cmd -> UAVControlCMD` 的转换思路。
 
 ### 8.3 新增一种控制命令
 

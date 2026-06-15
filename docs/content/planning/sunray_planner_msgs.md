@@ -9,7 +9,7 @@
 ### 目录结构
 
 ```text
-planning/sunray_planner_msgs/
+planning/sunray_planner/sunray_planner_msgs/
 ├── msg/
 │   ├── DiffGoalSet.msg
 │   ├── DiffPositionCommand.msg

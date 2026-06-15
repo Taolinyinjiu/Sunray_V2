@@ -238,12 +238,12 @@ launch_groups:
         description: "启动 sunray_planning 并接入 diff planner。"
 
       - title: "RViz Goal Bridge"
-        package: "sunray_planner_tools"
+        package: "planner_tools"
         launch: "rviz_goal_bridge.launch"
         description: "将 RViz 目标点转换为规划模块可用的 planning command。"
 
       - title: "PointCloud Transform"
-        package: "sunray_planner_tools"
+        package: "planner_tools"
         launch: "point_cloud_transform.launch"
         description: "点云坐标转换工具，常用于 Gazebo/仿真点云接入规划模块。"
 

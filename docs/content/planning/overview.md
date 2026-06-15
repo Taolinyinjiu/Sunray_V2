@@ -4,26 +4,48 @@
 
 ## 规划总览
 
-`planning` 目录负责把“外部目标点/任务指令”转换为无人机控制模块能执行的轨迹控制指令。对新开发者来说，可以先把它理解成三层：
+`planning` 目录负责把“外部目标点/任务指令”转换为无人机控制模块能执行的轨迹控制指令。当前规划模块按两套体系维护：
 
-- `sunray_planner_msgs`：规划器适配消息，主要承接 EGO / Diff 等外部规划器输出。
-- `sunray_planner_tools`：辅助工具，例如 RViz 目标点桥接、点云坐标转换。
-- `sunray_planning`：Sunray 规划状态机，负责连接 Sunray 控制指令、外部规划器和 `uav_control`。
-- `source_planners`：第三方规划器源码区，包含 EGO、Diff、FUEL、SUPER 等算法包。当前 Sunray 状态机只适配了 EGO 和 Diff。
+- `sunray_planner`：Sunray 自己维护的规划接口、消息、工具和后续自研规划器代码。理论上它不应该强依赖第三方 planner 的内部包。
+- `third_party_planner_examples`：第三方开源规划器源码，以及 Sunray 为这些规划器提供的接口示例或适配示例。
+
+这样分类后，新开发者可以先学习 `sunray_planner` 中的统一接口；需要研究 EGO、Diff、FUEL、SUPER 等开源算法时，再进入 `third_party_planner_examples`。后续如果 Sunray 自研全局规划、局部规划、探索规划逐步重写源码，也应优先放在 `sunray_planner` 体系下。
 
 ## 目录结构
 
 ```text
 planning/
-  sunray_planner_msgs/       # EGO / Diff 规划器输出消息定义
-  sunray_planner_tools/      # RViz goal 桥接、点云转换等工具节点
-  sunray_planning/           # Sunray 规划状态机和 planner 适配层
-  source_planners/           # 第三方规划器源码，尽量按上游结构保留
+  sunray_planner/
+    sunray_planner_msgs/       # Sunray 规划适配消息
+    sunray_planning/           # Sunray 规划状态机和 planner 统一接口层
+  third_party_planner_examples/
+    planner_msgs/              # 第三方 EGO 示例使用的 planner_msgs，不属于 Sunray 主接口
+    planner_tools/             # RViz goal 桥接、点云转换等示例辅助工具
+    ego_planner_example/
+      ego-planner-swarm/       # EGO planner 示例源码
+      sunray_ego_adapter/      # EGO position_cmd 到 Sunray 控制命令的适配包
+    diff_planner_example/
+      diff_planner/            # Diff planner 源码
+      sunray_diff_adapter/     # 预留适配包目录
+    fuel_example/
+      FUEL/                    # FUEL 源码
+      sunray_fuel_adapter/     # 预留适配包目录
+    super_example/
+      SUPER/                   # SUPER 源码
+      sunray_super_adapter/    # 预留适配包目录
 ```
 
-### sunray_planner_msgs
+### sunray_planner
 
-这个包定义 Sunray 适配层使用的 planner 输出消息：
+`sunray_planner` 是 Sunray 规划模块自己的代码区，包含三个已经存在的 ROS 包：
+
+| 包 | 作用 |
+| --- | --- |
+| `sunray_planner_msgs` | Sunray 规划适配消息，承接 planner 输出，再由 `sunray_planning` 转成控制命令。 |
+| `planner_tools` | 辅助工具，例如 RViz 目标点桥接、点云坐标转换。 |
+| `sunray_planning` | Sunray 规划状态机，负责连接 Sunray 控制指令、planner 适配器和 `uav_control`。 |
+
+`sunray_planner_msgs` 当前定义的主要消息：
 
 - `EgoPositionCommand.msg`：EGO planner 输出的位置、速度、加速度、yaw 等轨迹指令。
 - `DiffPositionCommand.msg`：Diff planner 输出，字段类似 EGO，额外包含 jerk。
@@ -31,16 +53,12 @@ planning/
 
 注意：这些消息不是最终控制指令。最终发给控制模块的是 `sunray_msgs/UAVControlCMD`。
 
-### sunray_planner_tools
-
-包含两个实用工具：
+`planner_tools` 当前包含两个实用工具：
 
 - `rviz_goal_bridge`：订阅 RViz 的 `geometry_msgs/PoseStamped` 目标点，转换为 `sunray_msgs/UAVPlanningCMD`，发布到 `${agent_key}/sunray/uav_planning/planning_cmd`。
 - `point_cloud_transform`：订阅点云和里程计，根据最近一次 odom 位姿把点云转换到指定 frame 后发布。
 
-### sunray_planning
-
-核心节点是 `sunray_planning_node`。它做的事情是：
+`sunray_planning` 的核心节点是 `sunray_planning_node`。它做的事情是：
 
 1. 订阅 `UAVPlanningCMD`，接收起飞、降落、悬停、返航、局部目标点、全局目标点等规划命令。
 2. 根据 `planner_type` 创建对应适配器，目前支持 `ego` 和 `diff`。
@@ -49,16 +67,23 @@ planning/
 5. 把 planner 输出转换成 `UAVControlCMD::MOVE_TRAJECTORY`，发布给 `sunray_uav_control`。
 6. 发布 `UAVPlanningState`，供监控和上层系统查看规划状态。
 
-### source_planners
+### third_party_planner_examples
 
-这里放的是第三方算法源码：
+`third_party_planner_examples` 按规划器拆分第三方算法源码和 Sunray 适配示例。目录名统一使用 `_example` 后缀，表示这些目录不是 Sunray 自研 planner 主线，而是第三方开源规划器的 Sunray 接入样例。第三方源码尽量保持原样，`sunray_xxx_adapter` 放 Sunray 侧的话题、消息和控制命令转换代码。当前只有 EGO 已有可用 adapter，Diff/FUEL/SUPER 的 adapter 目录先用 `.gitkeep` 占位。
 
-- `ego_planner_swarm`：EGO planner 相关包，当前由 `EgoPlanner` 适配。
-- `diff_planner`：Diff planner 相关包，当前由 `DiffPlanner` 适配。
-- `FUEL`：探索规划相关源码，目前 Sunray 状态机中保留枚举但未接入适配器。
-- `SUPER`：SUPER planner 相关源码，目前 Sunray 状态机中保留枚举但未接入适配器。
+| 路径 | 说明 |
+| --- | --- |
+| `third_party_planner_examples/planner_msgs` | EGO 示例内部消息包，不属于 Sunray 主接口。 |
+| `third_party_planner_examples/ego_planner_example/ego-planner-swarm` | EGO planner 示例源码。 |
+| `third_party_planner_examples/ego_planner_example/sunray_ego_adapter` | EGO 输出到 `UAVControlCMD` 的 Sunray 适配包。 |
+| `third_party_planner_examples/diff_planner_example/diff_planner` | Diff planner 源码，当前由 `sunray_planning` 的 `DiffPlanner` 适配。 |
+| `third_party_planner_examples/diff_planner_example/sunray_diff_adapter` | 预留 Diff adapter 目录。 |
+| `third_party_planner_examples/fuel_example/FUEL` | FUEL 探索规划源码，目前 Sunray 状态机中保留枚举但未接入可用适配器。 |
+| `third_party_planner_examples/fuel_example/sunray_fuel_adapter` | 预留 FUEL adapter 目录。 |
+| `third_party_planner_examples/super_example/SUPER` | SUPER 高速导航规划源码，目前 Sunray 状态机中保留枚举但未接入可用适配器。 |
+| `third_party_planner_examples/super_example/sunray_super_adapter` | 预留 SUPER adapter 目录。 |
 
-建议开发 Sunray 适配逻辑时优先改 `sunray_planning` 和 `sunray_planner_tools`，不要直接改第三方算法核心，除非确认是算法包自身 bug。
+建议开发 Sunray 适配逻辑时优先改 `sunray_planner/sunray_planning` 和 `third_party_planner_examples/planner_tools`，不要直接改第三方算法核心，除非确认是算法包自身 bug。确实修改第三方源码时，最好同步记录修改原因，方便以后更新上游版本。
 
 ## 核心数据流
 

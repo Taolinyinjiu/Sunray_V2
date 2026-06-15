@@ -87,23 +87,23 @@
       "planning/overview.md",
       "planning/sunray_planning.md",
       "planning/sunray_planner_msgs.md",
-      "planning/sunray_planner_tools.md",
-      "planning/sunray_uav_planning_example.md",
-      "planning/ego_planner_swarm.md",
-      "planning/diff_planner.md",
-      "planning/fuel.md",
-      "planning/super.md"
+      "planning/planner_tools.md",
+      "planning/ego_planner_example.md",
+      "planning/ego_planner_source.md",
+      "planning/diff_planner_example.md",
+      "planning/fuel_example.md",
+      "planning/super_example.md"
     ],
     "sections": [
       {"id": "planning-overview", "title": "规划总览"},
       {"id": "sunray-planning", "title": "sunray_planning"},
       {"id": "sunray-planner-msgs", "title": "sunray_planner_msgs"},
-      {"id": "sunray-planner-tools", "title": "sunray_planner_tools"},
-      {"id": "examples-uav-planning", "title": "sunray_uav_planning_example"},
-      {"id": "ego-planner-swarm", "title": "ego_planner_swarm"},
-      {"id": "diff-planner", "title": "diff_planner"},
-      {"id": "fuel-planner", "title": "FUEL"},
-      {"id": "super-planner", "title": "SUPER"}
+      {"id": "planner-tools", "title": "planner_tools"},
+      {"id": "ego-planner-example", "title": "EGO 第三方规划示例"},
+      {"id": "ego-planner-source", "title": "EGO 源码结构"},
+      {"id": "diff-planner-example", "title": "Diff 第三方规划示例"},
+      {"id": "fuel-example", "title": "FUEL 第三方规划示例"},
+      {"id": "super-example", "title": "SUPER 第三方规划示例"}
     ]
   },
   {

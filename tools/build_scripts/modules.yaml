@@ -70,52 +70,52 @@ modules:
 
   sunray_planner_msgs:
     description: "planning模块内部使用消息,用于适配多个planner的自定义消息"
-    source_path: "planning/sunray_planner_msgs"
+    source_path: "planning/sunray_planner/sunray_planner_msgs"
     build_path: "build/sunray_planner_msgs"
     dependencies: []
 
   planner_msgs:
-    description: "uav planning example 内部使用的 planner_msgs"
-    source_path: "planning/sunray_uav_planning_example/source_planners/planner_msgs"
+    description: "EGO planner 示例内部使用的 planner_msgs"
+    source_path: "planning/third_party_planner_examples/planner_msgs"
     build_path: "build/planner_msgs"
     dependencies: []
 
   ego_planner_swarm:
-    description: "ego_planner_swarm 功能包"
-    source_path: "planning/sunray_uav_planning_example/source_planners/ego-planner-swarm"
+    description: "EGO planner 示例源码包"
+    source_path: "planning/third_party_planner_examples/ego_planner_example/ego-planner-swarm"
     build_path: "build/ego_planner_swarm"
     dependencies: ["planner_msgs"]
 
-  ego_example:
-    description: "EGO planner position_cmd 到 uav_control 的桥接示例"
-    source_path: "planning/sunray_uav_planning_example/ego_example"
-    build_path: "build/ego_example"
+  sunray_ego_adapter:
+    description: "sunray_ego_adapter: EGO planner position_cmd 到 uav_control 的桥接示例"
+    source_path: "planning/third_party_planner_examples/ego_planner_example/sunray_ego_adapter"
+    build_path: "build/sunray_ego_adapter"
     dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
 
   diff_planner:
     description: "Diff Planner"
-    source_path: "planning/source_planners/diff_planner"
+    source_path: "planning/third_party_planner_examples/diff_planner_example/diff_planner"
     build_path: "build/diff_planner"
     dependencies: ["sunray_planner_msgs"]
 
   # SUPER还在适配中
   super_planner:
     description: "MARS LAB Planner"
-    source_path: "planning/source_planners/SUPER"
+    source_path: "planning/third_party_planner_examples/super_example/SUPER"
     build_path: "build/SUPER"
     dependencies: []
 
   # Sunray 系列无人机规划模块核心
   sunray_planning:
     description: "Sunray unified planning entry"
-    source_path: "planning/sunray_planning"
+    source_path: "planning/sunray_planner/sunray_planning"
     build_path: "build/sunray_planning"
     dependencies: ["sunray_msgs", "sunray_common", "sunray_planner_msgs"]
 
-  sunray_planner_tools:
+  planner_tools:
     description: "Planning helper tools and bridge nodes"
-    source_path: "planning/sunray_planner_tools"
-    build_path: "build/sunray_planner_tools"
+    source_path: "planning/third_party_planner_examples/planner_tools"
+    build_path: "build/planner_tools"
     dependencies: ["sunray_msgs"]
 
   sunray_msgs:
