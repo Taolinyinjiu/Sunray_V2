@@ -15,11 +15,11 @@ catkin_package()
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../common/sunray_log/
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../common/sunray_log/spdlog/include
 )
 
-message(${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/)
+message(${CMAKE_CURRENT_SOURCE_DIR}/../../../common/sunray_log/)
 
 add_executable(mocap_odom_node src/mocap_odom_node.cpp)
 target_link_libraries(mocap_odom_node ${catkin_LIBRARIES})

@@ -16,9 +16,11 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
   tf2_geometry_msgs
   eigen_conversions
+  pcl_conversions
 )
 
 find_package(Eigen3 REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common)
 find_package(Sophus QUIET)
 
 set(USE_BUNDLED_SOPHUS FALSE)
@@ -34,7 +36,7 @@ elseif(Sophus_LIBRARIES)
 endif()
 
 if(USE_BUNDLED_SOPHUS)
-  set(SOPHUS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../drivers/Sophus)
+  set(SOPHUS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../drivers/Sophus)
   if(EXISTS ${SOPHUS_SOURCE_DIR}/sophus/so3.h)
     message(STATUS "Sophus package not found; using bundled Sophus from ${SOPHUS_SOURCE_DIR}")
     set(Sophus_INCLUDE_DIRS ${SOPHUS_SOURCE_DIR})
@@ -63,18 +65,19 @@ endif()
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES imu_process ekf_filter
-  CATKIN_DEPENDS 
-    roscpp 
-    rospy 
-    std_msgs 
-    sensor_msgs 
-    nav_msgs 
+  CATKIN_DEPENDS
+    roscpp
+    rospy
+    std_msgs
+    sensor_msgs
+    nav_msgs
     geometry_msgs
     message_filters
     tf2
     tf2_ros
     tf2_geometry_msgs
     eigen_conversions
+    pcl_conversions
   DEPENDS EIGEN3 Sophus
 )
 
@@ -82,8 +85,11 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
+  ${PCL_INCLUDE_DIRS}
   ${Sophus_INCLUDE_DIRS}
 )
+
+add_definitions(${PCL_DEFINITIONS})
 
 # IMU Process library
 add_library(imu_process
@@ -110,6 +116,16 @@ target_link_libraries(ekf_odometry_node
   imu_process
   ekf_filter
   ${catkin_LIBRARIES}
+)
+
+# Transform odometry and point cloud node
+add_executable(ekf_transform_odom_pointCloud
+  src/transform_odom_pointCloud.cpp
+)
+set_target_properties(ekf_transform_odom_pointCloud PROPERTIES OUTPUT_NAME transform_odom_pointCloud)
+target_link_libraries(ekf_transform_odom_pointCloud
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
 # Mocap pose/twist to odometry node

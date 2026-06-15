@@ -88,37 +88,43 @@ modules:
   vins_fusion:
     description: "VINS-Fusion 视觉惯性里程计源码包，用于相机和 IMU 定位"
     label: localization
-    source_path: "localization/vins-fusion"
+    source_path: "localization/third_party_localization/vins-fusion"
     build_path: "build/vins-fusion"
     dependencies: [sunray_msgs]
   vins_fusion_GPU:
     description: "GPU 加速版本 VINS-Fusion，用于视觉惯性里程计实验"
     label: localization
-    source_path: "localization/vins-fusion-gpu"
+    source_path: "localization/third_party_localization/vins-fusion-gpu"
     build_path: "build/vins-fusion-gpu"
     dependencies: [sunray_msgs]
   fast_lio:
     description: "FAST-LIO 激光惯性里程计，用于 Livox 等激光雷达定位建图"
     label: localization
-    source_path: "localization/fast_lio"
+    source_path: "localization/third_party_localization/fast_lio"
     build_path: "build/fast_lio"
     dependencies: [livox_ros_driver2]
+  open3d_loc:
+    description: "Open3D 点云地图全局定位包，需先配置 Open3D C++ 开发环境"
+    label: localization
+    source_path: "localization/third_party_localization/open3d_loc"
+    build_path: "build/open3d_loc"
+    dependencies: []
   ekf_odometry:
     description: "EKF 高频里程计补偿模块，用 IMU 对低频 odom 进行预测更新"
     label: localization
-    source_path: "localization/ekf_odometry"
+    source_path: "localization/localization_sources/ekf_odometry"
     build_path: "build/ekf_odometry"
     dependencies: []
   sunray_mocap:
     description: "动捕定位适配器，将 VRPN pose/twist 转换为 Sunray odometry"
     label: localization
-    source_path: "localization/sunray_mocap"
+    source_path: "localization/localization_sources/sunray_mocap"
     build_path: "build/sunray_mocap"
     dependencies: []
   sunray_viobot:
     description: "VIOBOT/Baton mini 定位适配器，修正并输出统一里程计"
     label: localization
-    source_path: "localization/sunray_viobot"
+    source_path: "localization/localization_sources/sunray_viobot"
     build_path: "build/sunray_viobot"
     dependencies: []
 

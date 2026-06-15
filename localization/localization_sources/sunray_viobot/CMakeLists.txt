@@ -14,8 +14,8 @@ catkin_package()
 
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../common/sunray_log/spdlog/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../common/sunray_log/
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../common/sunray_log/spdlog/include
 )
 
 add_executable(viobot_odom_node src/viobot_odom_node.cpp)

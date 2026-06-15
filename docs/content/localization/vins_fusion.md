@@ -9,7 +9,7 @@
 ### 目录结构
 
 ```text
-localization/vins-fusion/
+localization/third_party_localization/vins-fusion/
 ├── camera_models/
 ├── config/
 │   ├── realsense_d435i/

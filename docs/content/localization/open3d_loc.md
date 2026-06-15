@@ -23,7 +23,7 @@ FAST-LIO odom + 当前点云 + PLY 地图 + 初始位姿
 ### 代码结构
 
 ```text
-localization/open3d_loc/
+localization/third_party_localization/open3d_loc/
 ├── config/
 │   └── loc_param_g1.yaml
 ├── launch/
@@ -90,16 +90,16 @@ roslaunch open3d_loc localization_3d_g1.launch
 启动前需要确认地图路径存在。`open3d_loc_g1.launch` 当前默认：
 
 ```text
-$(find open3d_loc)/../data/map.ply
+$(find open3d_loc)/../../data/map.ply
 ```
 
-也就是 `localization/data/map.ply`。
+也就是仓库中的 `localization/data/map.ply`。
 
 ### open3d_loc_g1.launch 关键参数
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `path_map` | `$(find open3d_loc)/../data/map.ply` | PLY 地图路径。 |
+| `path_map` | `$(find open3d_loc)/../../data/map.ply` | PLY 地图路径。 |
 | `pcd_queue_maxsize` | `10` | 点云队列长度。 |
 | `voxelsize_coarse` | `0.15` | 粗配准体素大小。 |
 | `voxelsize_fine` | `0.1` | 精配准体素大小。 |

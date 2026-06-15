@@ -32,7 +32,7 @@ mocap_odom_node
 ### 代码结构
 
 ```text
-localization/ekf_odometry/
+localization/localization_sources/ekf_odometry/
 ├── include/
 │   ├── ekf_filter.h
 │   └── imu_process.h

@@ -7,7 +7,7 @@
 ### 目录结构
 
 ```text
-localization/vins-fusion-gpu/
+localization/third_party_localization/vins-fusion-gpu/
 ├── camera_models/
 ├── config/
 │   ├── euroc/

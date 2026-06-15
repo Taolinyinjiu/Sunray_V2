@@ -91,8 +91,101 @@ a:hover {
   font-size: 12px;
 }
 
+.sidebar nav {
+  display: grid;
+  gap: 2px;
+}
+
+.nav-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  min-height: 31px;
+}
+
+.nav-item.depth-0 {
+  margin-top: 14px;
+}
+
+.nav-item.depth-1 {
+  padding-left: 12px;
+}
+
+.nav-item.depth-2 {
+  padding-left: 28px;
+}
+
+.nav-children.is-collapsed {
+  display: none;
+}
+
+.nav-children.depth-2 {
+  position: relative;
+}
+
+.nav-children.depth-2::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 6px;
+  left: 21px;
+  width: 1px;
+  background: #e3ebf5;
+}
+
+.nav-toggle,
+.nav-toggle-placeholder {
+  width: 22px;
+  height: 24px;
+}
+
+.nav-toggle {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  color: #5c6a7d;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+
+.nav-toggle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-55%) rotate(45deg);
+  transition: transform 0.16s ease;
+}
+
+.nav-item.is-collapsed > .nav-toggle::before {
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.nav-item:hover > .nav-toggle,
+.nav-toggle:focus-visible,
+.nav-item.active-parent > .nav-toggle {
+  opacity: 1;
+}
+
+.nav-toggle:hover {
+  color: var(--brand-dark);
+  background: var(--brand-soft);
+}
+
 .sidebar nav a.nav-section {
-  margin: 18px 0 6px;
   padding: 7px 10px;
   color: #26384d;
   font-weight: 700;
@@ -103,19 +196,26 @@ a:hover {
 
 .sidebar nav a {
   display: block;
+  min-width: 0;
   padding: 7px 10px;
   border-radius: 6px;
   color: #314154;
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
-.sidebar nav a.nav-page {
-  margin-left: 10px;
+.sidebar nav a.nav-group {
+  color: #314154;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sidebar nav a.nav-page,
+.sidebar nav a.nav-group {
   padding-left: 14px;
   color: #4b5d72;
   font-size: 13px;
-  border-left: 2px solid var(--line);
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
 }
 
 .sidebar nav a:hover {
@@ -127,6 +227,15 @@ a:hover {
   color: var(--brand-dark);
   background: var(--brand-soft);
   font-weight: 700;
+}
+
+.nav-item.active-parent > a:not(.active) {
+  color: #26384d;
+  background: #f8fbff;
+}
+
+.nav-item.active-parent > .nav-toggle {
+  color: var(--brand-dark);
 }
 
 .main {
