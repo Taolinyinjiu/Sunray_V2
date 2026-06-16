@@ -1,11 +1,7 @@
 std_msgs/Header header
-
 string agent_name
 uint8 agent_id
-
-uint64 yunlink_session_id
-uint64 yunlink_message_id
-uint64 yunlink_correlation_id
+yunlink_msgs/CommandMeta meta
 
 uint8 COMMAND_UNKNOWN=0
 uint8 COMMAND_TAKEOFF=1

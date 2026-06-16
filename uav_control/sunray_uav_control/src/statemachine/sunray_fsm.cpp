@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <yaml-cpp/yaml.h>  // 引入Yaml-cpp库，用于读取yaml文件
 #include <sunray_msgs/UAVControlState.h>
+#include <sunray_msgs/UAVControlCommandStatus.h>
 #include "controller/px4_origin_controller.hpp"
 #include "controller/geometric_controller.hpp"
 #include <mavros_msgs/AttitudeTarget.h>
@@ -39,17 +40,17 @@ geometry_msgs::Vector3 toVector3Msg(const Eigen::Vector3d& value) {
     return msg;
 }
 
-std::string command_kind_wait_reason(uint8_t command_kind) {
+std::string command_kind_wait_reason(control_common::CommandKind command_kind) {
     switch (command_kind) {
-    case sunray_msgs::UAVCommandExecutionStatus::COMMAND_TAKEOFF:
+    case control_common::CommandKind::Takeoff:
         return "TAKEOFF still running";
-    case sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND:
+    case control_common::CommandKind::Land:
         return "LAND still running";
-    case sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN:
+    case control_common::CommandKind::Return:
         return "RETURN still running";
-    case sunray_msgs::UAVCommandExecutionStatus::COMMAND_GOTO:
+    case control_common::CommandKind::Goto:
         return "MOVE_POINT still running";
-    case sunray_msgs::UAVCommandExecutionStatus::COMMAND_VELOCITY_SETPOINT:
+    case control_common::CommandKind::VelocitySetpoint:
         return "MOVE_VELOCITY still running";
     default:
         return "controller busy";
@@ -111,36 +112,61 @@ void update_input_rate(double& averaged_rate_hz,
     }
 }
 
+sunray_msgs::UAVControlCommandStatus makeLocalCommandExecutionStatusMsg(
+    const ros::Time& stamp,
+    const std::string& agent_name,
+    int agent_id,
+    const control_common::CommandExecutionStatus& status) {
+    sunray_msgs::UAVControlCommandStatus msg;
+    msg.header.stamp = stamp;
+    msg.agent_name = agent_name;
+    msg.agent_id = static_cast<uint8_t>(std::clamp(agent_id, 0, 255));
+    msg.tracking_token = status.command_meta.tracking_token;
+    msg.command_kind = static_cast<uint8_t>(status.command_kind);
+    msg.execution_state = static_cast<uint8_t>(status.execution_state);
+    msg.progress_percent = status.progress_percent;
+    msg.active = status.active;
+    msg.terminal = status.terminal;
+    msg.success = status.success;
+    msg.result_code = status.result_code;
+    msg.detail = status.detail;
+    msg.control_state = status.control_state;
+    msg.px4_landed_state = status.px4_landed_state;
+    msg.ready_for_takeoff = status.ready_for_takeoff;
+    msg.ready_for_land = status.ready_for_land;
+    msg.busy_reason = status.busy_reason;
+    return msg;
+}
+
 }  // namespace
 
-uint8_t Sunray_FSM::command_kind_from_control_cmd(
+control_common::CommandKind Sunray_FSM::command_kind_from_control_cmd(
     control_common::UavControlCmd::ControlCmd cmd) const {
     switch (cmd) {
     case control_common::UavControlCmd::ControlCmd::TAKEOFF:
-        return sunray_msgs::UAVCommandExecutionStatus::COMMAND_TAKEOFF;
+        return control_common::CommandKind::Takeoff;
     case control_common::UavControlCmd::ControlCmd::LAND:
-        return sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND;
+        return control_common::CommandKind::Land;
     case control_common::UavControlCmd::ControlCmd::RETURN:
-        return sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN;
+        return control_common::CommandKind::Return;
     case control_common::UavControlCmd::ControlCmd::MOVE_POINT:
     case control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY:
     case control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84:
-        return sunray_msgs::UAVCommandExecutionStatus::COMMAND_GOTO;
+        return control_common::CommandKind::Goto;
     case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY:
     case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY:
     case control_common::UavControlCmd::ControlCmd::MOVE_TRAJECTORY:
-        return sunray_msgs::UAVCommandExecutionStatus::COMMAND_VELOCITY_SETPOINT;
+        return control_common::CommandKind::VelocitySetpoint;
     case control_common::UavControlCmd::ControlCmd::KILL:
     case control_common::UavControlCmd::ControlCmd::HOVER:
     case control_common::UavControlCmd::ControlCmd::UNDEFINE:
     default:
-        return sunray_msgs::UAVCommandExecutionStatus::COMMAND_UNKNOWN;
+        return control_common::CommandKind::Unknown;
     }
 }
 
 bool Sunray_FSM::should_track_command(control_common::UavControlCmd::ControlCmd cmd) const {
-    return command_kind_from_control_cmd(cmd) !=
-           sunray_msgs::UAVCommandExecutionStatus::COMMAND_UNKNOWN;
+    return command_kind_from_control_cmd(cmd) != control_common::CommandKind::Unknown;
 }
 
 bool Sunray_FSM::is_command_request_event(sunray_fsm::SunrayEvent event) const {
@@ -186,10 +212,9 @@ void Sunray_FSM::update_command_readiness_locked(
         status->busy_reason = command_kind_wait_reason(status->command_kind);
         if (status->execution_state ==
             control_common::CommandExecutionState::WaitingPhysicalState) {
-            if (status->command_kind == sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND) {
+            if (status->command_kind == control_common::CommandKind::Land) {
                 status->busy_reason += ", waiting for PX4 ON_GROUND";
-            } else if (status->command_kind ==
-                       sunray_msgs::UAVCommandExecutionStatus::COMMAND_TAKEOFF) {
+            } else if (status->command_kind == control_common::CommandKind::Takeoff) {
                 status->busy_reason += ", waiting for controller HOVER";
             }
         }
@@ -212,9 +237,7 @@ void Sunray_FSM::mark_command_requested_locked(const control_common::UavControlC
         return;
     }
     command_status_ = control_common::CommandExecutionStatus{};
-    command_status_.yunlink_session_id = cmd.yunlink_session_id;
-    command_status_.yunlink_message_id = cmd.yunlink_message_id;
-    command_status_.yunlink_correlation_id = cmd.yunlink_correlation_id;
+    command_status_.command_meta = cmd.command_meta;
     command_status_.command_kind = command_kind_from_control_cmd(cmd.control_cmd);
     command_status_.execution_state = control_common::CommandExecutionState::Accepted;
     command_status_.progress_percent = 20;
@@ -226,12 +249,10 @@ void Sunray_FSM::mark_command_requested_locked(const control_common::UavControlC
 }
 
 bool Sunray_FSM::should_refresh_command_status_locked(const control_common::UavControlCmd& cmd) const {
-    if (command_status_.command_kind == sunray_msgs::UAVCommandExecutionStatus::COMMAND_UNKNOWN) {
+    if (command_status_.command_kind == control_common::CommandKind::Unknown) {
         return true;
     }
-    return command_status_.yunlink_session_id != cmd.yunlink_session_id ||
-           command_status_.yunlink_message_id != cmd.yunlink_message_id ||
-           command_status_.yunlink_correlation_id != cmd.yunlink_correlation_id ||
+    return command_status_.command_meta.tracking_token != cmd.command_meta.tracking_token ||
            command_status_.command_kind != command_kind_from_control_cmd(cmd.control_cmd);
 }
 
@@ -286,9 +307,7 @@ void Sunray_FSM::mark_command_rejected(const control_common::UavControlCmd& cmd,
                                        uint16_t result_code) {
     std::lock_guard<std::mutex> lock(command_status_mutex_);
     command_status_ = control_common::CommandExecutionStatus{};
-    command_status_.yunlink_session_id = cmd.yunlink_session_id;
-    command_status_.yunlink_message_id = cmd.yunlink_message_id;
-    command_status_.yunlink_correlation_id = cmd.yunlink_correlation_id;
+    command_status_.command_meta = cmd.command_meta;
     command_status_.command_kind = command_kind_from_control_cmd(cmd.control_cmd);
     command_status_.execution_state = control_common::CommandExecutionState::Failed;
     command_status_.progress_percent = 0;
@@ -407,8 +426,8 @@ void Sunray_FSM::init_publisher() {
     // 状态机当前状态发布者
     sunray_fsm_state_pub_ =
         nh_.advertise<sunray_msgs::UAVControlState>(uav_ns_ + "/sunray/uav_control/control_state", 10);
-    command_execution_status_pub_ = nh_.advertise<sunray_msgs::UAVCommandExecutionStatus>(
-        uav_ns_ + "/sunray/uav_control/command_execution_status", 10);
+    local_command_status_pub_ = nh_.advertise<sunray_msgs::UAVControlCommandStatus>(
+        uav_ns_ + "/sunray/uav_control/command_status_local", 10);
     sunray_odom_debug_pub_ =
         nh_.advertise<nav_msgs::Odometry>(uav_ns_ + "/surnay/debug/odometrry", 10);
 }
@@ -623,16 +642,14 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     fsm_state_msg.last_cmd.desired_body_xy_vel.x = last_cmd_snapshot.body_velocity_xy.x();
     fsm_state_msg.last_cmd.desired_body_xy_vel.y = last_cmd_snapshot.body_velocity_xy.y();
     fsm_state_msg.last_cmd.fixed_height = last_cmd_snapshot.fixed_height;
-    fsm_state_msg.last_cmd.takeoff_relative_height = last_cmd_snapshot.takeoff_relative_height;
-    fsm_state_msg.last_cmd.takeoff_max_velocity = last_cmd_snapshot.takeoff_max_velocity;
-    fsm_state_msg.last_cmd.land_max_velocity = last_cmd_snapshot.land_max_velocity;
+    fsm_state_msg.last_cmd.takeoff_relative_height = last_cmd_snapshot.takeoff.relative_height;
+    fsm_state_msg.last_cmd.takeoff_max_velocity = last_cmd_snapshot.takeoff.max_velocity;
+    fsm_state_msg.last_cmd.land_max_velocity = last_cmd_snapshot.land.max_velocity;
     fsm_state_msg.last_cmd.desired_wgs84_pos = last_cmd_snapshot.wgs84_position;
     fsm_state_msg.last_cmd.yaw_mode = static_cast<uint8_t>(last_cmd_snapshot.yaw_mode);
     fsm_state_msg.last_cmd.desired_yaw = last_cmd_snapshot.yaw;
     fsm_state_msg.last_cmd.desired_yaw_rate = last_cmd_snapshot.yaw_rate;
-    fsm_state_msg.last_cmd.yunlink_session_id = last_cmd_snapshot.yunlink_session_id;
-    fsm_state_msg.last_cmd.yunlink_message_id = last_cmd_snapshot.yunlink_message_id;
-    fsm_state_msg.last_cmd.yunlink_correlation_id = last_cmd_snapshot.yunlink_correlation_id;
+    fsm_state_msg.last_cmd.tracking_token = last_cmd_snapshot.command_meta.tracking_token;
     // 状态机状态
     fsm_state_msg.control_state = static_cast<uint8_t>(fsm_state_snapshot);
     if (has_self_odom_msg_snapshot) {
@@ -657,25 +674,7 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     // 发布消息
     sunray_fsm_state_pub_.publish(fsm_state_msg);
 
-    sunray_msgs::UAVCommandExecutionStatus exec_msg;
-    exec_msg.header.stamp = ros::Time::now();
-    exec_msg.agent_name = agent_name_;
-    exec_msg.agent_id = static_cast<uint8_t>(std::clamp(agent_id_, 0, 255));
-    exec_msg.yunlink_session_id = command_status_snapshot.yunlink_session_id;
-    exec_msg.yunlink_message_id = command_status_snapshot.yunlink_message_id;
-    exec_msg.yunlink_correlation_id = command_status_snapshot.yunlink_correlation_id;
-    exec_msg.command_kind = command_status_snapshot.command_kind;
-    exec_msg.execution_state = static_cast<uint8_t>(command_status_snapshot.execution_state);
-    exec_msg.progress_percent = command_status_snapshot.progress_percent;
-    exec_msg.active = command_status_snapshot.active;
-    exec_msg.terminal = command_status_snapshot.terminal;
-    exec_msg.success = command_status_snapshot.success;
-    exec_msg.result_code = command_status_snapshot.result_code;
-    exec_msg.detail = command_status_snapshot.detail;
-    exec_msg.control_state = command_status_snapshot.control_state;
-    exec_msg.px4_landed_state = command_status_snapshot.px4_landed_state;
-    exec_msg.ready_for_takeoff = command_status_snapshot.ready_for_takeoff;
-    exec_msg.ready_for_land = command_status_snapshot.ready_for_land;
-    exec_msg.busy_reason = command_status_snapshot.busy_reason;
-    command_execution_status_pub_.publish(exec_msg);
+    const auto local_exec_msg = makeLocalCommandExecutionStatusMsg(
+        ros::Time::now(), agent_name_, agent_id_, command_status_snapshot);
+    local_command_status_pub_.publish(local_exec_msg);
 }
