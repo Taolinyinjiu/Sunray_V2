@@ -334,8 +334,20 @@ groups:
   # ----- Product: 机型、产品形态和常用任务预设 -----
   S_150_Basic:
     label: Product
-    description: "Sunray-150 基础款预设，适合动捕定位和基础飞行控制"
-    modules: ["sunray_mavros", "vrpn_client_ros", "web_cam", "sunray_mocap"]
+    description: "Sunray-150 基础款预设，适合动捕定位条件下的基础飞行控制"
+    modules: 
+      [
+        "sunray_common",
+        "sunray_msgs",
+        "sunray_mavros", 
+        "vrpn_client_ros", 
+        "web_cam", 
+        "sunray_mocap",
+        "localization_fusion",
+        "uav_control",
+        "uav_control_tools",
+        "sunray_uav_control_example" 
+      ]
 
   S_150_Lidar:
     label: Product
