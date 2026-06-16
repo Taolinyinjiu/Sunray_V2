@@ -111,6 +111,11 @@ struct Geometric_AttitudeControl_Output_t {
     double thrust{0.0};                                  // 归一化推力，范围 [0, 0.95]
 };
 
+enum class ThrustCommandPolicy : uint8_t {
+    UseEstimatedAnchor = 0,
+    UseFixedAnchor,
+};
+
 struct Geometric_AttitudeControl_DebugState_t {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -126,15 +131,31 @@ struct Geometric_AttitudeControl_DebugState_t {
     double yaw_error{0.0};
     Eigen::Vector3d attitude_error{Eigen::Vector3d::Zero()};
 
+    double current_dt{0.0};
+    Eigen::Vector3d integral_pos{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d integral_vel{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d last_pos_error{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d last_vel_error{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d position_error_dot{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_dot{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d derivative_term_raw{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d derivative_term{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d integral_term{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d pid_feedback_acceleration_unsaturated{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d pid_feedback_acceleration{Eigen::Vector3d::Zero()};
+    bool pid_accel_saturated{false};
+
     Eigen::Vector3d desired_acceleration{Eigen::Vector3d::Zero()};
     Eigen::Quaterniond desired_orientation{Eigen::Quaterniond::Identity()};
     Eigen::Vector3d desired_bodyrates{Eigen::Vector3d::Zero()};
     double desired_thrust{0.0};
-};
 
-enum class ThrustCommandPolicy : uint8_t {
-    UseEstimatedAnchor = 0,
-    UseFixedAnchor,
+    ThrustCommandPolicy thrust_policy{ThrustCommandPolicy::UseEstimatedAnchor};
+    double hover_thrust_estimate{0.0};
+    double accepted_hover_thrust{0.0};
+    double selected_hover_anchor{0.0};
+    double fixed_anchor_override{0.0};
+    bool fixed_anchor_active{false};
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -186,6 +207,14 @@ class Geometric_AttitudeControl {
         last_velocity_fixed_height_active_ = false;
         first_run_ = true;
         last_call_stamp_ = ros::Time(0);
+        debug_position_error_dot_.setZero();
+        debug_velocity_error_dot_.setZero();
+        debug_derivative_term_raw_.setZero();
+        debug_derivative_term_.setZero();
+        debug_integral_term_.setZero();
+        debug_pid_feedback_acceleration_unsaturated_.setZero();
+        debug_pid_feedback_acceleration_.setZero();
+        debug_pid_accel_saturated_ = false;
     }
 
     // 仅重置 z 轴积分与误差缓存，避免高度环残留影响下一段运动
@@ -194,6 +223,13 @@ class Geometric_AttitudeControl {
         integral_vel_.z() = 0.0;
         last_pos_error_.z() = 0.0;
         last_vel_error_.z() = 0.0;
+        debug_position_error_dot_.z() = 0.0;
+        debug_velocity_error_dot_.z() = 0.0;
+        debug_derivative_term_raw_.z() = 0.0;
+        debug_derivative_term_.z() = 0.0;
+        debug_integral_term_.z() = 0.0;
+        debug_pid_feedback_acceleration_unsaturated_.z() = 0.0;
+        debug_pid_feedback_acceleration_.z() = 0.0;
     }
 
     // 初始化期望 yaw 缓存（起飞锁定 yaw 后调用）
@@ -251,6 +287,16 @@ class Geometric_AttitudeControl {
     // UseFixedAnchor 路径的覆盖值;>0 时优先使用,<=0 视为未覆盖。
     // 由 set_fixed_anchor_override / clear_fixed_anchor_override 维护。
     double fixed_anchor_override_{-1.0};
+    mutable double last_selected_hover_anchor_{0.0};
+
+    Eigen::Vector3d debug_position_error_dot_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_dot_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_derivative_term_raw_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_derivative_term_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_integral_term_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_pid_feedback_acceleration_unsaturated_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_pid_feedback_acceleration_{Eigen::Vector3d::Zero()};
+    bool debug_pid_accel_saturated_{false};
 
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法
@@ -283,7 +329,8 @@ class Geometric_AttitudeControl {
                             const control_common::UAVStateEstimate& current_odom,
                             const Eigen::Vector3d& desired_acc,
                             const Geometric_AttitudeControl_Output_t& output,
-                            Control_Type control_type);
+                            Control_Type control_type,
+                            ThrustCommandPolicy thrust_policy);
 
     // 位置 PD 控制器：由位置误差和速度误差计算加速度反馈量，并对输出限幅
     Eigen::Vector3d poscontroller(const Eigen::Vector3d& pos_error,

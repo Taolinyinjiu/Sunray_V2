@@ -1,5 +1,6 @@
 #pragma once
 
+#include "control_data_types/geometric_controller_log_types.hpp"
 #include "controller/controller_interface.hpp"
 #include "controller/takeoff_land_utils.hpp"
 #include "core_algorithm/geometric_attitude_control.hpp"
@@ -7,6 +8,7 @@
 #include "utils/arrival_helper.hpp"
 #include "utils/reference_limit_helper.hpp"
 #include "utils/quintic_curve.hpp"
+#include <sunray_logger/ulog_logger.hpp>
 #include <ros/node_handle.h>
 #include <ros/time.h>
 #include <string>
@@ -138,6 +140,9 @@ class Geometric_Controller : public Controller_Interface {
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
     void reset_stage_thrust_filters();
     void cache_attitude_setpoint(const control_common::Mavros_SetpointAttitude& setpoint);
+    bool init_ulog_logger();
+    void write_ulog_param_snapshot();
+    void write_ulog_sample(const control_common::Mavros_SetpointAttitude& setpoint);
     void feed_thrust_estimator_from_setpoint(
         const control_common::Mavros_SetpointAttitude& setpoint,
         bool is_hover_context);
@@ -147,6 +152,19 @@ class Geometric_Controller : public Controller_Interface {
                                     ThrustCommandPolicy::UseEstimatedAnchor);
 
     std::atomic<bool> controller_ready_{false};
+
+    // ----------------------ULog 日志-----------------------
+    bool ulog_enabled_{false};
+    std::string ulog_path_{"logs/sunray_uav_control/geometric_controller_debug"};
+    sunray_logger::UlogLogger ulog_logger_;
+    sunray_logger::UlogTopic<controller_data_types::GeometricControllerParamRecord>
+        ulog_param_topic_;
+    sunray_logger::UlogTopic<controller_data_types::GeometricControllerInputRecord>
+        ulog_input_topic_;
+    sunray_logger::UlogTopic<controller_data_types::GeometricControllerDebugRecord>
+        ulog_debug_topic_;
+    sunray_logger::UlogTopic<controller_data_types::GeometricControllerOutputRecord>
+        ulog_output_topic_;
 
     // ---------------------定时器回调函数---------------------
     void pub_px4_state_timer_cb(const ros::TimerEvent&);    // 定时发布 PX4State

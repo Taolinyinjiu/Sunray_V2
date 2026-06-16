@@ -3,6 +3,7 @@
 #include "utils/orientation_utils.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 
 void Geometric_Controller::load_and_validate_config_or_throw() {
     // 读取 geometric controller 自身需要的参数。
@@ -154,6 +155,16 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     attitude_command_mode_ =
         (control_type == 0) ? AttitudeCommandMode::Attitude : AttitudeCommandMode::BodyRate;
 
+    if (controller_param["enable_ulog"]) {
+        ulog_enabled_ = controller_param["enable_ulog"].as<bool>();
+    }
+    if (controller_param["ulog_path"]) {
+        ulog_path_ = controller_param["ulog_path"].as<std::string>();
+        if (ulog_enabled_ && ulog_path_.empty()) {
+            throw std::runtime_error(
+                "param 'geometric_controller_param.ulog_path' directory must not be empty when enable_ulog=true");
+        }
+    }
     if (!controller_param["attitude_tau"]) {
         throw std::runtime_error("missing param 'geometric_controller_param.attitude_tau'");
     }

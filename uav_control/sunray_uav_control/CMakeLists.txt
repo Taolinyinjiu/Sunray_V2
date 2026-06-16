@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
   geographic_msgs
   mavros_msgs
   sunray_common
+  sunray_logger
   sunray_msgs
 )
 
@@ -41,6 +42,7 @@ catkin_package(
     geographic_msgs
     mavros_msgs
     sunray_common
+    sunray_logger
     sunray_msgs
   DEPENDS Eigen3 yaml-cpp
 )

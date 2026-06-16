@@ -3,9 +3,15 @@
 #include "utils/control_config_loader.hpp"
 #include "utils/body_frame_reference_helper.hpp"
 #include "utils/orientation_utils.hpp"
+#include <sunray_logger/time_utils.hpp>
+#include <ros/package.h>
 #include <ros/ros.h>
 #include <cmath>
 #include <algorithm>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 
 namespace {
 
@@ -23,6 +29,95 @@ mavros_msgs::AttitudeTarget to_attitude_target_msg(
     msg.body_rate.z = setpoint.body_rate.z();
     msg.thrust = setpoint.thrust;
     return msg;
+}
+
+void copy_vec3(const Eigen::Vector3d& src, float dst[3]) {
+    dst[0] = static_cast<float>(src.x());
+    dst[1] = static_cast<float>(src.y());
+    dst[2] = static_cast<float>(src.z());
+}
+
+void copy_quaternion_wxyz(const Eigen::Quaterniond& src, float dst[4]) {
+    dst[0] = static_cast<float>(src.w());
+    dst[1] = static_cast<float>(src.x());
+    dst[2] = static_cast<float>(src.y());
+    dst[3] = static_cast<float>(src.z());
+}
+
+uint64_t stamp_to_us_or_now(const ros::Time& stamp) {
+    return sunray_logger::rosTimeToUs(stamp.isZero() ? ros::Time::now() : stamp);
+}
+
+bool file_exists(const std::string& path) {
+    std::ifstream file(path.c_str());
+    return file.good();
+}
+
+bool is_absolute_path(const std::string& path) {
+    return !path.empty() && path.front() == '/';
+}
+
+std::string join_path(const std::string& directory, const std::string& filename) {
+    if (directory.empty() || directory.back() == '/') {
+        return directory + filename;
+    }
+    return directory + "/" + filename;
+}
+
+std::string parent_path(const std::string& path) {
+    const std::string::size_type slash = path.find_last_of('/');
+    if (slash == std::string::npos) {
+        return std::string();
+    }
+    if (slash == 0U) {
+        return "/";
+    }
+    return path.substr(0, slash);
+}
+
+std::string sunray_repo_root() {
+    const std::string package_path = ros::package::getPath("sunray_uav_control");
+    if (package_path.empty()) {
+        return std::string();
+    }
+    // package_path = <repo>/uav_control/sunray_uav_control
+    return parent_path(parent_path(package_path));
+}
+
+std::string resolve_ulog_directory(const std::string& configured_path) {
+    if (is_absolute_path(configured_path)) {
+        return configured_path;
+    }
+
+    const std::string repo_root = sunray_repo_root();
+    if (repo_root.empty()) {
+        return configured_path;
+    }
+    return join_path(repo_root, configured_path);
+}
+
+std::string format_ulog_timestamp_filename(std::time_t timestamp_s) {
+    std::tm local_time{};
+    localtime_r(&timestamp_s, &local_time);
+
+    std::ostringstream stream;
+    stream << std::put_time(&local_time, "%Y%m%d%H%M") << ".ulg";
+    return stream.str();
+}
+
+std::string make_unique_ulog_path(const std::string& configured_directory) {
+    const std::string directory = resolve_ulog_directory(configured_directory);
+    const std::time_t now_s = static_cast<std::time_t>(ros::Time::now().sec);
+    for (int minute_offset = 0; minute_offset < 24 * 60; ++minute_offset) {
+        const std::time_t candidate_s = now_s + minute_offset * 60;
+        const std::string candidate =
+            join_path(directory, format_ulog_timestamp_filename(candidate_s));
+        if (!file_exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return join_path(directory, format_ulog_timestamp_filename(now_s + 24 * 60 * 60));
 }
 
 }  // namespace
@@ -49,6 +144,7 @@ bool Geometric_Controller::init() {
     load_and_validate_config_or_throw();
     // 将参数加载到核心算法
     controller_.load_param(geometric_controller_param_);
+    init_ulog_logger();
 
     // 初始化 mavros_helper
     mavros_helper_.init();
@@ -117,10 +213,185 @@ bool Geometric_Controller::get_last_attitude_target(mavros_msgs::AttitudeTarget&
 
 void Geometric_Controller::cache_attitude_setpoint(
     const control_common::Mavros_SetpointAttitude& setpoint) {
-    std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
-    last_setpoint_ = setpoint;
-    last_setpoint_.timestamp = ros::Time::now();
-    last_setpoint_.valid = true;
+    control_common::Mavros_SetpointAttitude stamped_setpoint = setpoint;
+    stamped_setpoint.timestamp = ros::Time::now();
+    stamped_setpoint.valid = true;
+    {
+        std::lock_guard<std::mutex> lock(last_setpoint_mutex_);
+        last_setpoint_ = stamped_setpoint;
+    }
+    write_ulog_sample(stamped_setpoint);
+}
+
+bool Geometric_Controller::init_ulog_logger() {
+    if (!ulog_enabled_) {
+        return false;
+    }
+
+    sunray_logger::UlogOptions options;
+    options.system_name = "sunray_geometric_controller";
+    options.auto_flush = false;
+    ulog_path_ = make_unique_ulog_path(ulog_path_);
+
+    if (!ulog_logger_.open(ulog_path_, options)) {
+        ROS_WARN("[Geometric_Controller] failed to open ULog file '%s': %s",
+                 ulog_path_.c_str(),
+                 ulog_logger_.lastError().c_str());
+        ulog_enabled_ = false;
+        return false;
+    }
+
+    ulog_param_topic_ =
+        ulog_logger_.advertise<controller_data_types::GeometricControllerParamRecord>(
+            "geometric_controller_param");
+    ulog_input_topic_ =
+        ulog_logger_.advertise<controller_data_types::GeometricControllerInputRecord>(
+            "geometric_controller_input");
+    ulog_debug_topic_ =
+        ulog_logger_.advertise<controller_data_types::GeometricControllerDebugRecord>(
+            "geometric_controller_debug");
+    ulog_output_topic_ =
+        ulog_logger_.advertise<controller_data_types::GeometricControllerOutputRecord>(
+            "geometric_controller_output");
+
+    if (!ulog_param_topic_.valid() || !ulog_input_topic_.valid() ||
+        !ulog_debug_topic_.valid() || !ulog_output_topic_.valid()) {
+        ROS_WARN("[Geometric_Controller] failed to advertise geometric controller ULog topics");
+        ulog_logger_.close();
+        ulog_enabled_ = false;
+        return false;
+    }
+
+    write_ulog_param_snapshot();
+    if (!ulog_enabled_) {
+        return false;
+    }
+    ROS_INFO("[Geometric_Controller] ULog enabled: path=%s", ulog_path_.c_str());
+    return true;
+}
+
+void Geometric_Controller::write_ulog_param_snapshot() {
+    if (!ulog_enabled_ || !ulog_logger_.isOpen() || !ulog_param_topic_.valid()) {
+        return;
+    }
+
+    controller_data_types::GeometricControllerParamRecord record;
+    record.timestamp = sunray_logger::rosTimeToUs(ros::Time::now());
+    record.enable_ulog = ulog_enabled_ ? 1U : 0U;
+    record.control_type = static_cast<uint8_t>(attitude_command_mode_);
+    record.takeoff_land_type = static_cast<uint8_t>(std::clamp(takeoff_land_type_, 0, 255));
+    record.hover_thrust_estimator_type =
+        static_cast<uint8_t>(std::clamp(geometric_controller_param_.hover_thrust_estimator_type,
+                                        0,
+                                        255));
+    record.mass_kg = static_cast<float>(geometric_controller_param_.drone_mass);
+    record.gravity = static_cast<float>(geometric_controller_param_.gravity);
+    record.hover_thrust_init = static_cast<float>(geometric_controller_param_.hover_thrust_init);
+    record.hover_thrust_min = static_cast<float>(geometric_controller_param_.hover_thrust_min);
+    record.hover_thrust_max = static_cast<float>(geometric_controller_param_.hover_thrust_max);
+    record.accepted_hover_thrust_rate =
+        static_cast<float>(geometric_controller_param_.accepted_hover_thrust_rate);
+    record.max_acc = static_cast<float>(geometric_controller_param_.max_acc);
+    record.max_d_acc = static_cast<float>(geometric_controller_param_.max_d_acc);
+    record.attitude_tau = static_cast<float>(geometric_controller_param_.attitude_tau);
+    record.zb_z_min = static_cast<float>(geometric_controller_param_.zb_z_min);
+    record.controller_hz = static_cast<float>(geometric_controller_param_.controller_hz);
+    copy_vec3(geometric_controller_param_.pos_kp, record.pos_kp);
+    copy_vec3(geometric_controller_param_.pos_ki, record.pos_ki);
+    copy_vec3(geometric_controller_param_.pos_kd, record.pos_kd);
+    copy_vec3(geometric_controller_param_.vel_kp, record.vel_kp);
+    copy_vec3(geometric_controller_param_.vel_ki, record.vel_ki);
+    copy_vec3(geometric_controller_param_.vel_kd, record.vel_kd);
+    copy_vec3(geometric_controller_param_.int_max_pos, record.int_max_pos);
+    copy_vec3(geometric_controller_param_.int_max_vel, record.int_max_vel);
+    copy_vec3(geometric_controller_param_.D, record.rotor_drag_d);
+
+    if (!ulog_logger_.write(ulog_param_topic_, record)) {
+        ROS_WARN_THROTTLE(1.0,
+                          "[Geometric_Controller] failed to write ULog param snapshot: %s",
+                          ulog_logger_.lastError().c_str());
+        ulog_logger_.close();
+        ulog_enabled_ = false;
+    }
+}
+
+void Geometric_Controller::write_ulog_sample(
+    const control_common::Mavros_SetpointAttitude& setpoint) {
+    if (!ulog_enabled_ || !ulog_logger_.isOpen()) {
+        return;
+    }
+
+    const Geometric_AttitudeControl_DebugState_t& debug = controller_.get_last_debug_state();
+    const uint64_t timestamp_us = stamp_to_us_or_now(setpoint.timestamp);
+
+    controller_data_types::GeometricControllerInputRecord input_record;
+    input_record.timestamp = debug.valid ? stamp_to_us_or_now(debug.stamp) : timestamp_us;
+    input_record.valid = debug.valid ? 1U : 0U;
+    input_record.control_type = static_cast<uint8_t>(debug.control_type);
+    input_record.thrust_policy = static_cast<uint8_t>(debug.thrust_policy);
+    copy_vec3(debug.reference.position, input_record.reference_position);
+    copy_vec3(debug.reference.velocity, input_record.reference_velocity);
+    copy_vec3(debug.reference.acceleration, input_record.reference_acceleration);
+    copy_vec3(debug.reference.jerk, input_record.reference_jerk);
+    input_record.reference_yaw = static_cast<float>(debug.reference.yaw);
+    input_record.reference_yaw_rate = static_cast<float>(debug.reference.yaw_rate);
+    copy_vec3(debug.odom.position, input_record.odom_position);
+    copy_vec3(debug.odom.velocity, input_record.odom_velocity);
+    copy_quaternion_wxyz(debug.odom.orientation, input_record.odom_orientation_q);
+    copy_vec3(debug.odom.bodyrate, input_record.odom_bodyrate);
+
+    controller_data_types::GeometricControllerDebugRecord debug_record;
+    debug_record.timestamp = input_record.timestamp;
+    debug_record.valid = debug.valid ? 1U : 0U;
+    debug_record.control_type = static_cast<uint8_t>(debug.control_type);
+    debug_record.thrust_policy = static_cast<uint8_t>(debug.thrust_policy);
+    debug_record.pid_accel_saturated = debug.pid_accel_saturated ? 1U : 0U;
+    debug_record.fixed_anchor_active = debug.fixed_anchor_active ? 1U : 0U;
+    debug_record.current_dt = static_cast<float>(debug.current_dt);
+    copy_vec3(debug.position_error, debug_record.position_error);
+    copy_vec3(debug.velocity_error, debug_record.velocity_error);
+    debug_record.yaw_error = static_cast<float>(debug.yaw_error);
+    copy_vec3(debug.attitude_error, debug_record.attitude_error);
+    copy_vec3(debug.integral_pos, debug_record.integral_pos);
+    copy_vec3(debug.integral_vel, debug_record.integral_vel);
+    copy_vec3(debug.last_pos_error, debug_record.last_pos_error);
+    copy_vec3(debug.last_vel_error, debug_record.last_vel_error);
+    copy_vec3(debug.position_error_dot, debug_record.position_error_dot);
+    copy_vec3(debug.velocity_error_dot, debug_record.velocity_error_dot);
+    copy_vec3(debug.derivative_term_raw, debug_record.derivative_term_raw);
+    copy_vec3(debug.derivative_term, debug_record.derivative_term);
+    copy_vec3(debug.integral_term, debug_record.integral_term);
+    copy_vec3(debug.pid_feedback_acceleration_unsaturated,
+              debug_record.pid_feedback_acceleration_unsaturated);
+    copy_vec3(debug.pid_feedback_acceleration, debug_record.pid_feedback_acceleration);
+    copy_vec3(debug.desired_acceleration, debug_record.desired_acceleration);
+    debug_record.hover_thrust_estimate = static_cast<float>(debug.hover_thrust_estimate);
+    debug_record.accepted_hover_thrust = static_cast<float>(debug.accepted_hover_thrust);
+    debug_record.selected_hover_anchor = static_cast<float>(debug.selected_hover_anchor);
+    debug_record.fixed_anchor_override = static_cast<float>(debug.fixed_anchor_override);
+
+    controller_data_types::GeometricControllerOutputRecord output_record;
+    output_record.timestamp = timestamp_us;
+    output_record.has_controller_debug = debug.valid ? 1U : 0U;
+    output_record.attitude_command_mode = static_cast<uint8_t>(attitude_command_mode_);
+    output_record.mavros_type_mask = setpoint.mask;
+    output_record.setpoint_valid = setpoint.valid ? 1U : 0U;
+    copy_quaternion_wxyz(debug.desired_orientation, output_record.desired_orientation_q);
+    copy_vec3(debug.desired_bodyrates, output_record.desired_bodyrate);
+    output_record.desired_thrust = static_cast<float>(debug.desired_thrust);
+    copy_quaternion_wxyz(setpoint.orientation, output_record.mavros_orientation_q);
+    copy_vec3(setpoint.body_rate, output_record.mavros_bodyrate);
+    output_record.mavros_thrust = static_cast<float>(setpoint.thrust);
+
+    if (!ulog_logger_.write(ulog_input_topic_, input_record) ||
+        !ulog_logger_.write(ulog_debug_topic_, debug_record) ||
+        !ulog_logger_.write(ulog_output_topic_, output_record)) {
+        ROS_WARN_THROTTLE(1.0,
+                          "[Geometric_Controller] failed to write ULog sample: %s",
+                          ulog_logger_.lastError().c_str());
+        ulog_logger_.close();
+        ulog_enabled_ = false;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
