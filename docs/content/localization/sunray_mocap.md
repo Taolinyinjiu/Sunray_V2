@@ -20,7 +20,7 @@
 ### 代码结构
 
 ```text
-localization/sunray_mocap/
+localization/localization_sources/sunray_mocap/
 ├── launch/
 │   └── mocap_odom.launch
 └── src/

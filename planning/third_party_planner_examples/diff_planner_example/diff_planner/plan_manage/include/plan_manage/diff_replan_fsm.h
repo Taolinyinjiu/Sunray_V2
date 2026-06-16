@@ -15,6 +15,7 @@
 #include <optimizer/poly_traj_optimizer.h>
 #include <plan_env/grid_map.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <planner_msgs/DiffGoalSet.h>
 #include <traj_utils/DataDisp.h>
 #include <plan_manage/planner_manager.h>
 #include <traj_utils/planning_visualization.h>
@@ -48,6 +49,12 @@ namespace diff_planner
       EMERGENCY_STOP,
       SEQUENTIAL_START
     };
+    enum TARGET_TYPE
+    {
+      MANUAL_TARGET = 1,
+      PRESET_TARGET = 2,
+      REFENCE_PATH = 3
+    };
     /* Anomaly Detection Parameters */
     Eigen::Vector3d last_local_target_pos_;
     double last_target_change_time_;
@@ -61,19 +68,23 @@ namespace diff_planner
     traj_utils::DataDisp data_disp_;
 
     /* parameters */
-    std::string uav_ns_;
-    Planner_Config_t_ planner_config_;
-    double replan_thresh_;
+    int target_type_; // 1 mannual select, 2 hard code
+    double no_replan_thresh_, replan_thresh_;
+    double waypoints_[50][3];
+    int waypoint_num_, wpt_id_;
     double planning_horizen_;
     double emergency_time_;
+    bool flag_realworld_experiment_;
     bool enable_fail_safe_;
     bool enable_ground_height_measurement_;
     bool flag_escape_emergency_;
     bool need_hover_stop_;
     bool mondify_final_goal_;
     bool enable_stuck_detect_; // Whether to enable stuck detection
+    bool fix_agent_height_;
+    double agent_height_;
 
-    bool have_target_, have_odom_, have_new_target_, have_recv_pre_agent_, touch_goal_, mandatory_stop_;
+    bool have_trigger_, have_target_, have_odom_, have_new_target_, have_recv_pre_agent_, touch_goal_, mandatory_stop_;
     FSM_EXEC_STATE exec_state_;
     int continously_called_times_{0};
 
@@ -81,11 +92,12 @@ namespace diff_planner
     Eigen::Vector3d final_goal_;                             // goal state
     Eigen::Vector3d local_target_pt_, local_target_vel_; // local target state
     Eigen::Vector3d odom_pos_, odom_vel_, odom_acc_;     // odometry state
+    std::vector<Eigen::Vector3d> wps_;
 
     /* ROS utils */
     ros::NodeHandle node_;
     ros::Timer exec_timer_, safety_timer_;
-    ros::Subscriber goal_sub_, odom_sub_, broadcast_ploytraj_sub_, mandatory_stop_sub_;
+    ros::Subscriber waypoint_sub_, odom_sub_, trigger_sub_, broadcast_ploytraj_sub_, mandatory_stop_sub_;
     ros::Publisher poly_traj_pub_, data_disp_pub_, broadcast_ploytraj_pub_, heartbeat_pub_, ground_height_pub_;
 
     /* state machine functions */
@@ -104,14 +116,16 @@ namespace diff_planner
     bool planFromLocalTraj(const int trial_times = 1);
 
     /* global trajectory */
-    void goalCallback(const geometry_msgs::PoseStampedPtr &msg);
-    bool planNextGoal(const Eigen::Vector3d next_goal, bool flag_2replan);
+    void waypointCallback(const geometry_msgs::PoseStampedPtr &msg);
+    void readGivenWpsAndPlan();
+    bool planNextWaypoint(const Eigen::Vector3d next_wp, bool flag_2replan);
     bool mondifyInCollisionFinalGoal();
     void finishProcess();
 
     /* input-output */
     void mandatoryStopCallback(const std_msgs::Empty &msg);
     void odometryCallback(const nav_msgs::OdometryConstPtr &msg);
+    void triggerCallback(const geometry_msgs::PoseStampedPtr &msg);
     void RecvBroadcastMINCOTrajCallback(const traj_utils::MINCOTrajConstPtr &msg);
     void polyTraj2ROSMsg(traj_utils::PolyTraj &poly_msg, traj_utils::MINCOTraj &MINCO_msg);
 

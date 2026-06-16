@@ -18,7 +18,26 @@ You can launch the node alongside the main after you assigning the right topic n
 roslaunch drone_detect drone_detect.launch
 ```
 
-The old `diff_planner` simulation launch chain has been removed and is expected to be redesigned separately.
+
+
+or add the following code in your simulation launch file
+
+```xml
+  <node pkg="drone_detect" type="drone_detect" name="drone_$(arg drone_id)_drone_detect" output="screen">
+      <rosparam command="load" file="$(find local_sensing_node)/params/camera.yaml" />
+      <rosparam command="load" file="$(find drone_detect)/config/default.yaml"/>
+      <param name="my_id"      value="$(arg drone_id)" />
+
+      <remap from="~odometry"   to="/drone_$(arg drone_id)_$(arg odom_topic)"/>
+      <remap from="~depth" to="/drone_$(arg drone_id)_pcl_render_node/depth"/>
+      <remap from="~colordepth" to="/drone_$(arg drone_id)_pcl_render_node/colordepth"/>
+      <remap from="~camera_pose" to="/drone_$(arg drone_id)_pcl_render_node/camera_pose"/>
+
+      <remap from="~drone0" to="/drone_0_$(arg odom_topic)"/>
+      <remap from="~drone1" to="/drone_1_$(arg odom_topic)"/>
+      <remap from="~drone2" to="/drone_2_$(arg odom_topic)"/>
+  </node>
+```
 
 
 

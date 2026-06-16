@@ -18,6 +18,28 @@
 
 对二次开发者来说，最重要的原则是：控制和规划尽量只依赖 `localization_fusion` 的标准输出，不直接耦合某一个定位算法的私有话题。这样以后从 Gazebo 切到动捕、从动捕切到 FAST-LIO，控制接口不需要跟着重写。
 
+### 目录分类
+
+当前 `localization` 目录按定位链路角色分成三类：
+
+```text
+localization/
+├── localization_fusion/           # Sunray 统一定位出口
+├── localization_sources/          # Sunray 维护的定位源适配和补偿
+│   ├── sunray_mocap/
+│   ├── sunray_viobot/
+│   └── ekf_odometry/
+└── third_party_localization/      # 第三方定位算法或基于第三方算法改造的包
+    ├── fast_lio/
+    ├── open3d_loc/
+    ├── vins-fusion/
+    └── vins-fusion-gpu/
+```
+
+- `localization_fusion` 单独保留在一级目录，因为它是控制、规划和上层任务推荐依赖的统一出口层。
+- `localization_sources` 放 Sunray 自己维护的定位源适配、同步、补偿代码。这些包通常服务于 `localization_fusion`，把外部系统或低频 odom 转成可统一消费的定位输入。
+- `third_party_localization` 放第三方定位算法源码或基于第三方算法修改的包。这样后续升级第三方算法、替换算法版本或编写 Sunray 适配层时，边界更清楚。
+
 ### 总体架构
 
 推荐把 `localization_fusion` 理解为定位系统的出口层。不同定位源先发布各自的 `nav_msgs/Odometry`，然后由 `localization_fusion` 统一转换成 Sunray 约定的话题和坐标系。

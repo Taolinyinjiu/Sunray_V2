@@ -10,7 +10,6 @@
 #include <ros/ros.h>
 #include <traj_utils/planning_visualization.h>
 #include <optimizer/poly_traj_utils.hpp>
-#include <plan_manage/uav_namespace_topic_utils.h>
 
 namespace diff_planner
 {
@@ -28,10 +27,7 @@ namespace diff_planner
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     /* main planning interface */
-    void initPlanModules(ros::NodeHandle &nh,
-                         PlanningVisualization::Ptr vis,
-                         const Planner_Config_t_ &planner_config,
-                         const std::string &uav_ns);
+    void initPlanModules(ros::NodeHandle &nh, PlanningVisualization::Ptr vis = NULL);
     bool computeInitState(
         const Eigen::Vector3d &start_pt, const Eigen::Vector3d &start_vel,
         const Eigen::Vector3d &start_acc, const Eigen::Vector3d &local_target_pt,

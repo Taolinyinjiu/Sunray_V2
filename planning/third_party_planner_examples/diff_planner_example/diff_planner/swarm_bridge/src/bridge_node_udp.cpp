@@ -5,9 +5,9 @@
 #include <string.h>
 #include <iostream>
 #include <nav_msgs/Odometry.h>
+#include <planner_msgs/DiffGoalSet.h>
 #include <std_msgs/Empty.h>
 #include <traj_utils/MINCOTraj.h>
-#include <sunray_planner_msgs/DiffGoalSet.h>
 #include <sensor_msgs/Joy.h>
 
 #include <unistd.h>
@@ -31,7 +31,7 @@ struct sockaddr_in addr_udp_send_;
 nav_msgs::Odometry odom_msg_;
 traj_utils::MINCOTraj MINCOTraj_msg_;
 std_msgs::Empty stop_msg_;
-sunray_planner_msgs::DiffGoalSet goal_msg_;
+planner_msgs::DiffGoalSet goal_msg_;
 sensor_msgs::Joy joy_msg_;
 
 enum MESSAGE_TYPE
@@ -184,7 +184,7 @@ void mandatory_stop_sub_udp_cb(const std_msgs::EmptyPtr &msg)
   }
 }
 
-void goal_sub_udp_cb(const sunray_planner_msgs::DiffGoalSetPtr &msg)
+void goal_sub_udp_cb(const planner_msgs::DiffGoalSetPtr &msg)
 {
 
   int len = serializeTopic(MESSAGE_TYPE::GOAL, *msg);
@@ -280,7 +280,7 @@ void udp_recv_fun()
 
     case MESSAGE_TYPE::GOAL:
     {
-
+      
       if (valread == deserializeTopic(goal_msg_))
       {
         goal_pub_.publish(goal_msg_);
@@ -296,7 +296,7 @@ void udp_recv_fun()
 
     case MESSAGE_TYPE::JOY:
     {
-
+      
       if (valread == deserializeTopic(joy_msg_))
       {
         joy_pub_.publish(joy_msg_);
@@ -344,7 +344,7 @@ int main(int argc, char **argv)
   // mandatory_stop_pub_ = nh.advertise<std_msgs::Empty>("/mandatory_stop_to_planner", 100);
 
   goal_sub_ = nh.subscribe("/goal_user2brig", 100, goal_sub_udp_cb, ros::TransportHints().tcpNoDelay());
-  goal_pub_ = nh.advertise<sunray_planner_msgs::DiffGoalSet>("/goal_brig2plner", 100);
+  goal_pub_ = nh.advertise<planner_msgs::DiffGoalSet>("/goal_brig2plner", 100);
 
   joy_sub_ = nh.subscribe("/joystick_from_users", 100, joy_sub_udp_cb, ros::TransportHints().tcpNoDelay());
   joy_pub_ = nh.advertise<sensor_msgs::Joy>("/joystick_from_bridge", 100);

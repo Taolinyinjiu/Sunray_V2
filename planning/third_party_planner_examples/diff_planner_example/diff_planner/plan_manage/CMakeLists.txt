@@ -13,8 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   geometry_msgs
-  sunray_common
-  sunray_planner_msgs
+  planner_msgs
   plan_env
   path_searching
   traj_opt
@@ -27,7 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES diff_planner
- CATKIN_DEPENDS plan_env path_searching sunray_common traj_opt traj_utils
+ CATKIN_DEPENDS plan_env path_searching planner_msgs traj_opt traj_utils
 #  DEPENDS system_lib
 )
 
@@ -41,11 +40,11 @@ include_directories(
 
 
 add_executable(diff_planner_node
-  src/diff_planner_node.cpp
+  src/diff_planner_node.cpp 
   src/diff_replan_fsm.cpp
   src/planner_manager.cpp
   )
-target_link_libraries(diff_planner_node
+target_link_libraries(diff_planner_node 
   ${catkin_LIBRARIES}
   )
 #add_dependencies(diff_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS})

@@ -56,11 +56,19 @@ add_executable(rviz_goal_bridge
   src/rviz_goal_bridge.cpp
 )
 
+add_executable(fuel_rviz_goal_bridge
+  src/fuel_rviz_goal_bridge.cpp
+)
+
 add_executable(point_cloud_transform
   src/point_cloud_transform.cpp
 )
 
 target_link_libraries(rviz_goal_bridge
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(fuel_rviz_goal_bridge
   ${catkin_LIBRARIES}
 )
 

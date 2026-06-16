@@ -1,8 +1,7 @@
 #include <nav_msgs/Odometry.h>
-#include <plan_manage/uav_namespace_topic_utils.h>
 #include <traj_utils/PolyTraj.h>
 #include <optimizer/poly_traj_utils.hpp>
-#include <sunray_planner_msgs/DiffPositionCommand.h>
+#include <planner_msgs/DiffPositionCommand.h>
 #include <std_msgs/Empty.h>
 #include <visualization_msgs/Marker.h>
 #include <ros/ros.h>
@@ -11,7 +10,9 @@ using namespace Eigen;
 
 ros::Publisher pos_cmd_pub;
 
-sunray_planner_msgs::DiffPositionCommand cmd;
+planner_msgs::DiffPositionCommand cmd;
+// double pos_gain[3] = {0, 0, 0};
+// double vel_gain[3] = {0, 0, 0};
 
 #define FLIP_YAW_AT_END 0
 #define TURN_YAW_TO_CENTER_AT_END 0
@@ -28,6 +29,9 @@ Eigen::Vector3d last_pos_;
 double last_yaw_, last_yawdot_, slowly_flip_yaw_target_, slowly_turn_to_center_target_;
 double time_forward_;
 double yaw_custom_;
+double YAW_DOT_MAX_PER_SEC = 2 * M_PI;
+double YAW_DOT_DOT_MAX_PER_SEC = 5 * M_PI;
+
 bool receive_yaw_ = false;
 ros::Time receive_yaw_time_(0);
 
@@ -36,7 +40,7 @@ void heartbeatCallback(std_msgs::EmptyPtr msg)
   heartbeat_time_ = ros::Time::now();
 }
 
-void yawCallback(const sunray_planner_msgs::DiffPositionCommandPtr msg)
+void yawCallback(const planner_msgs::DiffPositionCommandPtr msg)
 {
   receive_yaw_ = true;
   receive_yaw_time_ = ros::Time::now();
@@ -84,8 +88,6 @@ void polyTrajCallback(traj_utils::PolyTrajPtr msg)
 
 std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, double dt)
 {
-  constexpr double YAW_DOT_MAX_PER_SEC = 2 * M_PI;
-  constexpr double YAW_DOT_DOT_MAX_PER_SEC = 5 * M_PI;
   std::pair<double, double> yaw_yawdot(0, 0);
 
   Eigen::Vector3d dir = t_cur + time_forward_ <= traj_duration_
@@ -95,7 +97,7 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, doub
                         ? atan2(dir(1), dir(0))
                         : last_yaw_;
   if (receive_yaw_ && yaw_custom_ > -100.0)
-  {
+  { 
     if ((ros::Time::now() - receive_yaw_time_).toSec() < 0.5)
     {
       yaw_temp = yaw_custom_;
@@ -159,7 +161,7 @@ void publish_cmd(Vector3d p, Vector3d v, Vector3d a, Vector3d j, double y, doubl
 
   cmd.header.stamp = ros::Time::now();
   cmd.header.frame_id = "world";
-  cmd.trajectory_flag = sunray_planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_READY;
+  cmd.trajectory_flag = planner_msgs::DiffPositionCommand::TRAJECTORY_STATUS_READY;
   cmd.trajectory_id = traj_id_;
 
   cmd.position.x = p(0);
@@ -332,30 +334,20 @@ void cmdCallback(const ros::TimerEvent &e)
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "traj_server");
-  ros::NodeHandle node;
+  // ros::NodeHandle node;
   ros::NodeHandle nh("~");
-  const std::string uav_ns = diff_planner::loadUavNamespaceOrThrow(node, nh);
 
-  ros::Subscriber poly_traj_sub = node.subscribe(
-      diff_planner::makePlannerTopic("trajectory", uav_ns),
-      10,
-      polyTrajCallback);
-  ros::Subscriber yaw_sub = node.subscribe(
-      diff_planner::makePlannerTopic("yaw", uav_ns),
-      10,
-      yawCallback);
-  ros::Subscriber heartbeat_sub = node.subscribe(
-      diff_planner::makePlannerTopic("heartbeat", uav_ns),
-      10,
-      heartbeatCallback);
-
-  pos_cmd_pub = node.advertise<sunray_planner_msgs::DiffPositionCommand>(
-      diff_planner::makePlannerTopic("position_cmd", uav_ns),
-      50);
+  ros::Subscriber poly_traj_sub = nh.subscribe("planning/trajectory", 10, polyTrajCallback);
+  ros::Subscriber yaw_sub = nh.subscribe("planning/yaw", 10, yawCallback);
+  ros::Subscriber heartbeat_sub = nh.subscribe("heartbeat", 10, heartbeatCallback);
+  
+  pos_cmd_pub = nh.advertise<planner_msgs::DiffPositionCommand>("/position_cmd", 50);
 
   ros::Timer cmd_timer = nh.createTimer(ros::Duration(0.01), cmdCallback);
 
   nh.param("traj_server/time_forward", time_forward_, -1.0);
+  nh.param("traj_server/yaw_dot_max", YAW_DOT_MAX_PER_SEC, YAW_DOT_MAX_PER_SEC);
+  nh.param("traj_server/yaw_dot_dot_max", YAW_DOT_DOT_MAX_PER_SEC, YAW_DOT_DOT_MAX_PER_SEC);
   last_yaw_ = 0.0;
   last_yawdot_ = 0.0;
 

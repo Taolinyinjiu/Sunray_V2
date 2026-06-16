@@ -93,53 +93,47 @@ modules:
   vins_fusion:
     description: "VINS-Fusion 视觉惯性里程计源码包，用于相机和 IMU 定位"
     label: localization
-    source_path: "localization/vins-fusion"
+    source_path: "localization/third_party_localization/vins-fusion"
     build_path: "build/vins-fusion"
     dependencies: [sunray_msgs]
   vins_fusion_GPU:
     description: "GPU 加速版本 VINS-Fusion，用于视觉惯性里程计实验"
     label: localization
-    source_path: "localization/vins-fusion-gpu"
+    source_path: "localization/third_party_localization/vins-fusion-gpu"
     build_path: "build/vins-fusion-gpu"
     dependencies: [sunray_msgs]
   fast_lio:
     description: "FAST-LIO 激光惯性里程计，用于 Livox 等激光雷达定位建图"
     label: localization
-    source_path: "localization/fast_lio"
+    source_path: "localization/third_party_localization/fast_lio"
     build_path: "build/fast_lio"
     dependencies: [livox_ros_driver2]
+  open3d_loc:
+    description: "Open3D 点云地图全局定位包，需先配置 Open3D C++ 开发环境"
+    label: localization
+    source_path: "localization/third_party_localization/open3d_loc"
+    build_path: "build/open3d_loc"
+    dependencies: []
   ekf_odometry:
     description: "EKF 高频里程计补偿模块，用 IMU 对低频 odom 进行预测更新"
     label: localization
-    source_path: "localization/ekf_odometry"
+    source_path: "localization/localization_sources/ekf_odometry"
     build_path: "build/ekf_odometry"
     dependencies: []
   sunray_mocap:
     description: "动捕定位适配器，将 VRPN pose/twist 转换为 Sunray odometry"
     label: localization
-    source_path: "localization/sunray_mocap"
+    source_path: "localization/localization_sources/sunray_mocap"
     build_path: "build/sunray_mocap"
     dependencies: []
   sunray_viobot:
     description: "VIOBOT/Baton mini 定位适配器，修正并输出统一里程计"
     label: localization
-    source_path: "localization/sunray_viobot"
+    source_path: "localization/localization_sources/sunray_viobot"
     build_path: "build/sunray_viobot"
     dependencies: []
 
   # ----- planning: Sunray 自研规划器、规划消息和第三方规划器适配示例 -----
-  sunray_planner_msgs:
-    description: "Sunray 规划模块内部消息定义，用于统一规划器之间的数据接口"
-    label: planning
-    source_path: "planning/sunray_planner/sunray_planner_msgs"
-    build_path: "build/sunray_planner_msgs"
-    dependencies: []
-  sunray_planning:
-    description: "Sunray 自研统一规划入口，连接任务输入、规划输出和控制接口"
-    label: planning
-    source_path: "planning/sunray_planner/sunray_planning"
-    build_path: "build/sunray_planning"
-    dependencies: ["sunray_msgs", "sunray_common", "sunray_planner_msgs"]
   planner_msgs:
     description: "EGO planner 示例依赖的 planner_msgs 消息包"
     label: planning
@@ -152,30 +146,73 @@ modules:
     source_path: "planning/third_party_planner_examples/planner_tools"
     build_path: "build/planner_tools"
     dependencies: ["sunray_msgs"]
+
   ego_planner_swarm:
     description: "EGO planner 第三方源码示例包，用于轨迹规划功能验证"
     label: planning
     source_path: "planning/third_party_planner_examples/ego_planner_example/ego-planner-swarm"
     build_path: "build/ego_planner_swarm"
     dependencies: ["planner_msgs"]
+    conflicts_with: ["fuel_planner", "diff_planner", "sunray_fuel_adapter", "sunray_diff_adapter"]
   sunray_ego_adapter:
     description: "EGO planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
     label: planning
     source_path: "planning/third_party_planner_examples/ego_planner_example/sunray_ego_adapter"
     build_path: "build/sunray_ego_adapter"
     dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_fuel_adapter", "sunray_diff_adapter", "fuel_planner", "diff_planner"]
+  
+  sunray_fuel_adapter:
+    description: "FUEL planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/fuel_planner_example/sunray_fuel_adapter"
+    build_path: "build/sunray_fuel_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_diff_adapter", "ego_planner_swarm", "diff_planner"]
+  fuel_planner:
+    description: "FUEL planner 第三方源码示例包，用于轨迹规划功能验证"
+    label: planning
+    source_path: "planning/third_party_planner_examples/fuel_planner_example/fuel_planner"
+    build_path: "build/fuel_planner"
+    dependencies: ["planner_msgs", "planner_tools", "sunray_fuel_adapter"]
+    conflicts_with: ["ego_planner_swarm", "diff_planner", "sunray_ego_adapter", "sunray_diff_adapter"]
+  
   diff_planner:
     description: "Diff Planner 第三方规划器示例包，用于规划算法对接测试"
     label: planning
     source_path: "planning/third_party_planner_examples/diff_planner_example/diff_planner"
     build_path: "build/diff_planner"
-    dependencies: ["sunray_planner_msgs"]
+    dependencies: ["planner_msgs", "planner_tools", "sunray_diff_adapter"]
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "sunray_ego_adapter", "sunray_fuel_adapter"]
+  sunray_diff_adapter:
+    description: "Diff planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/diff_planner_example/sunray_diff_adapter"
+    build_path: "build/sunray_diff_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_fuel_adapter", "ego_planner_swarm", "fuel_planner"]
+
   super_planner:
     description: "SUPER/MARS Lab 第三方规划器示例包，当前仍处于适配阶段"
     label: planning
-    source_path: "planning/third_party_planner_examples/super_example/SUPER"
-    build_path: "build/SUPER"
+    source_path: "planning/third_party_planner_examples/super_planner_example/super_planner"
+    build_path: "build/super_planner"
+    dependencies: ["planner_msgs", "rog_map", "planner_tools", "sunray_super_adapter"]
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner", "sunray_ego_adapter", "sunray_fuel_adapter", "sunray_diff_adapter"]
+  sunray_super_adapter:
+    description: "SUPER planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/sunray_super_adapter"
+    build_path: "build/sunray_super_adapter"
+    dependencies: ["sunray_msgs", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_fuel_adapter", "sunray_diff_adapter", "ego_planner_swarm", "fuel_planner", "diff_planner"]
+  rog_map:
+    description: "SUPER 使用的 ROG-MAP 地图组件"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/rog_map"
+    build_path: "build/rog_map"
     dependencies: []
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner"]
 
   # ----- simulation: Gazebo、仿真插件和 Sunray 仿真入口 -----
   simulator_utils:
@@ -302,8 +339,20 @@ groups:
   # ----- Product: 机型、产品形态和常用任务预设 -----
   S_150_Basic:
     label: Product
-    description: "Sunray-150 基础款预设，适合动捕定位和基础飞行控制"
-    modules: ["sunray_mavros", "vrpn_client_ros", "web_cam", "sunray_mocap"]
+    description: "Sunray-150 基础款预设，适合动捕定位条件下的基础飞行控制"
+    modules: 
+      [
+        "sunray_common",
+        "sunray_msgs",
+        "sunray_mavros", 
+        "vrpn_client_ros", 
+        "web_cam", 
+        "sunray_mocap",
+        "localization_fusion",
+        "uav_control",
+        "uav_control_tools",
+        "sunray_uav_control_example" 
+      ]
 
   S_150_Lidar:
     label: Product

@@ -183,7 +183,7 @@ python3 docs/assets/sync-doc-data.py
 
   # 让 open3d_loc 找到 Open3D
   cd ~/Sunray_v2
-  cmake -S localization/open3d_loc -B build/open3d_loc \
+  cmake -S localization/third_party_localization/open3d_loc -B build/open3d_loc \
     -DOpen3D_ROOT=$HOME/open3d_install \
     -DCATKIN_DEVEL_PREFIX=$HOME/Sunray_v2/devel
   cmake --build build/open3d_loc --target global_localization_node -j$(nproc)
@@ -201,7 +201,7 @@ python3 docs/assets/sync-doc-data.py
   for f in *.deb; do dpkg-deb -x "$f" $HOME/open3d_libcxx; done
 
   cd ~/Sunray_v2
-  cmake -S localization/open3d_loc -B build/open3d_loc \
+  cmake -S localization/third_party_localization/open3d_loc -B build/open3d_loc \
     -DOpen3D_ROOT=$HOME/open3d_install \
     -DLIBCXX_ROOT=$HOME/open3d_libcxx \
     -DCATKIN_DEVEL_PREFIX=$HOME/Sunray_v2/devel

@@ -12,10 +12,7 @@ namespace diff_planner
 
   DiffPlannerManager::~DiffPlannerManager() { std::cout << "des manager" << std::endl; }
 
-  void DiffPlannerManager::initPlanModules(ros::NodeHandle &nh,
-                                           PlanningVisualization::Ptr vis,
-                                           const Planner_Config_t_ &planner_config,
-                                           const std::string &uav_ns)
+  void DiffPlannerManager::initPlanModules(ros::NodeHandle &nh, PlanningVisualization::Ptr vis)
   {
     /* read algorithm parameters */
 
@@ -26,15 +23,11 @@ namespace diff_planner
     nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);
     nh.param("manager/use_multitopology_trajs", pp_.use_multitopology_trajs, false);
     nh.param("manager/drone_id", pp_.drone_id, -1);
+    nh.param("manager/fix_height", pp_.fix_height_, false);
+    nh.param("manager/fixed_height", pp_.fixed_height_, 1.0);
 
     grid_map_.reset(new GridMap);
-    grid_map_->initMap(nh,
-                       planner_config.odom_topic,
-                       planner_config.depth_topic,
-                       planner_config.pose_topic,
-                       planner_config.cloud_topic,
-                       planner_config.extrinsic_topic,
-                       uav_ns);
+    grid_map_->initMap(nh);
 
     ploy_traj_opt_.reset(new PolyTrajOptimizer);
     ploy_traj_opt_->setParam(nh);
@@ -378,6 +371,19 @@ namespace diff_planner
   bool DiffPlannerManager::setLocalTrajFromOpt(const poly_traj::MinJerkOpt &opt, const bool touch_goal)
   {
     poly_traj::Trajectory traj = opt.getTraj();
+    if (pp_.fix_height_)
+    {
+      poly_traj::Trajectory fixed_traj;
+      fixed_traj.reserve(traj.getPieceNum());
+      for (int i = 0; i < traj.getPieceNum(); ++i)
+      {
+        poly_traj::CoefficientMat coeff = traj[i].getCoeffMat();
+        coeff.row(2).setZero();
+        coeff(2, 5) = pp_.fixed_height_;
+        fixed_traj.emplace_back(traj[i].getDuration(), coeff);
+      }
+      traj = fixed_traj;
+    }
     Eigen::MatrixXd cps = opt.getInitConstraintPoints(getCpsNumPrePiece());
     PtsChk_t pts_to_check;
     bool ret = ploy_traj_opt_->computePointsToCheck(traj, ConstraintPoints::two_thirds_id(cps, touch_goal), pts_to_check);

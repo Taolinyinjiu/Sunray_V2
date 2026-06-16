@@ -11,6 +11,7 @@
 #include <sunray_msgs/OdomState.h>
 
 #include <cmath>
+#include <deque>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -54,8 +55,9 @@ struct TopicRuntime
     bool      has_msg{false};
     uint32_t  publisher_count{0};
     uint64_t  msg_count{0};
-    double    hz{0.0};
+    float     hz{0.0F};
     ros::Time receive_time{0.0};
+    std::deque<double> hz_sample_times_s;
 };
 
 struct AgentTopics
@@ -104,11 +106,11 @@ std::string externalTopicStatusText(const TopicRuntime &runtime, const double st
     return colorText("正常发布", kAnsiGood);
 }
 
-std::string externalTopicHzText(const TopicRuntime &runtime)
+std::string externalTopicHzText(const double hz, const bool has_value)
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(1)
-       << "频率 = " << (runtime.has_msg ? runtime.hz : 0.0) << " Hz";
+       << "频率 = " << (has_value ? hz : 0.0) << " Hz";
     return colorText(ss.str(), kAnsiValue);
 }
 
@@ -254,7 +256,7 @@ std::string buildPanel(const std::string &agent_key,
         ss << "           "
            << "外部定位源（局部）话题: " << topicValueText(topics.external_odom_topic)
            << "  发布状态: " << externalTopicStatusText(external_odom_runtime, stale_timeout)
-           << "  " << externalTopicHzText(external_odom_runtime)
+           << "  " << externalTopicHzText(external_odom_runtime.hz, external_odom_runtime.has_msg)
            << "\n";
         ss << colorText(" 基本信息  ", kAnsiLabel) << colorText("等待 OdomState...", kAnsiWarn)
            << "\n";
@@ -266,7 +268,7 @@ std::string buildPanel(const std::string &agent_key,
     ss << colorText(" 订阅话题  ", kAnsiLabel)
        << "外部定位源（局部）话题: " << topicValueText(state.subtopic_name_external_odom)
        << "  发布状态: " << externalTopicStatusText(external_odom_runtime, stale_timeout)
-       << "  " << externalTopicHzText(external_odom_runtime)
+       << "  " << externalTopicHzText(state.odometry_update_hz, state.odometry_valid)
        << "\n";
     ss << "           "
        << "外部定位源（重定位）话题: " << relocalizationTopicText(state) << "\n";
@@ -327,21 +329,18 @@ void stateCallback(const sunray_msgs::OdomState::ConstPtr &msg, const int agent_
     cached.receive_time = ros::Time::now();
 }
 
-void externalOdomCallback(const nav_msgs::Odometry::ConstPtr &, const int agent_id)
+void externalOdomCallback(const nav_msgs::Odometry::ConstPtr &msg, const int agent_id)
 {
     const ros::Time now = ros::Time::now();
     std::lock_guard<std::mutex> lock(g_mutex);
     TopicRuntime &runtime = g_external_odom_topics[agent_id];
     runtime.configured = true;
-    if (runtime.has_msg)
-    {
-        const double dt = (now - runtime.receive_time).toSec();
-        if (dt > 1e-6)
-        {
-            const double instant_hz = 1.0 / dt;
-            runtime.hz = runtime.hz <= 0.0 ? instant_hz : 0.8 * runtime.hz + 0.2 * instant_hz;
-        }
-    }
+
+    // 优先使用消息自带时间戳统计输入频率，避免监控节点回调积压时把处理间隔误当成发布周期。
+    const double sample_time_s =
+        (msg && !msg->header.stamp.isZero()) ? msg->header.stamp.toSec() : now.toSec();
+    update_input_rate(runtime.hz, runtime.hz_sample_times_s, sample_time_s);
+
     runtime.has_msg = true;
     runtime.receive_time = now;
     ++runtime.msg_count;
@@ -382,7 +381,7 @@ void printPanel(const ros::TimerEvent &,
                       << "  话题: " << topicValueText(agent_topics[i].external_odom_topic)
                       << "  发布状态: "
                       << externalTopicStatusText(external_odom_runtime, stale_timeout)
-                      << "  " << externalTopicHzText(external_odom_runtime) << "\n";
+                      << "  " << externalTopicHzText(external_odom_runtime.hz, external_odom_runtime.has_msg) << "\n";
         }
         std::cout.flush();
         return;
@@ -407,7 +406,7 @@ void printPanel(const ros::TimerEvent &,
                       << "话题: " << topicValueText(topics.external_odom_topic)
                       << "  发布状态: "
                       << externalTopicStatusText(external_odom_runtime, stale_timeout)
-                      << "  " << externalTopicHzText(external_odom_runtime) << "\n";
+                      << "  " << externalTopicHzText(external_odom_runtime.hz, external_odom_runtime.has_msg) << "\n";
             continue;
         }
         std::cout << buildPanel(key, topics, item.second, external_odom_runtime, stale_timeout);

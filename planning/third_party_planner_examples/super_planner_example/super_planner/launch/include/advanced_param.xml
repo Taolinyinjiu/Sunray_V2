@@ -1,0 +1,33 @@
+<launch>
+  <!-- config_path：SUPER 的 YAML 配置文件路径。 -->
+  <arg name="config_path" default="$(find super_planner)/config/sunray_click_ros1.yaml"/>
+  <!-- odom_topic：世界系位姿输入。SUPER 的 ROG-Map 和规划器都依赖该话题。 -->
+  <arg name="odom_topic"/>
+  <!-- cloud_topic：世界系点云输入。SUPER 当前 ROS1 版本只直接订阅点云，不直接订阅 depth image。 -->
+  <arg name="cloud_topic"/>
+  <!-- goal_topic：RViz 2D Nav Goal 的输入话题。 -->
+  <arg name="goal_topic" default="/move_base_simple/goal"/>
+  <!-- position_cmd_topic：SUPER 发布的位置控制指令输出。 -->
+  <arg name="position_cmd_topic" default="/uav1/pos_cmd"/>
+  <!-- poly_traj_topic：SUPER 发布的多项式轨迹输出，主要用于调试和可视化。 -->
+  <arg name="poly_traj_topic" default="/uav1/planning_cmd/poly_traj"/>
+
+  <!--
+    SUPER 的大部分参数来自 YAML 文件，而不是 launch 参数。
+    这个包装层只负责两件事：
+    1. 指定使用哪份 YAML；
+    2. 把 YAML 中写死的通用话题名 remap 到 Sunray 当前场景的话题。
+  -->
+  <node pkg="super_planner"
+        type="fsm_node"
+        name="fsm_node"
+        output="screen">
+    <param name="config_path" value="$(arg config_path)"/>
+
+    <remap from="/move_base_simple/goal" to="$(arg goal_topic)"/>
+    <remap from="/planning/pos_cmd" to="$(arg position_cmd_topic)"/>
+    <remap from="/planning_cmd/poly_traj" to="$(arg poly_traj_topic)"/>
+    <remap from="/cloud_registered" to="$(arg cloud_topic)"/>
+    <remap from="/lidar_slam/odom" to="$(arg odom_topic)"/>
+  </node>
+</launch>

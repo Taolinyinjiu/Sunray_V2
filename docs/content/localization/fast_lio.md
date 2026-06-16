@@ -34,7 +34,7 @@
 ### 代码结构
 
 ```text
-localization/fast_lio/
+localization/third_party_localization/fast_lio/
 ├── config/
 │   ├── mid360.yaml
 │   ├── avia.yaml

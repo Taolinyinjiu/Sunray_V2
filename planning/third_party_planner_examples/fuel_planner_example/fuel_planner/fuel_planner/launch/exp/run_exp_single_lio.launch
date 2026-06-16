@@ -1,0 +1,46 @@
+<launch>
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="map_size_x" default="45.0"/>
+  <arg name="map_size_y" default="45.0"/>
+  <arg name="map_size_z" default="5.0"/>
+  <arg name="odom_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/local_odom"/>
+  <arg name="cloud_topic" default="/$(arg agent_name)$(arg agent_id)/global_points"/>
+  <arg name="sensor_pose_topic" default="/$(arg agent_name)$(arg agent_id)/mavros/local_position/pose"/>
+  <arg name="position_cmd_topic" default="/$(arg agent_name)$(arg agent_id)/pos_cmd"/>
+  <arg name="max_vel" default="1.0"/>
+  <arg name="max_acc" default="1.0"/>
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_fuel_adapter" default="true"/>
+  <arg name="control_cmd_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/uav_control/control_cmd"/>
+  <arg name="use_yaw_rate" default="false"/>
+  <arg name="ready_only" default="true"/>
+
+  <include file="$(find fuel_planner)/launch/include/advanced_param.xml">
+    <arg name="map_size_x" value="$(arg map_size_x)"/>
+    <arg name="map_size_y" value="$(arg map_size_y)"/>
+    <arg name="map_size_z" value="$(arg map_size_z)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+    <arg name="sensor_pose_topic" value="$(arg sensor_pose_topic)"/>
+    <arg name="position_cmd_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
+  </include>
+
+  <include if="$(arg enable_fuel_adapter)" file="$(find sunray_fuel_adapter)/launch/Fuel2Sunray.launch">
+    <arg name="agent_name" value="$(arg agent_name)"/>
+    <arg name="agent_id" value="$(arg agent_id)"/>
+    <arg name="input_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="output_topic" value="$(arg control_cmd_topic)"/>
+    <arg name="use_yaw_rate" value="$(arg use_yaw_rate)"/>
+    <arg name="ready_only" value="$(arg ready_only)"/>
+  </include>
+
+  <node if="$(arg enable_rviz)"
+        name="rviz"
+        pkg="rviz"
+        type="rviz"
+        args="-d $(find fuel_planner)/launch/rviz_config/single.rviz"
+        required="true" />
+</launch>

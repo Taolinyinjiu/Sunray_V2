@@ -19,7 +19,7 @@
 ### 代码结构
 
 ```text
-localization/sunray_viobot/
+localization/localization_sources/sunray_viobot/
 ├── launch/
 │   └── viobot_odom.launch
 └── src/

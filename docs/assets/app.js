@@ -6,6 +6,9 @@
   const content = document.getElementById("doc-content");
   const pageToc = document.getElementById("page-toc");
   const fileToPage = new Map();
+  const navNodeById = new Map();
+  const navNodeByPage = new Map();
+  const collapsedStateKey = "sunray-doc-nav-collapsed";
   let currentFile = "";
 
   function slugify(text) {
@@ -19,6 +22,15 @@
       .replace(/^-|-$/g, "");
   }
 
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function titleFromPath(file) {
     const name = file.split("/").pop().replace(/\.md$/, "");
     if (name === "index") {
@@ -27,14 +39,124 @@
     return name;
   }
 
-  const pages = chapters.flatMap((chapter) => {
-    return chapter.files.map((file, index) => {
-      const fullFile = `content/${file}`;
+  function normalizeFile(file) {
+    if (!file) {
+      return "";
+    }
+    return file.startsWith("content/") ? file : `content/${file}`;
+  }
+
+  function pageHref(page) {
+    return `#page=${encodeURIComponent(page.file)}`;
+  }
+
+  function headingHref(page, headingId) {
+    return `#page=${encodeURIComponent(page.file)}&heading=${encodeURIComponent(headingId)}`;
+  }
+
+  function loadCollapsedState() {
+    try {
+      const raw = localStorage.getItem(collapsedStateKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function saveCollapsedState(state) {
+    try {
+      localStorage.setItem(collapsedStateKey, JSON.stringify(state));
+    } catch (error) {
+      // localStorage may be unavailable under strict browser settings.
+    }
+  }
+
+  const collapsedState = loadCollapsedState();
+
+  function legacyEntries(chapter) {
+    const files = Array.isArray(chapter.files) ? chapter.files : [];
+    return files.map((file, index) => {
+      const fullFile = normalizeFile(file);
       const mirrored = pageDataByFile.get(fullFile);
       const section = Array.isArray(chapter.sections) ? chapter.sections[index] : null;
-      const title = chapter.files.length === 1
+      const title = files.length === 1
         ? chapter.title
         : (section && section.title) || (mirrored && mirrored.title) || titleFromPath(file);
+      return {
+        file,
+        title,
+      };
+    });
+  }
+
+  function collectTreeEntries(nodes, entries = []) {
+    if (!Array.isArray(nodes)) {
+      return entries;
+    }
+    nodes.forEach((node) => {
+      if (node.file) {
+        entries.push({
+          file: node.file,
+          title: node.title || titleFromPath(node.file),
+        });
+      }
+      collectTreeEntries(node.children, entries);
+    });
+    return entries;
+  }
+
+  function chapterEntries(chapter) {
+    const entries = Array.isArray(chapter.children) && chapter.children.length
+      ? collectTreeEntries(chapter.children)
+      : legacyEntries(chapter);
+
+    const seen = new Set();
+    return entries.filter((entry) => {
+      const file = normalizeFile(entry.file);
+      if (!file || seen.has(file)) {
+        return false;
+      }
+      seen.add(file);
+      return true;
+    });
+  }
+
+  function chapterDefaultFile(chapter, entries) {
+    return normalizeFile(chapter.default || (entries[0] && entries[0].file));
+  }
+
+  function buildLegacyChildren(chapter) {
+    const entries = legacyEntries(chapter);
+    if (entries.length <= 1) {
+      return [];
+    }
+    return entries.map((entry) => ({
+      title: entry.title,
+      file: entry.file,
+    }));
+  }
+
+  function buildChapterNode(chapter, index) {
+    const entries = chapterEntries(chapter);
+    return {
+      id: `chapter-${index}-${slugify(chapter.title) || index}`,
+      title: chapter.title,
+      default: chapterDefaultFile(chapter, entries),
+      children: Array.isArray(chapter.children) && chapter.children.length
+        ? chapter.children
+        : buildLegacyChildren(chapter),
+      chapter,
+    };
+  }
+
+  const chapterNodes = chapters.map(buildChapterNode);
+
+  const pages = chapters.flatMap((chapter) => {
+    return chapterEntries(chapter).map((entry) => {
+      const fullFile = normalizeFile(entry.file);
+      const mirrored = pageDataByFile.get(fullFile);
+      const title = entry.title || (mirrored && mirrored.title) || titleFromPath(entry.file);
       const page = {
         file: fullFile,
         hash: `page=${encodeURIComponent(fullFile)}`,
@@ -65,42 +187,141 @@
     };
   }
 
-  function pageHref(page) {
-    return `#page=${encodeURIComponent(page.file)}`;
+  function collectNodeFiles(node, files = []) {
+    if (node.file) {
+      files.push(normalizeFile(node.file));
+    }
+    if (node.default) {
+      files.push(normalizeFile(node.default));
+    }
+    if (Array.isArray(node.children)) {
+      node.children.forEach((child) => collectNodeFiles(child, files));
+    }
+    return Array.from(new Set(files.filter(Boolean)));
   }
 
-  function headingHref(page, headingId) {
-    return `#page=${encodeURIComponent(page.file)}&heading=${encodeURIComponent(headingId)}`;
+  function nodeTargetPage(node) {
+    const file = normalizeFile(node.file || node.default);
+    if (fileToPage.has(file)) {
+      return fileToPage.get(file);
+    }
+    const firstFile = collectNodeFiles(node).find((candidate) => fileToPage.has(candidate));
+    return firstFile ? fileToPage.get(firstFile) : null;
+  }
+
+  function renderNavNode(node, depth, path) {
+    const nodeId = path.join("-");
+    const children = Array.isArray(node.children) ? node.children : [];
+    const hasChildren = children.length > 0;
+    const targetPage = nodeTargetPage(node);
+    const files = collectNodeFiles(node);
+    const collapsed = hasChildren && collapsedState[nodeId] === true;
+    const label = escapeHtml(node.title || (targetPage && targetPage.title) || "未命名页面");
+    const href = targetPage ? pageHref(targetPage) : "#";
+    const dataPage = targetPage ? ` data-page="${escapeHtml(targetPage.file)}"` : "";
+    const dataFiles = files.length ? ` data-files="${escapeHtml(files.join("|"))}"` : "";
+    const kind = depth === 0 ? "nav-section" : (hasChildren ? "nav-group" : "nav-page");
+    const collapsedClass = collapsed ? " is-collapsed" : "";
+    const toggle = hasChildren
+      ? `<button class="nav-toggle" type="button" aria-label="展开或折叠 ${label}" aria-expanded="${!collapsed}" data-toggle="${nodeId}"></button>`
+      : '<span class="nav-toggle-placeholder"></span>';
+
+    navNodeById.set(nodeId, {
+      id: nodeId,
+      files,
+      parentIds: path.slice(0, -1).map((_, index) => path.slice(0, index + 1).join("-")),
+    });
+    files.forEach((file) => {
+      const list = navNodeByPage.get(file) || [];
+      list.push(nodeId);
+      navNodeByPage.set(file, list);
+    });
+
+    const item = [
+      `<div class="nav-item ${hasChildren ? "nav-branch" : "nav-leaf"} depth-${depth}${collapsedClass}" data-node="${nodeId}"${dataFiles}>`,
+      `<a class="${kind} nav-link" href="${href}"${dataPage}>${label}</a>`,
+      toggle,
+      "</div>",
+    ].join("");
+
+    if (!hasChildren) {
+      return item;
+    }
+
+    const childHtml = children
+      .map((child, index) => renderNavNode(child, depth + 1, path.concat(index)))
+      .join("");
+    return [
+      item,
+      `<div class="nav-children depth-${depth + 1}${collapsedClass}" data-parent="${nodeId}">`,
+      childHtml,
+      "</div>",
+    ].join("");
   }
 
   function buildNav() {
     if (!nav) {
       return;
     }
-    const chunks = [];
-    chapters.forEach((chapter) => {
-      const chapterPages = chapter.files
-        .map((file) => fileToPage.get(`content/${file}`))
-        .filter(Boolean);
-      if (!chapterPages.length) {
+    navNodeById.clear();
+    navNodeByPage.clear();
+    nav.innerHTML = chapterNodes
+      .map((node, index) => renderNavNode(node, 0, [index]))
+      .join("");
+
+    nav.querySelectorAll("[data-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const nodeId = button.getAttribute("data-toggle");
+        const isCollapsed = collapsedState[nodeId] === true;
+        collapsedState[nodeId] = !isCollapsed;
+        saveCollapsedState(collapsedState);
+        setNodeCollapsed(nodeId, !isCollapsed);
+      });
+    });
+  }
+
+  function setNodeCollapsed(nodeId, collapsed) {
+    const item = nav.querySelector(`[data-node="${nodeId}"]`);
+    const children = nav.querySelector(`[data-parent="${nodeId}"]`);
+    const toggle = nav.querySelector(`[data-toggle="${nodeId}"]`);
+    if (item) {
+      item.classList.toggle("is-collapsed", collapsed);
+    }
+    if (children) {
+      children.classList.toggle("is-collapsed", collapsed);
+    }
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+    }
+  }
+
+  function expandNode(nodeId) {
+    if (!nodeId) {
+      return;
+    }
+    collapsedState[nodeId] = false;
+    setNodeCollapsed(nodeId, false);
+  }
+
+  function expandActivePath(page) {
+    const nodeIds = navNodeByPage.get(page.file) || [];
+    nodeIds.forEach((nodeId) => {
+      const nodeMeta = navNodeById.get(nodeId);
+      if (!nodeMeta) {
         return;
       }
-      const firstPage = chapterPages[0];
-      chunks.push(
-        `<a class="nav-section" href="${pageHref(firstPage)}" data-page="${firstPage.file}">${chapter.title}</a>`
-      );
-      if (chapterPages.length > 1) {
-        chapterPages.forEach((page) => {
-          chunks.push(`<a class="nav-page" href="${pageHref(page)}" data-page="${page.file}">${page.title}</a>`);
-        });
-      }
+      nodeMeta.parentIds.forEach(expandNode);
     });
-    nav.innerHTML = chunks.join("");
   }
 
   function updateActiveNav(page) {
-    document.querySelectorAll(".sidebar nav a").forEach((link) => {
+    expandActivePath(page);
+    document.querySelectorAll(".sidebar nav [data-page]").forEach((link) => {
       link.classList.toggle("active", link.getAttribute("data-page") === page.file);
+    });
+    document.querySelectorAll(".sidebar nav [data-files]").forEach((node) => {
+      const files = (node.getAttribute("data-files") || "").split("|");
+      node.classList.toggle("active-parent", files.includes(page.file));
     });
   }
 

@@ -1,0 +1,22 @@
+<launch>
+  <arg name="agent_name" default="uav" />
+  <arg name="agent_id" default="1" />
+  <arg name="node_name" default="$(eval 'Diff2Sunray_' + str(int(arg('agent_id'))))" />
+  <arg name="agent_prefix" default="$(eval '/' + arg('agent_name') + str(arg('agent_id')))" />
+  <arg name="input_topic" default="$(arg agent_prefix)/pos_cmd" />
+  <arg name="output_topic" default="$(arg agent_prefix)/sunray/uav_control/control_cmd" />
+  <arg name="queue_size" default="50" />
+  <arg name="use_yaw_rate" default="false" />
+  <arg name="ready_only" default="true" />
+
+  <node pkg="sunray_diff_adapter"
+        type="Diff2Sunray_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="input_topic" value="$(arg input_topic)" />
+    <param name="output_topic" value="$(arg output_topic)" />
+    <param name="queue_size" value="$(arg queue_size)" />
+    <param name="use_yaw_rate" value="$(arg use_yaw_rate)" />
+    <param name="ready_only" value="$(arg ready_only)" />
+  </node>
+</launch>

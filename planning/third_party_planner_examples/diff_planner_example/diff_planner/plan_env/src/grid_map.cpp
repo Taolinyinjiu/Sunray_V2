@@ -1,20 +1,8 @@
 #include "plan_env/grid_map.h"
 
-void GridMap::initMap(ros::NodeHandle &nh,
-                      const std::string &odom_topic,
-                      const std::string &depth_topic,
-                      const std::string &pose_topic,
-                      const std::string &cloud_topic,
-                      const std::string &extrinsic_topic,
-                      const std::string &uav_ns)
+void GridMap::initMap(ros::NodeHandle &nh)
 {
   node_ = nh;
-  odom_topic_ = odom_topic;
-  depth_topic_ = depth_topic;
-  pose_topic_ = pose_topic;
-  cloud_topic_ = cloud_topic;
-  extrinsic_topic_ = extrinsic_topic;
-  planner_topic_prefix_ = uav_ns + "/sunray/planning/diff_planner/";
 
   /* get parameter */
   // double x_size, y_size, z_size;
@@ -48,11 +36,24 @@ void GridMap::initMap(ros::NodeHandle &nh,
   node_.param("grid_map/p_min", mp_.p_min_, 0.12);
   node_.param("grid_map/p_max", mp_.p_max_, 0.97);
   node_.param("grid_map/p_occ", mp_.p_occ_, 0.80);
+  node_.param("grid_map/lidar_p_hit", mp_.lidar_p_hit_, 0.90);
+  node_.param("grid_map/lidar_p_miss", mp_.lidar_p_miss_, 0.49);
+  node_.param("grid_map/lidar_p_free", mp_.lidar_p_free_, 0.499);
+  node_.param("grid_map/lidar_p_min", mp_.lidar_p_min_, 0.12);
+  node_.param("grid_map/lidar_p_max", mp_.lidar_p_max_, 0.98);
+  node_.param("grid_map/lidar_p_occ", mp_.lidar_p_occ_, 0.85);
+  node_.param("grid_map/cloud_enable_raycast", mp_.cloud_enable_raycast_, true);
   node_.param("grid_map/fading_time", mp_.fading_time_, 1000.0);
   node_.param("grid_map/min_ray_length", mp_.min_ray_length_, 0.1);
-
   node_.param("grid_map/front_vis", mp_.front_vis_, false);
+
   node_.param("grid_map/show_occ_time", mp_.show_occ_time_, false);
+
+  node_.param("grid_map/init_x", mp_.init_x_, 0.0);
+  node_.param("grid_map/init_y", mp_.init_y_, 0.0);
+  node_.param("grid_map/init_z", mp_.init_z_, 0.0);
+  node_.param("fsm/fix_agent_height", fix_agent_height_, true);
+  node_.param("fsm/agent_height", agent_height_, 1.0);
 
   mp_.inf_grid_ = ceil((mp_.obstacles_inflation_ - 1e-5) / mp_.resolution_);
   if (mp_.inf_grid_ > 4)
@@ -68,17 +69,27 @@ void GridMap::initMap(ros::NodeHandle &nh,
   md_.ringbuffer_size3i_ = 2 * mp_.local_update_range3i_;
   md_.ringbuffer_inf_size3i_ = md_.ringbuffer_size3i_ + Eigen::Vector3i(2 * mp_.inf_grid_, 2 * mp_.inf_grid_, 2 * mp_.inf_grid_);
 
-  mp_.prob_hit_log_ = logit(mp_.p_hit_);
-  mp_.prob_miss_log_ = logit(mp_.p_miss_);
-  mp_.clamp_min_log_ = logit(mp_.p_min_);
-  mp_.clamp_max_log_ = logit(mp_.p_max_);
-  mp_.min_occupancy_log_ = logit(mp_.p_occ_);
+  mp_.prob_hit_log_ = logit(mp_.p_hit_);//0.619
+  mp_.prob_miss_log_ = logit(mp_.p_miss_);//-0.619
+  mp_.clamp_min_log_ = logit(mp_.p_min_);//-1.9924
+  mp_.clamp_max_log_ = logit(mp_.p_max_);//2.1972
+  mp_.min_occupancy_log_ = logit(mp_.p_occ_);//1.3863
+  mp_.lidar_prob_hit_log_ = logit(mp_.lidar_p_hit_);
+  mp_.lidar_prob_miss_log_ = logit(mp_.lidar_p_miss_);
+  mp_.lidar_clamp_min_log_ = logit(mp_.lidar_p_min_);
+  mp_.lidar_clamp_max_log_ = logit(mp_.lidar_p_max_);
+  mp_.lidar_min_occupancy_log_ = logit(mp_.lidar_p_occ_);
 
   cout << "hit: " << mp_.prob_hit_log_ << endl;
   cout << "miss: " << mp_.prob_miss_log_ << endl;
   cout << "min log: " << mp_.clamp_min_log_ << endl;
   cout << "max: " << mp_.clamp_max_log_ << endl;
   cout << "thresh log: " << mp_.min_occupancy_log_ << endl;
+  cout << "lidar hit: " << mp_.lidar_prob_hit_log_ << endl;
+  cout << "lidar miss: " << mp_.lidar_prob_miss_log_ << endl;
+  cout << "lidar min log: " << mp_.lidar_clamp_min_log_ << endl;
+  cout << "lidar max: " << mp_.lidar_clamp_max_log_ << endl;
+  cout << "lidar thresh log: " << mp_.lidar_min_occupancy_log_ << endl;
 
   // initialize data buffers
   Eigen::Vector3i map_voxel_num3i = 2 * mp_.local_update_range3i_;
@@ -106,14 +117,14 @@ void GridMap::initMap(ros::NodeHandle &nh,
       0.0, 0.0, 0.0, 1.0;
 
   /* init callback */
-  depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, depth_topic_, 50));
+  depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "grid_map/depth", 50));
   extrinsic_sub_ = node_.subscribe<nav_msgs::Odometry>(
-      extrinsic_topic_, 10, &GridMap::extrinsicCallback, this);
+      "/vins_estimator/extrinsic", 10, &GridMap::extrinsicCallback, this); //sub
 
   if (mp_.pose_type_ == POSE_STAMPED)
   {
     pose_sub_.reset(
-        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, pose_topic_, 25));
+        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "grid_map/pose", 25));
 
     sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
         SyncPolicyImagePose(100), *depth_sub_, *pose_sub_));
@@ -121,8 +132,7 @@ void GridMap::initMap(ros::NodeHandle &nh,
   }
   else if (mp_.pose_type_ == ODOMETRY)
   {
-    odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(
-        node_, odom_topic_, 100, ros::TransportHints().tcpNoDelay()));
+    odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(node_, "grid_map/odom", 100, ros::TransportHints().tcpNoDelay()));
 
     sync_image_odom_.reset(new message_filters::Synchronizer<SyncPolicyImageOdom>(
         SyncPolicyImageOdom(100), *depth_sub_, *odom_sub_));
@@ -131,19 +141,17 @@ void GridMap::initMap(ros::NodeHandle &nh,
 
   // use odometry and point cloud
   indep_odom_sub_ =
-      node_.subscribe<nav_msgs::Odometry>(odom_topic_, 10, &GridMap::odomCallback, this);
+      node_.subscribe<nav_msgs::Odometry>("grid_map/odom", 10, &GridMap::odomCallback, this);
   indep_cloud_sub_ =
-      node_.subscribe<sensor_msgs::PointCloud2>(cloud_topic_, 10, &GridMap::cloudCallback, this);
+      node_.subscribe<sensor_msgs::PointCloud2>("grid_map/cloud", 10, &GridMap::cloudCallback, this);
 
   occ_timer_ = node_.createTimer(ros::Duration(0.032), &GridMap::updateOccupancyCallback, this);
   vis_timer_ = node_.createTimer(ros::Duration(0.125), &GridMap::visCallback, this);
   if (mp_.fading_time_ > 0)
     fading_timer_ = node_.createTimer(ros::Duration(0.5), &GridMap::fadingCallback, this);
 
-  map_pub_ =
-      node_.advertise<sensor_msgs::PointCloud2>(planner_topic_prefix_ + "grid_map/occupancy", 10);
-  map_inf_pub_ = node_.advertise<sensor_msgs::PointCloud2>(
-      planner_topic_prefix_ + "grid_map/occupancy_inflate", 10);
+  map_pub_ = node_.advertise<sensor_msgs::PointCloud2>("grid_map/occupancy", 10);
+  map_inf_pub_ = node_.advertise<sensor_msgs::PointCloud2>("grid_map/occupancy_inflate", 10);
 
   md_.occ_need_update_ = false;
   md_.has_first_depth_ = false;
@@ -152,6 +160,7 @@ void GridMap::initMap(ros::NodeHandle &nh,
 
   md_.flag_have_ever_received_depth_ = false;
   md_.flag_depth_odom_timeout_ = false;
+  md_.use_lidar_prob_for_update_ = false;
 }
 
 void GridMap::updateOccupancyCallback(const ros::TimerEvent & /*event*/)
@@ -233,7 +242,10 @@ void GridMap::fadingCallback(const ros::TimerEvent & /*event*/)
       {
         Eigen::Vector3i idx = BufIdx2GlobalIdx(i);
         int inf_buf_idx = globalIdx2InfBufIdx(idx);
-        changeInfBuf(false, inf_buf_idx, idx);
+         if (md_.occupancy_buffer_inflate_[inf_buf_idx] > GRID_MAP_OBS_FLAG)
+         {
+          changeInfBuf(false, inf_buf_idx, idx);
+         }
       }
     }
   }
@@ -241,7 +253,7 @@ void GridMap::fadingCallback(const ros::TimerEvent & /*event*/)
 
   if (mp_.show_occ_time_)
   {
-    printf("Fading(ms):%f\n", (t1 - t0).toSec() * 1000);
+    printf("Fading(ms):%f\n", (t1 - t0).toSec() * 1000); 
   }
 }
 
@@ -271,12 +283,17 @@ void GridMap::depthPoseCallback(const sensor_msgs::ImageConstPtr &img,
   md_.camera_pos_(0) = pose->pose.position.x;
   md_.camera_pos_(1) = pose->pose.position.y;
   md_.camera_pos_(2) = pose->pose.position.z;
+  if (fix_agent_height_)
+  {
+    md_.camera_pos_(2) = agent_height_;
+  }
   md_.camera_r_m_ = Eigen::Quaterniond(pose->pose.orientation.w, pose->pose.orientation.x,
                                        pose->pose.orientation.y, pose->pose.orientation.z)
                         .toRotationMatrix();
 
   md_.occ_need_update_ = true;
   md_.flag_have_ever_received_depth_ = true;
+  md_.use_lidar_prob_for_update_ = false;
 }
 
 void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
@@ -300,6 +317,10 @@ void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
   md_.camera_pos_(0) = cam_T(0, 3);
   md_.camera_pos_(1) = cam_T(1, 3);
   md_.camera_pos_(2) = cam_T(2, 3);
+  if (fix_agent_height_)
+  {
+    md_.camera_pos_(2) = agent_height_;
+  }
   md_.camera_r_m_ = cam_T.block<3, 3>(0, 0);
 
   /* get depth image */
@@ -320,6 +341,7 @@ void GridMap::depthOdomCallback(const sensor_msgs::ImageConstPtr &img,
 
   md_.occ_need_update_ = true;
   md_.flag_have_ever_received_depth_ = true;
+  md_.use_lidar_prob_for_update_ = false;
 }
 
 void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
@@ -347,6 +369,10 @@ void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
   md_.camera_pos_(0) = cam_T(0, 3);
   md_.camera_pos_(1) = cam_T(1, 3);
   md_.camera_pos_(2) = cam_T(2, 3);
+  if (fix_agent_height_)
+  {
+    md_.camera_pos_(2) = agent_height_;
+  }
   md_.camera_r_m_ = cam_T.block<3, 3>(0, 0);
 
   md_.has_odom_ = true;
@@ -374,9 +400,10 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg)
   {
     if (!std::isfinite(pt.x + pt.y + pt.z))
       continue;
-    md_.proj_points_[md_.proj_points_cnt_++] = Eigen::Vector3d(pt.x, pt.y, pt.z);
+    md_.proj_points_[md_.proj_points_cnt_++] = Eigen::Vector3d(pt.x + mp_.init_x_, pt.y + mp_.init_y_, pt.z + mp_.init_z_);
   }
   moveRingBuffer();          
+  md_.use_lidar_prob_for_update_ = true;
   raycastFromCloud();// TODO by glq        
   clearAndInflateLocalMap(); 
   md_.occ_need_update_ = true; 
@@ -589,18 +616,25 @@ void GridMap::raycastFromCloud()
   {
     pt_w = md_.proj_points_[i];
 
-    int vox_idx;
+    int vox_idx = INVALID_IDX;
     if (!isInBuf(pt_w))
     {
-      pt_w = closetPointInMap(pt_w, md_.camera_pos_);
-      vox_idx = setCacheOccupancy(pt_w, 0);
-      pts_num++;
+      if (mp_.cloud_enable_raycast_)
+      {
+        pt_w = closetPointInMap(pt_w, md_.camera_pos_);
+        vox_idx = setCacheOccupancy(pt_w, 0);
+        pts_num++;
+      }
     }
     else
     {
       vox_idx = setCacheOccupancy(pt_w, 1);
       pts_num++;
     }
+
+    if (!mp_.cloud_enable_raycast_)
+      continue;
+
     if (vox_idx != INVALID_IDX)
     {
       if (md_.flag_rayend_[vox_idx] == md_.raycast_num_)
@@ -627,19 +661,19 @@ void GridMap::raycastFromCloud()
     int buf_id = globalIdx2BufIdx(md_.cache_voxel_[i]);
     double log_update =
         (md_.count_hit_[buf_id] > 0)
-            ? mp_.prob_hit_log_
-            : mp_.prob_miss_log_;
+            ? mp_.lidar_prob_hit_log_
+            : mp_.lidar_prob_miss_log_;
 
     md_.count_hit_[buf_id] = md_.count_hit_and_miss_[buf_id] = 0;
 
-    if (log_update >= 0 && md_.occupancy_buffer_[buf_id] >= mp_.clamp_max_log_)
+    if (log_update >= 0 && md_.occupancy_buffer_[buf_id] >= mp_.lidar_clamp_max_log_)
       continue;
-    if (log_update <= 0 && md_.occupancy_buffer_[buf_id] <= mp_.clamp_min_log_)
+    if (log_update <= 0 && md_.occupancy_buffer_[buf_id] <= mp_.lidar_clamp_min_log_)
       continue;
 
     md_.occupancy_buffer_[buf_id] =
-        std::min(std::max(md_.occupancy_buffer_[buf_id] + log_update, mp_.clamp_min_log_),
-                 mp_.clamp_max_log_);
+        std::min(std::max(md_.occupancy_buffer_[buf_id] + log_update, mp_.lidar_clamp_min_log_),
+                 mp_.lidar_clamp_max_log_);
   }
   t3 = ros::Time::now();
     if (mp_.show_occ_time_)
@@ -753,18 +787,20 @@ void GridMap::raycastProcess()
 
 void GridMap::clearAndInflateLocalMap()
 {
+  const double occ_thres =
+      md_.use_lidar_prob_for_update_ ? mp_.lidar_min_occupancy_log_ : mp_.min_occupancy_log_;
   for (int i = 0; i < md_.cache_voxel_cnt_; ++i)
   {
     Eigen::Vector3i idx = md_.cache_voxel_[i];
     int buf_id = globalIdx2BufIdx(idx);
     int inf_buf_id = globalIdx2InfBufIdx(idx);
 
-    if (md_.occupancy_buffer_inflate_[inf_buf_id] < GRID_MAP_OBS_FLAG && md_.occupancy_buffer_[buf_id] >= mp_.min_occupancy_log_)
+    if (md_.occupancy_buffer_inflate_[inf_buf_id] < GRID_MAP_OBS_FLAG && md_.occupancy_buffer_[buf_id] >= occ_thres)
     {
       changeInfBuf(true, inf_buf_id, idx);
     }
 
-    if (md_.occupancy_buffer_inflate_[inf_buf_id] >= GRID_MAP_OBS_FLAG && md_.occupancy_buffer_[buf_id] < mp_.min_occupancy_log_)
+    if (md_.occupancy_buffer_inflate_[inf_buf_id] >= GRID_MAP_OBS_FLAG && md_.occupancy_buffer_[buf_id] < occ_thres)
     {
       changeInfBuf(false, inf_buf_id, idx);
     }

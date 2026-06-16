@@ -29,29 +29,42 @@
   {
     "group": "定位模块",
     "title": "定位模块",
-    "files": [
-      "localization/overview.md",
-      "localization/localization_fusion.md",
-      "localization/sunray_mocap.md",
-      "localization/sunray_viobot.md",
-      "localization/fast_lio.md",
-      "localization/ekf_odometry.md",
-      "localization/open3d_loc.md",
-      "localization/vins_fusion.md",
-      "localization/vins_fusion_gpu.md",
-      "localization/extension_debug.md"
-    ],
-    "sections": [
-      {"id": "localization-overview", "title": "定位总览"},
-      {"id": "localization-fusion", "title": "localization_fusion"},
-      {"id": "sunray-mocap", "title": "sunray_mocap"},
-      {"id": "sunray-viobot", "title": "sunray_viobot"},
-      {"id": "fast-lio", "title": "fast_lio"},
-      {"id": "ekf-odometry", "title": "ekf_odometry"},
-      {"id": "open3d-loc", "title": "open3d_loc"},
-      {"id": "vins-fusion", "title": "vins-fusion"},
-      {"id": "vins-fusion-gpu", "title": "vins-fusion-gpu"},
-      {"id": "localization-extension-debug", "title": "扩展与排错"}
+    "default": "localization/overview.md",
+    "children": [
+      {"title": "定位总览", "file": "localization/overview.md"},
+      {
+        "title": "统一输出层",
+        "default": "localization/localization_fusion.md",
+        "children": [
+          {"title": "localization_fusion", "file": "localization/localization_fusion.md"}
+        ]
+      },
+      {
+        "title": "Sunray 定位源",
+        "default": "localization/sunray_mocap.md",
+        "children": [
+          {"title": "sunray_mocap", "file": "localization/sunray_mocap.md"},
+          {"title": "sunray_viobot", "file": "localization/sunray_viobot.md"},
+          {"title": "ekf_odometry", "file": "localization/ekf_odometry.md"}
+        ]
+      },
+      {
+        "title": "第三方定位算法",
+        "default": "localization/fast_lio.md",
+        "children": [
+          {"title": "fast_lio", "file": "localization/fast_lio.md"},
+          {"title": "open3d_loc", "file": "localization/open3d_loc.md"},
+          {"title": "vins-fusion", "file": "localization/vins_fusion.md"},
+          {"title": "vins-fusion-gpu", "file": "localization/vins_fusion_gpu.md"}
+        ]
+      },
+      {
+        "title": "扩展与排错",
+        "default": "localization/extension_debug.md",
+        "children": [
+          {"title": "扩展与排错", "file": "localization/extension_debug.md"}
+        ]
+      }
     ]
   },
   {
@@ -85,27 +98,29 @@
   {
     "group": "规划模块",
     "title": "规划模块",
-    "files": [
-      "planning/overview.md",
-      "planning/sunray_planning.md",
-      "planning/sunray_planner_msgs.md",
-      "planning/planner_tools.md",
-      "planning/ego_planner_example.md",
-      "planning/ego_planner_source.md",
-      "planning/diff_planner_example.md",
-      "planning/fuel_example.md",
-      "planning/super_example.md"
-    ],
-    "sections": [
-      {"id": "planning-overview", "title": "规划总览"},
-      {"id": "sunray-planning", "title": "sunray_planning"},
-      {"id": "sunray-planner-msgs", "title": "sunray_planner_msgs"},
-      {"id": "planner-tools", "title": "planner_tools"},
-      {"id": "ego-planner-example", "title": "EGO 第三方规划示例"},
-      {"id": "ego-planner-source", "title": "EGO 源码结构"},
-      {"id": "diff-planner-example", "title": "Diff 第三方规划示例"},
-      {"id": "fuel-example", "title": "FUEL 第三方规划示例"},
-      {"id": "super-example", "title": "SUPER 第三方规划示例"}
+    "default": "planning/overview.md",
+    "children": [
+      {"title": "规划总览", "file": "planning/overview.md"},
+      {
+        "title": "Sunray 自研规划器",
+        "default": "planning/sunray_planning.md",
+        "children": [
+          {"title": "sunray_planning", "file": "planning/sunray_planning.md"},
+          {"title": "sunray_planner_msgs", "file": "planning/sunray_planner_msgs.md"}
+        ]
+      },
+      {
+        "title": "第三方规划示例",
+        "default": "planning/ego_planner_example.md",
+        "children": [
+          {"title": "planner_tools", "file": "planning/planner_tools.md"},
+          {"title": "EGO 第三方规划示例", "file": "planning/ego_planner_example.md"},
+          {"title": "EGO 源码结构", "file": "planning/ego_planner_source.md"},
+          {"title": "Diff 第三方规划示例", "file": "planning/diff_planner_example.md"},
+          {"title": "FUEL 第三方规划示例", "file": "planning/fuel_example.md"},
+          {"title": "SUPER 第三方规划示例", "file": "planning/super_example.md"}
+        ]
+      }
     ]
   },
   {

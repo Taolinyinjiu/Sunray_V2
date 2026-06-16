@@ -1,38 +1,47 @@
 
 #include <plan_manage/diff_replan_fsm.h>
-#include <plan_manage/uav_namespace_topic_utils.h>
 
 namespace diff_planner
 {
 
   void DiffReplanFSM::init(ros::NodeHandle &nh)
   {
-    node_ = ros::NodeHandle();
-    uav_ns_ = loadUavNamespaceOrThrow(node_, nh);
-    planner_config_ = loadPlannerConfigOrThrow(nh, uav_ns_);
-
     exec_state_ = FSM_EXEC_STATE::INIT;
     have_target_ = false;
     have_odom_ = false;
-    have_new_target_ = false;
     have_recv_pre_agent_ = false;
-    touch_goal_ = false;
     flag_escape_emergency_ = true;
     mandatory_stop_ = false;
 
     /*  fsm param  */
+    nh.param("fsm/flight_type", target_type_, -1);
     nh.param("fsm/thresh_replan_time", replan_thresh_, -1.0);
     nh.param("fsm/planning_horizon", planning_horizen_, -1.0);
     nh.param("fsm/emergency_time", emergency_time_, 1.0);
+    nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
     nh.param("fsm/ground_height_measurement", enable_ground_height_measurement_, false);
     nh.param("fsm/mondify_final_goal", mondify_final_goal_, true);
     nh.param("fsm/enable_stuck_detect", enable_stuck_detect_, true);
+    nh.param("fsm/fix_agent_height", fix_agent_height_, true);
+    nh.param("fsm/agent_height", agent_height_, 1.0);
+
+    nh.param("fsm/waypoint_num", waypoint_num_, -1);
+    for (int i = 0; i < waypoint_num_; i++)
+    {
+      nh.param("fsm/waypoint" + to_string(i) + "_x", waypoints_[i][0], -1.0);
+      nh.param("fsm/waypoint" + to_string(i) + "_y", waypoints_[i][1], -1.0);
+      nh.param("fsm/waypoint" + to_string(i) + "_z", waypoints_[i][2], -1.0);
+    }
+
 
     /* initialize main modules */
-    visualization_.reset(new PlanningVisualization(nh, uav_ns_));
+    visualization_.reset(new PlanningVisualization(nh));
     planner_manager_.reset(new DiffPlannerManager);
-    planner_manager_->initPlanModules(nh, visualization_, planner_config_, uav_ns_);
+    planner_manager_->initPlanModules(nh, visualization_);
+
+    have_trigger_ = !flag_realworld_experiment_;
+    no_replan_thresh_ = 0.5 * emergency_time_ * planner_manager_->pp_.max_vel_;
 
     /* initialize  Anomaly Detection Parameters */
     last_local_target_pos_.setZero();
@@ -45,35 +54,42 @@ namespace diff_planner
     exec_timer_ = nh.createTimer(ros::Duration(0.01), &DiffReplanFSM::execFSMCallback, this);
     safety_timer_ = nh.createTimer(ros::Duration(0.05), &DiffReplanFSM::checkCollisionCallback, this);
 
-    odom_sub_ = nh.subscribe(planner_config_.odom_topic, 1, &DiffReplanFSM::odometryCallback, this);
-    goal_sub_ = node_.subscribe(makePlannerTopic("target_point", uav_ns_),
-                                1,
-                                &DiffReplanFSM::goalCallback,
-                                this);
-    mandatory_stop_sub_ = node_.subscribe(
-        makePlannerTopic("mandatory_stop", uav_ns_),
-        1,
-        &DiffReplanFSM::mandatoryStopCallback,
-        this);
+    odom_sub_ = nh.subscribe("odom_world", 1, &DiffReplanFSM::odometryCallback, this);
+    mandatory_stop_sub_ = nh.subscribe("mandatory_stop", 1, &DiffReplanFSM::mandatoryStopCallback, this);
 
     /* Use MINCO trajectory to minimize the message size in wireless communication */
-    broadcast_ploytraj_pub_ = node_.advertise<traj_utils::MINCOTraj>(
-        makePlannerTopic("broadcast_traj_send", uav_ns_), 10);
-    broadcast_ploytraj_sub_ = node_.subscribe<traj_utils::MINCOTraj>(
-        makePlannerTopic("broadcast_traj_recv", uav_ns_),
-        100,
-        &DiffReplanFSM::RecvBroadcastMINCOTrajCallback,
-        this,
-        ros::TransportHints().tcpNoDelay());
+    broadcast_ploytraj_pub_ = nh.advertise<traj_utils::MINCOTraj>("planning/broadcast_traj_send", 10);
+    broadcast_ploytraj_sub_ = nh.subscribe<traj_utils::MINCOTraj>("planning/broadcast_traj_recv", 100,
+                                                                  &DiffReplanFSM::RecvBroadcastMINCOTrajCallback,
+                                                                  this,
+                                                                  ros::TransportHints().tcpNoDelay());
 
-    poly_traj_pub_ = node_.advertise<traj_utils::PolyTraj>(
-        makePlannerTopic("trajectory", uav_ns_), 10);
-    data_disp_pub_ = node_.advertise<traj_utils::DataDisp>(
-        makePlannerTopic("data_display", uav_ns_), 100);
-    heartbeat_pub_ = node_.advertise<std_msgs::Empty>(
-        makePlannerTopic("heartbeat", uav_ns_), 10);
-    ground_height_pub_ = node_.advertise<std_msgs::Float64>(
-        makePlannerTopic("ground_height_measurement", uav_ns_), 10);
+    poly_traj_pub_ = nh.advertise<traj_utils::PolyTraj>("planning/trajectory", 10);
+    data_disp_pub_ = nh.advertise<traj_utils::DataDisp>("planning/data_display", 100);
+    heartbeat_pub_ = nh.advertise<std_msgs::Empty>("planning/heartbeat", 10);
+    ground_height_pub_ = nh.advertise<std_msgs::Float64>("/ground_height_measurement", 10);
+
+    if (target_type_ == TARGET_TYPE::MANUAL_TARGET)
+    {
+      // Align manual-target input with the standard RViz 2D Nav Goal topic.
+      waypoint_sub_ = nh.subscribe("move_base_simple/goal", 1, &DiffReplanFSM::waypointCallback, this);
+    }
+    else if (target_type_ == TARGET_TYPE::PRESET_TARGET)
+    {
+      trigger_sub_ = nh.subscribe("/traj_start_trigger", 1, &DiffReplanFSM::triggerCallback, this);
+
+      ROS_INFO("Wait for 2 second.");
+      int count = 0;
+      while (ros::ok() && count++ < 2000)
+      {
+        ros::spinOnce();
+        ros::Duration(0.001).sleep();
+      }
+
+      readGivenWpsAndPlan();
+    }
+    else
+      cout << "Wrong target_type_ value! target_type_=" << target_type_ << endl;
   }
 
   void DiffReplanFSM::execFSMCallback(const ros::TimerEvent &e)
@@ -104,7 +120,7 @@ namespace diff_planner
 
     case WAIT_TARGET:
     {
-      if (!have_target_)
+      if (!have_target_ || !have_trigger_)
         goto force_return; // return;
       else
       {
@@ -193,6 +209,7 @@ namespace diff_planner
       LocalTrajData *info = &planner_manager_->traj_.local_traj;
       double t_cur = ros::Time::now().toSec() - info->start_time;
       t_cur = min(info->duration, t_cur);
+      Eigen::Vector3d pos = info->traj.getPos(t_cur);
       bool touch_the_goal = ((local_target_pt_ - final_goal_).norm() < 1e-2);
 
       const PtsChk_t *chk_ptr = &planner_manager_->traj_.local_traj.pts_chk;
@@ -213,13 +230,28 @@ namespace diff_planner
           changeFSMExecState(REPLAN_TRAJ, "mondify_FSM");
         }
       }
-      else if ((t_cur > info->duration - 1e-2) && touch_the_goal)
+      else if ((target_type_ == TARGET_TYPE::PRESET_TARGET) &&
+               (wpt_id_ < waypoint_num_ - 1) &&
+               (final_goal_ - pos).norm() < no_replan_thresh_) // case 2: assign the next waypoint
+      {
+        wpt_id_++;
+        planNextWaypoint(wps_[wpt_id_], true);
+      }
+      else if ((t_cur > info->duration - 1e-2) && touch_the_goal) // case 3: the final waypoint reached
       {
         have_target_ = false;
-        /* The navigation task completed. */
+        have_trigger_ = false;
+        if (target_type_ == TARGET_TYPE::PRESET_TARGET)
+        {
+          // prepare for next round
+          wpt_id_ = 0;
+          planNextWaypoint(wps_[wpt_id_], true);
+        }
+
+        /* The navigation task completed */
         changeFSMExecState(WAIT_TARGET, "FSM");
       }
-      else if (t_cur > replan_thresh_ || (!touch_the_goal && close_to_current_traj_end))
+      else if (t_cur > replan_thresh_ || (!touch_the_goal && close_to_current_traj_end)) // case 3: time to perform next replan
       {
         changeFSMExecState(REPLAN_TRAJ, "FSM");
       }
@@ -309,7 +341,8 @@ namespace diff_planner
           ROS_INFO("Exiting EMERGENCY_STOP. Switching to WAIT_TARGET. Need a new target point !!!");
           need_hover_stop_ = false;
           have_target_ = false;
-          changeFSMExecState(WAIT_TARGET, "EMERGENCY_EXIT");
+          have_trigger_ = false;
+          changeFSMExecState(WAIT_TARGET, "EMERGENCY_EXIT"); 
         }
       }
 
@@ -329,7 +362,7 @@ namespace diff_planner
     if (replan_fail_count_ > MAX_REPLAN_FAIL_COUNT)
     {
       ROS_WARN("replan fail too much. Emergency stop.");
-      replan_fail_count_ = 0;
+      replan_fail_count_ = 0; 
       need_hover_stop_ = true;
       flag_escape_emergency_ = true;
       changeFSMExecState(EMERGENCY_STOP, "finishProcess");
@@ -358,7 +391,7 @@ namespace diff_planner
     cout << "\r[FSM]: state: " + state_str[int(exec_state_)] << ", Drone:" << planner_manager_->pp_.drone_id;
 
     // some warnings
-    if (!have_odom_ || !have_target_ || (planner_manager_->pp_.drone_id >= 1 && !have_recv_pre_agent_))
+    if (!have_odom_ || !have_target_ || !have_trigger_ || (planner_manager_->pp_.drone_id >= 1 && !have_recv_pre_agent_))
     {
       cout << ". Waiting for ";
     }
@@ -369,6 +402,10 @@ namespace diff_planner
     if (!have_target_)
     {
       cout << "target,";
+    }
+    if (!have_trigger_)
+    {
+      cout << "trigger,";
     }
     if (planner_manager_->pp_.drone_id >= 1 && !have_recv_pre_agent_)
     {
@@ -512,7 +549,7 @@ namespace diff_planner
 
   bool DiffReplanFSM::callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj)
   {
-    if (mondify_final_goal_ && mondifyInCollisionFinalGoal())
+    if (mondify_final_goal_ && mondifyInCollisionFinalGoal()) 
     {
       ROS_WARN("Successfully modified final_goal in callReboundReplan !!!");
     }
@@ -597,17 +634,18 @@ namespace diff_planner
     return true;
   }
 
-  bool DiffReplanFSM::planNextGoal(const Eigen::Vector3d next_goal, bool flag_2replan)
+    bool DiffReplanFSM::planNextWaypoint(const Eigen::Vector3d next_wp, bool flag_2replan)
   {
     bool success = false;
     std::vector<Eigen::Vector3d> one_pt_wps;
-    one_pt_wps.push_back(next_goal);
+    one_pt_wps.push_back(next_wp);
     success = planner_manager_->planGlobalTrajWaypoints(
         odom_pos_, odom_vel_, Eigen::Vector3d::Zero(),
         one_pt_wps, Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+    // visualization_->displayGoalPoint(next_wp, Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, 0);
     if (success)
     {
-      final_goal_ = next_goal;
+      final_goal_ = next_wp;
       /*** display ***/
       constexpr double step_size_t = 0.1;
       int i_end = floor(planner_manager_->traj_.global_traj.duration / step_size_t);
@@ -622,7 +660,7 @@ namespace diff_planner
       if (exec_state_ != WAIT_TARGET && flag_2replan && exec_state_ != EMERGENCY_STOP)
       {
         ros::Time start_time = ros::Time::now();
-        ros::Duration timeout(0.5);
+        ros::Duration timeout(0.5); 
         while (exec_state_ != EXEC_TRAJ)
         {
           ros::spinOnce();
@@ -630,7 +668,7 @@ namespace diff_planner
           if (ros::Time::now() - start_time > timeout)
           {
             ROS_WARN("Timeout waiting for state to change to EXEC_TRAJ.");
-            return false;
+            return false; 
           }
         }
         changeFSMExecState(REPLAN_TRAJ, "TRIG");
@@ -639,8 +677,8 @@ namespace diff_planner
       {
         return true;
       }
-      visualization_->displayGoalPoint(final_goal_, Eigen::Vector4d(1, 0, 0, 1), 0.3, 0);
-      visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
+      // visualization_->displayGoalPoint(final_goal_, Eigen::Vector4d(1, 0, 0, 1), 0.3, 0);
+       visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
     }
     else
     {
@@ -672,7 +710,7 @@ namespace diff_planner
               }
             }
           }
-          if (planNextGoal(pt, false)) // final_goal_=pt inside if success
+          if (planNextWaypoint(pt, false)) // final_goal_=pt inside if success
           {
             ROS_INFO("Current in-collision waypoint (%.3f, %.3f %.3f) has been modified to (%.3f, %.3f %.3f)",
                      orig_goal(0), orig_goal(1), orig_goal(2), final_goal_(0), final_goal_(1), final_goal_(2));
@@ -690,25 +728,52 @@ namespace diff_planner
     return false;
   }
 
-  void DiffReplanFSM::goalCallback(const geometry_msgs::PoseStampedPtr &msg)
+  void DiffReplanFSM::waypointCallback(const geometry_msgs::PoseStampedPtr &msg)
   {
-    if (!have_odom_)
+    double goal_z = msg->pose.position.z;
+    if (fix_agent_height_)
     {
-      ROS_WARN("No odom received yet, ignore this goal.");
-      return;
+      goal_z = agent_height_;
     }
-
-    Eigen::Vector3d goal(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
-    if (planner_manager_->grid_map_->getInflateOccupancy(goal) == -1)
+    Eigen::Vector3d end_wp(msg->pose.position.x, msg->pose.position.y, goal_z);
+    if (planner_manager_->grid_map_->getInflateOccupancy(end_wp) == -1)
     {
       ROS_WARN("The goal is outside the safe fence, ignore this goal!");
       return;
     }
-    ROS_INFO("Received goal: %f, %f, %f", goal(0), goal(1), goal(2));
-    if (planNextGoal(goal, true))
+    ROS_INFO("Received goal: %f, %f, %f", end_wp(0), end_wp(1), end_wp(2));
+    if (planNextWaypoint(end_wp, true))
     {
       last_target_change_time_ = ros::Time::now().toSec();
+      have_trigger_ = true;
     }
+  }
+
+  void DiffReplanFSM::readGivenWpsAndPlan()
+  {
+    if (waypoint_num_ <= 0)
+    {
+      ROS_ERROR("Wrong waypoint_num_ = %d", waypoint_num_);
+      return;
+    }
+
+    wps_.resize(waypoint_num_);
+    for (int i = 0; i < waypoint_num_; i++)
+    {
+      wps_[i](0) = waypoints_[i][0];
+      wps_[i](1) = waypoints_[i][1];
+      wps_[i](2) = waypoints_[i][2];
+    }
+
+    for (size_t i = 0; i < (size_t)waypoint_num_; i++)
+    {
+      visualization_->displayGoalPoint(wps_[i], Eigen::Vector4d(0, 0.5, 0.5, 1), 0.3, i);
+      ros::Duration(0.001).sleep();
+    }
+
+    // plan first global waypoint
+    wpt_id_ = 0;
+    planNextWaypoint(wps_[wpt_id_], true);
   }
 
   void DiffReplanFSM::mandatoryStopCallback(const std_msgs::Empty &msg)
@@ -725,11 +790,22 @@ namespace diff_planner
     odom_pos_(1) = msg->pose.pose.position.y;
     odom_pos_(2) = msg->pose.pose.position.z;
 
+    if (fix_agent_height_)
+    {
+      odom_pos_(2) = agent_height_;
+    }
+
     odom_vel_(0) = msg->twist.twist.linear.x;
     odom_vel_(1) = msg->twist.twist.linear.y;
     odom_vel_(2) = msg->twist.twist.linear.z;
 
     have_odom_ = true;
+  }
+
+  void DiffReplanFSM::triggerCallback(const geometry_msgs::PoseStampedPtr &msg)
+  {
+    have_trigger_ = true;
+    cout << "Triggered!" << endl;
   }
 
   void DiffReplanFSM::RecvBroadcastMINCOTrajCallback(const traj_utils::MINCOTrajConstPtr &msg)
@@ -975,19 +1051,20 @@ namespace diff_planner
   {
       double t = 0.0;
       Eigen::Vector3d ab = b - a;
-      double ab2 = ab.squaredNorm();
-      if (ab2 < 1e-8)
+      double ab2 = ab.squaredNorm();   
+      double ab_norm = ab.norm();
+      if (ab2 < 1e-8)                  
       {
         t = 0.0;
         return a;
       }
-      t = (p - a).dot(ab) / ab2;
-      if (t < 0.0)
+      t = (p - a).dot(ab) / ab2;       
+      if (t < 0.0)                     
       {
         t = 0.0;
         return a;
       }
-      else if (t > 1.0)
+      else if (t > 1.0)                
       {
         t = 1.0;
         return b;
