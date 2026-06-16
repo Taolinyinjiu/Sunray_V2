@@ -117,7 +117,7 @@ class Geometric_Controller : public Controller_Interface {
                                    double tau_s,
                                    const ros::Time& now);
     void maybe_rebase_takeoff_curve_start();
-    void maybe_rebase_takeoff_curve_start_accff();
+    void maybe_rebase_takeoff_curve_start_accff(double max_takeoff_velocity);
     // 起降 AccFF 路径专用拆分实现,与 takeoff()/land() 两层路由配合使用
     bool takeoff_direct_thrust(double relative_takeoff_height, double max_takeoff_velocity);
     bool takeoff_accff(double relative_takeoff_height, double max_takeoff_velocity);

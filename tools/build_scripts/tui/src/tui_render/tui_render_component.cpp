@@ -97,9 +97,16 @@ ftxui::Component UIRenderer::create_component() {
     // 按钮 Hover 状态由反射 Box + 鼠标命中负责，不在此同步
     // 键盘焦点同步（仅作为候选，不直接决定高亮）
     if (state_.build_button_focused) {
-      highlight_mgr_.on_keyboard_focus(
-          state_.button_focus_index == 0 ? std::optional{InteractiveId::Start()}
-                                         : std::optional{InteractiveId::Clear()});
+      std::optional<InteractiveId> focus_id;
+      if (state_.button_focus_index == 0) {
+        focus_id = InteractiveId::Start();
+      } else if (state_.app_mode == AppMode::Check &&
+                 state_.button_focus_index == 1) {
+        focus_id = InteractiveId::Resolve();
+      } else {
+        focus_id = InteractiveId::Clear();
+      }
+      highlight_mgr_.on_keyboard_focus(focus_id);
     } else {
       // 离开按钮区时，不持有按钮键盘焦点
       highlight_mgr_.on_keyboard_focus(std::nullopt);
@@ -120,8 +127,10 @@ ftxui::Component UIRenderer::create_component() {
     std::vector<Element> main_content;
 
     // 标题
-    main_content.push_back(
-        text("Sunray Build System - TUI") | bold | center);
+    const std::string title = state_.app_mode == AppMode::Check
+                                  ? "Sunray Dependency Check - TUI"
+                                  : "Sunray Build System - TUI";
+    main_content.push_back(text(title) | bold | center);
 
     main_content.push_back(separator());
 
@@ -289,11 +298,24 @@ ftxui::Component UIRenderer::create_component() {
 
     // 手动渲染按钮并反射 Box，接入统一高亮管理器
     Element start_el = start_button_->Render() | reflect(start_button_box_);
+    Element resolve_el = state_.app_mode == AppMode::Check
+                             ? (resolve_button_->Render() |
+                                reflect(resolve_button_box_))
+                             : text("");
     Element clear_el = clear_button_->Render() | reflect(clear_button_box_);
     // 注册到管理器（可用于后续更复杂的命中/布局）
     highlight_mgr_.register_box(InteractiveId::Start(), start_button_box_);
+    if (state_.app_mode == AppMode::Check) {
+      highlight_mgr_.register_box(InteractiveId::Resolve(), resolve_button_box_);
+    }
     highlight_mgr_.register_box(InteractiveId::Clear(), clear_button_box_);
-    main_content.push_back(hbox({start_el, text("  "), clear_el}) | center);
+    if (state_.app_mode == AppMode::Check) {
+      main_content.push_back(
+          hbox({start_el, text("  "), resolve_el, text("  "), clear_el}) |
+          center);
+    } else {
+      main_content.push_back(hbox({start_el, text("  "), clear_el}) | center);
+    }
 
     // 清理失败时显示详细输出（如果有）
     if (clear_state_ == CleanState::Error && !clear_output_.empty() &&

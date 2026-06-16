@@ -541,6 +541,23 @@ odom_topic_name: "${agent_key}/sunray/localization/local_odom"
 | `max_acc` | 反馈加速度限幅 |
 | `attitude_tau` | 姿态控制时间常数 |
 
+`takeoff_land_type=1` 的 AccFF 起飞会在内部根据 `hover_thrust_percent`
+调整起飞净加速度：悬停推力高于参考值时，只降低 `a_target - gravity`
+这部分净起飞加速度，不缩放重力补偿本身。同时起飞阶段会把最终推力限制在
+`hover_thrust_percent + margin` 附近，避免高悬停推力机型在 PreLift /
+AirborneCurve 阶段因为同一加速度需求被换算成过大的归一化推力。AirborneCurve
+还会比较当前里程计高度/竖直速度与参考曲线：如果实际飞机已经明显超前，
+控制器会降低参考速度、参考加速度和动态推力上限，使填大的悬停推力不会继续把飞机推到更高。
+进入 AirborneCurve 后，内部推力换算会使用悬停推力估计器锚点；PreLift 仍使用配置中的固定锚点，
+避免离地前估计值不稳定。
+
+AccFF 降落按起飞的逆过程处理近地阶段。进入降落时会从悬停推力估计器取一次
+snapshot 作为固定换算锚点，后续不实时跟随估计器抖动。HighDescent 内 `a_ff` 基本保持 `g`，
+推力基本稳定，主要维持下降速度。NearGround 直接基于锁存地面高度触发，默认只在地面上方约
+0.10 m 内开始显著改变 `a_ff` 和推力上限，并以地面高度为参考，不再设置 `current_z + 0.05`
+这类固定向上位置误差。NearGround 内推力上限从略高于锚点平滑收到 `anchor * a_ff / gravity`，
+允许贴地前逐步低于真实悬停推力。
+
 ## 8. 二次开发怎么做
 
 ### 8.1 写一个上层控制节点

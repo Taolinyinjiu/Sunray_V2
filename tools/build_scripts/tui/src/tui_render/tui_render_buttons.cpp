@@ -21,7 +21,7 @@ namespace sunray_tui {
 // 按钮组件创建逻辑（从 create_component 中提取）
 void UIRenderer::create_buttons() {
   // ========== 组件化底部按钮 ==========
-  // 开始编译构建按钮：保持原有行为
+  // 主操作按钮：构建模式为开始编译构建，检查模式为检查依赖
   auto start_opt = ButtonOption::Animated();
   // 自定义外观：与清除按钮统一hover逻辑，错误提示改为点击触发
   start_opt.transform = [this](const EntryState &s) {
@@ -54,7 +54,7 @@ void UIRenderer::create_buttons() {
     return full;
   };
   start_button_ = Button(
-      "开始编译构建",
+      state_.app_mode == AppMode::Check ? "检查依赖" : "开始编译构建",
       [this] {
         // 仅当选择了模块才触发
         if (!state_.view.selected_modules.empty()) {
@@ -65,11 +65,58 @@ void UIRenderer::create_buttons() {
         }
         // 点击后重置按钮 hover 与键盘焦点，避免灰底滞留
         start_button_hovered_ = false;
+        resolve_button_hovered_ = false;
         clear_button_hovered_ = false;
         state_.build_button_focused = false;
       },
       start_opt);
   // 去除 Hoverable，hover 高亮由统一管理器 + 反射 Box 决定
+
+  if (state_.app_mode == AppMode::Check) {
+    auto resolve_opt = ButtonOption::Animated();
+    resolve_opt.transform = [this](const EntryState &s) {
+      const bool has_selection = !state_.view.selected_modules.empty();
+      const bool hover_like =
+          highlight_mgr_.is_highlighted(InteractiveId::Resolve());
+      const int inner_width = 18;
+      const bool warn = state_.build_warning_flash_active;
+
+      std::string raw = warn ? "请选择模块" : std::string(s.label);
+      if ((int)raw.size() > inner_width)
+        raw = raw.substr(0, inner_width);
+      Element inner = text(raw) | center | size(WIDTH, EQUAL, inner_width);
+      Element full = hbox({text("["), inner, text("]")});
+
+      if (warn) {
+        full = full | bold | bgcolor(Color::Red) | color(Color::White);
+      } else if (hover_like) {
+        full =
+            full | bold | bgcolor(Color::RGB(60, 60, 60)) | color(Color::White);
+      } else if (has_selection) {
+        full = full | bold | color(Color::Green);
+      } else {
+        full = full | bold | color(Color::GrayDark) | dim;
+      }
+
+      return full;
+    };
+
+    resolve_button_ = Button(
+        "解决依赖",
+        [this] {
+          if (!state_.view.selected_modules.empty()) {
+            state_.handle_resolve_button();
+          } else {
+            state_.trigger_build_warning_flash();
+            animation::RequestAnimationFrame();
+          }
+          start_button_hovered_ = false;
+          resolve_button_hovered_ = false;
+          clear_button_hovered_ = false;
+          state_.build_button_focused = false;
+        },
+        resolve_opt);
+  }
 
   // 清除构建按钮：点击后绿色闪烁三次（不做实际逻辑）
   auto clear_opt = ButtonOption::Animated();
@@ -182,13 +229,19 @@ void UIRenderer::create_buttons() {
 
         // 点击后重置按钮 hover 与键盘焦点，避免灰底滞留
         start_button_hovered_ = false;
+        resolve_button_hovered_ = false;
         clear_button_hovered_ = false;
         state_.build_button_focused = false;
       },
       clear_opt);
   // 去除 Hoverable，hover 高亮由统一管理器 + 反射 Box 决定
 
-  buttons_row_ = Container::Horizontal({start_button_, clear_button_});
+  if (state_.app_mode == AppMode::Check) {
+    buttons_row_ =
+        Container::Horizontal({start_button_, resolve_button_, clear_button_});
+  } else {
+    buttons_row_ = Container::Horizontal({start_button_, clear_button_});
+  }
 }
 
 // 触发"清除构建"按钮对应的动作（与鼠标点击一致）

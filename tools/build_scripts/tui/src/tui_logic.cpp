@@ -24,8 +24,9 @@ UILogic::UILogic(UIState &state) : state_(state), renderer_(state) {}
 
 int UILogic::run() {
   try {
-    return renderer_.run_with_build_callback(
-        [this]() { this->execute_build(); });
+    return renderer_.run_with_action_callbacks(
+        [this]() { this->execute_primary_action(); },
+        [this]() { this->execute_resolve(); });
   } catch (const std::runtime_error &e) {
     if (std::string(e.what()) == "User requested exit")
       return 0;
@@ -120,6 +121,76 @@ void UILogic::execute_build() {
   execl("/bin/bash", "bash", "-c", full_cmd.c_str(), nullptr);
   std::cerr << "致命错误: 无法启动构建脚本\n";
   exit(1);
+}
+
+void UILogic::execute_check() {
+  auto selected_modules = get_selected_modules();
+  if (selected_modules.empty()) {
+    std::cerr << "错误: 没有选择任何模块进行依赖检查\n";
+    return;
+  }
+
+  save_current_selection();
+
+  std::string project_root = get_project_root_dir();
+  std::string check_script = project_root + "/check.sh";
+  if (!std::filesystem::exists(check_script)) {
+    std::cerr << "错误: 找不到依赖检查脚本 " << check_script
+              << "\n项目根目录: " << project_root << std::endl;
+    return;
+  }
+
+  std::string full_cmd =
+      check_script + " --from-tui " + format_cli_arguments(selected_modules);
+  auto cleanup_config = terminal::InputCleanupConfig::production();
+  terminal::InputCleaner cleaner(cleanup_config);
+  if (!cleaner.execute_cleanup()) {
+    std::cerr << "致命错误: 输入清理失败\n";
+    exit(1);
+  }
+
+  execl("/bin/bash", "bash", "-c", full_cmd.c_str(), nullptr);
+  std::cerr << "致命错误: 无法启动依赖检查脚本\n";
+  exit(1);
+}
+
+void UILogic::execute_resolve() {
+  auto selected_modules = get_selected_modules();
+  if (selected_modules.empty()) {
+    std::cerr << "错误: 没有选择任何模块进行依赖解决\n";
+    return;
+  }
+
+  save_current_selection();
+
+  std::string project_root = get_project_root_dir();
+  std::string check_script = project_root + "/check.sh";
+  if (!std::filesystem::exists(check_script)) {
+    std::cerr << "错误: 找不到依赖检查脚本 " << check_script
+              << "\n项目根目录: " << project_root << std::endl;
+    return;
+  }
+
+  std::string full_cmd = check_script + " --resolve-from-tui " +
+                         format_cli_arguments(selected_modules);
+  auto cleanup_config = terminal::InputCleanupConfig::production();
+  terminal::InputCleaner cleaner(cleanup_config);
+  if (!cleaner.execute_cleanup()) {
+    std::cerr << "致命错误: 输入清理失败\n";
+    exit(1);
+  }
+
+  execl("/bin/bash", "bash", "-c", full_cmd.c_str(), nullptr);
+  std::cerr << "致命错误: 无法启动依赖解决脚本\n";
+  exit(1);
+}
+
+void UILogic::execute_primary_action() {
+  if (state_.app_mode == AppMode::Check) {
+    execute_check();
+    return;
+  }
+  execute_build();
 }
 
 void UILogic::save_current_selection() const {

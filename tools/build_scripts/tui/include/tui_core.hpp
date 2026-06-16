@@ -10,6 +10,11 @@
 
 namespace sunray_tui {
 
+enum class AppMode {
+  Build,
+  Check,
+};
+
 /**
  * @brief UI核心状态管理器 - 双栏布局版本
  * 
@@ -274,6 +279,13 @@ struct UIState {
    * false时隐藏对话框，显示正常的双栏界面
    */
   bool show_build_dialog = false;
+
+  /**
+   * @brief 当前TUI用途
+   * Build: build.sh 选择模块并移交构建
+   * Check: check.sh 选择模块并移交依赖检查
+   */
+  AppMode app_mode = AppMode::Build;
   
   /** 
    * @brief 构建请求标志
@@ -281,6 +293,12 @@ struct UIState {
    * 这是TUI向CLI移交控制权的关键标志
    */
   bool build_requested = false;
+
+  /**
+   * @brief 依赖解决请求标志
+   * 用户点击“解决依赖”后设为true，触发TUI退出并移交到check.sh。
+   */
+  bool resolve_requested = false;
   
   /**
    * @brief 触发立即退出的回调函数
@@ -612,6 +630,11 @@ struct UIState {
    * 显示构建确认对话框，列出选中的模块
    */
   void handle_build_button();
+
+  /**
+   * @brief 处理解决依赖按钮点击
+   */
+  void handle_resolve_button();
   
   /**
    * @brief 关闭构建确认对话框

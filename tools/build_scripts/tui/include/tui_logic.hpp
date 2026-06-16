@@ -29,6 +29,21 @@ public:
      */
     void execute_build();
 
+    /**
+     * @brief 执行依赖检查流程（TUI→CLI移交）
+     */
+    void execute_check();
+
+    /**
+     * @brief 执行依赖解决流程（TUI→CLI移交）
+     */
+    void execute_resolve();
+
+    /**
+     * @brief 执行当前模式的主流程
+     */
+    void execute_primary_action();
+
 private:
     UIState& state_;
     UIRenderer renderer_;

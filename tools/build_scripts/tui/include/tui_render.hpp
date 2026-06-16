@@ -29,7 +29,7 @@ namespace sunray_tui {
  * @brief UI 渲染器（双栏 + 组件化底部按钮）
  *
  * - 渲染双栏（组/模块）与底部区域（按键指南/调试）
- * - 底部“开始编译构建/清除构建”采用 FTXUI 组件（Button + Container）
+ * - 底部“开始编译构建/解决依赖/清除构建”采用 FTXUI 组件（Button + Container）
  * - 鼠标与键盘事件：按钮组件优先消费，未消费则由双栏逻辑处理
  */
 class UIRenderer {
@@ -43,27 +43,33 @@ public:
    */
   /**
    * @brief 运行渲染器（TUI→CLI 移交）
-   * @param build_callback 触发“开始编译构建”后的回调（TUI退出后执行）
+   * @param build_callback 触发主操作后的回调（TUI退出后执行）
    * @return 退出码
    */
   int run_with_build_callback(std::function<void()> build_callback);
+  int run_with_action_callbacks(std::function<void()> build_callback,
+                                std::function<void()> resolve_callback);
 
 private:
   UIState &state_;
   std::function<void()> build_callback_;
+  std::function<void()> resolve_callback_;
 
   // ==================== 底部按钮（组件化） ====================
   /// 开始编译构建按钮组件
   ftxui::Component start_button_;
+  /// 解决依赖按钮组件
+  ftxui::Component resolve_button_;
   /// 清除构建按钮组件（点击后绿色闪烁三次，仅视觉）
   ftxui::Component clear_button_;
-  /// 水平容器，承载两个按钮
+  /// 水平容器，承载底部按钮
   ftxui::Component buttons_row_;
   /// 清除构建按钮闪烁计数（>0时闪烁），单位：帧；3次闪烁≈6帧
   int clear_button_flash_remaining_ = 0;
 
   // Hover 状态（使用 FTXUI Hoverable 装饰器获取）
   bool start_button_hovered_ = false;
+  bool resolve_button_hovered_ = false;
   bool clear_button_hovered_ = false;
 
   // 统一高亮管理器（第一阶段：先接入按钮）
@@ -71,6 +77,7 @@ private:
 
   // 反射捕获的按钮盒子，用于鼠标命中
   ftxui::Box start_button_box_;
+  ftxui::Box resolve_button_box_;
   ftxui::Box clear_button_box_;
 
   // 清理过程的状态机

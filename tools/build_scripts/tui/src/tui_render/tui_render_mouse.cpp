@@ -49,6 +49,7 @@ bool UIRenderer::handle_dual_column_mouse_move(const Mouse &mouse) {
   state_.module_hover_index = -1;
   // 同步清除按钮悬停标志；若鼠标在按钮上，事件将继续传播并由Hoverable重新设置
   start_button_hovered_ = false;
+  resolve_button_hovered_ = false;
   clear_button_hovered_ = false;
   // 鼠标移动即退出按钮键盘焦点样式，由 Hoverable 决定是否高亮
   state_.build_button_focused = false;
@@ -111,6 +112,12 @@ bool UIRenderer::handle_dual_column_mouse_move(const Mouse &mouse) {
     state_.group_hover_index = -1;
     state_.module_hover_index = -1;
     highlight_mgr_.set_pointer_hover(InteractiveId::Start());
+    state_changed = true;
+  } else if (state_.app_mode == AppMode::Check &&
+             within(resolve_button_box_, mouse.x, mouse.y)) {
+    state_.group_hover_index = -1;
+    state_.module_hover_index = -1;
+    highlight_mgr_.set_pointer_hover(InteractiveId::Resolve());
     state_changed = true;
   } else if (within(clear_button_box_, mouse.x, mouse.y)) {
     state_.group_hover_index = -1;
@@ -180,6 +187,16 @@ bool UIRenderer::handle_dual_column_mouse_click(const Mouse &mouse) {
     // Start 按钮：触发构建或警告
     if (!state_.view.selected_modules.empty()) {
       state_.handle_build_button();
+    } else {
+      state_.trigger_build_warning_flash();
+      ftxui::animation::RequestAnimationFrame();
+    }
+    return true;
+  }
+  if (state_.app_mode == AppMode::Check &&
+      within(resolve_button_box_, mouse.x, mouse.y)) {
+    if (!state_.view.selected_modules.empty()) {
+      state_.handle_resolve_button();
     } else {
       state_.trigger_build_warning_flash();
       ftxui::animation::RequestAnimationFrame();

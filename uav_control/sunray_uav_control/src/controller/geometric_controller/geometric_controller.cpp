@@ -1054,13 +1054,16 @@ void Geometric_Controller::reset_takeoff_land_contexts() {
     controller_.clear_fixed_anchor_override();
 }
 
-void Geometric_Controller::maybe_rebase_takeoff_curve_start_accff() {
+void Geometric_Controller::maybe_rebase_takeoff_curve_start_accff(double max_takeoff_velocity) {
     if (takeoff_accff_state_.curve_started ||
         motion_curve_owner_ != MotionCurveOwner::Takeoff ||
         !has_uav_odometry_.load(std::memory_order_relaxed)) {
         return;
     }
-    motion_curve_.set_start_trajpoint(uav_odometry_.position, uav_odometry_.velocity);
+    Eigen::Vector3d rebased_velocity = uav_odometry_.velocity;
+    const double z_limit = std::max(0.05, max_takeoff_velocity);
+    rebased_velocity.z() = std::clamp(rebased_velocity.z(), -z_limit, z_limit);
+    motion_curve_.set_start_trajpoint(uav_odometry_.position, rebased_velocity);
     takeoff_accff_state_.curve_started = true;
 }
 
@@ -1087,10 +1090,25 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         std::min(takeoff_accff_tuning_.liftoff_detect_h_m, 0.35 * commanded_height);
     const double prelift_vz_guard =
         std::min(takeoff_accff_tuning_.liftoff_detect_vz_mps, 0.8 * commanded_vmax);
+    const double hover_thrust_init =
+        std::clamp(geometric_controller_param_.hover_thrust_init,
+                   geometric_controller_param_.hover_thrust_min,
+                   geometric_controller_param_.hover_thrust_max);
+    const double hover_gain_denominator =
+        std::max(hover_thrust_init, geometric_controller_param_.hover_thrust_min);
+    const double hover_thrust_gain =
+        std::clamp(takeoff_accff_tuning_.hover_thrust_reference / hover_gain_denominator,
+                   takeoff_accff_tuning_.hover_thrust_gain_min,
+                   1.0);
+    const double base_prelift_net_acc = std::clamp(commanded_vmax, 0.10, 0.60);
     const double velocity_limited_a_target =
-        geometric_controller_param_.gravity + std::clamp(commanded_vmax, 0.10, 0.60);
+        geometric_controller_param_.gravity + base_prelift_net_acc * hover_thrust_gain;
     const double prelift_a_target =
         std::min(takeoff_accff_tuning_.a_target_mps2, velocity_limited_a_target);
+    const double takeoff_thrust_limit =
+        std::clamp(hover_thrust_init + takeoff_accff_tuning_.thrust_margin,
+                   hover_thrust_init,
+                   geometric_controller_param_.hover_thrust_max);
 
     // ── 首次进入：初始化曲线、锁存起飞参数与 PreLift 状态 ────────────────────
     if (motion_curve_owner_ != MotionCurveOwner::Takeoff) {
@@ -1219,14 +1237,14 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
                 setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
                 setpoint.body_rate = output.bodyrates;
             }
-            setpoint.thrust = output.thrust;
+            setpoint.thrust = std::min(output.thrust, takeoff_thrust_limit);
             mavros_helper_.pub_attitude_setpoint(setpoint);
             cache_attitude_setpoint(setpoint);
 
             ROS_INFO_THROTTLE(0.5,
                               "[takeoff_accff] PreLift a_ff=%.2f thrust=%.3f rel_h=%.3f vz=%.3f "
                               "cmd_h=%.3f cmd_vmax=%.3f h_guard=%.3f vz_guard=%.3f "
-                              "a_target=%.2f",
+                              "a_target=%.2f hover_gain=%.2f thrust_limit=%.3f",
                               a_ff,
                               setpoint.thrust,
                               rel_height,
@@ -1235,7 +1253,9 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
                               commanded_vmax,
                               prelift_height_guard,
                               prelift_vz_guard,
-                              prelift_a_target);
+                              prelift_a_target,
+                              hover_thrust_gain,
+                              takeoff_thrust_limit);
 
             const double elapsed = (now - takeoff_accff_state_.phase_start).toSec();
             if (elapsed > 1.5 * takeoff_accff_tuning_.ramp_time_s &&
@@ -1248,18 +1268,19 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         }
     }
 
-    // ── 阶段 4：AirborneCurve  rebase + 五次项曲线 + UseFixedAnchor ─────────
+    // ── 阶段 4：AirborneCurve  rebase + 五次项曲线 + estimated anchor ───────
     {
-        maybe_rebase_takeoff_curve_start_accff();
+        maybe_rebase_takeoff_curve_start_accff(commanded_vmax);
         curve::QuinticCurveState curve_result = motion_curve_.get_result();
         if (!curve_result.valid) {
             const double fallback_vmax =
-                std::max(commanded_vmax, std::abs(uav_odometry_.velocity.z()) + 0.05);
+                std::min(std::max(commanded_vmax + 0.05, commanded_vmax),
+                         max_velocity_.z());
             motion_curve_.set_curve_maxvel(fallback_vmax);
             curve_result = motion_curve_.get_result();
             ROS_WARN_THROTTLE(
                 1.0,
-                "[takeoff_accff] AirborneCurve invalid, fallback_vmax=%.3f current_vz=%.3f "
+                "[takeoff_accff] AirborneCurve invalid, bounded fallback_vmax=%.3f current_vz=%.3f "
                 "cmd_vmax=%.3f",
                 fallback_vmax,
                 uav_odometry_.velocity.z(),
@@ -1271,16 +1292,41 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
             return false;
         }
 
+        const double z_ahead =
+            uav_odometry_.position.z() - curve_result.position.z() -
+            takeoff_accff_tuning_.odom_ahead_pos_tolerance_m;
+        const double vz_ahead =
+            uav_odometry_.velocity.z() - curve_result.velocity.z() -
+            takeoff_accff_tuning_.odom_ahead_vz_tolerance_mps;
+        const double z_ahead_ratio =
+            std::clamp(z_ahead / std::max(0.10, commanded_height), 0.0, 1.0);
+        const double vz_ahead_ratio =
+            std::clamp(vz_ahead / std::max(0.10, commanded_vmax), 0.0, 1.0);
+        const double odom_ahead_ratio = std::max(z_ahead_ratio, vz_ahead_ratio);
+        const double odom_correction_scale =
+            std::clamp(1.0 - odom_ahead_ratio,
+                       takeoff_accff_tuning_.odom_thrust_scale_min,
+                       1.0);
+
+        Eigen::Vector3d corrected_velocity = curve_result.velocity;
+        Eigen::Vector3d corrected_acceleration = curve_result.acceleration;
+        if (corrected_velocity.z() > 0.0) {
+            corrected_velocity.z() *= odom_correction_scale;
+        }
+        if (corrected_acceleration.z() > 0.0) {
+            corrected_acceleration.z() *= odom_correction_scale;
+        }
+
         controller_data_types::TargetTrajectoryPoint_t des_state;
         des_state.position = curve_result.position;
-        des_state.velocity = curve_result.velocity;
-        des_state.acceleration = curve_result.acceleration;
+        des_state.velocity = corrected_velocity;
+        des_state.acceleration = corrected_acceleration;
         des_state.jerk = Eigen::Vector3d::Zero();
         des_state.yaw = takeoff_accff_state_.yaw;
         des_state.yaw_rate = 0.0;
 
         auto output = controller_.calculateControl(
-            des_state, uav_odometry_, ThrustCommandPolicy::UseFixedAnchor);
+            des_state, uav_odometry_, ThrustCommandPolicy::UseEstimatedAnchor);
         control_common::Mavros_SetpointAttitude setpoint;
         if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
             setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
@@ -1292,9 +1338,25 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
             setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
             setpoint.body_rate = output.bodyrates;
         }
-        setpoint.thrust = output.thrust;
+        const double ahead_limit =
+            std::max(0.0, hover_thrust_init * odom_correction_scale);
+        const double dynamic_thrust_limit =
+            takeoff_thrust_limit +
+            odom_ahead_ratio * (ahead_limit - takeoff_thrust_limit);
+        setpoint.thrust = std::min(output.thrust, dynamic_thrust_limit);
         mavros_helper_.pub_attitude_setpoint(setpoint);
         cache_attitude_setpoint(setpoint);
+
+        ROS_INFO_THROTTLE(0.5,
+                          "[takeoff_accff] AirborneCurve thrust=%.3f limit=%.3f "
+                          "hover_est=%.3f odom_scale=%.2f z_ahead=%.3f vz_ahead=%.3f ref_vz=%.3f",
+                          setpoint.thrust,
+                          dynamic_thrust_limit,
+                          controller_.get_accepted_hover_thrust(),
+                          odom_correction_scale,
+                          std::max(0.0, z_ahead),
+                          std::max(0.0, vz_ahead),
+                          curve_result.velocity.z());
 
         // AirborneCurve 稳定爬升段开始喂 estimator,让其在 hover 之前就开始收敛。
         // 触发条件:rel_height > 0.30 且 |vz - target_vz| < 0.20。
@@ -1363,21 +1425,29 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
         // 替代 yaml 静态 hover_thrust_init。这样降落锚点会自动反映载荷/电池实际状态,
         // 不再因 yaml hover_thrust_percent 偏差导致"降不下来"或"硬墩"。
         const double snapshot = controller_.get_accepted_hover_thrust();
-        controller_.set_fixed_anchor_override(snapshot);
+        landing_accff_state_.anchor_thrust =
+            std::clamp(snapshot,
+                       geometric_controller_param_.hover_thrust_min,
+                       geometric_controller_param_.hover_thrust_max);
+        controller_.set_fixed_anchor_override(landing_accff_state_.anchor_thrust);
         ROS_INFO("[land_accff] anchor snapshot from estimator = %.3f (yaml init = %.3f)",
-                 snapshot, geometric_controller_param_.hover_thrust_init);
+                 landing_accff_state_.anchor_thrust,
+                 geometric_controller_param_.hover_thrust_init);
     }
 
     const double height_above_ground =
         std::max(0.0, uav_odometry_.position.z() - ground_height_ref_);
+    const double near_ground_h =
+        std::max(0.03, landing_accff_tuning_.near_ground_h_m);
     const control_common::LandedState px4_land_state =
         mavros_helper_.get_state().landed_state;
     const bool px4_landed = (px4_land_state == control_common::LandedState::OnGround);
 
     // ── 阶段切换:HighDescent → NearGround ────────────────────────────────
     if (landing_accff_state_.phase == takeoff_land::LandingPhaseAccFF::HighDescent &&
-        height_above_ground < landing_accff_tuning_.near_ground_h_m) {
-        ROS_INFO("[land_accff] HighDescent -> NearGround, h=%.3f", height_above_ground);
+        height_above_ground < near_ground_h) {
+        ROS_INFO("[land_accff] HighDescent -> NearGround, h=%.3f near_ground_h=%.3f",
+                 height_above_ground, near_ground_h);
         landing_accff_state_.phase = takeoff_land::LandingPhaseAccFF::NearGround;
         landing_accff_state_.phase_start = now;
         landing_accff_state_.last_update = now;
@@ -1459,29 +1529,36 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
     }
 
     // ── 阶段:HighDescent / NearGround  通过 calculateControl 输出 ─────────
-    // v5 设计:整段 vz_ref(h) 与 a_ff(h) 共用同一条五次平滑曲线 (smootherstep),
-    //         端点 0/1/2 阶导数全连续,从 (vz=-far_v, a=g) 单调过渡到 (vz=-near_v, a=a_touchdown)。
-    //         phase 仍区分 HighDescent / NearGround,但仅用于触地判定窗口,不影响 vz_ref / a_ff 计算。
+    // HighDescent:acc_ff 基本保持 g,推力基本稳定,主要通过速度参考维持下降。
+    // NearGround:仅在锁存地面高度上方 near_ground_h 内显著释放推力,完成贴地。
     controller_data_types::TargetTrajectoryPoint_t des_state;
-    const double lookahead_time = 0.35;
+    const bool near_ground_phase =
+        landing_accff_state_.phase == takeoff_land::LandingPhaseAccFF::NearGround;
     const double far_v  = std::max(0.05, landing_accff_state_.max_velocity);
     const double near_v = landing_accff_tuning_.near_ground_vz_mps;
-    const double h_high = std::max(landing_accff_tuning_.near_ground_h_m + 0.10,
-                                   2.0 * landing_accff_tuning_.near_ground_h_m);
     const double gravity = geometric_controller_param_.gravity;
 
-    // 归一化高度 u ∈ [0, 1]:u=1 在 h_high 之上,u=0 在触地
-    const double u = std::clamp(height_above_ground / std::max(h_high, 1e-3), 0.0, 1.0);
+    // NearGround 内归一化高度 u ∈ [0, 1]:u=1 在近地入口,u=0 在触地。
+    // HighDescent 不使用该曲线释放推力,只保持稳定下降。
+    const double u = near_ground_phase
+                         ? std::clamp(height_above_ground /
+                                          std::max(near_ground_h, 1e-3),
+                                      0.0,
+                                      1.0)
+                         : 1.0;
     // smootherstep: s(u) = 6u^5 - 15u^4 + 10u^3
     // 性质: s(0)=0, s(1)=1, s'(0)=s'(1)=0, s''(0)=s''(1)=0
     const double s = u * u * u * (u * (u * 6.0 - 15.0) + 10.0);
 
-    const double desc_speed = near_v + s * (far_v - near_v);
+    const double desc_speed = near_ground_phase ? (near_v + s * (far_v - near_v)) : far_v;
 
-    // a_ff 同样按 s 在 a_touchdown 与 g 之间插值;u=1 时 a_ff=g(不引入 acc_ref),u=0 时 a_ff=a_touchdown。
+    // a_ff 在 HighDescent 固定为 g;NearGround 按 s 在 a_touchdown 与 g 之间插值。
     // 进一步用 jerk-bounded ramp 平滑跨帧跳变(防止 h 抖动反映到 a_ff)。
-    const double a_target = landing_accff_tuning_.a_touchdown_mps2 +
-                            s * (gravity - landing_accff_tuning_.a_touchdown_mps2);
+    const double a_target =
+        near_ground_phase
+            ? landing_accff_tuning_.a_touchdown_mps2 +
+                  s * (gravity - landing_accff_tuning_.a_touchdown_mps2)
+            : gravity;
     double dt = (now - landing_accff_state_.last_update).toSec();
     if (!(dt > 0.0) || dt > 5.0 * nominal_dt) {
         dt = nominal_dt;
@@ -1496,12 +1573,11 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
         landing_accff_tuning_.a_max_mps2);
     landing_accff_state_.a_ff_prev = a_ff_now;
 
-    // target_z 略高于当前高度(约 0.05 m),让 pos_error_z = +0.05 给一个小刹车,
-    // 抵消 vel_kp 不足以完全压住 -0.30 m/s 时的超速倾向。
-    // 不再用 lookahead 减偏(lookahead 会让 pos_error 持续为负,反而推动加速)。
-    constexpr double kPosBrakeOffsetM = 0.05;
-    const double target_z =
-        std::max(uav_odometry_.position.z() + kPosBrakeOffsetM, ground_height_ref_);
+    // HighDescent 保持当前高度作为 z 参考,让下降主要由速度参考决定;
+    // NearGround 改用地面锚点,避免固定 +0.05 m 位置误差持续向上刹车。
+    const double target_z = near_ground_phase
+                                ? ground_height_ref_
+                                : std::max(uav_odometry_.position.z(), ground_height_ref_);
     des_state.position = Eigen::Vector3d(landing_accff_state_.locked_xy_z.x(),
                                          landing_accff_state_.locked_xy_z.y(),
                                          target_z);
@@ -1525,14 +1601,43 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
         setpoint.body_rate = output.bodyrates;
     }
     setpoint.thrust = output.thrust;
+    double thrust_release_limit = geometric_controller_param_.hover_thrust_max;
+    if (near_ground_phase) {
+        const double anchor = std::clamp(
+            landing_accff_state_.anchor_thrust > 0.0
+                ? landing_accff_state_.anchor_thrust
+                : geometric_controller_param_.hover_thrust_init,
+            geometric_controller_param_.hover_thrust_min,
+            geometric_controller_param_.hover_thrust_max);
+        const double gravity_safe = std::max(gravity, 1e-6);
+        const double touchdown_release_limit =
+            std::clamp(anchor * (a_ff_now / gravity_safe), 0.0, anchor);
+        const double near_u = std::clamp(
+            height_above_ground / std::max(near_ground_h, 1e-3),
+            0.0,
+            1.0);
+        const double near_s = near_u * near_u * near_u *
+                              (near_u * (near_u * 6.0 - 15.0) + 10.0);
+        constexpr double kNearGroundBrakeMargin = 0.03;
+        const double near_entry_limit =
+            std::clamp(anchor + kNearGroundBrakeMargin,
+                       anchor,
+                       geometric_controller_param_.hover_thrust_max);
+        thrust_release_limit =
+            touchdown_release_limit + near_s * (near_entry_limit - touchdown_release_limit);
+        setpoint.thrust = std::min(setpoint.thrust, thrust_release_limit);
+    }
     mavros_helper_.pub_attitude_setpoint(setpoint);
     cache_attitude_setpoint(setpoint);
 
-    if (landing_accff_state_.phase == takeoff_land::LandingPhaseAccFF::NearGround) {
+    if (near_ground_phase) {
         ROS_INFO_THROTTLE(0.5,
-                          "[land_accff] NearGround a_ff=%.2f thrust=%.3f h=%.3f vz=%.3f",
-                          a_ff_now, setpoint.thrust, height_above_ground,
-                          uav_odometry_.velocity.z());
+                          "[land_accff] NearGroundRelease a_ff=%.2f thrust=%.3f "
+                          "limit=%.3f anchor=%.3f target_z=%.3f h=%.3f near_ground_h=%.3f "
+                          "vz=%.3f ref_vz=%.3f",
+                          a_ff_now, setpoint.thrust, thrust_release_limit,
+                          landing_accff_state_.anchor_thrust, target_z, height_above_ground,
+                          near_ground_h, uav_odometry_.velocity.z(), -desc_speed);
     }
     return false;
 }

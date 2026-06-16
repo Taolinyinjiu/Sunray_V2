@@ -1116,6 +1116,17 @@ void UIState::calculate_module_visible_count() {
   }
 }
 
+void UIState::handle_resolve_button() {
+  if (view.selected_modules.empty()) {
+    trigger_build_warning_flash();
+  } else {
+    resolve_requested = true;
+    if (trigger_exit_callback) {
+      trigger_exit_callback();
+    }
+  }
+}
+
 /**
  * @brief 确保当前选择项可见（滚动到可视区域内）
  * 自动调整滚动偏移，保持当前选择项始终在可视范围内

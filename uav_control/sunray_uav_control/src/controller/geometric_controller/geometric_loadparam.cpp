@@ -307,12 +307,18 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     takeoff_accff_tuning_.a_max_mps2 = gravity + 5.0;
     takeoff_accff_tuning_.liftoff_detect_h_m = 0.05;
     takeoff_accff_tuning_.liftoff_detect_vz_mps = 0.15;
+    takeoff_accff_tuning_.hover_thrust_reference = 0.375;
+    takeoff_accff_tuning_.hover_thrust_gain_min = 0.65;
+    takeoff_accff_tuning_.thrust_margin = 0.04;
+    takeoff_accff_tuning_.odom_ahead_pos_tolerance_m = 0.04;
+    takeoff_accff_tuning_.odom_ahead_vz_tolerance_mps = 0.05;
+    takeoff_accff_tuning_.odom_thrust_scale_min = 0.72;
 
-    // 降落:a_touchdown 接近 g 的稳态值,让 NearGround 大部分时间维持悬停推力,
-    // 只在末段做温和净减速,避免出现 a_touchdown=0.55g 时的"NearGround 一进入就自由落体"。
-    landing_accff_tuning_.near_ground_h_m = 0.25;
+    // 降落:a_touchdown 低于 g,NearGround 只在锁存地面高度上方约 0.10 m 内释放推力;
+    // 取 0.92g 保持温和贴地,避免末端突然卸力。
+    landing_accff_tuning_.near_ground_h_m = 0.10;
     landing_accff_tuning_.near_ground_vz_mps = 0.10;
-    landing_accff_tuning_.a_touchdown_mps2 = 0.85 * gravity;
+    landing_accff_tuning_.a_touchdown_mps2 = 0.92 * gravity;
     landing_accff_tuning_.ramp_time_s = 2.0;
     landing_accff_tuning_.jerk_max_mps3 = 1.0;
     landing_accff_tuning_.a_min_mps2 = 0.0;

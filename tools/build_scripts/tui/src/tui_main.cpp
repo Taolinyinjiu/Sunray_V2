@@ -12,7 +12,7 @@ void show_help() {
   std::cout << "Sunray TUI - 交互式模块管理工具\n\n用法: sunray_tui "
                "[选项]\n\n选项:\n";
   std::cout << "  --help, -h     显示此帮助信息\n  --version, -v  "
-               "显示版本信息\n\n交互控制:\n";
+               "显示版本信息\n  --mode check   启动依赖检查模式\n\n交互控制:\n";
   std::cout << "  上下键         上下导航\n  空格           选择模块/展开组\n  "
                "C              清除所有选择\n  q/Esc          退出程序\n\n";
 }
@@ -22,11 +22,7 @@ void show_version() {
 }
 
 int main(int argc, char *argv[]) {
-  // TUI模式不接受任何参数，如果有参数则显示提示
-  if (argc > 1) {
-    std::cout << "注意: TUI模式不接受参数，所有参数将被忽略\n";
-    std::cout << "如需使用参数功能，请使用CLI模式\n\n";
-  }
+  AppMode app_mode = AppMode::Build;
 
   // 检查帮助请求
   for (int i = 1; i < argc; ++i) {
@@ -37,6 +33,18 @@ int main(int argc, char *argv[]) {
     } else if (arg == "--version" || arg == "-v") {
       show_version();
       return 0;
+    } else if (arg == "--mode" && i + 1 < argc) {
+      std::string mode(argv[++i]);
+      if (mode == "check") {
+        app_mode = AppMode::Check;
+      } else if (mode == "build") {
+        app_mode = AppMode::Build;
+      } else {
+        std::cerr << "错误: 未知TUI模式: " << mode << std::endl;
+        return 1;
+      }
+    } else {
+      std::cout << "注意: 未识别的TUI参数已忽略: " << arg << "\n";
     }
   }
 
@@ -75,6 +83,7 @@ int main(int argc, char *argv[]) {
     }
 
     UIState state = ConfigDataSimplified::create_ui_state(*config);
+    state.app_mode = app_mode;
     UILogic logic(state);
 
     return logic.run();

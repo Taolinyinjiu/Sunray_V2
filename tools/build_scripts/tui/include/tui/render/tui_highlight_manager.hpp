@@ -12,6 +12,7 @@ enum class InteractiveKind {
   GroupItem,
   ModuleItem,
   ButtonStart,
+  ButtonResolve,
   ButtonClear,
   None,
 };
@@ -23,6 +24,7 @@ struct InteractiveId {
 
   static InteractiveId None() { return {InteractiveKind::None, -1}; }
   static InteractiveId Start() { return {InteractiveKind::ButtonStart, -1}; }
+  static InteractiveId Resolve() { return {InteractiveKind::ButtonResolve, -1}; }
   static InteractiveId Clear() { return {InteractiveKind::ButtonClear, -1}; }
   static InteractiveId Group(int i) { return {InteractiveKind::GroupItem, i}; }
   static InteractiveId Module(int i) { return {InteractiveKind::ModuleItem, i}; }
@@ -88,4 +90,3 @@ class UIHighlightManager {
 };
 
 } // namespace sunray_tui
-

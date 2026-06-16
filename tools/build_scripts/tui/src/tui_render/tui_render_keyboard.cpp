@@ -39,10 +39,12 @@ bool UIRenderer::handle_dual_column_keyboard_event(const Event &event) {
       state_.group_hover_index = -1;
       state_.module_hover_index = -1;
       start_button_hovered_ = false;
+      resolve_button_hovered_ = false;
       clear_button_hovered_ = false;
     } else {
       // 离开按钮区域，清除按钮 hover，并同步到当前活动栏位
       start_button_hovered_ = false;
+      resolve_button_hovered_ = false;
       clear_button_hovered_ = false;
       sync_hover_to_active_pane();
     }
@@ -55,9 +57,11 @@ bool UIRenderer::handle_dual_column_keyboard_event(const Event &event) {
       state_.group_hover_index = -1;
       state_.module_hover_index = -1;
       start_button_hovered_ = false;
+      resolve_button_hovered_ = false;
       clear_button_hovered_ = false;
     } else {
       start_button_hovered_ = false;
+      resolve_button_hovered_ = false;
       clear_button_hovered_ = false;
       sync_hover_to_active_pane();
     }
@@ -98,8 +102,16 @@ bool UIRenderer::handle_dual_column_keyboard_event(const Event &event) {
   if (event == Event::ArrowLeft || event == Event::ArrowRight) {
     if (state_.build_button_focused) {
       // 在按钮行内左右移动焦点，但不设置 hover；仅用于回车触发目标
-      state_.button_focus_index = (event == Event::ArrowLeft) ? 0 : 1;
+      const int button_count = state_.app_mode == AppMode::Check ? 3 : 2;
+      if (event == Event::ArrowLeft) {
+        state_.button_focus_index =
+            (state_.button_focus_index + button_count - 1) % button_count;
+      } else {
+        state_.button_focus_index =
+            (state_.button_focus_index + 1) % button_count;
+      }
       start_button_hovered_ = false;
+      resolve_button_hovered_ = false;
       clear_button_hovered_ = false;
       animation::RequestAnimationFrame();
     } else {
@@ -115,6 +127,9 @@ bool UIRenderer::handle_dual_column_keyboard_event(const Event &event) {
     if (state_.build_button_focused) {
       if (state_.button_focus_index == 0) {
         state_.handle_build_button();
+      } else if (state_.app_mode == AppMode::Check &&
+                 state_.button_focus_index == 1) {
+        state_.handle_resolve_button();
       } else {
         // 触发清除构建
         trigger_clear_build_clean();

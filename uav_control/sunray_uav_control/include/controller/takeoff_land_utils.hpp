@@ -96,6 +96,12 @@ struct TakeoffAccFFTuning {
     double a_max_mps2{15.0};
     double liftoff_detect_h_m{0.05};
     double liftoff_detect_vz_mps{0.15};
+    double hover_thrust_reference{0.375};
+    double hover_thrust_gain_min{0.65};
+    double thrust_margin{0.04};
+    double odom_ahead_pos_tolerance_m{0.04};
+    double odom_ahead_vz_tolerance_mps{0.05};
+    double odom_thrust_scale_min{0.72};
 };
 
 struct TakeoffAccFFState {
@@ -117,7 +123,7 @@ struct TakeoffAccFFState {
 };
 
 struct LandingAccFFTuning {
-    double near_ground_h_m{0.25};
+    double near_ground_h_m{0.10};
     double near_ground_vz_mps{0.10};
     double a_touchdown_mps2{5.4};
     double ramp_time_s{0.6};
@@ -139,6 +145,7 @@ struct LandingAccFFState {
     Eigen::Vector3d locked_xy_z{Eigen::Vector3d::Zero()};
     double yaw{0.0};
     double max_velocity{0.30};
+    double anchor_thrust{0.0};
     double a_ff_prev{9.8};
     bool entered{false};
 
@@ -151,6 +158,7 @@ struct LandingAccFFState {
         locked_xy_z.setZero();
         yaw = 0.0;
         max_velocity = 0.30;
+        anchor_thrust = 0.0;
         a_ff_prev = 9.8;
         entered = false;
     }
