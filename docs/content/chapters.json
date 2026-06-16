@@ -147,6 +147,7 @@
       "drivers/realsense2_camera.md",
       "drivers/sunray_gimbal.md",
       "drivers/vrpn_client_ros.md",
+      "drivers/joystick_ros_bridge.md",
       "drivers/web_cam.md",
       "drivers/turn_on_wheeltec_robot.md",
       "drivers/librealsense2.md"
@@ -158,6 +159,7 @@
       {"id": "driver-realsense2-camera", "title": "realsense2_camera"},
       {"id": "driver-sunray-gimbal", "title": "sunray_gimbal"},
       {"id": "driver-vrpn-client-ros", "title": "vrpn_client_ros"},
+      {"id": "driver-joystick-ros-bridge", "title": "joystick_ros_bridge"},
       {"id": "driver-web-cam", "title": "web_cam"},
       {"id": "driver-turn-on-wheeltec-robot", "title": "turn_on_wheeltec_robot"},
       {"id": "driver-librealsense2", "title": "librealsense2"}
