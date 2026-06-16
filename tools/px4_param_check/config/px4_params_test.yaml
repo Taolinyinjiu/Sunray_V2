@@ -1,0 +1,382 @@
+# Sunray 关注的 PX4 参数建议值。
+# based on PX4 v1.15.2dev firmware，适用于Sunray-150系列无人机。
+#
+# agent_name 和 agent_id 对应 drivers/sunray_mavros/launch/mavros.launch:
+#   <group ns="$(arg agent_name)$(arg agent_id)">
+# 默认 MAVROS namespace 为 /uav1/mavros。
+
+agent_name: uav
+agent_id: 1
+mavros_node: mavros
+
+parameter_group:
+  - name: EKF2
+    description: PX4中多源融合模块参数
+    parameters:
+      - name: EKF2_EV_CTRL
+        type: integer
+        recommended_value: 15
+        description: 外部视觉融合控制
+      - name: EKF2_EVP_GATE
+        type: real
+        recommended_value: 5.0
+        description: 外部视觉位置融合创新门限，单位为标准差；数值越小越容易拒绝异常视觉位置数据。
+      - name: EKF2_EVV_GATE
+        type: real
+        recommended_value: 3.0
+        description: 外部视觉速度融合创新门限，单位为标准差；数值越小越容易拒绝异常视觉速度数据。
+      - name: EKF2_EV_QMIN
+        type: integer
+        recommended_value: 0
+        description: 外部视觉质量最低阈值:0表示不使用可选质量字段做额外门限,适合大多数不发布质量字段的VIO或动捕系统。
+      - name: EKF2_HGT_REF
+        type: integer
+        recommended_value: 2
+        description: EKF 高度参考源，高度参考源：0代表气压计、1代表GPS、2代表测距仪、3代表外部视觉
+      - name: EKF2_IMU_CTRL
+        type: integer
+        recommended_value: 7
+        description: IMU 状态估计
+      - name: EKF2_RNG_CTRL
+        type: integer
+        recommended_value: 1
+        description: 测距传感器高度辅助融合控制:0代表禁用,1代表使能.
+      - name: EKF2_BARO_CTRL
+        type: integer
+        recommended_value: 0
+        description: 气压计高度融合控制:0表示禁用,1代表使能.
+      - name: EKF2_OF_CTRL
+        type: integer
+        recommended_value: 1
+        description: 光流辅助:0表示融合未启用,1表示使能.
+      - name: EKF2_OF_POS_X
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 X 轴方向相对飞机重心的位置，单位为米；正方向通常为机头前方。
+      - name: EKF2_OF_POS_Y
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 Y 轴方向相对飞机重心的位置，单位为米；正方向通常为机体右侧。
+      - name: EKF2_OF_POS_Z
+        type: real
+        recommended_value: 0.0
+        description: 光流传感器焦点在机体系 Z 轴方向相对飞机重心的位置，单位为米；正方向通常为机体下方。
+      - name: EKF2_GPS_CTRL
+        type: integer
+        recommended_value: 0
+        description: GPS融合控制,0表示禁用GPS融合,适合室内无GPS飞行。
+      - name: EKF2_RNG_A_HMAX
+        type: real
+        recommended_value: 5.0
+        description: 测距仪高度辅助允许的最大离地高度，单位为米。
+      - name: EKF2_RNG_A_VMAX
+        type: real
+        recommended_value: 1.0
+        description: 测距仪高度辅助允许的最大水平速度，单位为米每秒。
+      - name: EKF2_MAG_TYPE
+        type: integer
+        recommended_value: 5
+        description: 磁力计融合类型，5表示不使用磁力计；仅建议在外部视觉可靠提供偏航时使用，否则应改回自动模式。
+
+
+
+  - name: Multicopter Position Control
+    description: 位置控制相关参数
+    parameters:
+      - name: MPC_XY_VEL_MAX
+        type: real
+        recommended_value: 2.0
+        description: 最大水平速度,单位为米每秒:OFFBOARD速度或位置轨迹产生的速度会被该值限制,室内外部视觉场景建议先用保守值。
+      - name: MPC_VEL_MANUAL
+        type: real
+        recommended_value: 1.5
+        description: Position等手动位置模式下的最大水平速度,单位为米每秒；室内手飞建议使用保守值。
+      - name: MPC_XY_CRUISE
+        type: real
+        recommended_value: 1.5
+        description: 自动模式默认水平巡航速度，单位为米每秒；未单独指定速度的任务或自动飞行会参考该值。
+      - name: MPC_Z_VEL_MAX_UP
+        type: real
+        recommended_value: 1.0
+        description: 最大上升速度,单位为米每秒:OFFBOARD 垂直速度指令会被该值限制
+      - name: MPC_Z_VEL_MAX_DN
+        type: real
+        recommended_value: 0.8
+        description: 最大下降速度，单位为米每秒；数值过大可能导致降落或高度修正过程过激。
+      - name: MPC_Z_V_AUTO_UP
+        type: real
+        recommended_value: 1.0
+        description: 自动模式默认上升速度，单位为米每秒；自动起飞或任务爬升时会参考该值。
+      - name: MPC_ALT_MODE
+        type: integer
+        recommended_value: 2
+        description: 高度参考模式,2表示Terrain hold:静止或低速时优先使用测距仪保持对地高度，测距失效时回退到本地高度。
+      - name: MPC_TILTMAX_AIR
+        type: real
+        recommended_value: 20.0
+        description: 空中最大倾角，单位为度；限制速度或加速度控制模式下的最大机体倾斜角。
+      - name: MPC_TKO_SPEED
+        type: real
+        recommended_value: 1.0
+        description: 起飞爬升速度，单位为米每秒；外部视觉场景建议先使用较保守的起飞速度。
+      - name: MPC_LAND_SPEED
+        type: real
+        recommended_value: 0.6
+        description: 降落下降速度，单位为米每秒；影响自动降落阶段的下降速率。
+      - name: MPC_THR_HOVER
+        type: real
+        recommended_value: 0.35
+        description: 悬停所需归一化推力初值；用于悬停推力估计初始化，也会影响高度控制和落地检测。
+      - name: MPC_USE_HTE
+        type: integer
+        recommended_value: 1
+        description: 悬停推力估计开关,1表示启用估计:机型载荷变化明显时建议启用。
+      - name: MPC_THR_MIN
+        type: real
+        recommended_value: 0.12
+        description: 爬升率控制模式下的最小集体推力；过低可能导致横滚、俯仰、偏航控制力不足。
+      - name: MPC_THR_MAX
+        type: real
+        recommended_value: 1.0
+        description: 爬升率控制模式下的最大集体推力；室内测试大推重比机型时可按安全需要降低。
+      - name: MPC_THR_XY_MARG
+        type: real
+        recommended_value: 0.3
+        description: 为水平控制预留的推力余量；垂直推力接近饱和时保留部分推力给水平控制。
+      - name: MPC_POS_MODE
+        type: integer
+        recommended_value: 1
+        description: 位置控制模式；0=加速度模式，1代表平滑速度，2代表直接速度
+      - name: MPC_JERK_MAX
+        type: real
+        recommended_value: 4.0
+        description: 最大加加速度，控制轨迹平滑度，避免电机突变抖动。
+      - name: MPC_HOLD_DZ
+        type: real
+        recommended_value: 0.05
+        description: 摇杆死区，减少手动操作带来的位置扰动。
+
+  - name: Commander
+    description: OFFBOARD模式丢失如何处理的相关参数
+    parameters:
+      - name: COM_ARM_WO_GPS
+        type: integer
+        recommended_value: 1
+        description: GPS检查失败时允许解锁,仅警告,适合室内无GPS飞行。
+      - name: COM_OF_LOSS_T
+        type: real
+        recommended_value: 1.0
+        description: OFFBOARD模式控制指令丢失后的超时时间,单位为秒。
+      - name: COM_OBL_RC_ACT
+        type: integer
+        recommended_value: 4
+        description: OFFBOARD模式丢失且遥控器可用时的动作, 0 表示切到定点模式,4代表原地降落。
+      - name: COM_RC_OVERRIDE
+        type: integer
+        recommended_value: 2
+        description: 是否允许摇杆接管自动或 OFFBOARD 模式,0 = 禁用， 2 = 允许在OFFBOARD模式下接管。
+      - name: COM_RC_STICK_OV
+        type: real
+        recommended_value: 30.0
+        description: 摇杆接管阈值，单位为百分比；当摇杆输入超过该阈值且 COM_RC_OVERRIDE 允许时，会切回 Position 模式。
+      - name: COM_RCL_EXCEPT
+        type: integer
+        recommended_value: 4
+        description: 哪些飞行模式下忽略遥控器 (RC) 丢失，不触发 RC 丢失失控保护,4代表Offboard 免 RC 检查。
+      - name: COM_RC_LOSS_T
+        type: real
+        recommended_value: 0.5
+        description: 遥控器或 Joystick 控制输入丢失判定时间，单位为秒；超过该时间未收到新输入则认为链路丢失。
+    
+  - name: MAVLink
+    description: MAVLink 通信基础参数
+    parameters:
+      - name: MAV_1_FLOW_CTRL
+        type: integer
+        recommended_value: 2
+        description: 第1路 MAVLink 串口流控设置,0表示强制关闭,1表示强制开启,2表示自动检测。
+      - name: MAV_TYPE
+        type: integer
+        recommended_value: 2
+        description: MAVLink 机体类型,2表示四旋翼。
+      - name: MAV_COMP_ID
+        type: integer
+        recommended_value: 1
+        description: MAVLink 组件 ID,通常飞控为 1。
+      - name: MAV_HASH_CHK_EN
+        type: integer
+        recommended_value: 1
+        description: MAVLink 参数哈希检查.1表示启用。
+      - name: MAV_USEHILGPS
+        type: integer
+        recommended_value: 0
+        description: 非 HITL 模式下是否接受 HIL_GPS,0表示禁用。
+      - name: MAV_FWDEXTSP
+        type: integer
+        recommended_value: 1
+        description: 外部设定值转发开关,1表示启用。
+      - name: MAV_1_FORWARD
+        type: integer
+        recommended_value: 0
+        description: 第1路 MAVLink 消息转发开关,0表示禁用。
+      - name: MAV_1_RATE
+        type: integer
+        recommended_value: 0
+        description: 第1路 MAVLink 最大发送速率,0表示根据串口带宽自动设置。
+      - name: MAV_1_CONFIG
+        type: integer
+        recommended_value: 102
+        description: 第1路 MAVLink 实例绑定到 TELEM2 通信端口，用于光流模块。
+      - name: MAV_2_CONFIG
+        type: integer
+        recommended_value: 0
+        description: 第2路 MAVLink 实例端口配置,0表示禁用:保留给后续扩展传感器时再启用。
+      - name: MAV_1_MODE
+        type: integer
+        recommended_value: 0
+        description: 第1路 MAVLink 实例使用普通遥测数据流模式,0代表Normal,1代表Custom,2代表Onboard。
+  
+  - name: Serial Port
+    description: 串口配置参数
+    parameters:
+      - name: SER_TEL1_BAUD
+        type: integer
+        recommended_value: 57600
+        description: TELEM1 口波特率。 
+      - name: SER_TEL2_BAUD
+        type: integer
+        recommended_value: 115200
+        description: TELEM2串口波特率。
+  
+  - name: BAT
+    description: 电池参数
+    parameters:
+      - name: BAT1_N_CELLS
+        type: integer
+        recommended_value: 4
+        description: 电池类型,4代表4S电池。
+      - name: BAT1_V_CHARGED
+        type: real
+        recommended_value: 4.20
+        description: 电池电压,4.20代表充满时每片电芯电压。
+      - name: BAT1_V_EMPTY
+        type: real
+        recommended_value: 3.20
+        description: 电池电压,3.20代表没电时每片电芯电压。
+  
+  - name: Manual Control
+    description: 摇杆/手动控制相关参数
+    parameters:
+      - name: MAN_ARM_GESTURE
+        type: integer
+        recommended_value: 0
+        description: 摇杆解锁/上锁手势开关,0表示禁用。
+  
+  - name: RC Input
+    description: 遥控器输入协议参数
+    parameters:
+      - name: RC_INPUT_PROTO
+        type: integer
+        recommended_value: -1
+        description: RC输入协议,-1表示自动识别,2表示SBUS,6表示CRSF/ELRS。
+      - name: RC_MAP_ROLL
+        type: integer
+        recommended_value: 1
+        description: 横滚控制通道映射,1表示使用遥控器第1通道。
+
+      - name: RC_MAP_PITCH
+        type: integer
+        recommended_value: 2
+        description: 俯仰控制通道映射,2表示使用遥控器第2通道。
+
+      - name: RC_MAP_THROTTLE
+        type: integer
+        recommended_value: 3
+        description: 油门控制通道映射,3表示使用遥控器第3通道。
+
+      - name: RC_MAP_YAW
+        type: integer
+        recommended_value: 4
+        description: 偏航控制通道映射,4表示使用遥控器第4通道。
+
+      - name: RC_MAP_ARM_SW
+        type: integer
+        recommended_value: 5
+        description: 解锁开关通道映射,5表示使用遥控器第5通道。
+
+      - name: RC_MAP_FLTMODE
+        type: integer
+        recommended_value: 6
+        description: 飞行模式选择通道映射,6表示使用遥控器第6通道。
+
+      - name: RC_MAP_KILL_SW
+        type: integer
+        recommended_value: 8
+        description: 急停开关通道映射,8表示使用遥控器第8通道。
+  
+  
+  
+  - name: System    
+    description: 系统硬件检查参数
+    parameters:  
+      - name: SYS_HAS_MAG
+        type: integer
+        recommended_value: 0
+        description: 是否期望磁力计存在,0表示不要求磁力计。
+      - name: SYS_HAS_GPS
+        type: integer
+        recommended_value: 0
+        description: 声明系统是否需要GPS,0表示不要求GPS。
+      - name: SYS_HAS_BARO
+        type: integer
+        recommended_value: 1
+        description: 声明系统是否有气压计,1表示有气压计。
+      - name: SYS_HAS_NUM_DIST
+        type: integer
+        recommended_value: 1
+        description: 起飞前要求可用的测距传感器数量,1表示至少需要1个,可能会影响解锁检查，传感器没起成功时无法解锁。
+
+  - name: Failure Detector
+    description: 故障检测相关参数
+    parameters:
+      - name: CBRK_FLIGHTTERM
+        type: integer
+        recommended_value: 0
+        description: 飞行终止断路器,0表示启用Flight Termination；姿态故障等严重故障触发后可能直接停桨/上锁，实机测试需谨慎。
+
+      - name: FD_FAIL_P
+        type: integer
+        recommended_value: 45
+        description: 最大允许俯仰角，单位为度；超过后可触发姿态故障检测。
+
+      - name: FD_FAIL_P_TTRI
+        type: real
+        recommended_value: 0.3
+        description: 俯仰角故障需要持续的触发时间，单位为秒。
+
+      - name: FD_FAIL_R
+        type: integer
+        recommended_value: 45
+        description: 最大允许横滚角，单位为度；超过后可触发姿态故障检测。
+
+      - name: FD_FAIL_R_TTRI
+        type: real
+        recommended_value: 0.3
+        description: 横滚角故障需要持续的触发时间，单位为秒。
+
+
+  - name: Multicopter Rate Control
+    description: 多旋翼角速度控制相关参数
+    parameters:
+      - name: MC_BAT_SCALE_EN
+        type: integer
+        recommended_value: 0
+        description: 电池电压推力补偿开关,0表示关闭:启用后会根据电池电压下降放大推力和力矩设定能把推力和力矩设定值放大一点，让飞机在低电压时尽量保持接近满电时的控制手感,但是建议关闭。     
+
+  - name: SD Logging
+    description: Logging
+    parameters:
+      - name: SDLOG_PROFILE
+        type: integer
+        recommended_value: 145
+        description: 日志记录模式
