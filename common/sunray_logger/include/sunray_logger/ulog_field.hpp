@@ -21,11 +21,8 @@ inline std::string makeFormatString(const std::string& format_name, const std::v
     std::ostringstream stream;
     stream << format_name << ":";
 
-    for (std::size_t i = 0; i < fields.size(); ++i) {
-        if (i > 0) {
-            stream << ";";
-        }
-        stream << fields[i].type << " " << fields[i].name;
+    for (const auto& field : fields) {
+        stream << field.type << " " << field.name << ";";
     }
 
     return stream.str();

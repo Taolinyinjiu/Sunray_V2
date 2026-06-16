@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,15 @@ struct ControlCmdRecord {
         return "sunray_control_cmd";
     }
 
+    // serialize() 把当前 record 按 fields() 声明的顺序写成二进制 payload。
+    // 这里不要写字段名，只写字段值；字段名已经由 fields() 写入 ULog format。
+    void serialize(sunray_logger::BinaryWriter& writer) const {
+        writer.write(timestamp);
+        writer.writeArray(position_sp, 3);
+        writer.writeArray(velocity_sp, 3);
+        writer.write(yaw_sp);
+    }
+
     // fields() 描述 record 的二进制字段布局。
     // 字段顺序必须和 serialize() 中写入顺序完全一致，否则离线解析时字段会错位。
     static std::vector<sunray_logger::UlogField> fields() {
@@ -44,30 +54,39 @@ struct ControlCmdRecord {
         };
     }
 
-    // serialize() 把当前 record 按 fields() 声明的顺序写成二进制 payload。
-    // 这里不要写字段名，只写字段值；字段名已经由 fields() 写入 ULog format。
-    void serialize(sunray_logger::BinaryWriter& writer) const {
-        writer.write(timestamp);
-        writer.writeArray(position_sp, 3);
-        writer.writeArray(velocity_sp, 3);
-        writer.write(yaw_sp);
-    }
 };
 
 int main(int argc, char** argv) {
-    // ros::init 只初始化 ROS 客户端库。这个示例不创建 NodeHandle，也不连接 ROS master，
-    // 因此可以作为普通可执行文件运行，用于快速验证 ULog 写文件流程。
+    bool standalone_mode = false;
+    int log_path_arg_index = 1;
+    if (argc > 1 && std::string(argv[1]) == "--standalone") {
+        standalone_mode = true;
+        log_path_arg_index = 2;
+    }
+
+    // 初始化 ROS 节点。构建完成并 source devel/setup.bash 后，可以这样运行：
+    //   rosrun sunray_logger simple_ulog_logger_example _log_path:=/tmp/test.ulg
     ros::init(argc, argv, "simple_ulog_logger_example");
 
-    // standalone 场景下使用 ros::Time::now() 前需要显式初始化 ROS time。
-    // 如果你的模块本来就创建了 ros::NodeHandle，这一行通常不是必须的。
-    ros::Time::init();
+    // 正常模式下创建 NodeHandle，这个示例就是一个标准 ROS 节点；
+    // --standalone 模式只用于没有 ROS master 的环境中直接生成测试文件。
+    std::unique_ptr<ros::NodeHandle> nh;
+    std::unique_ptr<ros::NodeHandle> private_nh;
+    if (!standalone_mode) {
+        nh.reset(new ros::NodeHandle());
+        private_nh.reset(new ros::NodeHandle("~"));
+    } else {
+        ros::Time::init();
+    }
 
-    // 默认输出到 /tmp，也允许通过命令行第一个参数覆盖：
-    //   devel/lib/sunray_logger/simple_ulog_logger_example /tmp/test.ulg
+    // 默认输出到 /tmp。优先读取 ROS 私有参数 ~log_path；
+    // 如果没有通过 rosrun/roslaunch 传参，也允许使用命令行第一个普通参数覆盖。
     std::string log_path = "/tmp/sunray_logger_example.ulg";
-    if (argc > 1) {
-        log_path = argv[1];
+    if (private_nh) {
+        private_nh->param<std::string>("log_path", log_path, log_path);
+    }
+    if (argc > log_path_arg_index && std::string(argv[log_path_arg_index]).find("_log_path:=") != 0) {
+        log_path = argv[log_path_arg_index];
     }
 
     // UlogOptions 用于配置日志文件的公共信息和刷新策略。
@@ -89,6 +108,7 @@ int main(int argc, char** argv) {
     }
 
     // advertise<RecordT>() 会写入 RecordT 的 format 信息，并创建一个 typed topic handle。
+    // 为了兼容 pyulog/PlotJuggler，所有 format 会先写完，topic 订阅信息会在第一次 write() 前统一写入。
     // 第一次 write() 之后 ULog header 会结束，之后不能再 advertise 新 topic；
     // 所以所有需要记录的 topic 应在开始写数据前统一注册。
     const auto odom_topic = logger.advertise<sunray_logger::OdomRecord>("odom");
@@ -98,7 +118,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    for (int i = 0; i < 20; ++i) {
+    ros::Rate rate(100.0);
+    for (int i = 0; (standalone_mode || ros::ok()) && i < 20; ++i) {
         // 构造一段简单轨迹数据，模拟模块循环中每个周期的状态快照。
         const float t = static_cast<float>(i) * 0.05f;
 
@@ -140,7 +161,12 @@ int main(int argc, char** argv) {
         }
 
         // 模拟 100 Hz 左右的写入节奏。真实模块中通常在控制循环或 ROS callback 中写。
-        ros::Duration(0.01).sleep();
+        if (!standalone_mode) {
+            ros::spinOnce();
+            rate.sleep();
+        } else {
+            ros::Duration(0.01).sleep();
+        }
     }
 
     // 程序结束前主动 flush/close，确保数据落盘。

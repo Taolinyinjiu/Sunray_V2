@@ -293,7 +293,7 @@ modules:
     label: uav_control
     source_path: "uav_control/sunray_uav_control"
     build_path: "build/sunray_uav_control"
-    dependencies: [sunray_msgs, sunray_common]
+    dependencies: [sunray_msgs, sunray_common, sunray_logger]
   uav_control_tools:
     description: "无人机控制工具包，包含终端控制、控制面板和速度测试工具"
     label: uav_control

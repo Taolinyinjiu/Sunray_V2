@@ -68,7 +68,7 @@ geographic_msgs/GeoPoint desired_wgs84_pos # 经纬高
 
 # ---------- yaw mode ----------
 # ------------偏航角控制模式---------
-uint8 KEEP_YAW=0 # 保持当前的yaw角不变
+uint8 KEEP_YAW=0    # 保持当前的yaw角不变
 uint8 SET_YAW=1     # 控制yaw角
 uint8 SET_YAWRATE=2 # 控制yaw_rate
 uint8 yaw_mode

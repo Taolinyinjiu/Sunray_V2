@@ -57,6 +57,8 @@ public:
         next_msg_id_ = 0;
         format_names_.clear();
         topic_names_.clear();
+        pending_subscriptions_.clear();
+        subscriptions_written_ = false;
         return writer_.open(path, options, wallTimeNowToUs());
     }
 
@@ -102,10 +104,7 @@ public:
         }
 
         const uint16_t msg_id = next_msg_id_++;
-        if (!writer_.addLoggedMessage(msg_id, topic_name, format_name, multi_id)) {
-            ROS_ERROR("sunray_logger: failed to add topic '%s': %s", topic_name.c_str(), writer_.lastError().c_str());
-            return UlogTopic<RecordT>();
-        }
+        pending_subscriptions_.push_back({msg_id, topic_name, format_name, multi_id});
 
         topic_names_.insert(topic_name);
         return UlogTopic<RecordT>(msg_id, topic_name, format_name);
@@ -125,8 +124,8 @@ public:
             return false;
         }
 
-        if (!writer_.hasCompletedHeader() && !writer_.completeHeader()) {
-            ROS_ERROR("sunray_logger: failed to complete ULog header before writing '%s': %s", topic.name().c_str(),
+        if (!ensureSubscriptionsWritten()) {
+            ROS_ERROR("sunray_logger: failed to complete ULog subscriptions before writing '%s': %s", topic.name().c_str(),
                       writer_.lastError().c_str());
             return false;
         }
@@ -153,7 +152,7 @@ public:
         if (!writer_.isOpen()) {
             return false;
         }
-        if (!writer_.hasCompletedHeader() && !writer_.completeHeader()) {
+        if (!ensureSubscriptionsWritten()) {
             return false;
         }
         return writer_.writeTextMessage(log_level, timestamp_us, message);
@@ -164,10 +163,42 @@ public:
     }
 
 private:
+    struct PendingSubscription {
+        PendingSubscription(uint16_t id, const std::string& topic, const std::string& format, uint8_t multi)
+            : msg_id(id), topic_name(topic), format_name(format), multi_id(multi) {}
+
+        uint16_t msg_id = 0;
+        std::string topic_name;
+        std::string format_name;
+        uint8_t multi_id = 0;
+    };
+
+    bool ensureSubscriptionsWritten() {
+        if (subscriptions_written_) {
+            return true;
+        }
+
+        for (const auto& subscription : pending_subscriptions_) {
+            if (!writer_.addLoggedMessage(subscription.msg_id, subscription.topic_name, subscription.format_name,
+                                          subscription.multi_id)) {
+                return false;
+            }
+        }
+
+        if (!writer_.completeHeader()) {
+            return false;
+        }
+
+        subscriptions_written_ = true;
+        return true;
+    }
+
     UlogWriter writer_;
     uint16_t next_msg_id_ = 0;
     std::set<std::string> format_names_;
     std::set<std::string> topic_names_;
+    std::vector<PendingSubscription> pending_subscriptions_;
+    bool subscriptions_written_ = false;
 };
 
 }  // namespace sunray_logger

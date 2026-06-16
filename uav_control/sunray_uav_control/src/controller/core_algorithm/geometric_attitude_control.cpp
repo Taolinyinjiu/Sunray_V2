@@ -63,6 +63,7 @@ void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param
 
     last_debug_state_ = Geometric_AttitudeControl_DebugState_t{};
     accepted_hover_thrust_ = param_.hover_thrust_init;
+    last_selected_hover_anchor_ = param_.hover_thrust_init;
 }
 
 void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::Input_t& input) {
@@ -177,7 +178,8 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateControl(
     output.thrust = compose_thrust_command(bodyrate_cmd(3), thrust_policy);
     // 期望姿态由期望加速度方向 + 偏航角决定（主要用于可视化/调试）
     output.orientation = acc2quaternion(a_des, target_yaw);
-    update_debug_state(des_state, current_odom, a_des, output, Control_Type::Trajectory_);
+    update_debug_state(
+        des_state, current_odom, a_des, output, Control_Type::Trajectory_, thrust_policy);
     return output;
 }
 
@@ -226,7 +228,8 @@ Geometric_AttitudeControl_Output_t Geometric_AttitudeControl::calculateVelocityC
     debug_state.jerk = Eigen::Vector3d::Zero();
     debug_state.yaw = target_yaw;
     debug_state.yaw_rate = des_state.yaw_rate;
-    update_debug_state(debug_state, current_odom, a_des, output, Control_Type::Velocity_);
+    update_debug_state(
+        debug_state, current_odom, a_des, output, Control_Type::Velocity_, thrust_policy);
     return output;
 }
 
@@ -282,7 +285,8 @@ double Geometric_AttitudeControl::normalize_collective_acc(double collective_acc
 double Geometric_AttitudeControl::compose_thrust_command(
     double collective_acc,
     ThrustCommandPolicy thrust_policy) const {
-    return normalize_collective_acc(collective_acc, select_hover_anchor(thrust_policy));
+    last_selected_hover_anchor_ = select_hover_anchor(thrust_policy);
+    return normalize_collective_acc(collective_acc, last_selected_hover_anchor_);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -320,6 +324,12 @@ Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& 
                                        param_.vel_kp.asDiagonal() * vel_error +
                                        param_.vel_ki.asDiagonal() * integral_vel_;
     const bool saturated = a_fb_unsat.norm() > param_.max_acc;
+    debug_position_error_dot_ = pos_error_dot;
+    debug_velocity_error_dot_ = vel_error_dot;
+    debug_derivative_term_raw_ = d_term_raw;
+    debug_derivative_term_ = d_term;
+    debug_pid_feedback_acceleration_unsaturated_ = a_fb_unsat;
+    debug_pid_accel_saturated_ = saturated;
 
     // 条件积分 anti-windup：饱和时按轴判断，只允许"误差与积分异号"的方向继续积分
     // 即放电方向允许、充电方向冻结，避免饱和后的过冲与滞回。
@@ -355,11 +365,16 @@ Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& 
                            d_term +
                            param_.vel_kp.asDiagonal() * vel_error +
                            param_.vel_ki.asDiagonal() * integral_vel_;
+    debug_integral_term_ =
+        param_.pos_ki.asDiagonal() * integral_pos_ +
+        param_.vel_ki.asDiagonal() * integral_vel_;
 
     // 对输出加速度进行球形限幅，保持方向不变
     if (a_fb.norm() > param_.max_acc) {
         a_fb = (param_.max_acc / a_fb.norm()) * a_fb;
+        debug_pid_accel_saturated_ = true;
     }
+    debug_pid_feedback_acceleration_ = a_fb;
     return a_fb;
 }
 
@@ -511,10 +526,18 @@ void Geometric_AttitudeControl::update_debug_state(
     const control_common::UAVStateEstimate& current_odom,
     const Eigen::Vector3d& desired_acc,
     const Geometric_AttitudeControl_Output_t& output,
-    Control_Type control_type) {
+    Control_Type control_type,
+    ThrustCommandPolicy thrust_policy) {
     const Eigen::Quaterniond& q = current_odom.orientation;
     const double current_yaw =
         std::atan2(2.0 * (q.w() * q.z() + q.x() * q.y()), 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
+    double hover_thrust_estimate = accepted_hover_thrust_;
+    if (hover_thrust_estimator_) {
+        const double estimate = hover_thrust_estimator_->get_hover_thrust();
+        if (std::isfinite(estimate)) {
+            hover_thrust_estimate = estimate;
+        }
+    }
 
     last_debug_state_.valid = true;
     last_debug_state_.stamp = current_odom.timestamp.isZero() ? ros::Time::now() : current_odom.timestamp;
@@ -525,8 +548,29 @@ void Geometric_AttitudeControl::update_debug_state(
     last_debug_state_.velocity_error = des_state.velocity - current_odom.velocity;
     last_debug_state_.yaw_error = eigen_helper::wrap_angle(des_state.yaw - current_yaw);
     last_debug_state_.attitude_error = compute_attitude_error(current_odom.orientation, output.orientation);
+    last_debug_state_.current_dt = current_dt_;
+    last_debug_state_.integral_pos = integral_pos_;
+    last_debug_state_.integral_vel = integral_vel_;
+    last_debug_state_.last_pos_error = last_pos_error_;
+    last_debug_state_.last_vel_error = last_vel_error_;
+    last_debug_state_.position_error_dot = debug_position_error_dot_;
+    last_debug_state_.velocity_error_dot = debug_velocity_error_dot_;
+    last_debug_state_.derivative_term_raw = debug_derivative_term_raw_;
+    last_debug_state_.derivative_term = debug_derivative_term_;
+    last_debug_state_.integral_term = debug_integral_term_;
+    last_debug_state_.pid_feedback_acceleration_unsaturated =
+        debug_pid_feedback_acceleration_unsaturated_;
+    last_debug_state_.pid_feedback_acceleration = debug_pid_feedback_acceleration_;
+    last_debug_state_.pid_accel_saturated = debug_pid_accel_saturated_;
     last_debug_state_.desired_acceleration = desired_acc;
     last_debug_state_.desired_orientation = output.orientation;
     last_debug_state_.desired_bodyrates = output.bodyrates;
     last_debug_state_.desired_thrust = output.thrust;
+    last_debug_state_.thrust_policy = thrust_policy;
+    last_debug_state_.hover_thrust_estimate = hover_thrust_estimate;
+    last_debug_state_.accepted_hover_thrust = accepted_hover_thrust_;
+    last_debug_state_.selected_hover_anchor = last_selected_hover_anchor_;
+    last_debug_state_.fixed_anchor_override = fixed_anchor_override_;
+    last_debug_state_.fixed_anchor_active =
+        thrust_policy == ThrustCommandPolicy::UseFixedAnchor;
 }

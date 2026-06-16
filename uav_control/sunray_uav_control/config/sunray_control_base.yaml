@@ -305,6 +305,15 @@ geometric_controller_param:
   #   1: bodyrate + thrust，输出机体系角速度和归一化推力，默认推荐。
   control_type: 1
 
+  # 是否记录几何控制器内部 ULog。
+  # 默认关闭，打开后会同步写入本控制器的参数快照、期望输入、中间变量和 MAVROS attitude setpoint。
+  enable_ulog: true
+
+  # ULog 输出目录。enable_ulog=true 时生效。
+  # 相对路径会按 Sunray 仓库根目录解析，避免不同电脑上的绝对路径差异。
+  # 实际文件名由启动时间生成: YYYYMMDDHHMM.ulg。
+  ulog_path: "logs/sunray_uav_control/geometric_controller_debug"
+
   # 悬停推力估计器类型。
   #   0: RLS 最小二乘估计。
   #   1: EKF 加速度观测估计。
