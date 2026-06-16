@@ -18,8 +18,8 @@ common/sunray_msgs/
 │   ├── PlanningWaypoint.msg
 │   ├── Px4State.msg
 │   ├── SystemInfo.msg
-│   ├── UAVCommandExecutionStatus.msg
 │   ├── UAVControlCMD.msg
+│   ├── UAVControlCommandStatus.msg
 │   ├── UAVControlState.msg
 │   ├── UAVPlanningCMD.msg
 │   ├── UAVPlanningState.msg
@@ -46,7 +46,7 @@ common/sunray_msgs/
 | 基础类型 | `Vector2` | 二维向量，当前主要给 UAV 机体系 XY 位置/速度使用。 |
 | 定位状态 | `OdomState` | `localization_fusion` 对外发布定位源、里程计、TF 和健康状态。 |
 | PX4/MAVROS 状态 | `Px4State` | `sunray_uav_control` 汇总 MAVROS/PX4 状态、RC、GPS 和 setpoint 回显。 |
-| UAV 控制 | `UAVControlCMD`、`UAVControlState`、`UAVCommandExecutionStatus` | 无人机控制命令、控制器状态和命令执行状态。 |
+| UAV 控制 | `UAVControlCMD`、`UAVControlState`、`UAVControlCommandStatus` | 无人机控制命令、控制器状态和本地命令执行状态。 |
 | UGV 控制 | `UGVControlCMD`、`UGVControlState` | 无人车点位/速度控制命令和状态反馈。 |
 | 规划 | `PlanningWaypoint`、`UAVPlanningCMD`、`UAVPlanningState` | 规划模块目标点、规划命令和规划状态。 |
 | 集群 | `Formation`、`UAVSwarmCMD`、`UAVSwarmState`、`UGVSwarmCMD`、`UGVSwarmState` | 多智能体集群命令、队形参数和集群状态。 |
@@ -241,9 +241,7 @@ float32 y
 | `yaw_mode` | `uint8` | yaw 控制模式。 |
 | `desired_yaw` | `float32` | 目标 yaw，单位 rad。 |
 | `desired_yaw_rate` | `float32` | 目标 yaw rate，单位 rad/s。 |
-| `yunlink_session_id` | `uint64` | YunLink 会话 ID。 |
-| `yunlink_message_id` | `uint64` | YunLink 消息 ID。 |
-| `yunlink_correlation_id` | `uint64` | YunLink 关联 ID。 |
+| `tracking_token` | `uint64` | 协议无关的本地命令跟踪标识；由 bridge 或其他上游发布者生成，供本地控制链路和本地状态回传关联同一条命令。 |
 
 Yaw 模式：
 
@@ -252,6 +250,11 @@ Yaw 模式：
 | `KEEP_YAW` | `0` | 保持当前 yaw。 |
 | `SET_YAW` | `1` | 控制到指定 yaw。 |
 | `SET_YAWRATE` | `2` | 控制 yaw rate。 |
+
+补充说明：
+
+- `UAVControlCMD` 现在只保留本地控制语义，不再承载 YunLink 协议字段。
+- 如果上层需要携带 `session_id / message_id / correlation_id` 这类协议追踪信息，应改走 `common/yunlink_msgs` 中的 `CommandMeta.msg`。
 
 ### UAVControlState.msg
 
@@ -307,9 +310,23 @@ Yaw 模式：
 | `OUTPUT_POSITION_TARGET` | `1` | 发布 `mavros_msgs/PositionTarget`。 |
 | `OUTPUT_ATTITUDE_TARGET` | `2` | 发布 `mavros_msgs/AttitudeTarget`。 |
 
-### UAVCommandExecutionStatus.msg
+### UAVControlCommandStatus.msg
 
-用途：描述一条外部命令的执行生命周期，尤其适合地面站/YunLink 这类需要知道“命令是否被接受、是否执行中、是否成功”的上层系统。
+典型话题：
+
+```text
+/uav1/sunray/uav_control/command_status_local
+```
+
+发布者：`sunray_uav_control`。
+
+用途：描述本地控制链路里一条 UAV 控制命令的执行生命周期。它只表达控制侧事实，不携带 YunLink 会话、消息号、关联号等协议字段。
+
+边界说明：
+
+- `tracking_token` 是这条本地命令的身份标识，用来把 `UAVControlCMD` 和本地执行状态关联起来。
+- 如果需要对外发布协议侧兼容状态，应由 `yunlink_ros_bridge` 把本消息映射为 `yunlink_msgs/CommandExecutionStatus`，再发布到 `/uavX/yunlink/command_execution_status`。
+- `sunray_uav_control` 不应直接依赖 `yunlink_msgs` 或 YunLink runtime。
 
 命令类型：
 
@@ -337,21 +354,24 @@ Yaw 模式：
 
 字段说明：
 
-| 字段 | 说明 |
+| 字段 | 类型 | 说明 |
 | --- | --- |
-| `agent_name` / `agent_id` | 命令所属智能体。 |
-| `yunlink_session_id/message_id/correlation_id` | 上层链路追踪信息。 |
-| `command_kind` | 命令类型。 |
-| `execution_state` | 当前执行状态。 |
-| `progress_percent` | 进度百分比。 |
-| `active` | 是否仍在执行。 |
-| `terminal` | 是否已进入终态。 |
-| `success` | 是否成功。 |
-| `result_code` / `detail` | 结果码和详情文本。 |
-| `control_state` | 当前 UAV 控制状态。 |
-| `px4_landed_state` | PX4 起降状态。 |
-| `ready_for_takeoff` / `ready_for_land` | 是否满足起飞/降落条件。 |
-| `busy_reason` | 忙碌或拒绝原因。 |
+| `header` | `std_msgs/Header` | 状态时间戳。 |
+| `agent_name` / `agent_id` | `string` / `uint8` | 命令所属智能体。 |
+| `tracking_token` | `uint64` | 本地命令跟踪标识，和 `UAVControlCMD.tracking_token` 对应。 |
+| `command_kind` | `uint8` | 本地归一化命令类型。 |
+| `execution_state` | `uint8` | 当前执行状态。 |
+| `progress_percent` | `uint8` | 进度百分比。 |
+| `active` | `bool` | 是否仍在执行。 |
+| `terminal` | `bool` | 是否已进入终态。 |
+| `success` | `bool` | 是否成功。 |
+| `result_code` | `uint16` | 结果码，便于程序做细分判断。 |
+| `detail` | `string` | 详细文本说明。 |
+| `control_state` | `uint8` | 当前 UAV 控制状态。 |
+| `px4_landed_state` | `uint8` | PX4 起降状态。 |
+| `ready_for_takeoff` | `bool` | 当前是否满足起飞条件。 |
+| `ready_for_land` | `bool` | 当前是否满足降落条件。 |
+| `busy_reason` | `string` | 忙碌、拒绝或等待原因。 |
 
 ### UGVControlCMD.msg
 

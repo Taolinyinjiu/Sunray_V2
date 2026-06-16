@@ -101,28 +101,3 @@ yunlink::UavControlCmdSnapshot mapControlCmd(const sunray_msgs::UAVControlCMD& m
     out.desired_yaw_rate_radps = msg.desired_yaw_rate;
     return out;
 }
-
-yunlink::CommandExecutionStatusSnapshot
-mapCommandExecutionStatus(const sunray_msgs::UAVCommandExecutionStatus& msg) {
-    yunlink::CommandExecutionStatusSnapshot out{};
-    out.header = mapHeader(msg.header);
-    out.agent_name = msg.agent_name;
-    out.agent_id = msg.agent_id;
-    out.session_id = msg.yunlink_session_id;
-    out.command_message_id = msg.yunlink_message_id;
-    out.command_correlation_id = msg.yunlink_correlation_id;
-    out.command_kind = static_cast<yunlink::CommandKind>(msg.command_kind);
-    out.execution_state = msg.execution_state;
-    out.progress_percent = msg.progress_percent;
-    out.active = msg.active;
-    out.terminal = msg.terminal;
-    out.success = msg.success;
-    out.result_code = msg.result_code;
-    out.detail = msg.detail;
-    out.control_state = msg.control_state;
-    out.px4_landed_state = msg.px4_landed_state;
-    out.ready_for_takeoff = msg.ready_for_takeoff;
-    out.ready_for_land = msg.ready_for_land;
-    out.busy_reason = msg.busy_reason;
-    return out;
-}
