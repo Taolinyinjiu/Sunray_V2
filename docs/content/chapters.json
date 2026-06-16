@@ -195,6 +195,7 @@
       "tools/sunray_system.md",
       "tools/scripts_manage.md",
       "tools/px4_param_check.md",
+      "tools/sunray_flight_logger.md",
       "tools/build_scripts.md",
       "tools/code_intel.md"
     ],
@@ -205,6 +206,7 @@
       {"id": "tools-sunray-system", "title": "sunray_system"},
       {"id": "tools-scripts-manage", "title": "scripts_manage"},
       {"id": "tools-px4-param-check", "title": "px4_param_check"},
+      {"id": "tools-sunray-flight-logger", "title": "sunray_flight_logger"},
       {"id": "tools-build-scripts", "title": "build_scripts"},
       {"id": "tools-code-intel", "title": "code_intel"}
     ]

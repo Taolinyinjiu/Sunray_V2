@@ -1,0 +1,36 @@
+<launch>
+  <arg name="mavros_ns" default=""/>
+  <arg name="log_root" default="/fs/microsd/log"/>
+  <arg name="download_root" default=""/>
+  <arg name="log_extension_filter" default=".ulg"/>
+  <arg name="refresh_period_sec" default="10.0"/>
+  <arg name="max_scan_depth" default="6"/>
+  <arg name="auto_start_mavros" default="true"/>
+  <arg name="mavros_start_wait_sec" default="18.0"/>
+  <arg name="mavros_launch_package" default="sunray_mavros"/>
+  <arg name="mavros_launch_file" default="mavros.launch"/>
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="fcu_url" default="/dev/ttyACM0:921600"/>
+  <arg name="gcs_ip" default="0.0.0.0"/>
+
+  <node pkg="sunray_flight_logger"
+        type="sunray_flight_logger_tui"
+        name="sunray_flight_logger_tui"
+        output="screen">
+    <param name="mavros_ns" value="$(arg mavros_ns)"/>
+    <param name="log_root" value="$(arg log_root)"/>
+    <param name="download_root" value="$(arg download_root)"/>
+    <param name="log_extension_filter" value="$(arg log_extension_filter)"/>
+    <param name="refresh_period_sec" value="$(arg refresh_period_sec)"/>
+    <param name="max_scan_depth" value="$(arg max_scan_depth)"/>
+    <param name="auto_start_mavros" value="$(arg auto_start_mavros)"/>
+    <param name="mavros_start_wait_sec" value="$(arg mavros_start_wait_sec)"/>
+    <param name="mavros_launch_package" value="$(arg mavros_launch_package)"/>
+    <param name="mavros_launch_file" value="$(arg mavros_launch_file)"/>
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+    <param name="fcu_url" value="$(arg fcu_url)"/>
+    <param name="gcs_ip" value="$(arg gcs_ip)"/>
+  </node>
+</launch>

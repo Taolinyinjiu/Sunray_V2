@@ -25,6 +25,12 @@ modules:
     source_path: "common/sunray_common"
     build_path: "build/sunray_common"
     dependencies: []
+  sunray_logger:
+    description: "Sunray 结构化二进制时序日志库，提供 ULog 风格的数据记录能力"
+    label: common
+    source_path: "common/sunray_logger"
+    build_path: "build/sunray_logger"
+    dependencies: []
 
   # ----- communication: 对外通信、链路桥接和状态转发 -----
   yunlink_ros_bridge:
@@ -268,6 +274,12 @@ modules:
     source_path: "tools/scripts_manage"
     build_path: "build/scripts_manage"
     dependencies: [sunray_msgs]
+  sunray_flight_logger:
+    description: "Sunray 飞控日志管理工具，通过 MAVROS FTP 浏览、下载和清除 PX4 日志"
+    label: tools
+    source_path: "tools/sunray_flight_logger"
+    build_path: "build/sunray_flight_logger"
+    dependencies: [sunray_mavros]
 
   # ----- uav_control: 无人机控制核心、工具和接口示例 -----
   uav_control:

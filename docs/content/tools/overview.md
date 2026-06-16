@@ -13,6 +13,7 @@
 | `sunray_system` | 真机 feature supervisor，通过服务启动/停止功能组合。 |
 | `scripts_manage` | 终端 TUI，调用 `sunray_system` 服务管理 feature。 |
 | `px4_param_check` | PX4 参数检查和写入脚本。 |
+| `sunray_flight_logger` | 终端 TUI，通过 MAVROS FTP 浏览、下载和删除 PX4 飞行日志。 |
 | `build_scripts` | `build.sh` 背后的模块化构建脚本。 |
 | `code_intel` | 代码智能/编译数据库辅助脚本。 |
 
