@@ -1,0 +1,31 @@
+<launch>
+  <!-- agent_name：无人机名称前缀，例如 uav。 -->
+  <arg name="agent_name" default="uav" />
+  <!-- agent_id：无人机编号，例如 1，最终命名空间会拼成 /uav1。 -->
+  <arg name="agent_id" default="1" />
+  <!-- node_name：适配节点名称，默认带编号，方便多机同时启动。 -->
+  <arg name="node_name" default="$(eval 'Super2Sunray_' + str(int(arg('agent_id'))))" />
+  <!-- agent_prefix：当前无人机的命名空间前缀，例如 /uav1。 -->
+  <arg name="agent_prefix" default="$(eval '/' + arg('agent_name') + str(arg('agent_id')))" />
+  <!-- input_topic：SUPER 的位置指令输出。 -->
+  <arg name="input_topic" default="$(arg agent_prefix)/pos_cmd" />
+  <!-- output_topic：Sunray 控制器接收的统一控制命令输入。 -->
+  <arg name="output_topic" default="$(arg agent_prefix)/sunray/uav_control/control_cmd" />
+  <!-- queue_size：收发缓冲队列长度。 -->
+  <arg name="queue_size" default="50" />
+  <!-- use_yaw_rate：true 时按 yaw_rate 控制偏航；false 时按 yaw 角控制。 -->
+  <arg name="use_yaw_rate" default="false" />
+  <!-- ready_only：true 时只转发可执行轨迹，避免空轨迹或非法状态进入控制器。 -->
+  <arg name="ready_only" default="true" />
+
+  <node pkg="sunray_super_adapter"
+        type="Super2Sunray_node"
+        name="$(arg node_name)"
+        output="screen">
+    <param name="input_topic" value="$(arg input_topic)" />
+    <param name="output_topic" value="$(arg output_topic)" />
+    <param name="queue_size" value="$(arg queue_size)" />
+    <param name="use_yaw_rate" value="$(arg use_yaw_rate)" />
+    <param name="ready_only" value="$(arg ready_only)" />
+  </node>
+</launch>

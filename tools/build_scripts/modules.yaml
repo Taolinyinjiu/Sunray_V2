@@ -190,9 +190,24 @@ modules:
   super_planner:
     description: "SUPER/MARS Lab 第三方规划器示例包，当前仍处于适配阶段"
     label: planning
-    source_path: "planning/third_party_planner_examples/super_example/SUPER"
-    build_path: "build/SUPER"
+    source_path: "planning/third_party_planner_examples/super_planner_example/super_planner"
+    build_path: "build/super_planner"
+    dependencies: ["planner_msgs", "rog_map", "planner_tools", "sunray_super_adapter"]
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner", "sunray_ego_adapter", "sunray_fuel_adapter", "sunray_diff_adapter"]
+  sunray_super_adapter:
+    description: "SUPER planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/sunray_super_adapter"
+    build_path: "build/sunray_super_adapter"
+    dependencies: ["sunray_msgs", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_fuel_adapter", "sunray_diff_adapter", "ego_planner_swarm", "fuel_planner", "diff_planner"]
+  rog_map:
+    description: "SUPER 使用的 ROG-MAP 地图组件"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/rog_map"
+    build_path: "build/rog_map"
     dependencies: []
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner"]
 
   # ----- simulation: Gazebo、仿真插件和 Sunray 仿真入口 -----
   simulator_utils:

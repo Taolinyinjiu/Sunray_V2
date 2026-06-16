@@ -1,0 +1,51 @@
+<launch>
+  <!-- 与 EGO/FUEL/Diff 包装层保持一致的单机命名方式。 -->
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <!-- Sunray 提供的世界系里程计输入。VIO 入口通常表示 odom 来源是视觉惯性。 -->
+  <arg name="odom_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/localization/local_odom"/>
+  <!--
+    SUPER 当前 ROS1 版本不直接订阅 depth image。
+    因此即使是 VIO 入口，也仍然需要提供一个点云话题；如果你的相机只输出深度图，
+    需要先在外部转成点云并对齐到世界系，再把话题填到这里。
+  -->
+  <arg name="cloud_topic" default="/$(arg agent_name)$(arg agent_id)/global_points"/>
+  <arg name="position_cmd_topic" default="/$(arg agent_name)$(arg agent_id)/pos_cmd"/>
+  <arg name="poly_traj_topic" default="/$(arg agent_name)$(arg agent_id)/planning_cmd/poly_traj"/>
+  <arg name="goal_topic" default="/move_base_simple/goal"/>
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_super_adapter" default="true"/>
+  <arg name="control_cmd_topic" default="/$(arg agent_name)$(arg agent_id)/sunray/uav_control/control_cmd"/>
+  <arg name="use_yaw_rate" default="false"/>
+  <arg name="ready_only" default="true"/>
+  <arg name="config_path" default="$(find super_planner)/config/sunray_click_ros1.yaml"/>
+
+  <include file="$(find super_planner)/launch/include/advanced_param.xml">
+    <arg name="config_path" value="$(arg config_path)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg cloud_topic)"/>
+    <arg name="goal_topic" value="$(arg goal_topic)"/>
+    <arg name="position_cmd_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="poly_traj_topic" value="$(arg poly_traj_topic)"/>
+  </include>
+
+  <include if="$(arg enable_super_adapter)" file="$(find sunray_super_adapter)/launch/Super2Sunray.launch">
+    <arg name="agent_name" value="$(arg agent_name)"/>
+    <arg name="agent_id" value="$(arg agent_id)"/>
+    <arg name="input_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="output_topic" value="$(arg control_cmd_topic)"/>
+    <arg name="use_yaw_rate" value="$(arg use_yaw_rate)"/>
+    <arg name="ready_only" value="$(arg ready_only)"/>
+  </include>
+
+  <node if="$(arg enable_rviz)"
+        name="rviz"
+        pkg="rviz"
+        type="rviz"
+        args="-d $(find super_planner)/launch/rviz_config/single.rviz"
+        required="true">
+    <remap from="/cloud_registered" to="$(arg cloud_topic)"/>
+    <remap from="/lidar_slam/odom" to="$(arg odom_topic)"/>
+    <remap from="/move_base_simple/goal" to="$(arg goal_topic)"/>
+  </node>
+</launch>

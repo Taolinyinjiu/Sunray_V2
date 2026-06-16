@@ -15,6 +15,8 @@ add_message_files(
   DiffPositionCommand.msg
   EgoPositionCommand.msg
   FuelPositionCommand.msg
+  SuperPositionCommand.msg
+  SuperPolynomialTrajectory.msg
 )
 
 generate_messages(

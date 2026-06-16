@@ -1,0 +1,62 @@
+<launch>
+  <!-- Gazebo 单机仿真入口。 -->
+  <arg name="uav_id" default="1"/>
+  <!-- 机体系原始点云输入。 -->
+  <arg name="local_pointcloud_topic" default="/uav$(arg uav_id)/livox/lidar"/>
+  <!-- 转换到世界系后的点云输出。 -->
+  <arg name="global_pointcloud_topic" default="/uav$(arg uav_id)/global_points"/>
+  <!-- Gazebo 位姿输入。 -->
+  <arg name="odom_topic" default="/uav$(arg uav_id)/sunray/gazebo_pose"/>
+  <!-- SUPER 发布的位置控制指令。 -->
+  <arg name="position_cmd_topic" default="/uav$(arg uav_id)/pos_cmd"/>
+  <!-- SUPER 发布的多项式轨迹调试输出。 -->
+  <arg name="poly_traj_topic" default="/uav$(arg uav_id)/planning_cmd/poly_traj"/>
+  <!-- RViz 2D Nav Goal 目标输入。 -->
+  <arg name="goal_topic" default="/move_base_simple/goal"/>
+  <!-- 点云变换后的世界坐标系。 -->
+  <arg name="world_frame" default="world"/>
+  <arg name="enable_rviz" default="true"/>
+  <arg name="enable_super_adapter" default="true"/>
+  <arg name="control_cmd_topic" default="/uav$(arg uav_id)/sunray/uav_control/control_cmd"/>
+  <arg name="use_yaw_rate" default="false"/>
+  <arg name="ready_only" default="true"/>
+  <arg name="config_path" default="$(find super_planner)/config/sunray_click_ros1.yaml"/>
+
+  <!-- 将机体系点云结合 odom 转到世界系，供 SUPER/ROG-Map 直接使用。 -->
+  <include file="$(find planner_tools)/launch/point_cloud_transform.launch">
+    <arg name="input_point_topic" value="$(arg local_pointcloud_topic)"/>
+    <arg name="output_point_topic" value="$(arg global_pointcloud_topic)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="frame_id" value="$(arg world_frame)"/>
+    <arg name="child_frame_id" value="uav$(arg uav_id)/base_link"/>
+  </include>
+
+  <include file="$(find super_planner)/launch/include/advanced_param.xml">
+    <arg name="config_path" value="$(arg config_path)"/>
+    <arg name="odom_topic" value="$(arg odom_topic)"/>
+    <arg name="cloud_topic" value="$(arg global_pointcloud_topic)"/>
+    <arg name="goal_topic" value="$(arg goal_topic)"/>
+    <arg name="position_cmd_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="poly_traj_topic" value="$(arg poly_traj_topic)"/>
+  </include>
+
+  <include if="$(arg enable_super_adapter)" file="$(find sunray_super_adapter)/launch/Super2Sunray.launch">
+    <arg name="agent_name" value="uav"/>
+    <arg name="agent_id" value="$(arg uav_id)"/>
+    <arg name="input_topic" value="$(arg position_cmd_topic)"/>
+    <arg name="output_topic" value="$(arg control_cmd_topic)"/>
+    <arg name="use_yaw_rate" value="$(arg use_yaw_rate)"/>
+    <arg name="ready_only" value="$(arg ready_only)"/>
+  </include>
+
+  <node if="$(arg enable_rviz)"
+        name="rviz"
+        pkg="rviz"
+        type="rviz"
+        args="-d $(find super_planner)/launch/rviz_config/single.rviz"
+        required="true">
+    <remap from="/cloud_registered" to="$(arg global_pointcloud_topic)"/>
+    <remap from="/lidar_slam/odom" to="$(arg odom_topic)"/>
+    <remap from="/move_base_simple/goal" to="$(arg goal_topic)"/>
+  </node>
+</launch>
