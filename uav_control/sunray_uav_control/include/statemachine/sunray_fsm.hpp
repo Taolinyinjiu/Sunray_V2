@@ -8,12 +8,12 @@
 #pragma once
 
 #include <ros/node_handle.h>
-#include <sunray_msgs/UAVControlState.h>
-#include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlCommandStatus.h>
 #include "sunray_fsm_param.hpp"
 #include "sunray_state_types.hpp"
+#include "sunray_msgs/UAVControlCMD.h"
+#include "sunray_msgs/UAVCommandExecutionStatus.h"
 #include "sunray_msgs/OdomState.h"
+#include "sunray_msgs/UAVControlState.h"
 #include <nav_msgs/Odometry.h>
 #include "controller/controller_interface.hpp"
 #include "control_data_types/uav_control_cmd_types.hpp"
@@ -25,15 +25,6 @@
 #include <string>
 
 namespace control_common {
-
-enum class CommandKind : uint8_t {
-    Unknown = 0,
-    Takeoff = 1,
-    Land = 2,
-    Return = 3,
-    Goto = 4,
-    VelocitySetpoint = 5,
-};
 
 enum class CommandExecutionState : uint8_t {
     Idle = 0,
@@ -47,8 +38,10 @@ enum class CommandExecutionState : uint8_t {
 };
 
 struct CommandExecutionStatus {
-    CommandTrackingMeta command_meta;
-    CommandKind command_kind{CommandKind::Unknown};
+    uint64_t yunlink_session_id{0};
+    uint64_t yunlink_message_id{0};
+    uint64_t yunlink_correlation_id{0};
+    uint8_t command_kind{sunray_msgs::UAVCommandExecutionStatus::COMMAND_UNKNOWN};
     CommandExecutionState execution_state{CommandExecutionState::Idle};
     uint8_t progress_percent{0};
     bool active{false};
@@ -134,8 +127,7 @@ class Sunray_FSM {
     double effective_land_max_velocity(const control_common::UavControlCmd& cmd) const;
     bool should_track_command(control_common::UavControlCmd::ControlCmd cmd) const;
     bool is_command_request_event(sunray_fsm::SunrayEvent event) const;
-    control_common::CommandKind
-    command_kind_from_control_cmd(control_common::UavControlCmd::ControlCmd cmd) const;
+    uint8_t command_kind_from_control_cmd(control_common::UavControlCmd::ControlCmd cmd) const;
     uint8_t current_px4_landed_state() const;
     void update_command_readiness_locked(sunray_fsm::SunrayState current_state,
                                          control_common::CommandExecutionStatus* status) const;
@@ -190,7 +182,7 @@ class Sunray_FSM {
     ros::Subscriber system_check_sub_;
     // ROS话题发布者
     ros::Publisher sunray_fsm_state_pub_;
-    ros::Publisher local_command_status_pub_;
+    ros::Publisher command_execution_status_pub_;
     ros::Publisher sunray_odom_debug_pub_;
     // 控制器指针
     std::shared_ptr<Controller_Interface> sunray_controller_;  // 全局唯一的控制器实例

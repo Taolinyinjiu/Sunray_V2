@@ -5,10 +5,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <deque>
-#include <unordered_map>
 #include <string>
 #include <thread>
-#include <atomic>
 
 #include <diagnostic_msgs/DiagnosticArray.h>
 #include <nav_msgs/Odometry.h>
@@ -20,24 +18,21 @@
 #include <sunray_msgs/StartFeature.h>
 #include <sunray_msgs/StopFeature.h>
 #include <sunray_msgs/UAVControlCMD.h>
-#include <sunray_msgs/UAVControlCommandStatus.h>
+#include <sunray_msgs/UAVCommandExecutionStatus.h>
 #include <sunray_msgs/UAVControlState.h>
-#include <yunlink_msgs/CommandExecutionStatus.h>
-#include <yunlink_msgs/CommandMeta.h>
 #include <yunlink/runtime/runtime.hpp>
 
 #include "discovery/bridge_endpoint_discovery.hpp"
 
 struct BridgeParams {
-    std::string local_odom_topic;
-    std::string odom_state_topic;
-    std::string control_state_topic;
-    std::string local_command_status_topic;
-    std::string canonical_command_execution_status_topic;
-    std::string control_cmd_topic;
-    std::string px4_state_topic;
+    std::string local_odom_topic{"/uav1/sunray/localization/local_odom"};
+    std::string odom_state_topic{"/uav1/sunray/localization/odom_state"};
+    std::string control_state_topic{"/uav1/sunray/uav_control/control_state"};
+    std::string command_execution_status_topic{"/uav1/sunray/uav_control/command_execution_status"};
+    std::string control_cmd_topic{"/uav1/sunray/uav_control/control_cmd"};
+    std::string px4_state_topic{"/uav1/sunray/px4_state"};
     std::string external_odom_topic;
-    std::string global_odom_topic;
+    std::string global_odom_topic{"/uav1/sunray/localization/global_odom"};
     bool enable_system_services{true};
     bool enable_runtime_diagnostics{true};
     std::string sunray_system_ns{"/sunray_system"};
@@ -54,13 +49,11 @@ struct BridgeParams {
     int udp_target_port{9898};
     int tcp_listen_port{9696};
     int agent_id{1};
-    bool enable_auto_agent_id{true};
     bool enable_endpoint_discovery{true};
     int discovery_port{9966};
     std::string discovery_target_ip{"255.255.255.255"};
     int discovery_period_ms{1000};
     std::string endpoint_name_prefix{"yundrone_uav"};
-    std::string agent_id_file;
     std::string endpoint_id_file;
 };
 
@@ -73,7 +66,7 @@ class YunlinkRosBridgeNode {
     void onOdomState(const sunray_msgs::OdomState::ConstPtr& msg);
     void onControlCmd(const sunray_msgs::UAVControlCMD::ConstPtr& msg);
     void onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg);
-    void onLocalCommandExecutionStatus(const sunray_msgs::UAVControlCommandStatus::ConstPtr& msg);
+    void onCommandExecutionStatus(const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg);
     void onPx4State(const sunray_msgs::Px4State::ConstPtr& msg);
     void onExternalOdomDiagnostic(const nav_msgs::Odometry::ConstPtr& msg);
     void onGlobalOdomDiagnostic(const nav_msgs::Odometry::ConstPtr& msg);
@@ -179,11 +172,13 @@ class YunlinkRosBridgeNode {
     bool ensurePeerReady();
     yunlink::TargetSelector targetSelector() const;
     float latestPx4Height(bool* has_height = nullptr) const;
+    sunray_msgs::UAVControlCMD makeBaseControlCmd(uint8_t control_cmd) const;
     void publishControlCmd(const char* name,
                            const sunray_msgs::UAVControlCMD& cmd,
-                           const yunlink_msgs::CommandMeta& meta,
+                           uint64_t session_id,
+                           uint64_t correlation_id,
+                           uint64_t message_id,
                            const std::string& detail = std::string());
-    void publishCommandExecutionStatus(const yunlink_msgs::CommandExecutionStatus& msg);
     void recordRosToYunlinkEvent(TopicDiagnosticRuntime* runtime,
                                  const ros::Time& receive_time,
                                  const std::string& detail = std::string(),
@@ -230,12 +225,11 @@ class YunlinkRosBridgeNode {
     ros::Subscriber odom_state_sub_;
     ros::Subscriber control_cmd_sub_;
     ros::Subscriber control_state_sub_;
-    ros::Subscriber local_command_status_sub_;
+    ros::Subscriber command_execution_status_sub_;
     ros::Subscriber px4_state_sub_;
     ros::Subscriber external_odom_diag_sub_;
     ros::Subscriber global_odom_diag_sub_;
     ros::Publisher control_cmd_pub_;
-    ros::Publisher canonical_command_execution_status_pub_;
     ros::Publisher monitor_diagnostic_pub_;
     ros::Timer reconnect_timer_;
     ros::Timer diagnostic_timer_;
@@ -259,9 +253,6 @@ class YunlinkRosBridgeNode {
     size_t feature_stop_request_sub_token_{0};
     uint64_t session_id_{0};
     bool peer_ready_{false};
-    std::atomic<uint64_t> next_tracking_token_{1};
-    mutable std::mutex command_meta_mu_;
-    std::unordered_map<uint64_t, yunlink_msgs::CommandMeta> command_meta_by_token_;
     mutable std::mutex px4_state_mu_;
     mutable std::mutex diag_mu_;
     mutable std::mutex system_service_mu_;

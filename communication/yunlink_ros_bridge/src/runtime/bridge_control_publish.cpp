@@ -1,7 +1,5 @@
 #include "bridge_node.hpp"
 
-#include "bridge_mapping.hpp"
-
 float YunlinkRosBridgeNode::latestPx4Height(bool* has_height) const {
     std::lock_guard<std::mutex> lock(px4_state_mu_);
     if (has_height != nullptr) {
@@ -10,27 +8,31 @@ float YunlinkRosBridgeNode::latestPx4Height(bool* has_height) const {
     return latest_px4_height_m_;
 }
 
+sunray_msgs::UAVControlCMD YunlinkRosBridgeNode::makeBaseControlCmd(uint8_t control_cmd) const {
+    sunray_msgs::UAVControlCMD cmd;
+    cmd.header.stamp = ros::Time::now();
+    cmd.cmd_source = sunray_msgs::UAVControlCMD::SUNRAY_STATION;
+    cmd.control_cmd = control_cmd;
+    return cmd;
+}
+
 void YunlinkRosBridgeNode::publishControlCmd(const char* name,
                                              const sunray_msgs::UAVControlCMD& cmd,
-                                             const yunlink_msgs::CommandMeta& meta,
+                                             uint64_t session_id,
+                                             uint64_t correlation_id,
+                                             uint64_t message_id,
                                              const std::string& detail) {
-    uint64_t tracking_token = cmd.tracking_token;
-    if (tracking_token == 0) {
-        tracking_token = next_tracking_token_.fetch_add(1, std::memory_order_relaxed);
-    }
-    {
-        std::lock_guard<std::mutex> lock(command_meta_mu_);
-        command_meta_by_token_[tracking_token] = meta;
-    }
-    const sunray_msgs::UAVControlCMD routed_cmd = applyTrackingToken(cmd, tracking_token);
+    sunray_msgs::UAVControlCMD routed_cmd = cmd;
+    routed_cmd.yunlink_session_id = session_id;
+    routed_cmd.yunlink_message_id = message_id;
+    routed_cmd.yunlink_correlation_id = correlation_id;
     control_cmd_pub_.publish(routed_cmd);
     recordYunlinkToRosEvent(name, detail);
 
     std::string line = std::string("yunlink_ros_bridge forwarded ") + name + " to " +
-                       params_.control_cmd_topic + " session_id=" + std::to_string(meta.session_id) +
-                       " correlation_id=" + std::to_string(meta.correlation_id) + " msg_id=" +
-                       std::to_string(meta.message_id) + " tracking_token=" +
-                       std::to_string(routed_cmd.tracking_token);
+                       params_.control_cmd_topic + " session_id=" + std::to_string(session_id) +
+                       " correlation_id=" + std::to_string(correlation_id) + " msg_id=" +
+                       std::to_string(message_id);
     if (!detail.empty()) {
         line += " " + detail;
     }

@@ -13,11 +13,6 @@ class BridgeEndpointDiscovery {
     BridgeEndpointDiscovery();
     ~BridgeEndpointDiscovery();
 
-    static bool resolve_agent_id(bool enable_auto_agent_id,
-                                 int configured_agent_id,
-                                 const std::string& path,
-                                 uint32_t* resolved_agent_id,
-                                 std::string* error = nullptr);
     bool configure(const BridgeParams& params, std::string* error = nullptr);
     void stop();
     bool enabled() const;
@@ -29,23 +24,8 @@ class BridgeEndpointDiscovery {
     static bool load_or_create_endpoint_id(const std::string& path,
                                            std::string* endpoint_id,
                                            std::string* error);
-    static bool load_or_create_agent_id(bool enable_auto_agent_id,
-                                        int configured_agent_id,
-                                        const std::string& path,
-                                        uint32_t* resolved_agent_id,
-                                        std::string* error);
-    static bool allocate_next_agent_id(const std::string& path,
-                                       uint32_t* agent_id,
-                                       std::string* error);
-    static std::string next_agent_id_path(const std::string& path);
     static std::string generate_endpoint_id();
     static bool ensure_parent_directory(const std::string& path, std::string* error);
-    static bool read_agent_id_file(const std::string& path,
-                                   uint32_t* agent_id,
-                                   std::string* error);
-    static bool write_agent_id_file(const std::string& path,
-                                    uint32_t agent_id,
-                                    std::string* error);
     static bool read_endpoint_id_file(const std::string& path,
                                       std::string* endpoint_id,
                                       std::string* error);

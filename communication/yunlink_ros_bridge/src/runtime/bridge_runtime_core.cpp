@@ -3,30 +3,6 @@
 #include <algorithm>
 #include <cstdlib>
 
-namespace {
-
-void apply_default_topics(BridgeParams* params) {
-    if (params == nullptr) {
-        return;
-    }
-    const std::string prefix = "/uav" + std::to_string(std::max(params->agent_id, 0)) + "/sunray";
-    if (params->local_odom_topic.empty()) params->local_odom_topic = prefix + "/localization/local_odom";
-    if (params->odom_state_topic.empty()) params->odom_state_topic = prefix + "/localization/odom_state";
-    if (params->global_odom_topic.empty()) params->global_odom_topic = prefix + "/localization/global_odom";
-    if (params->control_state_topic.empty()) params->control_state_topic = prefix + "/uav_control/control_state";
-    if (params->local_command_status_topic.empty()) {
-        params->local_command_status_topic = prefix + "/uav_control/command_status_local";
-    }
-    if (params->canonical_command_execution_status_topic.empty()) {
-        params->canonical_command_execution_status_topic =
-            "/uav" + std::to_string(std::max(params->agent_id, 0)) + "/yunlink/command_execution_status";
-    }
-    if (params->control_cmd_topic.empty()) params->control_cmd_topic = prefix + "/uav_control/control_cmd";
-    if (params->px4_state_topic.empty()) params->px4_state_topic = prefix + "/px4_state";
-}
-
-}  // namespace
-
 YunlinkRosBridgeNode::YunlinkRosBridgeNode() : nh_(), pnh_("~") {
     loadParams();
     setupDiagnosticState();
@@ -55,12 +31,9 @@ void YunlinkRosBridgeNode::loadParams() {
     pnh_.param<std::string>("control_state_topic",
                             params_.control_state_topic,
                             params_.control_state_topic);
-    pnh_.param<std::string>("local_command_status_topic",
-                            params_.local_command_status_topic,
-                            params_.local_command_status_topic);
-    pnh_.param<std::string>("canonical_command_execution_status_topic",
-                            params_.canonical_command_execution_status_topic,
-                            params_.canonical_command_execution_status_topic);
+    pnh_.param<std::string>("command_execution_status_topic",
+                            params_.command_execution_status_topic,
+                            params_.command_execution_status_topic);
     pnh_.param<std::string>("control_cmd_topic",
                             params_.control_cmd_topic,
                             params_.control_cmd_topic);
@@ -75,9 +48,15 @@ void YunlinkRosBridgeNode::loadParams() {
                      params_.enable_runtime_diagnostics,
                      params_.enable_runtime_diagnostics);
     pnh_.param<std::string>("sunray_system_ns", params_.sunray_system_ns, params_.sunray_system_ns);
-    pnh_.param<double>("system_service_timeout_sec", params_.system_service_timeout_sec, params_.system_service_timeout_sec);
-    pnh_.param<double>("diagnostic_publish_rate_hz", params_.diagnostic_publish_rate_hz, params_.diagnostic_publish_rate_hz);
-    pnh_.param<int>("diagnostic_stale_timeout_ms", params_.diagnostic_stale_timeout_ms, params_.diagnostic_stale_timeout_ms);
+    pnh_.param<double>("system_service_timeout_sec",
+                       params_.system_service_timeout_sec,
+                       params_.system_service_timeout_sec);
+    pnh_.param<double>("diagnostic_publish_rate_hz",
+                       params_.diagnostic_publish_rate_hz,
+                       params_.diagnostic_publish_rate_hz);
+    pnh_.param<int>("diagnostic_stale_timeout_ms",
+                    params_.diagnostic_stale_timeout_ms,
+                    params_.diagnostic_stale_timeout_ms);
     pnh_.param<std::string>("monitor_diagnostic_topic",
                             params_.monitor_diagnostic_topic,
                             params_.monitor_diagnostic_topic);
@@ -89,9 +68,6 @@ void YunlinkRosBridgeNode::loadParams() {
     pnh_.param<int>("udp_bind_port", params_.udp_bind_port, params_.udp_bind_port);
     pnh_.param<int>("udp_target_port", params_.udp_target_port, params_.udp_target_port);
     pnh_.param<int>("tcp_listen_port", params_.tcp_listen_port, params_.tcp_listen_port);
-    pnh_.param<bool>("enable_auto_agent_id",
-                     params_.enable_auto_agent_id,
-                     params_.enable_auto_agent_id);
     pnh_.param<int>("agent_id", params_.agent_id, params_.agent_id);
     pnh_.param<std::string>("shared_secret", params_.shared_secret, params_.shared_secret);
     pnh_.param<std::string>("node_name", params_.node_name, params_.node_name);
@@ -109,30 +85,13 @@ void YunlinkRosBridgeNode::loadParams() {
                             params_.endpoint_name_prefix,
                             params_.endpoint_name_prefix);
     const char* home_env = std::getenv("HOME");
-    const std::string default_agent_id_file =
-        home_env != nullptr ? std::string(home_env) + "/.config/yunlink_ros_bridge/agent_id"
-                            : std::string("agent_id");
     const std::string default_endpoint_id_file =
         home_env != nullptr ? std::string(home_env) + "/.config/yunlink_ros_bridge/endpoint_id"
                             : std::string("endpoint_id");
-    params_.agent_id_file = default_agent_id_file;
-    pnh_.param<std::string>("agent_id_file", params_.agent_id_file, params_.agent_id_file);
     params_.endpoint_id_file = default_endpoint_id_file;
-    pnh_.param<std::string>("endpoint_id_file", params_.endpoint_id_file, params_.endpoint_id_file);
-
-    uint32_t resolved_agent_id = 0;
-    std::string agent_error;
-    if (!BridgeEndpointDiscovery::resolve_agent_id(params_.enable_auto_agent_id,
-                                                   params_.agent_id,
-                                                   params_.agent_id_file,
-                                                   &resolved_agent_id,
-                                                   &agent_error)) {
-        ROS_FATAL("yunlink_ros_bridge resolve agent_id failed: %s", agent_error.c_str());
-        ros::shutdown();
-        return;
-    }
-    params_.agent_id = static_cast<int>(resolved_agent_id);
-    apply_default_topics(&params_);
+    pnh_.param<std::string>("endpoint_id_file",
+                            params_.endpoint_id_file,
+                            params_.endpoint_id_file);
 }
 
 void YunlinkRosBridgeNode::startRuntime() {
@@ -165,9 +124,6 @@ void YunlinkRosBridgeNode::startRuntime() {
 
 void YunlinkRosBridgeNode::setupSubscribers() {
     control_cmd_pub_ = nh_.advertise<sunray_msgs::UAVControlCMD>(params_.control_cmd_topic, 20);
-    canonical_command_execution_status_pub_ =
-        nh_.advertise<yunlink_msgs::CommandExecutionStatus>(
-            params_.canonical_command_execution_status_topic, 10);
     monitor_diagnostic_pub_ =
         nh_.advertise<diagnostic_msgs::DiagnosticArray>(params_.monitor_diagnostic_topic, 1, true);
     ros::TransportHints latest_hints;
@@ -180,11 +136,11 @@ void YunlinkRosBridgeNode::setupSubscribers() {
         nh_.subscribe(params_.control_cmd_topic, 1, &YunlinkRosBridgeNode::onControlCmd, this, latest_hints);
     control_state_sub_ =
         nh_.subscribe(params_.control_state_topic, 1, &YunlinkRosBridgeNode::onControlState, this, latest_hints);
-    local_command_status_sub_ = nh_.subscribe(params_.local_command_status_topic,
-                                              1,
-                                              &YunlinkRosBridgeNode::onLocalCommandExecutionStatus,
-                                              this,
-                                              latest_hints);
+    command_execution_status_sub_ = nh_.subscribe(params_.command_execution_status_topic,
+                                                  1,
+                                                  &YunlinkRosBridgeNode::onCommandExecutionStatus,
+                                                  this,
+                                                  latest_hints);
     px4_state_sub_ =
         nh_.subscribe(params_.px4_state_topic, 1, &YunlinkRosBridgeNode::onPx4State, this, latest_hints);
     if (params_.enable_runtime_diagnostics && !params_.external_odom_topic.empty()) {
@@ -250,10 +206,8 @@ void YunlinkRosBridgeNode::setupSubscribers() {
     ROS_INFO("yunlink_ros_bridge subscribe odom_state: %s", params_.odom_state_topic.c_str());
     ROS_INFO("yunlink_ros_bridge subscribe control_cmd: %s", params_.control_cmd_topic.c_str());
     ROS_INFO("yunlink_ros_bridge subscribe control_state: %s", params_.control_state_topic.c_str());
-    ROS_INFO("yunlink_ros_bridge subscribe local_command_status: %s",
-             params_.local_command_status_topic.c_str());
-    ROS_INFO("yunlink_ros_bridge advertise canonical_command_execution_status: %s",
-             params_.canonical_command_execution_status_topic.c_str());
+    ROS_INFO("yunlink_ros_bridge subscribe command_execution_status: %s",
+             params_.command_execution_status_topic.c_str());
     ROS_INFO("yunlink_ros_bridge subscribe px4_state: %s", params_.px4_state_topic.c_str());
     if (params_.enable_runtime_diagnostics) {
         ROS_INFO("yunlink_ros_bridge diagnostic external_odom: %s",

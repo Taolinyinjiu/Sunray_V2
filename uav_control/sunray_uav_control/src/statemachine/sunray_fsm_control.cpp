@@ -100,7 +100,8 @@ void Sunray_FSM::update_controller_output() {
             {
                 std::lock_guard<std::mutex> lk(command_status_mutex_);
                 if (command_status_.active &&
-                    command_status_.command_kind == control_common::CommandKind::Return) {
+                    command_status_.command_kind ==
+                        sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN) {
                     mark_command_terminal_locked(true,
                                                  control_common::CommandExecutionState::Succeeded,
                                                  0,
@@ -275,9 +276,9 @@ bool Sunray_FSM::resolve_takeoff_command_params(const control_common::UavControl
     const bool is_takeoff_cmd =
         cmd.control_cmd == control_common::UavControlCmd::ControlCmd::TAKEOFF;
 
-    if (is_takeoff_cmd && std::isfinite(cmd.takeoff.relative_height) &&
-        cmd.takeoff.relative_height > 0.0) {
-        resolved_height = cmd.takeoff.relative_height;
+    if (is_takeoff_cmd && std::isfinite(cmd.takeoff_relative_height) &&
+        cmd.takeoff_relative_height > 0.0) {
+        resolved_height = cmd.takeoff_relative_height;
     }
     if (!std::isfinite(resolved_height) || resolved_height <= 0.0) {
         set_reject_reason("takeoff_relative_height must be finite and > 0");
@@ -297,9 +298,9 @@ bool Sunray_FSM::resolve_takeoff_command_params(const control_common::UavControl
     }
 
     if (cmd.control_cmd == control_common::UavControlCmd::ControlCmd::TAKEOFF &&
-        std::isfinite(cmd.takeoff.max_velocity) &&
-        cmd.takeoff.max_velocity > 0.0) {
-        resolved_velocity = cmd.takeoff.max_velocity;
+        std::isfinite(cmd.takeoff_max_velocity) &&
+        cmd.takeoff_max_velocity > 0.0) {
+        resolved_velocity = cmd.takeoff_max_velocity;
     }
     if (!std::isfinite(resolved_velocity) || resolved_velocity <= 0.0) {
         set_reject_reason("takeoff_max_velocity must be finite and > 0");
@@ -325,9 +326,9 @@ bool Sunray_FSM::resolve_takeoff_command_params(const control_common::UavControl
 double Sunray_FSM::effective_land_max_velocity(
     const control_common::UavControlCmd& cmd) const {
     if (cmd.control_cmd == control_common::UavControlCmd::ControlCmd::LAND &&
-        std::isfinite(cmd.land.max_velocity) &&
-        cmd.land.max_velocity > 0.0) {
-        return cmd.land.max_velocity;
+        std::isfinite(cmd.land_max_velocity) &&
+        cmd.land_max_velocity > 0.0) {
+        return cmd.land_max_velocity;
     }
     return fsm_config_.takeoff_land_param.land_max_velocity;
 }

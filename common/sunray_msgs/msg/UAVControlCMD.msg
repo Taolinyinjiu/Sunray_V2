@@ -78,5 +78,6 @@ float32 desired_yaw
 float32 desired_yaw_rate
 
 # ---------- YunLink metadata ----------
-# 协议无关的本地命令跟踪标识；由 bridge 或上游本地发布者生成并透传回本地状态链路
-uint64 tracking_token
+uint64 yunlink_session_id
+uint64 yunlink_message_id
+uint64 yunlink_correlation_id

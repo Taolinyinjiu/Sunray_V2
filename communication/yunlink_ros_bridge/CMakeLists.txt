@@ -15,7 +15,6 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   std_srvs
   sunray_msgs
-  yunlink_msgs
 )
 
 get_filename_component(SUNRAY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
@@ -42,18 +41,7 @@ if(NOT TARGET yunlink)
   add_subdirectory("${YUNLINK_ROOT}" "${YUNLINK_BINARY_DIR}" EXCLUDE_FROM_ALL)
 endif()
 
-catkin_package(
-  CATKIN_DEPENDS
-    diagnostic_msgs
-    geographic_msgs
-    geometry_msgs
-    nav_msgs
-    roscpp
-    std_msgs
-    std_srvs
-    sunray_msgs
-    yunlink_msgs
-)
+catkin_package()
 
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -66,7 +54,6 @@ add_executable(yunlink_ros_bridge_node
   src/diagnostics/bridge_runtime_diagnostics.cpp
   src/discovery/bridge_endpoint_discovery.cpp
   src/bridge_mapping.cpp
-  src/mapping/bridge_command_mapping.cpp
   src/bridge_commands.cpp
   src/bridge_system_services.cpp
   src/bridge_topics.cpp

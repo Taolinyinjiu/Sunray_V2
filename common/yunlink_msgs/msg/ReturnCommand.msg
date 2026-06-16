@@ -1,3 +1,0 @@
-std_msgs/Header header
-yunlink_msgs/CommandMeta meta
-float32 loiter_before_return_s

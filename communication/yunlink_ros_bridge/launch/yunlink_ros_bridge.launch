@@ -5,14 +5,12 @@
   <arg name="remote_ip" default="" />
   <arg name="remote_tcp_port" default="0" />
   <arg name="shared_secret" default="yunlink-default-secret" />
-  <arg name="enable_auto_agent_id" default="true" />
   <arg name="agent_id" default="1" />
   <arg name="enable_endpoint_discovery" default="true" />
   <arg name="discovery_port" default="9966" />
   <arg name="discovery_target_ip" default="255.255.255.255" />
   <arg name="discovery_period_ms" default="1000" />
   <arg name="endpoint_name_prefix" default="yundrone_uav" />
-  <arg name="agent_id_file" default="$(env HOME)/.config/yunlink_ros_bridge/agent_id" />
   <arg name="endpoint_id_file" default="$(env HOME)/.config/yunlink_ros_bridge/endpoint_id" />
   <arg name="enable_system_services" default="true" />
   <arg name="enable_runtime_diagnostics" default="true" />
@@ -26,15 +24,14 @@
   <arg name="tui_stale_timeout_ms" default="1000" />
   <arg name="default_start_with_terminal" default="false" />
 
-  <arg name="local_odom_topic" default="" />
-  <arg name="odom_state_topic" default="" />
+  <arg name="local_odom_topic" default="/uav1/sunray/localization/local_odom" />
+  <arg name="odom_state_topic" default="/uav1/sunray/localization/odom_state" />
   <arg name="external_odom_topic" default="" />
-  <arg name="global_odom_topic" default="" />
-  <arg name="control_state_topic" default="" />
-  <arg name="local_command_status_topic" default="" />
-  <arg name="canonical_command_execution_status_topic" default="" />
-  <arg name="control_cmd_topic" default="" />
-  <arg name="px4_state_topic" default="" />
+  <arg name="global_odom_topic" default="/uav1/sunray/localization/global_odom" />
+  <arg name="control_state_topic" default="/uav1/sunray/uav_control/control_state" />
+  <arg name="command_execution_status_topic" default="/uav1/sunray/uav_control/command_execution_status" />
+  <arg name="control_cmd_topic" default="/uav1/sunray/uav_control/control_cmd" />
+  <arg name="px4_state_topic" default="/uav1/sunray/px4_state" />
 
   <node pkg="yunlink_ros_bridge"
         type="yunlink_ros_bridge_node"
@@ -46,9 +43,7 @@
     <param name="remote_ip" value="$(arg remote_ip)" />
     <param name="remote_tcp_port" value="$(arg remote_tcp_port)" />
     <param name="shared_secret" value="$(arg shared_secret)" />
-    <param name="enable_auto_agent_id" value="$(arg enable_auto_agent_id)" />
     <param name="agent_id" value="$(arg agent_id)" />
-    <param name="agent_id_file" value="$(arg agent_id_file)" />
     <param name="enable_endpoint_discovery" value="$(arg enable_endpoint_discovery)" />
     <param name="discovery_port" value="$(arg discovery_port)" />
     <param name="discovery_target_ip" value="$(arg discovery_target_ip)" />
@@ -69,8 +64,7 @@
     <param name="external_odom_topic" value="$(arg external_odom_topic)" />
     <param name="global_odom_topic" value="$(arg global_odom_topic)" />
     <param name="control_state_topic" value="$(arg control_state_topic)" />
-    <param name="local_command_status_topic" value="$(arg local_command_status_topic)" />
-    <param name="canonical_command_execution_status_topic" value="$(arg canonical_command_execution_status_topic)" />
+    <param name="command_execution_status_topic" value="$(arg command_execution_status_topic)" />
     <param name="control_cmd_topic" value="$(arg control_cmd_topic)" />
     <param name="px4_state_topic" value="$(arg px4_state_topic)" />
   </node>
