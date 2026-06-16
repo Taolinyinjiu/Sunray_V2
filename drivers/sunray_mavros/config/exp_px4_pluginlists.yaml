@@ -43,6 +43,7 @@ plugin_blacklist:
 - wind_estimation
 - waypoint
 - wheel_odometry
+- odom
 
 plugin_whitelist: # 如果模块即被同时声明在plugin_blacklist和plugin_whitelist中，也会启动
 - command
@@ -61,5 +62,5 @@ plugin_whitelist: # 如果模块即被同时声明在plugin_blacklist和plugin_w
 - sys_time
 - vision_pose_estimate
 - vision_speed_estimate
-- odom
+
 

@@ -77,6 +77,12 @@ modules:
     source_path: "drivers/web_cam"
     build_path: "build/web_cam"
     dependencies: []
+  joystick_ros_bridge:
+    description: "Linux 手柄到 ROS Joy 话题桥接驱动，用于发布 sensor_msgs/Joy"
+    label: drivers
+    source_path: "drivers/joystick_ros_bridge"
+    build_path: "build/joystick_ros_bridge"
+    dependencies: []
   turn_on_wheeltec_robot:
     description: "轮趣底盘驱动和启动包，用于 UGV 底盘通信与控制"
     label: drivers

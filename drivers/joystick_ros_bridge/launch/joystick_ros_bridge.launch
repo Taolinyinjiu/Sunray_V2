@@ -1,0 +1,13 @@
+<launch>
+  <!-- YAML 配置文件路径；所有手柄、Joy、MAVROS RC 映射参数都在这个文件里修改。 -->
+  <arg name="config_file" default="$(find joystick_ros_bridge)/config/joystick_px4_mapping.yaml" />
+
+  <!-- 将 YAML 加载到 joystick_ros_bridge 节点私有命名空间下，源码只从参数服务器读取配置。 -->
+  <rosparam command="load" file="$(arg config_file)" ns="joystick_ros_bridge" />
+
+  <!-- 手柄到 ROS Joy 和 MAVROS RC override 的桥接节点；output=screen 用于显示终端可视化状态。 -->
+  <node pkg="joystick_ros_bridge"
+        type="joystick_ros_bridge_node"
+        name="joystick_ros_bridge"
+        output="screen" />
+</launch>

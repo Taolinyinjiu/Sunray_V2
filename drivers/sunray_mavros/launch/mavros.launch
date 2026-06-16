@@ -8,7 +8,8 @@
     <param name="agent_name" value="$(arg agent_name)" />
     <!-- 将mavros节点放置在 /uav_name+/uav_id 的命名空间下-->
     <group ns="$(arg agent_name)$(arg agent_id)">
-        <arg name="gcs_url" default="udp://:14556@$(arg gcs_ip):14551" />
+        <!-- <arg name="gcs_url" default="udp://:14556@$(arg gcs_ip):14551" /> -->
+        <arg name="gcs_url" default="udp-b://@" />
         <arg name="tgt_system" default="1" />
         <arg name="tgt_component" default="1" />
         <arg name="log_output" default="screen" />
