@@ -129,3 +129,19 @@ sources_list:
         - [0.0, 1.0, 0.0, 0.0]
         - [0.0, 0.0, 1.0, 0.0]
         - [0.0, 0.0, 0.0, 1.0]
+    # 基于EKF的高频Fastlio里程计
+    Fast_LIO_POSE_TEST:
+        # 定位源序号
+        source_id: 7
+        # 订阅的里程计话题
+        odometry_topic: "/ekf/ekf_odom"
+        # 订阅的重定位话题
+        relocalization_topic: ""
+        # local odom 超时判定时间
+        timeout_s: 0.5
+        # 传感器到机体中心的外参矩阵
+        source_frame_to_base:
+        - [1.0, 0.0, 0.0, 0.0]
+        - [0.0, 1.0, 0.0, 0.0]
+        - [0.0, 0.0, 1.0, 0.0]
+        - [0.0, 0.0, 0.0, 1.0]

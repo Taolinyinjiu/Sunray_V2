@@ -115,6 +115,12 @@ modules:
     source_path: "localization/localization_sources/ekf_odometry"
     build_path: "build/ekf_odometry"
     dependencies: []
+  ekf_pose:
+    description: "EKF 高频里程计补偿模块，用 IMU 对低频 odom 进行预测更新"
+    label: localization
+    source_path: "localization/localization_sources/ekf_pose"
+    build_path: "build/ekf_pose"
+    dependencies: []
   sunray_mocap:
     description: "动捕定位适配器，将 VRPN pose/twist 转换为 Sunray odometry"
     label: localization
