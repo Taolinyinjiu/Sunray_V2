@@ -1,7 +1,7 @@
 fsm:
   click_goal_en: true
   click_goal_topic: "/move_base_simple/goal"
-  click_height: 1.5
+  click_height: 0.6
   click_yaw_en: true
   replan_rate: 15.0
   cmd_topic: "/planning/pos_cmd"
@@ -86,7 +86,7 @@ traj_opt:
     penna_thr: 1.0e+5
 
   flatness:
-    mass: 1.64
+    mass: 0.98
     dh: 0.35
     dv: 0.35
     cp: 0.001
@@ -115,7 +115,7 @@ rog_map:
   frontier_extraction_en: false
 
   # Virtual ceil and ground
-  virtual_ceil_height: 3.5
+  virtual_ceil_height: 2.8
   virtual_ground_height: -0.3
 
   load_pcd_en: false
