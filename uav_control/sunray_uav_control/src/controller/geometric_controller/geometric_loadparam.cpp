@@ -192,6 +192,34 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         out.y() = controller_param[key][1].as<double>();
         out.z() = controller_param[key][2].as<double>();
     };
+    const auto load_optional_vec3 = [&](const char* key, Eigen::Vector3d& out) {
+        if (controller_param[key]) {
+            if (!controller_param[key].IsSequence() || controller_param[key].size() != 3) {
+                throw std::runtime_error(
+                    std::string("invalid param 'geometric_controller_param.") + key +
+                    "' (expected sequence of 3 values)");
+            }
+            out.x() = controller_param[key][0].as<double>();
+            out.y() = controller_param[key][1].as<double>();
+            out.z() = controller_param[key][2].as<double>();
+        }
+    };
+    const auto require_vec3_nonnegative = [&](const char* key, const Eigen::Vector3d& value) {
+        for (int i = 0; i < 3; ++i) {
+            if (!std::isfinite(value[i]) || value[i] < 0.0) {
+                throw std::runtime_error(std::string("param 'geometric_controller_param.") + key +
+                                         "' values must be finite and >= 0");
+            }
+        }
+    };
+    const auto require_vec3_unit = [&](const char* key, const Eigen::Vector3d& value) {
+        for (int i = 0; i < 3; ++i) {
+            if (!std::isfinite(value[i]) || value[i] < 0.0 || value[i] > 1.0) {
+                throw std::runtime_error(std::string("param 'geometric_controller_param.") + key +
+                                         "' values must be finite and in [0, 1]");
+            }
+        }
+    };
 
     load_vec3("pos_kp", geometric_controller_param_.pos_kp);
     load_vec3("pos_ki", geometric_controller_param_.pos_ki);
@@ -199,6 +227,35 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     load_vec3("vel_kp", geometric_controller_param_.vel_kp);
     load_vec3("vel_ki", geometric_controller_param_.vel_ki);
     load_vec3("vel_kd", geometric_controller_param_.vel_kd);
+    load_optional_vec3("vel_error_limit", geometric_controller_param_.vel_error_limit);
+    load_optional_vec3("vel_error_filter_tau", geometric_controller_param_.vel_error_filter_tau);
+    load_optional_vec3("trajectory_vel_error_weight",
+                       geometric_controller_param_.trajectory_vel_error_weight);
+    load_optional_vec3("velocity_vel_error_weight",
+                       geometric_controller_param_.velocity_vel_error_weight);
+    load_optional_vec3("vel_error_gate_threshold",
+                       geometric_controller_param_.vel_error_gate_threshold);
+    load_optional_vec3("vel_error_gate_decay", geometric_controller_param_.vel_error_gate_decay);
+
+    require_vec3_nonnegative("vel_error_limit", geometric_controller_param_.vel_error_limit);
+    require_vec3_nonnegative("vel_error_filter_tau",
+                             geometric_controller_param_.vel_error_filter_tau);
+    require_vec3_nonnegative("trajectory_vel_error_weight",
+                             geometric_controller_param_.trajectory_vel_error_weight);
+    require_vec3_nonnegative("velocity_vel_error_weight",
+                             geometric_controller_param_.velocity_vel_error_weight);
+    require_vec3_nonnegative("vel_error_gate_threshold",
+                             geometric_controller_param_.vel_error_gate_threshold);
+    require_vec3_unit("vel_error_gate_decay", geometric_controller_param_.vel_error_gate_decay);
+    if (controller_param["vel_error_gate_hold_s"]) {
+        geometric_controller_param_.vel_error_gate_hold_s =
+            controller_param["vel_error_gate_hold_s"].as<double>();
+        if (!std::isfinite(geometric_controller_param_.vel_error_gate_hold_s) ||
+            geometric_controller_param_.vel_error_gate_hold_s < 0.0) {
+            throw std::runtime_error(
+                "param 'geometric_controller_param.vel_error_gate_hold_s' must be finite and >= 0");
+        }
+    }
 
     if (controller_param["max_acc"]) {
         geometric_controller_param_.max_acc = controller_param["max_acc"].as<double>();

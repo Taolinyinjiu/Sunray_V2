@@ -302,6 +302,17 @@ void Geometric_Controller::write_ulog_param_snapshot() {
     copy_vec3(geometric_controller_param_.vel_kp, record.vel_kp);
     copy_vec3(geometric_controller_param_.vel_ki, record.vel_ki);
     copy_vec3(geometric_controller_param_.vel_kd, record.vel_kd);
+    copy_vec3(geometric_controller_param_.vel_error_limit, record.vel_error_limit);
+    copy_vec3(geometric_controller_param_.vel_error_filter_tau, record.vel_error_filter_tau);
+    copy_vec3(geometric_controller_param_.trajectory_vel_error_weight,
+              record.trajectory_vel_error_weight);
+    copy_vec3(geometric_controller_param_.velocity_vel_error_weight,
+              record.velocity_vel_error_weight);
+    copy_vec3(geometric_controller_param_.vel_error_gate_threshold,
+              record.vel_error_gate_threshold);
+    copy_vec3(geometric_controller_param_.vel_error_gate_decay, record.vel_error_gate_decay);
+    record.vel_error_gate_hold_s =
+        static_cast<float>(geometric_controller_param_.vel_error_gate_hold_s);
     copy_vec3(geometric_controller_param_.int_max_pos, record.int_max_pos);
     copy_vec3(geometric_controller_param_.int_max_vel, record.int_max_vel);
     copy_vec3(geometric_controller_param_.D, record.rotor_drag_d);
@@ -358,6 +369,16 @@ void Geometric_Controller::write_ulog_sample(
     copy_vec3(debug.last_vel_error, debug_record.last_vel_error);
     copy_vec3(debug.position_error_dot, debug_record.position_error_dot);
     copy_vec3(debug.velocity_error_dot, debug_record.velocity_error_dot);
+    copy_vec3(debug.velocity_error_limited, debug_record.velocity_error_limited);
+    copy_vec3(debug.velocity_error_filtered, debug_record.velocity_error_filtered);
+    copy_vec3(debug.velocity_error_weight, debug_record.velocity_error_weight);
+    copy_vec3(debug.velocity_error_gate_triggered,
+              debug_record.velocity_error_gate_triggered);
+    copy_vec3(debug.velocity_error_gate_active, debug_record.velocity_error_gate_active);
+    copy_vec3(debug.velocity_error_gate_scale, debug_record.velocity_error_gate_scale);
+    copy_vec3(debug.velocity_error_processed, debug_record.velocity_error_processed);
+    copy_vec3(debug.velocity_error_processed_dot, debug_record.velocity_error_processed_dot);
+    copy_vec3(debug.velocity_feedback_term, debug_record.velocity_feedback_term);
     copy_vec3(debug.derivative_term_raw, debug_record.derivative_term_raw);
     copy_vec3(debug.derivative_term, debug_record.derivative_term);
     copy_vec3(debug.integral_term, debug_record.integral_term);

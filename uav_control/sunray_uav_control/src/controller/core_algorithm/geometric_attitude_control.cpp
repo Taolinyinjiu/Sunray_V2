@@ -15,12 +15,61 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+
+Eigen::Vector3d sanitize_vector3(const Eigen::Vector3d& value) {
+    Eigen::Vector3d sanitized = value;
+    for (int i = 0; i < 3; ++i) {
+        if (!std::isfinite(sanitized[i])) {
+            sanitized[i] = 0.0;
+        }
+    }
+    return sanitized;
+}
+
+Eigen::Vector3d clamp_vector3_nonnegative(const Eigen::Vector3d& value,
+                                          double max_if_nonfinite = 0.0) {
+    Eigen::Vector3d clamped = value;
+    for (int i = 0; i < 3; ++i) {
+        if (!std::isfinite(clamped[i])) {
+            clamped[i] = max_if_nonfinite;
+        }
+        clamped[i] = std::max(0.0, clamped[i]);
+    }
+    return clamped;
+}
+
+Eigen::Vector3d clamp_vector3_unit(const Eigen::Vector3d& value) {
+    Eigen::Vector3d clamped = value;
+    for (int i = 0; i < 3; ++i) {
+        if (!std::isfinite(clamped[i])) {
+            clamped[i] = 1.0;
+        }
+        clamped[i] = std::clamp(clamped[i], 0.0, 1.0);
+    }
+    return clamped;
+}
+
+}  // namespace
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Geometric_AttitudeControl 实现
 // ═══════════════════════════════════════════════════════════════════════════
 
 void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param_t& param) {
     param_ = param;
+    param_.vel_error_limit = clamp_vector3_nonnegative(param_.vel_error_limit);
+    param_.vel_error_filter_tau = clamp_vector3_nonnegative(param_.vel_error_filter_tau);
+    param_.trajectory_vel_error_weight =
+        clamp_vector3_nonnegative(param_.trajectory_vel_error_weight, 1.0);
+    param_.velocity_vel_error_weight =
+        clamp_vector3_nonnegative(param_.velocity_vel_error_weight, 1.0);
+    param_.vel_error_gate_threshold =
+        clamp_vector3_nonnegative(param_.vel_error_gate_threshold);
+    param_.vel_error_gate_decay = clamp_vector3_unit(param_.vel_error_gate_decay);
+    if (!std::isfinite(param_.vel_error_gate_hold_s) || param_.vel_error_gate_hold_s < 0.0) {
+        param_.vel_error_gate_hold_s = 0.0;
+    }
 
     // 悬停推力估计器由 core 持有，0=RLS，1=EKFAccel。
     switch (param_.hover_thrust_estimator_type) {
@@ -64,6 +113,7 @@ void Geometric_AttitudeControl::load_param(const Geometric_AttitudeControl_Param
     last_debug_state_ = Geometric_AttitudeControl_DebugState_t{};
     accepted_hover_thrust_ = param_.hover_thrust_init;
     last_selected_hover_anchor_ = param_.hover_thrust_init;
+    reset_velocity_error_preprocess_state();
 }
 
 void Geometric_AttitudeControl::feed_thrust_estimator(const thrust_estimator::Input_t& input) {
@@ -294,38 +344,115 @@ double Geometric_AttitudeControl::compose_thrust_command(
 // 位置 PD 控制器，输入误差均为 target - current（正值代表落后于目标）
 // ─────────────────────────────────────────────────────────────────────────
 Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& pos_error,
-                                                         const Eigen::Vector3d& vel_error) {
-    const double dt = current_dt_;
+                                                         const Eigen::Vector3d& vel_error,
+                                                         const Eigen::Vector3d& vel_error_weight) {
+    const double dt = std::max(current_dt_, 1e-3);
+    const Eigen::Vector3d safe_pos_error = sanitize_vector3(pos_error);
+    const Eigen::Vector3d safe_vel_error = sanitize_vector3(vel_error);
+    const Eigen::Vector3d safe_vel_error_weight =
+        clamp_vector3_nonnegative(vel_error_weight, 1.0);
+    const bool first_sample = first_run_;
 
     // 三轴微分项（D）
     // 第一帧（reset 后）跳过差分，避免 last_*_error_ 为零导致的虚假大冲击。
     Eigen::Vector3d pos_error_dot = Eigen::Vector3d::Zero();
     Eigen::Vector3d vel_error_dot = Eigen::Vector3d::Zero();
-    if (!first_run_) {
-        pos_error_dot = (pos_error - last_pos_error_) / dt;
-        vel_error_dot = (vel_error - last_vel_error_) / dt;
+    if (!first_sample) {
+        pos_error_dot = (safe_pos_error - last_pos_error_) / dt;
     }
-    last_pos_error_ = pos_error;
-    last_vel_error_ = vel_error;
+    for (int i = 0; i < 3; ++i) {
+        if (!first_sample && velocity_error_dot_initialized_[i]) {
+            vel_error_dot[i] = (safe_vel_error[i] - last_vel_error_[i]) / dt;
+        }
+        velocity_error_dot_initialized_[i] = true;
+    }
+    last_pos_error_ = safe_pos_error;
+    last_vel_error_ = safe_vel_error;
     first_run_ = false;
+
+    Eigen::Vector3d vel_error_limited = safe_vel_error;
+    for (int i = 0; i < 3; ++i) {
+        const double limit = param_.vel_error_limit[i];
+        if (limit > 0.0) {
+            vel_error_limited[i] = std::clamp(vel_error_limited[i], -limit, limit);
+        }
+    }
+
+    Eigen::Vector3d vel_error_filtered = vel_error_limited;
+    for (int i = 0; i < 3; ++i) {
+        const double tau = param_.vel_error_filter_tau[i];
+        if (tau > 0.0) {
+            if (!velocity_error_filter_initialized_[i]) {
+                filtered_velocity_error_[i] = vel_error_limited[i];
+                velocity_error_filter_initialized_[i] = true;
+            } else {
+                const double alpha = std::clamp(dt / (tau + dt), 0.0, 1.0);
+                filtered_velocity_error_[i] +=
+                    alpha * (vel_error_limited[i] - filtered_velocity_error_[i]);
+            }
+            vel_error_filtered[i] = filtered_velocity_error_[i];
+        } else {
+            filtered_velocity_error_[i] = vel_error_limited[i];
+            velocity_error_filter_initialized_[i] = true;
+        }
+    }
+
+    Eigen::Vector3d gate_triggered = Eigen::Vector3d::Zero();
+    Eigen::Vector3d gate_active = Eigen::Vector3d::Zero();
+    Eigen::Vector3d gate_scale = Eigen::Vector3d::Ones();
+    const double gate_hold_s = std::max(0.0, param_.vel_error_gate_hold_s);
+    for (int i = 0; i < 3; ++i) {
+        const double threshold = param_.vel_error_gate_threshold[i];
+        if (threshold > 0.0 && std::abs(vel_error_dot[i]) > threshold) {
+            velocity_error_gate_timer_[i] = gate_hold_s;
+            gate_triggered[i] = 1.0;
+        } else {
+            velocity_error_gate_timer_[i] =
+                std::max(0.0, velocity_error_gate_timer_[i] - dt);
+        }
+
+        if (velocity_error_gate_timer_[i] > 0.0) {
+            gate_active[i] = 1.0;
+            gate_scale[i] = param_.vel_error_gate_decay[i];
+        }
+    }
+
+    const Eigen::Vector3d vel_error_processed =
+        vel_error_filtered.cwiseProduct(safe_vel_error_weight).cwiseProduct(gate_scale);
+    Eigen::Vector3d vel_error_processed_dot = Eigen::Vector3d::Zero();
+    if (!first_sample) {
+        vel_error_processed_dot = (vel_error_processed - last_velocity_error_weighted_) / dt;
+    }
+    last_velocity_error_weighted_ = vel_error_processed;
 
     // D 项输出单独限幅，防止速度前馈引入后误差变化率过大导致冲击。
     const Eigen::Vector3d d_term_raw = param_.pos_kd.asDiagonal() * pos_error_dot +
-                                       param_.vel_kd.asDiagonal() * vel_error_dot;
+                                       param_.vel_kd.asDiagonal() * vel_error_processed_dot;
     const double d_term_norm = d_term_raw.norm();
     const Eigen::Vector3d d_term = (d_term_norm > param_.max_d_acc && d_term_norm > 1e-6)
                                        ? d_term_raw * (param_.max_d_acc / d_term_norm)
                                        : d_term_raw;
+    const Eigen::Vector3d velocity_feedback_term =
+        param_.vel_kp.asDiagonal() * vel_error_processed +
+        param_.vel_ki.asDiagonal() * integral_vel_;
 
     // 用上一拍的积分先算一次未饱和输出，判定本拍是否处于饱和区（D 项已限幅）
-    const Eigen::Vector3d a_fb_unsat = param_.pos_kp.asDiagonal() * pos_error +
+    const Eigen::Vector3d a_fb_unsat = param_.pos_kp.asDiagonal() * safe_pos_error +
                                        param_.pos_ki.asDiagonal() * integral_pos_ +
                                        d_term +
-                                       param_.vel_kp.asDiagonal() * vel_error +
-                                       param_.vel_ki.asDiagonal() * integral_vel_;
+                                       velocity_feedback_term;
     const bool saturated = a_fb_unsat.norm() > param_.max_acc;
     debug_position_error_dot_ = pos_error_dot;
     debug_velocity_error_dot_ = vel_error_dot;
+    debug_velocity_error_limited_ = vel_error_limited;
+    debug_velocity_error_filtered_ = vel_error_filtered;
+    debug_velocity_error_weight_ = safe_vel_error_weight;
+    debug_velocity_error_gate_triggered_ = gate_triggered;
+    debug_velocity_error_gate_active_ = gate_active;
+    debug_velocity_error_gate_scale_ = gate_scale;
+    debug_velocity_error_processed_ = vel_error_processed;
+    debug_velocity_error_processed_dot_ = vel_error_processed_dot;
+    debug_velocity_feedback_term_ = velocity_feedback_term;
     debug_derivative_term_raw_ = d_term_raw;
     debug_derivative_term_ = d_term;
     debug_pid_feedback_acceleration_unsaturated_ = a_fb_unsat;
@@ -335,13 +462,14 @@ Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& 
     // 即放电方向允许、充电方向冻结，避免饱和后的过冲与滞回。
     // 单轴硬限幅作为兜底保留。
     for (int i = 0; i < 3; ++i) {
-        const bool allow_pos = !saturated || (pos_error[i] * integral_pos_[i] < 0.0);
+        const bool allow_pos = !saturated || (safe_pos_error[i] * integral_pos_[i] < 0.0);
         if (allow_pos) {
-            integral_pos_[i] += pos_error[i] * dt;
+            integral_pos_[i] += safe_pos_error[i] * dt;
         }
-        const bool allow_vel = !saturated || (vel_error[i] * integral_vel_[i] < 0.0);
+        const bool allow_vel =
+            !saturated || (vel_error_processed[i] * integral_vel_[i] < 0.0);
         if (allow_vel) {
-            integral_vel_[i] += vel_error[i] * dt;
+            integral_vel_[i] += vel_error_processed[i] * dt;
         }
 
         if (std::abs(param_.pos_ki[i]) > 1e-6) {
@@ -360,11 +488,14 @@ Eigen::Vector3d Geometric_AttitudeControl::poscontroller(const Eigen::Vector3d& 
     }
 
     // 用更新后的积分重新合成反馈加速度（D 项已限幅）
-    Eigen::Vector3d a_fb = param_.pos_kp.asDiagonal() * pos_error +
+    const Eigen::Vector3d velocity_feedback_term_updated =
+        param_.vel_kp.asDiagonal() * vel_error_processed +
+        param_.vel_ki.asDiagonal() * integral_vel_;
+    debug_velocity_feedback_term_ = velocity_feedback_term_updated;
+    Eigen::Vector3d a_fb = param_.pos_kp.asDiagonal() * safe_pos_error +
                            param_.pos_ki.asDiagonal() * integral_pos_ +
                            d_term +
-                           param_.vel_kp.asDiagonal() * vel_error +
-                           param_.vel_ki.asDiagonal() * integral_vel_;
+                           velocity_feedback_term_updated;
     debug_integral_term_ =
         param_.pos_ki.asDiagonal() * integral_pos_ +
         param_.vel_ki.asDiagonal() * integral_vel_;
@@ -402,7 +533,8 @@ Eigen::Vector3d Geometric_AttitudeControl::controlPosition(const Eigen::Vector3d
     const Eigen::Vector3d vel_error = target_vel - mav_vel;
 
     // PD 反馈加速度
-    const Eigen::Vector3d a_fb = poscontroller(pos_error, vel_error);
+    const Eigen::Vector3d a_fb =
+        poscontroller(pos_error, vel_error, param_.trajectory_vel_error_weight);
 
     // 转子阻力补偿（D 为零向量时此项为零，不影响基本功能）
     const Eigen::Vector3d a_rd = R_ref * param_.D.asDiagonal() * R_ref.transpose() * target_vel;
@@ -426,14 +558,18 @@ Eigen::Vector3d Geometric_AttitudeControl::controlVelocity(
         target_vel.z() = 0.0;
         const Eigen::Vector3d pos_error(0.0, 0.0, des_state.fixed_height - current_odom.position.z());
         const Eigen::Vector3d vel_error = target_vel - mav_vel;
-        a_fb = poscontroller(pos_error, vel_error);
+        Eigen::Vector3d vel_error_weight = param_.velocity_vel_error_weight;
+        vel_error_weight.z() = param_.trajectory_vel_error_weight.z();
+        a_fb = poscontroller(pos_error, vel_error, vel_error_weight);
     } else {
         const Eigen::Vector3d vel_error = target_vel - mav_vel;
         // 纯速度模式不引入位置环：传入零位置误差，由 poscontroller 内部统一处理积分/D 项/限幅。
         // 同时清掉位置积分残留，避免下一次切回轨迹模式时被旧值污染。
         integral_pos_.setZero();
         last_pos_error_.setZero();
-        a_fb = poscontroller(Eigen::Vector3d::Zero(), vel_error);
+        a_fb = poscontroller(Eigen::Vector3d::Zero(),
+                             vel_error,
+                             param_.velocity_vel_error_weight);
     }
 
     // 参考姿态与 controlPosition 对齐：用"反馈加速度 + 重力补偿"作为期望推力方向。
@@ -555,6 +691,15 @@ void Geometric_AttitudeControl::update_debug_state(
     last_debug_state_.last_vel_error = last_vel_error_;
     last_debug_state_.position_error_dot = debug_position_error_dot_;
     last_debug_state_.velocity_error_dot = debug_velocity_error_dot_;
+    last_debug_state_.velocity_error_limited = debug_velocity_error_limited_;
+    last_debug_state_.velocity_error_filtered = debug_velocity_error_filtered_;
+    last_debug_state_.velocity_error_weight = debug_velocity_error_weight_;
+    last_debug_state_.velocity_error_gate_triggered = debug_velocity_error_gate_triggered_;
+    last_debug_state_.velocity_error_gate_active = debug_velocity_error_gate_active_;
+    last_debug_state_.velocity_error_gate_scale = debug_velocity_error_gate_scale_;
+    last_debug_state_.velocity_error_processed = debug_velocity_error_processed_;
+    last_debug_state_.velocity_error_processed_dot = debug_velocity_error_processed_dot_;
+    last_debug_state_.velocity_feedback_term = debug_velocity_feedback_term_;
     last_debug_state_.derivative_term_raw = debug_derivative_term_raw_;
     last_debug_state_.derivative_term = debug_derivative_term_;
     last_debug_state_.integral_term = debug_integral_term_;

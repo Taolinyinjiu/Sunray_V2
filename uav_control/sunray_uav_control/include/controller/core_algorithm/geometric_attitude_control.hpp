@@ -16,6 +16,7 @@
 #include "control_data_types/uav_state_estimate.hpp"
 #include "controller/core_algorithm/hoverthrust_estimator.hpp"
 #include <Eigen/Dense>
+#include <array>
 #include <memory>
 
 // ═══════════════════════════════════════════════════════════
@@ -43,6 +44,21 @@ struct Geometric_AttitudeControl_Param_t {
     // D 项输出单独限幅，防止速度前馈引入后误差变化率过大导致冲击。
     // 默认与 max_acc 相同（不额外限制），可收紧到 2~4 m/s² 抑制冲击。
     double max_d_acc{9.0};
+
+    // ── 速度误差预处理/门控参数 ──────────────────────────────
+    // vel_error_limit <= 0 表示该轴不做限幅；单位 m/s。
+    Eigen::Vector3d vel_error_limit{Eigen::Vector3d::Zero()};
+    // vel_error_filter_tau <= 0 表示该轴不做一阶低通；单位 s。
+    Eigen::Vector3d vel_error_filter_tau{Eigen::Vector3d::Zero()};
+    // 轨迹/位置控制中速度误差主要作为阻尼项；纯速度控制中速度误差为主反馈。
+    Eigen::Vector3d trajectory_vel_error_weight{Eigen::Vector3d::Ones()};
+    Eigen::Vector3d velocity_vel_error_weight{Eigen::Vector3d::Ones()};
+    // vel_error_gate_threshold <= 0 表示该轴不启用门控；单位 m/s²，对 raw vel_error_dot 生效。
+    Eigen::Vector3d vel_error_gate_threshold{Eigen::Vector3d::Zero()};
+    // 门控激活时保留的速度反馈比例，范围 [0, 1]，1 表示不衰减。
+    Eigen::Vector3d vel_error_gate_decay{Eigen::Vector3d::Ones()};
+    // 速度跳变触发后门控保持时间；阈值未启用时不生效。
+    double vel_error_gate_hold_s{0.10};
 
     // ── 姿态环参数 ──────────────────────────────────────────
     double attitude_tau{0.1};  // SO3 姿态控制时间常数：越小响应越快，太小会振荡
@@ -138,6 +154,15 @@ struct Geometric_AttitudeControl_DebugState_t {
     Eigen::Vector3d last_vel_error{Eigen::Vector3d::Zero()};
     Eigen::Vector3d position_error_dot{Eigen::Vector3d::Zero()};
     Eigen::Vector3d velocity_error_dot{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_limited{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_filtered{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_weight{Eigen::Vector3d::Ones()};
+    Eigen::Vector3d velocity_error_gate_triggered{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_gate_active{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_gate_scale{Eigen::Vector3d::Ones()};
+    Eigen::Vector3d velocity_error_processed{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_processed_dot{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_feedback_term{Eigen::Vector3d::Zero()};
     Eigen::Vector3d derivative_term_raw{Eigen::Vector3d::Zero()};
     Eigen::Vector3d derivative_term{Eigen::Vector3d::Zero()};
     Eigen::Vector3d integral_term{Eigen::Vector3d::Zero()};
@@ -204,11 +229,21 @@ class Geometric_AttitudeControl {
         integral_vel_.setZero();
         last_pos_error_.setZero();
         last_vel_error_.setZero();
+        reset_velocity_error_preprocess_state();
         last_velocity_fixed_height_active_ = false;
         first_run_ = true;
         last_call_stamp_ = ros::Time(0);
         debug_position_error_dot_.setZero();
         debug_velocity_error_dot_.setZero();
+        debug_velocity_error_limited_.setZero();
+        debug_velocity_error_filtered_.setZero();
+        debug_velocity_error_weight_.setOnes();
+        debug_velocity_error_gate_triggered_.setZero();
+        debug_velocity_error_gate_active_.setZero();
+        debug_velocity_error_gate_scale_.setOnes();
+        debug_velocity_error_processed_.setZero();
+        debug_velocity_error_processed_dot_.setZero();
+        debug_velocity_feedback_term_.setZero();
         debug_derivative_term_raw_.setZero();
         debug_derivative_term_.setZero();
         debug_integral_term_.setZero();
@@ -223,8 +258,18 @@ class Geometric_AttitudeControl {
         integral_vel_.z() = 0.0;
         last_pos_error_.z() = 0.0;
         last_vel_error_.z() = 0.0;
+        reset_vertical_velocity_error_preprocess_state();
         debug_position_error_dot_.z() = 0.0;
         debug_velocity_error_dot_.z() = 0.0;
+        debug_velocity_error_limited_.z() = 0.0;
+        debug_velocity_error_filtered_.z() = 0.0;
+        debug_velocity_error_weight_.z() = 1.0;
+        debug_velocity_error_gate_triggered_.z() = 0.0;
+        debug_velocity_error_gate_active_.z() = 0.0;
+        debug_velocity_error_gate_scale_.z() = 1.0;
+        debug_velocity_error_processed_.z() = 0.0;
+        debug_velocity_error_processed_dot_.z() = 0.0;
+        debug_velocity_feedback_term_.z() = 0.0;
         debug_derivative_term_raw_.z() = 0.0;
         debug_derivative_term_.z() = 0.0;
         debug_integral_term_.z() = 0.0;
@@ -291,6 +336,15 @@ class Geometric_AttitudeControl {
 
     Eigen::Vector3d debug_position_error_dot_{Eigen::Vector3d::Zero()};
     Eigen::Vector3d debug_velocity_error_dot_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_limited_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_filtered_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_weight_{Eigen::Vector3d::Ones()};
+    Eigen::Vector3d debug_velocity_error_gate_triggered_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_gate_active_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_gate_scale_{Eigen::Vector3d::Ones()};
+    Eigen::Vector3d debug_velocity_error_processed_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_error_processed_dot_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d debug_velocity_feedback_term_{Eigen::Vector3d::Zero()};
     Eigen::Vector3d debug_derivative_term_raw_{Eigen::Vector3d::Zero()};
     Eigen::Vector3d debug_derivative_term_{Eigen::Vector3d::Zero()};
     Eigen::Vector3d debug_integral_term_{Eigen::Vector3d::Zero()};
@@ -301,6 +355,20 @@ class Geometric_AttitudeControl {
     // ── 内部计算函数 ─────────────────────────────────────────────────────────
     // 对应 ecbf_bodyrate 中 geometric_controller.cpp 的各私有方法
 
+    void reset_velocity_error_preprocess_state() {
+        velocity_error_filter_initialized_.fill(false);
+        velocity_error_dot_initialized_.fill(false);
+        filtered_velocity_error_.setZero();
+        last_velocity_error_weighted_.setZero();
+        velocity_error_gate_timer_.setZero();
+    }
+    void reset_vertical_velocity_error_preprocess_state() {
+        velocity_error_filter_initialized_[2] = false;
+        velocity_error_dot_initialized_[2] = false;
+        filtered_velocity_error_.z() = 0.0;
+        last_velocity_error_weighted_.z() = 0.0;
+        velocity_error_gate_timer_.z() = 0.0;
+    }
     double select_hover_anchor(ThrustCommandPolicy thrust_policy) const;
     double normalize_collective_acc(double collective_acc, double hover_anchor) const;
     double compose_thrust_command(double collective_acc,
@@ -334,7 +402,8 @@ class Geometric_AttitudeControl {
 
     // 位置 PD 控制器：由位置误差和速度误差计算加速度反馈量，并对输出限幅
     Eigen::Vector3d poscontroller(const Eigen::Vector3d& pos_error,
-                                  const Eigen::Vector3d& vel_error);
+                                  const Eigen::Vector3d& vel_error,
+                                  const Eigen::Vector3d& vel_error_weight);
 
     // 综合位置反馈、前馈加速度、转子阻力补偿，生成最终期望加速度向量
     Eigen::Vector3d controlPosition(const Eigen::Vector3d& target_pos,
@@ -358,4 +427,10 @@ class Geometric_AttitudeControl {
 
     // 由期望加速度方向和偏航角计算期望姿态四元数
     static Eigen::Quaterniond acc2quaternion(const Eigen::Vector3d& vector_acc, double yaw);
+
+    std::array<bool, 3> velocity_error_filter_initialized_{{false, false, false}};
+    std::array<bool, 3> velocity_error_dot_initialized_{{false, false, false}};
+    Eigen::Vector3d filtered_velocity_error_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d last_velocity_error_weighted_{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_error_gate_timer_{Eigen::Vector3d::Zero()};
 };

@@ -31,6 +31,13 @@ struct GeometricControllerParamRecord {
     float vel_kp[3] = {0.0f, 0.0f, 0.0f};
     float vel_ki[3] = {0.0f, 0.0f, 0.0f};
     float vel_kd[3] = {0.0f, 0.0f, 0.0f};
+    float vel_error_limit[3] = {0.0f, 0.0f, 0.0f};
+    float vel_error_filter_tau[3] = {0.0f, 0.0f, 0.0f};
+    float trajectory_vel_error_weight[3] = {1.0f, 1.0f, 1.0f};
+    float velocity_vel_error_weight[3] = {1.0f, 1.0f, 1.0f};
+    float vel_error_gate_threshold[3] = {0.0f, 0.0f, 0.0f};
+    float vel_error_gate_decay[3] = {1.0f, 1.0f, 1.0f};
+    float vel_error_gate_hold_s = 0.0f;
     float int_max_pos[3] = {0.0f, 0.0f, 0.0f};
     float int_max_vel[3] = {0.0f, 0.0f, 0.0f};
     float rotor_drag_d[3] = {0.0f, 0.0f, 0.0f};
@@ -63,6 +70,13 @@ struct GeometricControllerParamRecord {
             {"float[3]", "vel_kp"},
             {"float[3]", "vel_ki"},
             {"float[3]", "vel_kd"},
+            {"float[3]", "vel_error_limit"},
+            {"float[3]", "vel_error_filter_tau"},
+            {"float[3]", "trajectory_vel_error_weight"},
+            {"float[3]", "velocity_vel_error_weight"},
+            {"float[3]", "vel_error_gate_threshold"},
+            {"float[3]", "vel_error_gate_decay"},
+            {"float", "vel_error_gate_hold_s"},
             {"float[3]", "int_max_pos"},
             {"float[3]", "int_max_vel"},
             {"float[3]", "rotor_drag_d"},
@@ -92,6 +106,13 @@ struct GeometricControllerParamRecord {
         writer.writeArray(vel_kp, 3);
         writer.writeArray(vel_ki, 3);
         writer.writeArray(vel_kd, 3);
+        writer.writeArray(vel_error_limit, 3);
+        writer.writeArray(vel_error_filter_tau, 3);
+        writer.writeArray(trajectory_vel_error_weight, 3);
+        writer.writeArray(velocity_vel_error_weight, 3);
+        writer.writeArray(vel_error_gate_threshold, 3);
+        writer.writeArray(vel_error_gate_decay, 3);
+        writer.write(vel_error_gate_hold_s);
         writer.writeArray(int_max_pos, 3);
         writer.writeArray(int_max_vel, 3);
         writer.writeArray(rotor_drag_d, 3);
@@ -173,6 +194,15 @@ struct GeometricControllerDebugRecord {
     float last_vel_error[3] = {0.0f, 0.0f, 0.0f};
     float position_error_dot[3] = {0.0f, 0.0f, 0.0f};
     float velocity_error_dot[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_error_limited[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_error_filtered[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_error_weight[3] = {1.0f, 1.0f, 1.0f};
+    float velocity_error_gate_triggered[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_error_gate_active[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_error_gate_scale[3] = {1.0f, 1.0f, 1.0f};
+    float velocity_error_processed[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_error_processed_dot[3] = {0.0f, 0.0f, 0.0f};
+    float velocity_feedback_term[3] = {0.0f, 0.0f, 0.0f};
     float derivative_term_raw[3] = {0.0f, 0.0f, 0.0f};
     float derivative_term[3] = {0.0f, 0.0f, 0.0f};
     float integral_term[3] = {0.0f, 0.0f, 0.0f};
@@ -207,6 +237,15 @@ struct GeometricControllerDebugRecord {
             {"float[3]", "last_vel_error"},
             {"float[3]", "position_error_dot"},
             {"float[3]", "velocity_error_dot"},
+            {"float[3]", "velocity_error_limited"},
+            {"float[3]", "velocity_error_filtered"},
+            {"float[3]", "velocity_error_weight"},
+            {"float[3]", "velocity_error_gate_triggered"},
+            {"float[3]", "velocity_error_gate_active"},
+            {"float[3]", "velocity_error_gate_scale"},
+            {"float[3]", "velocity_error_processed"},
+            {"float[3]", "velocity_error_processed_dot"},
+            {"float[3]", "velocity_feedback_term"},
             {"float[3]", "derivative_term_raw"},
             {"float[3]", "derivative_term"},
             {"float[3]", "integral_term"},
@@ -238,6 +277,15 @@ struct GeometricControllerDebugRecord {
         writer.writeArray(last_vel_error, 3);
         writer.writeArray(position_error_dot, 3);
         writer.writeArray(velocity_error_dot, 3);
+        writer.writeArray(velocity_error_limited, 3);
+        writer.writeArray(velocity_error_filtered, 3);
+        writer.writeArray(velocity_error_weight, 3);
+        writer.writeArray(velocity_error_gate_triggered, 3);
+        writer.writeArray(velocity_error_gate_active, 3);
+        writer.writeArray(velocity_error_gate_scale, 3);
+        writer.writeArray(velocity_error_processed, 3);
+        writer.writeArray(velocity_error_processed_dot, 3);
+        writer.writeArray(velocity_feedback_term, 3);
         writer.writeArray(derivative_term_raw, 3);
         writer.writeArray(derivative_term, 3);
         writer.writeArray(integral_term, 3);
