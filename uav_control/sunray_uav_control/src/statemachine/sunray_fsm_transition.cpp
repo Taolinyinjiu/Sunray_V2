@@ -40,12 +40,25 @@ void Sunray_FSM::init_transition_table() {
                                                     active_takeoff_relative_height_.load(),
                                                     active_takeoff_max_velocity_.load());
                                             },
-                                            [this] { return update_home_point(); }});
+                                            [this] {
+                                                const bool home_ok = update_home_point();
+                                                // handle_event() 当前不使用 action 返回值回滚状态。
+                                                // 这里的 reset 只表示 TAKEOFF_REQUEST guard 已通过后的新 session 初始化。
+                                                sunray_controller_->reset_takeoff_status();
+                                                return home_ok;
+                                            }});
 
     // TAKEOFF -> HOVER
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::TAKEOFF,
                                             sunray_fsm::SunrayEvent::TAKEOFF_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
+                                            always,
+                                            always});
+
+    // TAKEOFF -> LAND，controller 报告起飞失败后进入恢复降落。
+    sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::TAKEOFF,
+                                            sunray_fsm::SunrayEvent::TAKEOFF_FAILED,
+                                            sunray_fsm::SunrayState::LAND,
                                             always,
                                             always});
 

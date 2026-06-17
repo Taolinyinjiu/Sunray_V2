@@ -372,6 +372,12 @@ struct GeometricControllerRuntimeRecord {
     float odom_ahead_ratio = 0.0f;
     float odom_correction_scale = 0.0f;
     float accepted_hover_thrust = 0.0f;
+    float rebase_v_start_norm = 0.0f;
+    float rebase_v_xy_norm = 0.0f;
+    float rebase_effective_vmax = 0.0f;
+    uint8_t rebase_fallback_level = 0;
+    uint8_t takeoff_failed = 0;
+    uint8_t takeoff_failure_reason = 0;
 
     static const char* formatName() {
         return "sunray_geometric_controller_runtime";
@@ -403,6 +409,12 @@ struct GeometricControllerRuntimeRecord {
             {"float", "odom_ahead_ratio"},
             {"float", "odom_correction_scale"},
             {"float", "accepted_hover_thrust"},
+            {"float", "rebase_v_start_norm"},
+            {"float", "rebase_v_xy_norm"},
+            {"float", "rebase_effective_vmax"},
+            {"uint8_t", "rebase_fallback_level"},
+            {"uint8_t", "takeoff_failed"},
+            {"uint8_t", "takeoff_failure_reason"},
         };
     }
 
@@ -431,6 +443,12 @@ struct GeometricControllerRuntimeRecord {
         writer.write(odom_ahead_ratio);
         writer.write(odom_correction_scale);
         writer.write(accepted_hover_thrust);
+        writer.write(rebase_v_start_norm);
+        writer.write(rebase_v_xy_norm);
+        writer.write(rebase_effective_vmax);
+        writer.write(rebase_fallback_level);
+        writer.write(takeoff_failed);
+        writer.write(takeoff_failure_reason);
     }
 };
 

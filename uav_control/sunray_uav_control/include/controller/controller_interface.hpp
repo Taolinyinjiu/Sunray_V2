@@ -1,7 +1,8 @@
 #pragma once
 
-#include "control_data_types/uav_state_estimate.hpp"
 #include "control_data_types/controller_desired_types.hpp"
+#include "control_data_types/takeoff_failure_reason.hpp"
+#include "control_data_types/uav_state_estimate.hpp"
 #include <cstdint>
 #include <geographic_msgs/GeoPoint.h>
 #include <mavros_msgs/AttitudeTarget.h>
@@ -47,7 +48,14 @@ class Controller_Interface {
     // 移动到WGS84下的某一点
     virtual bool move_point_wgs84(geographic_msgs::GeoPoint point) = 0;
     // ---------------------起降状态查询接口-----------------------
+    virtual void reset_takeoff_status() {}
     virtual bool is_takeoff_complete() = 0;
+    virtual bool is_takeoff_failed() const {
+        return false;
+    }
+    virtual control_common::TakeoffFailureReason takeoff_failure_reason() const {
+        return control_common::TakeoffFailureReason::None;
+    }
     virtual bool is_land_complete() = 0;
     virtual bool is_point_complete() = 0;
     virtual uint8_t current_px4_landed_state() const {

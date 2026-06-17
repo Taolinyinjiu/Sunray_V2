@@ -1,5 +1,6 @@
 #include "statemachine/sunray_fsm.hpp"
 #include <ros/ros.h>
+#include <string>
 
 namespace {
 
@@ -105,6 +106,20 @@ void Sunray_FSM::check_move_completed() {
         current_state = fsm_state_;
     }
     if (current_state == sunray_fsm::SunrayState::TAKEOFF) {
+        if (sunray_controller_->is_takeoff_failed()) {
+            const auto reason = sunray_controller_->takeoff_failure_reason();
+            const std::string msg =
+                std::string("takeoff failed: ") + control_common::to_cstr(reason);
+            {
+                std::lock_guard<std::mutex> lk(command_status_mutex_);
+                mark_command_terminal_locked(false,
+                                             control_common::CommandExecutionState::Failed,
+                                             0,
+                                             msg);
+            }
+            enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_FAILED);
+            return;
+        }
         bool takeoff_state = sunray_controller_->is_takeoff_complete();
         if (takeoff_state) {
             {
@@ -124,15 +139,23 @@ void Sunray_FSM::check_move_completed() {
         if (land_state) {
             {
                 std::lock_guard<std::mutex> lk(command_status_mutex_);
-                mark_command_terminal_locked(true,
-                                             control_common::CommandExecutionState::Succeeded,
-                                             0,
-                                             "land completed");
+                if (command_status_.active &&
+                    command_status_.command_kind ==
+                        sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND) {
+                    mark_command_terminal_locked(true,
+                                                 control_common::CommandExecutionState::Succeeded,
+                                                 0,
+                                                 "land completed");
+                }
             }
             enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_COMPLETED);
         } else {
             std::lock_guard<std::mutex> lk(command_status_mutex_);
-            mark_command_waiting_physical_state_locked("waiting for PX4 ON_GROUND", 90);
+            if (command_status_.active &&
+                command_status_.command_kind ==
+                    sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND) {
+                mark_command_waiting_physical_state_locked("waiting for PX4 ON_GROUND", 90);
+            }
         }
     } else if (current_state == sunray_fsm::SunrayState::RETURN) {
         std::lock_guard<std::mutex> lk(command_status_mutex_);

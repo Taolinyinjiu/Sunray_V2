@@ -73,7 +73,10 @@ class Geometric_Controller : public Controller_Interface {
     bool move_point_wgs84(geographic_msgs::GeoPoint point) override;
 
     // ---------------------起降状态查询接口-----------------------
+    void reset_takeoff_status() override;
     bool is_takeoff_complete() override;
+    bool is_takeoff_failed() const override;
+    control_common::TakeoffFailureReason takeoff_failure_reason() const override;
     bool is_land_complete() override;
     bool is_point_complete() override;
     uint8_t current_px4_landed_state() const override;
@@ -102,6 +105,22 @@ class Geometric_Controller : public Controller_Interface {
         AirborneCurveOutput = 7,
         TakeoffComplete = 8,
         TakeoffAlreadyComplete = 9,
+        TakeoffFailedAlready = 10,
+        LowHeightInvalidFailed = 11,
+        AirborneCurveInvalidFailed = 12,
+    };
+
+    struct TakeoffAccFFRebaseResult {
+        bool attempted{false};
+        bool rebased{false};
+        bool minimal_curve{false};
+        double remaining_z{0.0};
+        double target_z{0.0};
+        Eigen::Vector3d sanitized_velocity{Eigen::Vector3d::Zero()};
+        double v_start_norm{0.0};
+        double v_xy_norm{0.0};
+        double effective_vmax{0.0};
+        uint8_t fallback_level{0};
     };
 
     // ----------------------配置相关-----------------------
@@ -130,8 +149,16 @@ class Geometric_Controller : public Controller_Interface {
                                    double tau_s,
                                    const ros::Time& now);
     void maybe_rebase_takeoff_curve_start();
-    void maybe_rebase_takeoff_curve_start_accff(double max_takeoff_velocity,
-                                                double commanded_height);
+    TakeoffAccFFRebaseResult
+    maybe_rebase_takeoff_curve_start_accff(double commanded_vmax,
+                                           double commanded_height);
+    bool handle_takeoff_accff_unrecovered_invalid(
+        const curve::QuinticCurveState& curve_result,
+        double commanded_height,
+        double commanded_vmax,
+        double rel_height,
+        double takeoff_thrust_limit,
+        const TakeoffAccFFRebaseResult& rebase);
     // 起降 AccFF 路径专用拆分实现,与 takeoff()/land() 两层路由配合使用
     bool takeoff_direct_thrust(double relative_takeoff_height, double max_takeoff_velocity);
     bool takeoff_accff(double relative_takeoff_height, double max_takeoff_velocity);
@@ -140,6 +167,8 @@ class Geometric_Controller : public Controller_Interface {
     bool land_px4_autoland();
     // 统一清理 takeoff/land 双路径状态,所有控制流出口都应调用
     void reset_takeoff_land_contexts();
+    void clear_takeoff_failure_state();
+    void mark_takeoff_failed(control_common::TakeoffFailureReason reason);
     void update_hover_reference(const Eigen::Vector3d& hover_point,
                                 double hover_yaw,
                                 const char* reason);
@@ -229,6 +258,7 @@ class Geometric_Controller : public Controller_Interface {
     int takeoff_land_type_{0};
     takeoff_land::TakeoffAccFFTuning takeoff_accff_tuning_{};
     takeoff_land::TakeoffAccFFState  takeoff_accff_state_{};
+    TakeoffAccFFRebaseResult last_takeoff_accff_rebase_result_{};
     takeoff_land::LandingAccFFTuning landing_accff_tuning_{};
     takeoff_land::LandingAccFFState  landing_accff_state_{};
 
@@ -248,6 +278,9 @@ class Geometric_Controller : public Controller_Interface {
 
     // -------------------起降状态与 move_point 到位标志位--------------
     std::atomic<bool> takeoff_complete_{false};
+    std::atomic<bool> takeoff_failed_{false};
+    std::atomic<uint8_t> takeoff_failure_reason_{
+        static_cast<uint8_t>(control_common::TakeoffFailureReason::None)};
     std::atomic<bool> land_complete_{false};
     std::atomic<bool> point_complete_{false};
 

@@ -45,6 +45,7 @@ enum class SunrayEvent {
     POINT_WGS84_REQUEST,    ///< 进入WGS98位置控制
     POINT_WGS84_COMPLETED,  ///< WGS98位置控制完成
     KILL_REQUEST,           ///< 请求紧急锁桨 (Kill阶段没有完成态,因为我们不会切换到其他状态)
+    TAKEOFF_FAILED,         ///< 起飞失败。
 };
 
 // 状态转移表结构体
