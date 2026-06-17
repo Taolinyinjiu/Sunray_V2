@@ -19,7 +19,7 @@ geometric_controller_param:
   mass_kg: 0.96
 
   # 归一化悬停推力初值。写错会影响起飞贴地时间、降落软硬和推力估计收敛。
-  hover_thrust_percent: 0.375
+  hover_thrust_percent: 0.475
 
   # 位置环比例增益 [x, y, z]。小机型响应快，当前沿用 base 默认。
   pos_kp: [1.5, 1.5, 3.0]

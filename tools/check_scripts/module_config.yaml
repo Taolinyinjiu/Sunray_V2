@@ -1,0 +1,305 @@
+# Sunray 模块额外依赖检查配置
+#
+# 这个文件只描述安装基础 ROS Noetic 环境后，仍需要额外确认的依赖。
+# 不要把基础 ROS 环境通常自带的包写到这里，例如 rviz、pcl_ros、
+# gazebo_ros、vision_opencv/cv_bridge/image_transport 等。
+#
+# 每个模块支持以下字段:
+#   ros_packages:    用 rospack find 检查额外 ROS 包
+#   cmake_packages:  用 find_package 检查 CMake 包
+#   pkg_config:      用 pkg-config --exists 检查 pkg-config 包
+#   headers:         通过临时编译检查头文件
+#   libraries:       用 ldconfig 检查共享库
+#   paths:           用 test -e 检查文件或目录
+#
+# 每一项可以是字符串，也可以是带提示信息的 map:
+#   - yaml-cpp
+#   - name: realsense2
+#     version: "2.55.1"
+#     hint: "Install librealsense2 v2.55.1 or newer."
+
+modules:
+  sunray_msgs:
+    ros_packages:
+      - name: mavros_msgs
+        hint: "sudo apt install ros-noetic-mavros ros-noetic-mavros-msgs"
+      - name: geographic_msgs
+        hint: "sudo apt install ros-noetic-geographic-msgs"
+
+  sunray_common:
+    ros_packages:
+      - name: mavros_msgs
+        hint: "sudo apt install ros-noetic-mavros ros-noetic-mavros-msgs"
+
+  yunlink_ros_bridge:
+    ros_packages:
+      - name: geographic_msgs
+        hint: "sudo apt install ros-noetic-geographic-msgs"
+
+  realsense2_camera:
+    ros_packages:
+      - name: ddynamic_reconfigure
+        hint: "sudo apt install ros-noetic-ddynamic-reconfigure"
+    cmake_packages:
+      - name: realsense2
+        version: "2.55.1"
+        hint: "Install librealsense2 v2.55.1 or newer, then confirm CMake can find realsense2."
+      - name: OpenCV
+        hint: "sudo apt install libopencv-dev"
+
+  livox_ros_driver2:
+    cmake_packages:
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+    pkg_config:
+      - name: apr-1
+        hint: "sudo apt install libapr1-dev"
+    paths:
+      - path: /usr/local/lib/liblivox_lidar_sdk_static.a
+        title: "Livox SDK2 static library"
+        hint: "Build and install drivers/Livox_SDK2, then run sudo ldconfig."
+
+  vrpn_client_ros:
+    cmake_packages:
+      - name: VRPN
+        hint: "sudo apt install libvrpn-dev"
+
+  web_cam:
+    cmake_packages:
+      - name: OpenCV
+        hint: "sudo apt install libopencv-dev"
+    pkg_config:
+      - name: libavcodec
+        hint: "sudo apt install libavcodec-dev"
+      - name: libavutil
+        hint: "sudo apt install libavutil-dev"
+      - name: libswscale
+        hint: "sudo apt install libswscale-dev"
+      - name: libv4l2
+        hint: "sudo apt install libv4l-dev"
+
+  turn_on_wheeltec_robot:
+    ros_packages:
+      - name: serial
+        hint: "sudo apt install ros-noetic-serial"
+
+  localization_fusion:
+    cmake_packages:
+      - name: yaml-cpp
+        hint: "sudo apt install libyaml-cpp-dev"
+
+  vins_fusion:
+    cmake_packages:
+      - name: OpenCV
+        version: "4"
+        hint: "sudo apt install libopencv-dev"
+      - name: Ceres
+        hint: "sudo apt install libceres-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+
+  vins_fusion_GPU:
+    cmake_packages:
+      - name: OpenCV
+        version: "4"
+        hint: "sudo apt install libopencv-dev"
+      - name: Ceres
+        hint: "sudo apt install libceres-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+
+  fast_lio:
+    cmake_packages:
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: PythonLibs
+        hint: "sudo apt install python3-dev"
+    headers:
+      - name: matplotlibcpp.h
+        hint: "Provide matplotlibcpp.h in a compiler include path, or install it under /usr/local/include."
+
+  open3d_loc:
+    cmake_packages:
+      - name: Open3D
+        hint: "Install Open3D C++ and set Open3D_DIR or Open3D_ROOT if it is installed outside standard paths."
+    libraries:
+      - name: c++
+        title: "libc++"
+        hint: "sudo apt install libc++-dev"
+      - name: c++abi
+        title: "libc++abi"
+        hint: "sudo apt install libc++abi-dev"
+
+  ekf_odometry:
+    cmake_packages:
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Sophus
+        optional: true
+        hint: "Optional for ekf_odometry; install Sophus or keep using the package fallback if the build allows it."
+
+  ekf_pose:
+    cmake_packages:
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+
+  planner_tools:
+    cmake_packages:
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+
+  ego_planner_swarm:
+    cmake_packages:
+      - name: OpenCV
+        hint: "sudo apt install libopencv-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+
+  fuel_planner:
+    cmake_packages:
+      - name: OpenCV
+        hint: "sudo apt install libopencv-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+
+  diff_planner:
+    cmake_packages:
+      - name: OpenCV
+        hint: "sudo apt install libopencv-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+
+  super_planner:
+    cmake_packages:
+      - name: yaml-cpp
+        hint: "sudo apt install libyaml-cpp-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+      - name: Curses
+        title: "ncurses"
+        hint: "sudo apt install libncurses-dev"
+    libraries:
+      - name: dw
+        title: "elfutils libdw"
+        hint: "sudo apt install libdw-dev"
+
+  rog_map:
+    cmake_packages:
+      - name: yaml-cpp
+        hint: "sudo apt install libyaml-cpp-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+    libraries:
+      - name: dw
+        title: "elfutils libdw"
+        hint: "sudo apt install libdw-dev"
+
+  simulator_utils:
+    cmake_packages:
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: PCL
+        hint: "sudo apt install libpcl-dev"
+      - name: OpenCV
+        hint: "sudo apt install libopencv-dev"
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+      - name: Armadillo
+        hint: "sudo apt install libarmadillo-dev"
+
+  gazebo_plugin:
+    cmake_packages:
+      - name: gazebo
+        title: "Gazebo development files"
+        hint: "sudo apt install gazebo11 libgazebo11-dev ros-noetic-gazebo-dev"
+
+  sunray_simulator:
+    cmake_packages:
+      - name: Boost
+        hint: "sudo apt install libboost-all-dev"
+
+  sunray_launcher_panel:
+    cmake_packages:
+      - name: Qt5
+        components: "Widgets"
+        title: "Qt5 Widgets"
+        hint: "sudo apt install qtbase5-dev"
+
+  sunray_monitor_tools:
+    ros_packages:
+      - name: mavros_msgs
+        hint: "sudo apt install ros-noetic-mavros ros-noetic-mavros-msgs"
+    cmake_packages:
+      - name: Qt5
+        components: "Widgets"
+        title: "Qt5 Widgets"
+        hint: "sudo apt install qtbase5-dev"
+
+  sunray_flight_logger:
+    ros_packages:
+      - name: mavros_msgs
+        hint: "sudo apt install ros-noetic-mavros ros-noetic-mavros-msgs"
+
+  uav_control:
+    ros_packages:
+      - name: mavros_msgs
+        hint: "sudo apt install ros-noetic-mavros ros-noetic-mavros-msgs"
+      - name: geographic_msgs
+        hint: "sudo apt install ros-noetic-geographic-msgs"
+    cmake_packages:
+      - name: yaml-cpp
+        hint: "sudo apt install libyaml-cpp-dev"
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+
+  uav_control_tools:
+    cmake_packages:
+      - name: Qt5
+        components: "Widgets"
+        title: "Qt5 Widgets"
+        hint: "sudo apt install qtbase5-dev"
+
+  ugv_control:
+    cmake_packages:
+      - name: Eigen3
+        hint: "sudo apt install libeigen3-dev"
+      - name: Qt5
+        components: "Widgets"
+        title: "Qt5 Widgets"
+        hint: "sudo apt install qtbase5-dev"
+
+  sunray_swarm_control:
+    cmake_packages:
+      - name: Curses
+        title: "ncurses"
+        hint: "sudo apt install libncurses-dev"
+      - name: Qt5
+        components: "Widgets"
+        title: "Qt5 Widgets"
+        hint: "sudo apt install qtbase5-dev"

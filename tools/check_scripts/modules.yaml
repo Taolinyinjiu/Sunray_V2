@@ -1,0 +1,443 @@
+# Sunray 构建模块配置文件
+#
+# modules:
+#   定义每个可独立参与编译的功能包。TUI 右侧“所有模块”会按照 label 分组显示。
+#
+# label:
+#   模块分类标签。建议与功能包所在的大目录保持一致，例如 common、drivers、
+#   localization、uav_control、ugv_control、planning、simulation 等。
+#
+# groups:
+#   左侧“模块组”预设，用于按照机型、场景或测试目的批量勾选模块。
+
+# ========== 模块定义 ==========
+modules:
+  # ----- common: 跨功能包共享的消息、服务和基础库 -----
+  sunray_msgs:
+    description: "Sunray 统一消息和服务定义，是各模块通信的基础依赖"
+    label: common
+    source_path: "common/sunray_msgs"
+    build_path: "build/sunray_msgs"
+    dependencies: []
+  sunray_common:
+    description: "Sunray 通用工具库，提供控制、定位和示例代码复用的基础函数"
+    label: common
+    source_path: "common/sunray_common"
+    build_path: "build/sunray_common"
+    dependencies: []
+  sunray_logger:
+    description: "Sunray 结构化二进制时序日志库，提供 ULog 风格的数据记录能力"
+    label: common
+    source_path: "common/sunray_logger"
+    build_path: "build/sunray_logger"
+    dependencies: []
+
+  # ----- communication: 对外通信、链路桥接和状态转发 -----
+  yunlink_ros_bridge:
+    description: "Yunlink 通信桥接包，订阅 Sunray 状态话题并转发给外部链路"
+    label: communication
+    source_path: "communication/yunlink_ros_bridge"
+    build_path: "build/yunlink_ros_bridge"
+    dependencies: ["sunray_msgs", "sunray_mavros"]
+
+  # ----- drivers: 飞控、传感器、动捕、云台和底盘等硬件驱动 -----
+  sunray_mavros:
+    description: "Sunray 对 MAVROS 的适配层，负责 PX4/MAVLink 状态读取和接口封装"
+    label: drivers
+    source_path: "drivers/sunray_mavros"
+    build_path: "build/sunray_mavros"
+    dependencies: []
+  vrpn_client_ros:
+    description: "VRPN 动捕客户端，用于接入外部动捕系统的位姿数据"
+    label: drivers
+    source_path: "drivers/vrpn_client_ros"
+    build_path: "build/vrpn_client_ros"
+    dependencies: []
+  sunray_gimbal:
+    description: "Sunray 云台控制驱动，用于云台设备的控制和状态交互"
+    label: drivers
+    source_path: "drivers/sunray_gimbal"
+    build_path: "build/sunray_gimbal"
+    dependencies: []
+  realsense2_camera:
+    description: "Intel RealSense 相机 ROS 驱动，用于视觉、深度和感知输入"
+    label: drivers
+    source_path: "drivers/realsense2_camera"
+    build_path: "build/realsense2_camera"
+    dependencies: [sunray_msgs]
+  livox_ros_driver2:
+    description: "Livox 激光雷达 ROS 驱动，使用前需确认 Livox_SDK 已正确安装"
+    label: drivers
+    source_path: "drivers/livox_ros_driver2"
+    build_path: "build/livox_ros_driver2"
+    dependencies: []
+  web_cam:
+    description: "普通 USB 摄像头 ROS 驱动，用于图像采集和视觉示例"
+    label: drivers
+    source_path: "drivers/web_cam"
+    build_path: "build/web_cam"
+    dependencies: []
+  joystick_ros_bridge:
+    description: "Linux 手柄到 ROS Joy 话题桥接驱动，用于发布 sensor_msgs/Joy"
+    label: drivers
+    source_path: "drivers/joystick_ros_bridge"
+    build_path: "build/joystick_ros_bridge"
+    dependencies: []
+  turn_on_wheeltec_robot:
+    description: "轮趣底盘驱动和启动包，用于 UGV 底盘通信与控制"
+    label: drivers
+    source_path: "drivers/turn_on_wheeltec_robot"
+    build_path: "build/turn_on_wheeltec_robot"
+    dependencies: []
+  
+  # ----- localization: 定位算法、定位源适配和统一里程计输出 -----
+  localization_fusion:
+    description: "Sunray 定位统一出口，融合外部定位源并发布标准 odom、TF 和状态"
+    label: localization
+    source_path: "localization/localization_fusion"
+    build_path: "build/localization_fusion"
+    dependencies: [sunray_msgs]
+  vins_fusion:
+    description: "VINS-Fusion 视觉惯性里程计源码包，用于相机和 IMU 定位"
+    label: localization
+    source_path: "localization/third_party_localization/vins-fusion"
+    build_path: "build/vins-fusion"
+    dependencies: [sunray_msgs]
+  vins_fusion_GPU:
+    description: "GPU 加速版本 VINS-Fusion，用于视觉惯性里程计实验"
+    label: localization
+    source_path: "localization/third_party_localization/vins-fusion-gpu"
+    build_path: "build/vins-fusion-gpu"
+    dependencies: [sunray_msgs]
+  fast_lio:
+    description: "FAST-LIO 激光惯性里程计，用于 Livox 等激光雷达定位建图"
+    label: localization
+    source_path: "localization/third_party_localization/fast_lio"
+    build_path: "build/fast_lio"
+    dependencies: [livox_ros_driver2]
+  open3d_loc:
+    description: "Open3D 点云地图全局定位包，需先配置 Open3D C++ 开发环境"
+    label: localization
+    source_path: "localization/third_party_localization/open3d_loc"
+    build_path: "build/open3d_loc"
+    dependencies: []
+  ekf_odometry:
+    description: "EKF 高频里程计补偿模块，用 IMU 对低频 odom 进行预测更新"
+    label: localization
+    source_path: "localization/localization_sources/ekf_odometry"
+    build_path: "build/ekf_odometry"
+    dependencies: []
+  ekf_pose:
+    description: "EKF 高频里程计补偿模块，用 IMU 对低频 odom 进行预测更新"
+    label: localization
+    source_path: "localization/localization_sources/ekf_pose"
+    build_path: "build/ekf_pose"
+    dependencies: []
+  sunray_mocap:
+    description: "动捕定位适配器，将 VRPN pose/twist 转换为 Sunray odometry"
+    label: localization
+    source_path: "localization/localization_sources/sunray_mocap"
+    build_path: "build/sunray_mocap"
+    dependencies: []
+  sunray_viobot:
+    description: "VIOBOT/Baton mini 定位适配器，修正并输出统一里程计"
+    label: localization
+    source_path: "localization/localization_sources/sunray_viobot"
+    build_path: "build/sunray_viobot"
+    dependencies: []
+
+  # ----- planning: Sunray 自研规划器、规划消息和第三方规划器适配示例 -----
+  planner_msgs:
+    description: "EGO planner 示例依赖的 planner_msgs 消息包"
+    label: planning
+    source_path: "planning/third_party_planner_examples/planner_msgs"
+    build_path: "build/planner_msgs"
+    dependencies: []
+  planner_tools:
+    description: "规划辅助工具和桥接节点，用于调试规划器输入输出"
+    label: planning
+    source_path: "planning/third_party_planner_examples/planner_tools"
+    build_path: "build/planner_tools"
+    dependencies: ["sunray_msgs"]
+
+  ego_planner_swarm:
+    description: "EGO planner 第三方源码示例包，用于轨迹规划功能验证"
+    label: planning
+    source_path: "planning/third_party_planner_examples/ego_planner_example/ego-planner-swarm"
+    build_path: "build/ego_planner_swarm"
+    dependencies: ["planner_msgs"]
+    conflicts_with: ["fuel_planner", "diff_planner", "sunray_fuel_adapter", "sunray_diff_adapter"]
+  sunray_ego_adapter:
+    description: "EGO planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/ego_planner_example/sunray_ego_adapter"
+    build_path: "build/sunray_ego_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_fuel_adapter", "sunray_diff_adapter", "fuel_planner", "diff_planner"]
+  
+  sunray_fuel_adapter:
+    description: "FUEL planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/fuel_planner_example/sunray_fuel_adapter"
+    build_path: "build/sunray_fuel_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_diff_adapter", "ego_planner_swarm", "diff_planner"]
+  fuel_planner:
+    description: "FUEL planner 第三方源码示例包，用于轨迹规划功能验证"
+    label: planning
+    source_path: "planning/third_party_planner_examples/fuel_planner_example/fuel_planner"
+    build_path: "build/fuel_planner"
+    dependencies: ["planner_msgs", "planner_tools", "sunray_fuel_adapter"]
+    conflicts_with: ["ego_planner_swarm", "diff_planner", "sunray_ego_adapter", "sunray_diff_adapter"]
+  
+  diff_planner:
+    description: "Diff Planner 第三方规划器示例包，用于规划算法对接测试"
+    label: planning
+    source_path: "planning/third_party_planner_examples/diff_planner_example/diff_planner"
+    build_path: "build/diff_planner"
+    dependencies: ["planner_msgs", "planner_tools", "sunray_diff_adapter"]
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "sunray_ego_adapter", "sunray_fuel_adapter"]
+  sunray_diff_adapter:
+    description: "Diff planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/diff_planner_example/sunray_diff_adapter"
+    build_path: "build/sunray_diff_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_fuel_adapter", "ego_planner_swarm", "fuel_planner"]
+
+  super_planner:
+    description: "SUPER/MARS Lab 第三方规划器示例包，当前仍处于适配阶段"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/super_planner"
+    build_path: "build/super_planner"
+    dependencies: ["planner_msgs", "rog_map", "planner_tools", "sunray_super_adapter"]
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner", "sunray_ego_adapter", "sunray_fuel_adapter", "sunray_diff_adapter"]
+  sunray_super_adapter:
+    description: "SUPER planner 到 Sunray 控制接口的适配示例，将 position_cmd 转换为控制命令"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/sunray_super_adapter"
+    build_path: "build/sunray_super_adapter"
+    dependencies: ["sunray_msgs", "planner_msgs"]
+    conflicts_with: ["sunray_ego_adapter", "sunray_fuel_adapter", "sunray_diff_adapter", "ego_planner_swarm", "fuel_planner", "diff_planner"]
+  rog_map:
+    description: "SUPER 使用的 ROG-MAP 地图组件"
+    label: planning
+    source_path: "planning/third_party_planner_examples/super_planner_example/rog_map"
+    build_path: "build/rog_map"
+    dependencies: []
+    conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner"]
+
+  # ----- simulation: Gazebo、仿真插件和 Sunray 仿真入口 -----
+  simulator_utils:
+    description: "仿真通用工具包，提供 Gazebo 和仿真场景复用能力"
+    label: simulation
+    source_path: "simulation/simulator_utils"
+    build_path: "build/simulator_utils"
+    dependencies: []
+  gazebo_plugin:
+    description: "Sunray Gazebo 插件包，用于仿真环境中的模型和传感器交互"
+    label: simulation
+    source_path: "simulation/gazebo_plugin"
+    build_path: "build/gazebo_plugin"
+    dependencies: []
+  sunray_simulator:
+    description: "Sunray 仿真主入口，整合 Gazebo 插件、模型和仿真启动流程"
+    label: simulation
+    source_path: "simulation/sunray_simulator"
+    build_path: "build/sunray_simulator"
+    dependencies: ["gazebo_plugin", "sunray_common", "sunray_msgs"]
+
+  # ----- swarm: 多机集群控制和集群示例 -----
+  sunray_swarm_control:
+    description: "Sunray 多机集群控制包，提供集群任务、编队和多机控制接口"
+    label: swarm
+    source_path: "swarm/sunray_swarm_control"
+    build_path: "build/sunray_swarm_control"
+    dependencies: [sunray_msgs]
+
+  # ----- tools: 启动面板、监控工具、系统管理和脚本管理 -----
+  sunray_launcher_panel:
+    description: "Sunray 启动面板，用于集中启动仿真、控制和常用工具"
+    label: tools
+    source_path: "tools/sunray_launcher_panel"
+    build_path: "build/sunray_launcher_panel"
+    dependencies: []
+  sunray_monitor_tools:
+    description: "Sunray 状态监控与三维可视化工具，用于观察无人机状态和任务过程"
+    label: tools
+    source_path: "tools/sunray_monitor_tools"
+    build_path: "build/sunray_monitor_tools"
+    dependencies: [sunray_msgs]
+  sunray_system:
+    description: "Sunray 真机 supervisor 工具，用于管理机载程序和运行状态"
+    label: tools
+    source_path: "tools/sunray_system"
+    build_path: "build/sunray_system"
+    dependencies: [sunray_msgs]
+  scripts_manage:
+    description: "Sunray 脚本管理工具，用于真机脚本部署、启动和维护"
+    label: tools
+    source_path: "tools/scripts_manage"
+    build_path: "build/scripts_manage"
+    dependencies: [sunray_msgs]
+  sunray_flight_logger:
+    description: "Sunray 飞控日志管理工具，通过 MAVROS FTP 浏览、下载和清除 PX4 日志"
+    label: tools
+    source_path: "tools/sunray_flight_logger"
+    build_path: "build/sunray_flight_logger"
+    dependencies: [sunray_mavros]
+
+  # ----- uav_control: 无人机控制核心、工具和接口示例 -----
+  uav_control:
+    description: "Sunray 无人机控制核心包，订阅控制命令并输出 PX4/MAVROS 控制接口"
+    label: uav_control
+    source_path: "uav_control/sunray_uav_control"
+    build_path: "build/sunray_uav_control"
+    dependencies: [sunray_msgs, sunray_common, sunray_logger]
+  uav_control_tools:
+    description: "无人机控制工具包，包含终端控制、控制面板和速度测试工具"
+    label: uav_control
+    source_path: "uav_control/uav_control_tools"
+    build_path: "build/uav_control_tools"
+    dependencies: [sunray_msgs, sunray_common]
+  sunray_uav_control_example:
+    description: "无人机控制接口示例包，面向新手演示起飞、降落、速度和轨迹命令"
+    label: uav_control
+    source_path: "uav_control/sunray_uav_control_example"
+    build_path: "build/sunray_uav_control_example"
+    dependencies: [sunray_msgs, uav_control, sunray_common]
+
+  # ----- ugv_control: 无人车控制核心、工具和接口示例 -----
+  ugv_control:
+    description: "Sunray 无人车控制核心包，负责 UGV 运动控制接口封装"
+    label: ugv_control
+    source_path: "ugv_control/sunray_ugv_control"
+    build_path: "build/sunray_ugv_control"
+    dependencies: [sunray_msgs, sunray_common]
+  ugv_control_tools:
+    description: "无人车控制终端工具，用于手动发送 UGV 控制命令和调试底盘"
+    label: ugv_control
+    source_path: "ugv_control/ugv_control_tools"
+    build_path: "build/ugv_control_tools"
+    dependencies: [sunray_msgs, sunray_common]
+  sunray_ugv_control_example:
+    description: "无人车控制接口示例包，面向新手演示 UGV 控制命令的发布方式"
+    label: ugv_control
+    source_path: "ugv_control/sunray_ugv_control_example"
+    build_path: "build/sunray_ugv_control_example"
+    dependencies: [sunray_msgs, ugv_control]
+
+# ========== 预定义组 ==========
+# label 用于 TUI 左侧“模块组”分段显示：
+#   Product: 面向机型或产品形态的常用构建预设
+#   Simulation: 面向仿真环境的构建预设
+#   Test: 面向开发测试或局部验证的构建预设
+groups:
+  # ----- Test: 开发测试和局部验证预设 -----
+  test:
+    label: Test
+    description: "全量测试预设，包含常用核心模块、驱动、定位、控制、工具和示例"
+    modules: ["sunray_msgs","sunray_common","sunray_mavros","livox_ros_driver2","vrpn_client_ros","localization_fusion","sunray_mocap","ekf_odometry","fast_lio","uav_control","ugv_control","uav_control_tools","ugv_control_tools","sunray_launcher_panel","sunray_monitor_tools","sunray_system","scripts_manage","yunlink_ros_bridge","sunray_uav_control_example","sunray_ugv_control_example","sunray_swarm_control"]
+
+  control_test:
+    label: Test
+    description: "无人机控制模块测试预设，仅编译 UAV 控制核心包"
+    modules: ["uav_control"]
+
+  localization_fusion_test:
+    label: Test
+    description: "定位融合测试预设，包含 MAVROS、VRPN 和 localization_fusion"
+    modules: ["sunray_mavros", "vrpn_client_ros", "localization_fusion"]
+
+  # ----- Simulation: 仿真环境预设 -----
+  Simulation:
+    label: Simulation
+    description: "仿真环境预设，包含 Sunray 仿真入口和启动面板"
+    modules: ["sunray_simulator", "sunray_launcher_panel"]
+
+  # ----- Product: 机型、产品形态和常用任务预设 -----
+  S_150_Basic:
+    label: Product
+    description: "Sunray-150 基础款预设，适合动捕定位条件下的基础飞行控制"
+    modules: 
+      [
+        "sunray_common",
+        "sunray_msgs",
+        "sunray_mavros", 
+        "vrpn_client_ros", 
+        "web_cam", 
+        "sunray_mocap",
+        "localization_fusion",
+        "uav_control",
+        "uav_control_tools",
+        "sunray_uav_control_example" 
+      ]
+
+  S_150_Lidar:
+    label: Product
+    description: "Sunray-150 激光雷达款预设，包含 Livox 驱动、动捕适配和 FAST-LIO"
+    modules:
+      [
+        "sunray_mavros",
+        "vrpn_client_ros",
+        "web_cam",
+        "livox_ros_driver2",
+        "sunray_mocap",
+        "fast_lio",
+      ]
+
+  S_150_Stereo:
+    label: Product
+    description: "Sunray-150 双目款预设，包含 MAVROS、动捕和 VIOBOT 适配"
+    modules:
+      ["sunray_mavros", "vrpn_client_ros", "sunray_mocap", "sunray_viobot"]
+
+  S_300_Standard:
+    label: Product
+    description: "Sunray-300 标准款预设，包含相机、Livox、FAST-LIO 和云台驱动"
+    modules:
+      [
+        "sunray_mavros",
+        "vrpn_client_ros",
+        "web_cam",
+        "livox_ros_driver2",
+        "sunray_mocap",
+        "fast_lio",
+        "sunray_gimbal",
+      ]
+
+  Swarm:
+    label: Product
+    description: "多机集群预设，包含公共库、飞控接口、定位融合、控制、集群和仿真模块"
+    modules:
+      [
+        "sunray_common",
+        "sunray_msgs",
+        "sunray_mavros",
+        "vrpn_client_ros",
+        "localization_fusion",
+        "uav_control",
+        "sunray_swarm_control",
+        "sunray_simulator",
+      ]
+
+  UGV:
+    label: Product
+    description: "无人车预设，包含 UGV 控制、定位、底盘驱动和仿真相关模块"
+    modules:
+      [
+        "ugv_control_tools",
+        "sunray_common",
+        "sunray_msgs",
+        "vrpn_client_ros",
+        "sunray_mocap",
+        "localization_fusion",
+        "ugv_control",
+        "turn_on_wheeltec_robot",
+        "sunray_simulator",
+      ]
+
+# ========== 构建配置 ==========
+build_config:
+  default_jobs: "auto"
+  catkin_command: "catkin_make"

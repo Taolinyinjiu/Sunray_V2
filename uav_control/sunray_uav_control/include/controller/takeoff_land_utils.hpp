@@ -94,8 +94,6 @@ struct TakeoffAccFFTuning {
     double jerk_max_mps3{8.0};
     double a_min_mps2{0.0};
     double a_max_mps2{15.0};
-    double liftoff_detect_h_m{0.05};
-    double liftoff_detect_vz_mps{0.15};
     double hover_thrust_reference{0.375};
     double hover_thrust_gain_min{0.65};
     double thrust_margin{0.04};

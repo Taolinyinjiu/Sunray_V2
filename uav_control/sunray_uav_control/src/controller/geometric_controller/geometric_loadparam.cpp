@@ -305,8 +305,6 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     takeoff_accff_tuning_.jerk_max_mps3 = 8.0;
     takeoff_accff_tuning_.a_min_mps2 = 0.0;
     takeoff_accff_tuning_.a_max_mps2 = gravity + 5.0;
-    takeoff_accff_tuning_.liftoff_detect_h_m = 0.05;
-    takeoff_accff_tuning_.liftoff_detect_vz_mps = 0.15;
     takeoff_accff_tuning_.hover_thrust_reference = 0.375;
     takeoff_accff_tuning_.hover_thrust_gain_min = 0.65;
     takeoff_accff_tuning_.thrust_margin = 0.04;

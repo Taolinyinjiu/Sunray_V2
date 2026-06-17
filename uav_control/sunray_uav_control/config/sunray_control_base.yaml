@@ -335,10 +335,11 @@ geometric_controller_param:
 
   # 速度环 PID 参数，数组顺序为 [x, y, z]。
   # move_velocity / move_velocity_body 主要依赖速度环。
-  vel_kp: [2.0, 2.0, 3]
+  vel_kp: [1.5, 1.5, 2.5]    # 轻微降低
   vel_ki: [0.0, 0.0, 0.0]
   vel_kd: [0.0, 0.0, 0.0]
 
+  # 这部分速度误差参数测试完成后移除
   # 速度误差预处理参数，数组顺序为 [x, y, z]。
   # 当前默认值保持旧行为:
   #   - limit = 0: 不限制 vel_error 幅值。
@@ -351,7 +352,7 @@ geometric_controller_param:
   #     的水平轴降到 0.5~0.8，velocity_vel_error_weight 保持 1.0。
   #   - 若速度偶发跳变，可启用 gate_threshold 并把 gate_decay 设为 0.2~0.5。
   vel_error_limit: [0.0, 0.0, 0.0]
-  vel_error_filter_tau: [0.0, 0.0, 0.0]
+  vel_error_filter_tau: [0.05, 0.05, 0.04]  # 主要噪声抑制手段
   trajectory_vel_error_weight: [1.0, 1.0, 1.0]
   velocity_vel_error_weight: [1.0, 1.0, 1.0]
   vel_error_gate_threshold: [0.0, 0.0, 0.0]

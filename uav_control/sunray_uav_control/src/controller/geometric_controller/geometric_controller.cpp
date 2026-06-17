@@ -1086,10 +1086,6 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         1.0 / std::max(1.0, geometric_controller_param_.controller_hz);
     const double commanded_height = std::max(relative_takeoff_height, 0.05);
     const double commanded_vmax = std::max(max_takeoff_velocity, 0.05);
-    const double prelift_height_guard =
-        std::min(takeoff_accff_tuning_.liftoff_detect_h_m, 0.35 * commanded_height);
-    const double prelift_vz_guard =
-        std::min(takeoff_accff_tuning_.liftoff_detect_vz_mps, 0.8 * commanded_vmax);
     const double hover_thrust_init =
         std::clamp(geometric_controller_param_.hover_thrust_init,
                    geometric_controller_param_.hover_thrust_min,
@@ -1180,8 +1176,6 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
     }
 
     const double rel_height = uav_odometry_.position.z() - ground_height_ref_;
-    const bool airborne =
-        rel_height > prelift_height_guard || uav_odometry_.velocity.z() > prelift_vz_guard;
 
     // ── 阶段 3：PreLift  jerk-bounded S-curve a_start → a_target ────────────
     if (takeoff_accff_state_.phase == takeoff_land::TakeoffPhaseAccFF::PreLift) {
@@ -1191,81 +1185,92 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
             takeoff_accff_state_.a_ff_prev = takeoff_accff_tuning_.a_start_mps2;
         }
 
-        if (airborne) {
-            ROS_INFO("[takeoff_accff] PreLift -> AirborneCurve, rel_h=%.3f vz=%.3f",
-                     rel_height, uav_odometry_.velocity.z());
+        double dt = (now - takeoff_accff_state_.last_update).toSec();
+        if (!(dt > 0.0) || dt > 5.0 * nominal_dt) {
+            dt = nominal_dt;
+        }
+        takeoff_accff_state_.last_update = now;
+        const double a_ff = takeoff_land::advance_s_curve_acc(
+            takeoff_accff_state_.a_ff_prev,
+            prelift_a_target,
+            dt,
+            takeoff_accff_tuning_.jerk_max_mps3,
+            takeoff_accff_tuning_.a_min_mps2,
+            takeoff_accff_tuning_.a_max_mps2);
+        takeoff_accff_state_.a_ff_prev = a_ff;
+
+        controller_data_types::TargetTrajectoryPoint_t des_state;
+        des_state.position = Eigen::Vector3d(motion_curve_.get_start_position().x(),
+                                             motion_curve_.get_start_position().y(),
+                                             ground_height_ref_);
+        des_state.velocity = Eigen::Vector3d::Zero();
+        des_state.acceleration =
+            Eigen::Vector3d(0.0, 0.0, a_ff - geometric_controller_param_.gravity);
+        des_state.jerk = Eigen::Vector3d::Zero();
+        des_state.yaw = takeoff_accff_state_.yaw;
+        des_state.yaw_rate = 0.0;
+
+        auto output = controller_.calculateControl(
+            des_state, uav_odometry_, ThrustCommandPolicy::UseFixedAnchor);
+        control_common::Mavros_SetpointAttitude setpoint;
+        if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
+            setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
+                            control_common::Mavros_SetpointAttitude::IgnorePitchRate |
+                            control_common::Mavros_SetpointAttitude::IgnoreYawRate;
+            setpoint.orientation = output.orientation;
+            setpoint.body_rate = Eigen::Vector3d::Zero();
+        } else {
+            setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
+            setpoint.body_rate = output.bodyrates;
+        }
+        setpoint.thrust = std::min(output.thrust, takeoff_thrust_limit);
+        mavros_helper_.pub_attitude_setpoint(setpoint);
+        cache_attitude_setpoint(setpoint);
+
+        const double elapsed = (now - takeoff_accff_state_.phase_start).toSec();
+        const bool ramp_ready = a_ff >= 0.99 * prelift_a_target;
+        const bool ramp_timeout =
+            elapsed >= takeoff_accff_tuning_.ramp_time_s + 2.0 * nominal_dt;
+
+        ROS_INFO_THROTTLE(0.5,
+                          "[takeoff_accff] PreLift a_ff=%.2f thrust=%.3f rel_h=%.3f vz=%.3f "
+                          "cmd_h=%.3f cmd_vmax=%.3f a_target=%.2f hover_gain=%.2f "
+                          "thrust_limit=%.3f px4_landed=%u ramp_ready=%u elapsed=%.2f",
+                          a_ff,
+                          setpoint.thrust,
+                          rel_height,
+                          uav_odometry_.velocity.z(),
+                          commanded_height,
+                          commanded_vmax,
+                          prelift_a_target,
+                          hover_thrust_gain,
+                          takeoff_thrust_limit,
+                          static_cast<unsigned>(px4_state.landed_state),
+                          static_cast<unsigned>(ramp_ready),
+                          elapsed);
+
+        if (ramp_ready || ramp_timeout) {
+            const char* trigger = ramp_ready ? "ramp_ready" : "ramp_timeout";
+            ROS_INFO("[takeoff_accff] PreLift -> AirborneCurve trigger=%s a_ff=%.2f "
+                     "a_target=%.2f rel_h=%.3f vz=%.3f px4_landed=%u elapsed=%.2f",
+                     trigger,
+                     a_ff,
+                     prelift_a_target,
+                     rel_height,
+                     uav_odometry_.velocity.z(),
+                     static_cast<unsigned>(px4_state.landed_state),
+                     elapsed);
             takeoff_accff_state_.phase = takeoff_land::TakeoffPhaseAccFF::AirborneCurve;
             takeoff_accff_state_.phase_start = now;
             takeoff_accff_state_.last_update = now;
             takeoff_accff_state_.curve_started = false;
-        } else {
-            double dt = (now - takeoff_accff_state_.last_update).toSec();
-            if (!(dt > 0.0) || dt > 5.0 * nominal_dt) {
-                dt = nominal_dt;
-            }
-            takeoff_accff_state_.last_update = now;
-            const double a_ff = takeoff_land::advance_s_curve_acc(
-                takeoff_accff_state_.a_ff_prev,
-                prelift_a_target,
-                dt,
-                takeoff_accff_tuning_.jerk_max_mps3,
-                takeoff_accff_tuning_.a_min_mps2,
-                takeoff_accff_tuning_.a_max_mps2);
-            takeoff_accff_state_.a_ff_prev = a_ff;
-
-            controller_data_types::TargetTrajectoryPoint_t des_state;
-            des_state.position = Eigen::Vector3d(motion_curve_.get_start_position().x(),
-                                                 motion_curve_.get_start_position().y(),
-                                                 ground_height_ref_);
-            des_state.velocity = Eigen::Vector3d::Zero();
-            des_state.acceleration =
-                Eigen::Vector3d(0.0, 0.0, a_ff - geometric_controller_param_.gravity);
-            des_state.jerk = Eigen::Vector3d::Zero();
-            des_state.yaw = takeoff_accff_state_.yaw;
-            des_state.yaw_rate = 0.0;
-
-            auto output = controller_.calculateControl(
-                des_state, uav_odometry_, ThrustCommandPolicy::UseFixedAnchor);
-            control_common::Mavros_SetpointAttitude setpoint;
-            if (attitude_command_mode_ == AttitudeCommandMode::Attitude) {
-                setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreRollRate |
-                                control_common::Mavros_SetpointAttitude::IgnorePitchRate |
-                                control_common::Mavros_SetpointAttitude::IgnoreYawRate;
-                setpoint.orientation = output.orientation;
-                setpoint.body_rate = Eigen::Vector3d::Zero();
-            } else {
-                setpoint.mask = control_common::Mavros_SetpointAttitude::IgnoreAttitude;
-                setpoint.body_rate = output.bodyrates;
-            }
-            setpoint.thrust = std::min(output.thrust, takeoff_thrust_limit);
-            mavros_helper_.pub_attitude_setpoint(setpoint);
-            cache_attitude_setpoint(setpoint);
-
-            ROS_INFO_THROTTLE(0.5,
-                              "[takeoff_accff] PreLift a_ff=%.2f thrust=%.3f rel_h=%.3f vz=%.3f "
-                              "cmd_h=%.3f cmd_vmax=%.3f h_guard=%.3f vz_guard=%.3f "
-                              "a_target=%.2f hover_gain=%.2f thrust_limit=%.3f",
-                              a_ff,
-                              setpoint.thrust,
-                              rel_height,
-                              uav_odometry_.velocity.z(),
-                              commanded_height,
-                              commanded_vmax,
-                              prelift_height_guard,
-                              prelift_vz_guard,
-                              prelift_a_target,
-                              hover_thrust_gain,
-                              takeoff_thrust_limit);
-
-            const double elapsed = (now - takeoff_accff_state_.phase_start).toSec();
-            if (elapsed > 1.5 * takeoff_accff_tuning_.ramp_time_s &&
-                takeoff_accff_state_.a_ff_prev < 0.99 * prelift_a_target) {
-                ROS_WARN_THROTTLE(
-                    1.0,
-                    "[takeoff_accff] PreLift ramp 未达 a_target,可能需要增大 jerk_max_mps3 或 ramp_time_s");
-            }
-            return false;
+        } else if (elapsed > 1.5 * takeoff_accff_tuning_.ramp_time_s &&
+                   takeoff_accff_state_.a_ff_prev < 0.99 * prelift_a_target) {
+            ROS_WARN_THROTTLE(
+                1.0,
+                "[takeoff_accff] PreLift ramp 未达 a_target,可能需要增大 jerk_max_mps3 或 ramp_time_s");
         }
+        return false;
     }
 
     // ── 阶段 4：AirborneCurve  rebase + 五次项曲线 + estimated anchor ───────

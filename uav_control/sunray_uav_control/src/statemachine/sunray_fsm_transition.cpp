@@ -49,6 +49,13 @@ void Sunray_FSM::init_transition_table() {
                                             always,
                                             always});
 
+    // TAKEOFF -> LAND，允许起飞异常或未完成时用降落指令中止起飞
+    sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::TAKEOFF,
+                                            sunray_fsm::SunrayEvent::LAND_REQUEST,
+                                            sunray_fsm::SunrayState::LAND,
+                                            always,
+                                            always});
+
     // HOVER -> MOVE (POINT)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::HOVER,
                                             sunray_fsm::SunrayEvent::POINT_REQUEST,
