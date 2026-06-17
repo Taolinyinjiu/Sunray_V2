@@ -607,6 +607,9 @@ def analyze_landing_runtime(log: LogData, out_dir: Path, stem: str):
     _save(fig, out_dir, stem, "08_landing_runtime")
 
     phases = sorted(int(v) for v in landing["landing_phase"].dropna().unique())
+    reasons = []
+    if "early_return_reason" in landing.columns:
+        reasons = sorted(int(v) for v in landing["early_return_reason"].dropna().unique())
     triggers = []
     if "landing_near_ground_trigger" in landing.columns:
         triggers = sorted(int(v) for v in landing["landing_near_ground_trigger"].dropna().unique())
@@ -617,16 +620,25 @@ def analyze_landing_runtime(log: LogData, out_dir: Path, stem: str):
         landing["landing_thrust_release_limit"] - landing["landing_setpoint_thrust"]
     ))
     print(f"  phases: {phases}  triggers: {triggers}")
+    if reasons:
+        print(f"  reasons: {reasons}")
     print(f"  min height={min_height:.3f}m  min release_u={min_release:.3f}  max xy_error={max_xy:.3f}m")
     print(f"  min thrust_limit-setpoint={min_thrust_margin:.3f}")
     return {
         "phases": phases,
+        "reasons": reasons,
         "triggers": triggers,
         "min_release": min_release,
         "min_height": min_height,
         "max_xy": max_xy,
         "min_thrust_margin": min_thrust_margin,
         "samples": int(len(landing)),
+        "last_phase": int(landing["landing_phase"].iloc[-1]),
+        "last_height": float(landing["landing_height_above_ground"].iloc[-1]),
+        "last_release": float(landing["landing_release_progress"].iloc[-1]),
+        "last_setpoint_thrust": float(landing["landing_setpoint_thrust"].iloc[-1]),
+        "last_thrust_limit": float(landing["landing_thrust_release_limit"].iloc[-1]),
+        "last_odom_vz": float(landing["landing_odom_vz"].iloc[-1]),
     }
 
 
@@ -820,16 +832,26 @@ def diagnose_landing(res):
     level = "OK"
     obs, sug = [], []
     phases = res["phases"]
+    reasons = res.get("reasons", [])
     triggers = res["triggers"]
-    obs.append(f"降落 runtime 样本 {res['samples']} 帧，phase={phases}，trigger={triggers}。")
+    obs.append(f"降落 runtime 样本 {res['samples']} 帧，phase={phases}，trigger={triggers}，reason={reasons}。")
     obs.append(
         f"最低高度 {res['min_height']:.3f} m，最小 release_u={res['min_release']:.3f}，"
         f"最大 XY 误差 {res['max_xy']:.3f} m。"
+    )
+    obs.append(
+        f"末端 phase={res.get('last_phase', -1)}，height={res.get('last_height', 0.0):.3f} m，"
+        f"release_u={res.get('last_release', 1.0):.3f}，thrust={res.get('last_setpoint_thrust', 0.0):.3f}，"
+        f"limit={res.get('last_thrust_limit', 0.0):.3f}，vz={res.get('last_odom_vz', 0.0):.3f} m/s。"
     )
     if 1 not in phases and 2 not in phases:
         level = _level_max(level, "WARN")
         obs.append("没有进入 NearGround 或 TouchdownRelease，降落可能仍停留在 HighDescent。")
         sug.append("检查 `landing_height_above_ground` 是否低于 near_h，或是否满足地效卡滞触发条件。")
+    if 13 in reasons and 14 not in reasons and 15 not in reasons:
+        level = _level_max(level, "ERROR")
+        obs.append("进入 AccFF 降落输出后没有出现 TouchdownRelease/LandingComplete，降落状态机未完成。")
+        sug.append("检查 NearGround 是否由控制器主动释放到低推力区，而不是依赖 PX4 landed_state。")
     if 2 not in triggers and 1 not in triggers and 1 in phases:
         level = _level_max(level, "WARN")
         obs.append("进入 NearGround 但 trigger 字段未记录有效来源。")
