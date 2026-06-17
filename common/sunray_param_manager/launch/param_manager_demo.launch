@@ -1,0 +1,71 @@
+<launch>
+  <!--
+    Sunray 参数管理演示入口：A/B/C 三个模块模拟定位、规划、控制。
+
+    推荐直接运行：
+      roslaunch sunray_param_manager param_manager_demo.launch
+
+    指定不同 agent：
+      roslaunch sunray_param_manager param_manager_demo.launch agent_name:=uav agent_id:=2
+
+    运行时修改规划目标：
+      rosparam set /uav1/module_b_planning/module_b/target_x 5.0
+
+    运行时修改控制限幅：
+      rosparam set /uav1/module_c_control/module_c/max_applied_vel 0.4
+
+    A 定位模块的 start_x/start_y/height/simulated_vx 是启动时读取一次；
+    B/C 模块的 target、kp、max 等参数会运行时刷新。
+  -->
+
+  <arg name="agent_name" default="uav"/>
+  <arg name="agent_id" default="1"/>
+  <arg name="agent_key" default="$(arg agent_name)$(arg agent_id)"/>
+
+  <!-- 共享参数模板：只保存 topic/frame 后缀规则，不写死 uav1。 -->
+  <rosparam
+    file="$(find sunray_param_manager)/config/common_params.yaml"
+    command="load"
+    ns="$(arg agent_key)/sunray"/>
+
+  <!--
+    agent 基本信息由 launch 参数写入共享命名空间。
+    这样 frame/topic 的完整前缀由 agent_name + agent_id 决定。
+  -->
+  <param name="/$(arg agent_key)/sunray/agent/name" value="$(arg agent_name)"/>
+  <param name="/$(arg agent_key)/sunray/agent/id" value="$(arg agent_id)"/>
+  <param name="/$(arg agent_key)/sunray/agent/key" value="$(arg agent_key)"/>
+
+  <!-- A 模块：模拟 localization，发布 odom。 -->
+  <node pkg="sunray_param_manager"
+        type="module_a_localization_node"
+        name="module_a_localization"
+        ns="$(arg agent_key)"
+        output="screen">
+    <rosparam file="$(find sunray_param_manager)/config/module_a_params.yaml" command="load"/>
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+  </node>
+
+  <!-- B 模块：模拟 planning，订阅 odom，发布速度规划命令。 -->
+  <node pkg="sunray_param_manager"
+        type="module_b_planning_node"
+        name="module_b_planning"
+        ns="$(arg agent_key)"
+        output="screen">
+    <rosparam file="$(find sunray_param_manager)/config/module_b_params.yaml" command="load"/>
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+  </node>
+
+  <!-- C 模块：模拟 control，订阅 odom 和规划命令，发布控制状态。 -->
+  <node pkg="sunray_param_manager"
+        type="module_c_control_node"
+        name="module_c_control"
+        ns="$(arg agent_key)"
+        output="screen">
+    <rosparam file="$(find sunray_param_manager)/config/module_c_params.yaml" command="load"/>
+    <param name="agent_name" value="$(arg agent_name)"/>
+    <param name="agent_id" value="$(arg agent_id)"/>
+  </node>
+</launch>

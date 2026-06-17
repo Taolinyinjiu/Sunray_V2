@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>sunray_param_manager</name>
+  <version>0.1.0</version>
+  <description>Parameter management examples for Sunray ROS packages.</description>
+
+  <maintainer email="yundrone@yundrone.cn">Sunray</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+
+  <export/>
+</package>

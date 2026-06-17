@@ -229,11 +229,13 @@
     "group": "附录",
     "title": "附录",
     "files": [
+      "appendix/ros.md",
       "appendix/px4.md",
       "appendix/mavlink.md",
       "appendix/mavros.md"
     ],
     "sections": [
+      {"id": "appendix-ros", "title": "ROS"},
       {"id": "appendix-px4", "title": "PX4"},
       {"id": "appendix-mavlink", "title": "MAVLink"},
       {"id": "appendix-mavros", "title": "MAVROS"}

@@ -1,0 +1,27 @@
+# C 模块私有参数：模拟 control。
+#
+# 实际加载路径：
+#   /uav1/module_c_control/module_c/...
+#
+# 本模块会周期重新读取参数，用来演示：
+#   - 控制增益、执行速度限幅、到达/悬停判定阈值可以运行时调整。
+#   - 控制模块通常订阅规划命令，再结合自身参数输出控制状态。
+
+module_c:
+  # 控制状态发布频率，单位 Hz。
+  control_rate_hz: 20.0
+
+  # 运行时参数刷新频率，单位 Hz。
+  refresh_rate_hz: 1.0
+
+  # true：周期读取 kp/max/threshold 等参数；false：只使用当前内存中的参数。
+  enable_live_reload: true
+
+  # 简化控制律：applied_vel = kp_velocity * planning_cmd_vel。
+  kp_velocity: 1.0
+
+  # 每个轴向模拟执行速度限幅，单位 m/s。
+  max_applied_vel: 1.0
+
+  # 执行速度低于该阈值时，mock_state 显示 HOLD_OR_ARRIVED。
+  stop_speed_threshold: 0.05

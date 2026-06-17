@@ -1,0 +1,29 @@
+# B 模块私有参数：模拟 planning。
+#
+# 实际加载路径：
+#   /uav1/module_b_planning/module_b/...
+#
+# 本模块会周期重新读取参数，用来演示：
+#   - 规划目标点、规划增益、速度限幅可以运行时调整。
+#   - 参数服务器不会主动推送变化，节点必须自己定时 getParam。
+
+module_b:
+  # 速度规划命令发布频率，单位 Hz。
+  publish_rate_hz: 10.0
+
+  # 运行时参数刷新频率，单位 Hz。
+  refresh_rate_hz: 1.0
+
+  # true：周期读取 target/kp/max 等参数；false：只使用当前内存中的参数。
+  enable_live_reload: true
+
+  # 规划目标点，单位 m，坐标系为 {agent_key}/sunray_local。
+  target_x: 3.0
+  target_y: 0.0
+  target_z: 1.0
+
+  # 简化规划律：cmd_vel = kp_position * position_error。
+  kp_position: 0.8
+
+  # 每个轴向速度命令限幅，单位 m/s。
+  max_cmd_vel: 1.2

@@ -1,0 +1,23 @@
+# Sunray 参数管理演示：公共参数模板
+#
+# 这里不写死 uav1。agent/name、agent/id、agent/key 由 launch 参数生成。
+# 本文件只保存 frame/topic 后缀规则，节点用 agent_name + agent_id 推导完整名称。
+#
+# 例如 agent_name=uav、agent_id=1 时：
+#   agent_key = uav1
+#   frames/local_suffix = sunray_local
+#   => local_frame = uav1/sunray_local
+#
+#   topics/localization_odom = localization/local_odom
+#   => /uav1/sunray/localization/local_odom
+
+frames:
+  world: "world"
+  global_suffix: "sunray_global"
+  local_suffix: "sunray_local"
+  base_link_suffix: "base_link"
+
+topics:
+  localization_odom: "localization/local_odom"
+  planning_cmd: "planning/mock_velocity_cmd"
+  control_state: "control/mock_state"
