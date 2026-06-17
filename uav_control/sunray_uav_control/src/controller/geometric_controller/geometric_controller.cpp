@@ -999,7 +999,7 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         std::clamp(takeoff_accff_tuning_.hover_thrust_reference / hover_gain_denominator,
                    takeoff_accff_tuning_.hover_thrust_gain_min,
                    1.0);
-    const double base_prelift_net_acc = std::clamp(commanded_vmax, 0.10, 0.60);
+    const double base_prelift_net_acc = std::clamp(commanded_vmax, 0.05, 0.45);
     const double velocity_limited_a_target =
         geometric_controller_param_.gravity + base_prelift_net_acc * hover_thrust_gain;
     const double prelift_a_target =

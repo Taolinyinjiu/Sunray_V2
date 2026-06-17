@@ -288,11 +288,14 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     const double gravity = geometric_controller_param_.gravity;
     const double hover_init = std::clamp(geometric_controller_param_.hover_thrust_init, 0.05, 0.80);
 
-    // 起飞:a_start 对应 thrust ≈ 0.08(略高于 idle,远低于悬停);a_target = g + 0.5。
+    // 起飞:a_start 对应 thrust ≈ 0.08(略高于 idle,远低于悬停);
+    // a_target 略高于 g,PreLift 只负责柔和建立推力,后续爬升速度交给 AirborneCurve。
     takeoff_accff_tuning_.a_start_mps2 = std::clamp(gravity * 0.08 / hover_init, 0.5, gravity);
-    takeoff_accff_tuning_.a_target_mps2 = gravity + 0.5;
-    takeoff_accff_tuning_.ramp_time_s = 1.2;
-    takeoff_accff_tuning_.jerk_max_mps3 = 8.0;
+    takeoff_accff_tuning_.a_target_mps2 = gravity + 0.35;
+    takeoff_accff_tuning_.ramp_time_s = 3.0;
+    takeoff_accff_tuning_.jerk_max_mps3 =
+        1.2 * (takeoff_accff_tuning_.a_target_mps2 - takeoff_accff_tuning_.a_start_mps2) /
+        std::max(takeoff_accff_tuning_.ramp_time_s, 0.2);
     takeoff_accff_tuning_.a_min_mps2 = 0.0;
     takeoff_accff_tuning_.a_max_mps2 = gravity + 5.0;
     takeoff_accff_tuning_.hover_thrust_reference = 0.375;
