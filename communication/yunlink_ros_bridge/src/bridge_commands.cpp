@@ -1,7 +1,9 @@
+/** @file @brief YunLink 命令到 Sunray 控制命令的回调适配实现。 */
 #include "bridge_node.hpp"
 
 #include <cmath>
 
+/// 命令回调只做字段适配，具体执行判断由 uav_control 负责。
 void YunlinkRosBridgeNode::onTakeoffCommand(
     const yunlink::InboundCommandView<yunlink::TakeoffCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(sunray_msgs::UAVControlCMD::TAKEOFF);
@@ -16,6 +18,7 @@ void YunlinkRosBridgeNode::onTakeoffCommand(
                           " max_velocity_mps=" + std::to_string(view.payload.max_velocity_mps));
 }
 
+/// 将 YunLink 降落命令转成 Sunray LAND 控制命令。
 void YunlinkRosBridgeNode::onLandCommand(
     const yunlink::InboundCommandView<yunlink::LandCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(sunray_msgs::UAVControlCMD::LAND);
@@ -28,6 +31,7 @@ void YunlinkRosBridgeNode::onLandCommand(
                       "max_velocity_mps=" + std::to_string(view.payload.max_velocity_mps));
 }
 
+/// 将 YunLink 返航命令转成 Sunray RETURN 控制命令。
 void YunlinkRosBridgeNode::onReturnCommand(
     const yunlink::InboundCommandView<yunlink::ReturnCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(sunray_msgs::UAVControlCMD::RETURN);
@@ -39,6 +43,7 @@ void YunlinkRosBridgeNode::onReturnCommand(
                       "loiter_before_return_s=" + std::to_string(view.payload.loiter_before_return_s));
 }
 
+/// 将 YunLink 定点命令转成 Sunray 惯性系 MOVE_POINT 控制命令。
 void YunlinkRosBridgeNode::onGotoCommand(
     const yunlink::InboundCommandView<yunlink::GotoCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(sunray_msgs::UAVControlCMD::MOVE_POINT);
@@ -58,6 +63,7 @@ void YunlinkRosBridgeNode::onGotoCommand(
                           " yaw=" + std::to_string(view.payload.yaw_rad));
 }
 
+/// 将 YunLink 速度设定命令转成 Sunray 惯性系或机体系速度控制命令。
 void YunlinkRosBridgeNode::onVelocitySetpointCommand(
     const yunlink::InboundCommandView<yunlink::VelocitySetpointCommand>& view) {
     sunray_msgs::UAVControlCMD cmd = makeBaseControlCmd(
@@ -73,6 +79,7 @@ void YunlinkRosBridgeNode::onVelocitySetpointCommand(
                          " yaw_rate=" + std::to_string(view.payload.yaw_rate_radps);
 
     if (view.payload.body_frame) {
+        // 机体系速度通过 fixed_height 保持高度，bridge 不新增 z 轴控制语义。
         bool has_height = false;
         cmd.desired_body_xy_vel.x = view.payload.vx_mps;
         cmd.desired_body_xy_vel.y = view.payload.vy_mps;

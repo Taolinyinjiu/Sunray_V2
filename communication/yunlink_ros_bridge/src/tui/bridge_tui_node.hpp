@@ -1,3 +1,4 @@
+/** @file @brief YunLink ROS bridge 终端诊断面板节点接口。 */
 #pragma once
 
 #include <cstdint>
@@ -9,9 +10,10 @@
 #include <diagnostic_msgs/DiagnosticArray.h>
 #include <ros/ros.h>
 
+/** @brief 订阅 bridge 诊断数组并渲染终端状态面板。 */
 class BridgeTuiNode {
   public:
-    BridgeTuiNode();
+    BridgeTuiNode(); ///< @brief 构造 TUI 节点并启动诊断订阅与打印定时器。
 
   private:
     struct FlowRow {

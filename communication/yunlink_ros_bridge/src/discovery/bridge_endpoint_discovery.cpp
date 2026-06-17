@@ -1,3 +1,4 @@
+/** @file @brief bridge 端点发现广播和稳定 endpoint_id 管理实现。 */
 #include "discovery/bridge_endpoint_discovery.hpp"
 
 #include <algorithm>
@@ -12,6 +13,7 @@
 
 namespace {
 
+/// 返回当前墙钟毫秒时间，用于发现包启动时间戳。
 uint64_t wall_time_ms() {
     return static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -19,12 +21,14 @@ uint64_t wall_time_ms() {
             .count());
 }
 
+/// 写入可选错误字符串。
 void set_error(std::string* error, const std::string& value) {
     if (error != nullptr) {
         *error = value;
     }
 }
 
+/// 根据配置声明 bridge 能力。
 std::vector<std::string> default_capabilities(bool enable_system_services) {
     std::vector<std::string> capabilities{"state", "commands"};
     if (enable_system_services) {
@@ -41,6 +45,7 @@ BridgeEndpointDiscovery::~BridgeEndpointDiscovery() {
     stop();
 }
 
+/// 根据 bridge 参数生成广播内容并启动 UDP endpoint advertiser。
 bool BridgeEndpointDiscovery::configure(const BridgeParams& params, std::string* error) {
     stop();
     if (!params.enable_endpoint_discovery) {
@@ -48,6 +53,7 @@ bool BridgeEndpointDiscovery::configure(const BridgeParams& params, std::string*
         return true;
     }
 
+    // endpoint_id 跨重启保持稳定，避免 bridge 进程重启后 monitor 侧设备条目反复变化。
     std::string endpoint_id;
     if (!load_or_create_endpoint_id(params.endpoint_id_file, &endpoint_id, error)) {
         return false;
@@ -91,16 +97,19 @@ bool BridgeEndpointDiscovery::configure(const BridgeParams& params, std::string*
     return true;
 }
 
+/// 停止 endpoint advertiser 并清空启用状态。
 void BridgeEndpointDiscovery::stop() {
     advertiser_.stop();
     enabled_ = false;
     sequence_ = 0;
 }
 
+/// 返回端点发现是否处于启用状态。
 bool BridgeEndpointDiscovery::enabled() const {
     return enabled_;
 }
 
+/// 广播一次 endpoint advertisement，供 monitor 发现 bridge。
 void BridgeEndpointDiscovery::publish_once() {
     if (!enabled_) {
         return;
@@ -114,14 +123,17 @@ void BridgeEndpointDiscovery::publish_once() {
     }
 }
 
+/// 返回当前广播给 monitor 的显示名。
 std::string BridgeEndpointDiscovery::display_name() const {
     return advertisement_.display_name;
 }
 
+/// 返回当前稳定 endpoint_id。
 std::string BridgeEndpointDiscovery::endpoint_id() const {
     return advertisement_.endpoint_id;
 }
 
+/// 优先读取持久化 endpoint_id，缺失时生成并写回。
 bool BridgeEndpointDiscovery::load_or_create_endpoint_id(const std::string& path,
                                                          std::string* endpoint_id,
                                                          std::string* error) {
@@ -143,6 +155,7 @@ bool BridgeEndpointDiscovery::load_or_create_endpoint_id(const std::string& path
     return true;
 }
 
+/// 生成短 endpoint_id，用于显示和发现时区分不同 bridge。
 std::string BridgeEndpointDiscovery::generate_endpoint_id() {
     static constexpr char kAlphabet[] = "0123456789abcdefghijklmnopqrstuvwxyz";
     std::random_device rd;
@@ -157,6 +170,7 @@ std::string BridgeEndpointDiscovery::generate_endpoint_id() {
     return out;
 }
 
+/// 确保持久化 endpoint_id 的父目录存在。
 bool BridgeEndpointDiscovery::ensure_parent_directory(const std::string& path, std::string* error) {
     try {
         const std::filesystem::path file_path(path);
@@ -171,6 +185,7 @@ bool BridgeEndpointDiscovery::ensure_parent_directory(const std::string& path, s
     }
 }
 
+/// 从文件读取并校验 endpoint_id。
 bool BridgeEndpointDiscovery::read_endpoint_id_file(const std::string& path,
                                                     std::string* endpoint_id,
                                                     std::string* error) {
@@ -192,6 +207,7 @@ bool BridgeEndpointDiscovery::read_endpoint_id_file(const std::string& path,
     return true;
 }
 
+/// 将生成的 endpoint_id 写入文件，保证后续重启稳定。
 bool BridgeEndpointDiscovery::write_endpoint_id_file(const std::string& path,
                                                      const std::string& endpoint_id,
                                                      std::string* error) {

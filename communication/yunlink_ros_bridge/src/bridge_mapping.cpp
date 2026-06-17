@@ -1,5 +1,8 @@
+/** @file @brief ROS 消息到 YunLink snapshot 的字段映射实现。 */
 #include "bridge_mapping.hpp"
 
+/// 本文件只做字段转换，不推断就绪、完成或控制权限。
+/// 将 ROS Header 的 frame/stamp 转成 YunLink 通用头。
 yunlink::HeaderSnapshot mapHeader(const std_msgs::Header& msg) {
     yunlink::HeaderSnapshot out{};
     out.frame_id = msg.frame_id;
@@ -10,6 +13,7 @@ yunlink::HeaderSnapshot mapHeader(const std_msgs::Header& msg) {
     return out;
 }
 
+/// 将 Sunray Vector2 转成 YunLink 二维向量。
 yunlink::Vector2f mapVector2(const sunray_msgs::Vector2& msg) {
     yunlink::Vector2f out{};
     out.x = msg.x;
@@ -17,6 +21,7 @@ yunlink::Vector2f mapVector2(const sunray_msgs::Vector2& msg) {
     return out;
 }
 
+/// 将 ROS 四元数转成 YunLink 四元数。
 yunlink::Quaternionf mapQuaternion(const geometry_msgs::Quaternion& msg) {
     yunlink::Quaternionf out{};
     out.x = toFloat(msg.x);
@@ -26,6 +31,7 @@ yunlink::Quaternionf mapQuaternion(const geometry_msgs::Quaternion& msg) {
     return out;
 }
 
+/// 将 ROS 地理坐标转成 YunLink 地理坐标 snapshot。
 yunlink::GeoPointSnapshot mapGeoPoint(const geographic_msgs::GeoPoint& msg) {
     yunlink::GeoPointSnapshot out{};
     out.latitude_deg = msg.latitude;
@@ -34,6 +40,7 @@ yunlink::GeoPointSnapshot mapGeoPoint(const geographic_msgs::GeoPoint& msg) {
     return out;
 }
 
+/// 将 ROS 位姿转成 YunLink 位姿 snapshot。
 yunlink::PoseSnapshot mapPose(const geometry_msgs::Pose& msg) {
     yunlink::PoseSnapshot out{};
     out.position_m = mapVector3(msg.position);
@@ -41,6 +48,7 @@ yunlink::PoseSnapshot mapPose(const geometry_msgs::Pose& msg) {
     return out;
 }
 
+/// 将 ROS 线速度/角速度转成 YunLink twist snapshot。
 yunlink::TwistSnapshot mapTwist(const geometry_msgs::Twist& msg) {
     yunlink::TwistSnapshot out{};
     out.linear_mps = mapVector3(msg.linear);
@@ -48,6 +56,7 @@ yunlink::TwistSnapshot mapTwist(const geometry_msgs::Twist& msg) {
     return out;
 }
 
+/// 将 ROS 坐标变换转成 YunLink transform snapshot。
 yunlink::TransformSnapshot mapTransform(const geometry_msgs::TransformStamped& msg) {
     yunlink::TransformSnapshot out{};
     out.header = mapHeader(msg.header);
@@ -57,6 +66,7 @@ yunlink::TransformSnapshot mapTransform(const geometry_msgs::TransformStamped& m
     return out;
 }
 
+/// 将 ROS 里程计完整转成 YunLink odometry snapshot。
 yunlink::OdometrySnapshot mapOdometry(const nav_msgs::Odometry& msg) {
     yunlink::OdometrySnapshot out{};
     out.header = mapHeader(msg.header);
@@ -70,6 +80,7 @@ yunlink::OdometrySnapshot mapOdometry(const nav_msgs::Odometry& msg) {
     return out;
 }
 
+/// 将本地里程计转成 YunLink local odom snapshot。
 yunlink::LocalOdomSnapshot mapLocalOdom(const nav_msgs::Odometry& msg) {
     yunlink::LocalOdomSnapshot out{};
     out.header = mapHeader(msg.header);
@@ -83,6 +94,7 @@ yunlink::LocalOdomSnapshot mapLocalOdom(const nav_msgs::Odometry& msg) {
     return out;
 }
 
+/// 将 Sunray 控制命令转成 monitor 可读的 YunLink snapshot。
 yunlink::UavControlCmdSnapshot mapControlCmd(const sunray_msgs::UAVControlCMD& msg) {
     yunlink::UavControlCmdSnapshot out{};
     out.header = mapHeader(msg.header);
@@ -102,12 +114,14 @@ yunlink::UavControlCmdSnapshot mapControlCmd(const sunray_msgs::UAVControlCMD& m
     return out;
 }
 
+/// 将控制侧发布的命令执行状态转成 YunLink 状态 snapshot。
 yunlink::CommandExecutionStatusSnapshot
 mapCommandExecutionStatus(const sunray_msgs::UAVCommandExecutionStatus& msg) {
     yunlink::CommandExecutionStatusSnapshot out{};
     out.header = mapHeader(msg.header);
     out.agent_name = msg.agent_name;
     out.agent_id = msg.agent_id;
+    // envelope ID 经控制链路透传回来，用于把状态匹配回原始命令。
     out.session_id = msg.yunlink_session_id;
     out.command_message_id = msg.yunlink_message_id;
     out.command_correlation_id = msg.yunlink_correlation_id;

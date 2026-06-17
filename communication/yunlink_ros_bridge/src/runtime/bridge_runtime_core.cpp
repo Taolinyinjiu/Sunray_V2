@@ -1,8 +1,10 @@
+/** @file @brief bridge runtime 初始化、参数加载和 ROS/YunLink 订阅设置实现。 */
 #include "bridge_node.hpp"
 
 #include <algorithm>
 #include <cstdlib>
 
+/// 按固定顺序初始化参数、诊断、YunLink runtime、ROS IO 和后台任务。
 YunlinkRosBridgeNode::YunlinkRosBridgeNode() : nh_(), pnh_("~") {
     loadParams();
     setupDiagnosticState();
@@ -15,13 +17,16 @@ YunlinkRosBridgeNode::YunlinkRosBridgeNode() : nh_(), pnh_("~") {
     setupReconnectTimer();
 }
 
+/// 停止后台 worker、端点发现和 YunLink runtime。
 YunlinkRosBridgeNode::~YunlinkRosBridgeNode() {
     stopSystemServiceWorker();
     endpoint_discovery_.stop();
     runtime_.stop();
 }
 
+/// 从 ROS 私有参数加载 bridge 配置，保留单机默认值作为 fallback。
 void YunlinkRosBridgeNode::loadParams() {
+    // 默认值对应单机启动路径；仿真、真机或多机布局通过 YAML/launch 参数覆盖。
     pnh_.param<std::string>("local_odom_topic",
                             params_.local_odom_topic,
                             params_.local_odom_topic);
@@ -94,6 +99,7 @@ void YunlinkRosBridgeNode::loadParams() {
                             params_.endpoint_id_file);
 }
 
+/// 启动 YunLink runtime，并记录主动拨号或被动监听模式。
 void YunlinkRosBridgeNode::startRuntime() {
     yunlink::RuntimeConfig cfg;
     cfg.udp_bind_port = clampPort(params_.udp_bind_port);
@@ -106,14 +112,26 @@ void YunlinkRosBridgeNode::startRuntime() {
 
     const auto ec = runtime_.start(cfg);
     if (ec != yunlink::ErrorCode::kOk) {
+        {
+            std::lock_guard<std::mutex> lock(diag_mu_);
+            runtime_started_ = false;
+            last_connect_error_ = "runtime start failed ec=" + std::to_string(static_cast<unsigned>(ec));
+            last_error_time_ = ros::Time::now();
+        }
         ROS_FATAL("yunlink runtime start failed, error code=%u", static_cast<unsigned>(ec));
         ros::shutdown();
         return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(diag_mu_);
+        runtime_started_ = true;
     }
 
     ROS_INFO("yunlink runtime started: udp_bind=%u udp_target=%u tcp_listen=%u agent_id=%d",
              cfg.udp_bind_port, cfg.udp_target_port, cfg.tcp_listen_port, params_.agent_id);
     if (params_.remote_ip.empty() || params_.remote_tcp_port <= 0) {
+        // 被动模式是默认 monitor 工作流：bridge 监听端口，
+        // endpoint discovery 告诉 monitor 应该连接哪里。
         ROS_INFO("yunlink_ros_bridge passive connection mode: waiting for monitor inbound session on tcp_listen=%u",
                  cfg.tcp_listen_port);
     } else {
@@ -122,12 +140,14 @@ void YunlinkRosBridgeNode::startRuntime() {
     }
 }
 
+/// 建立 ROS topic 订阅/发布和 YunLink command/system-service 订阅。
 void YunlinkRosBridgeNode::setupSubscribers() {
     control_cmd_pub_ = nh_.advertise<sunray_msgs::UAVControlCMD>(params_.control_cmd_topic, 20);
     monitor_diagnostic_pub_ =
         nh_.advertise<diagnostic_msgs::DiagnosticArray>(params_.monitor_diagnostic_topic, 1, true);
     ros::TransportHints latest_hints;
     latest_hints.tcpNoDelay();
+    // 状态 snapshot 只关心最新值，不需要积压历史消息。
     local_odom_sub_ =
         nh_.subscribe(params_.local_odom_topic, 1, &YunlinkRosBridgeNode::onLocalOdom, this, latest_hints);
     odom_state_sub_ =
@@ -223,6 +243,7 @@ void YunlinkRosBridgeNode::setupSubscribers() {
     }
 }
 
+/// 配置 UDP 端点发现广播，让 monitor 能发现被动监听的 bridge。
 void YunlinkRosBridgeNode::setupEndpointDiscovery() {
     if (!params_.enable_endpoint_discovery) {
         ROS_INFO("yunlink_ros_bridge endpoint discovery disabled");
@@ -242,6 +263,7 @@ void YunlinkRosBridgeNode::setupEndpointDiscovery() {
              endpoint_discovery_.endpoint_id().c_str());
 }
 
+/// 创建重连、诊断发布和端点发现定时器。
 void YunlinkRosBridgeNode::setupReconnectTimer() {
     reconnect_timer_ = nh_.createTimer(
         ros::Duration(1.0), &YunlinkRosBridgeNode::onReconnectTimer, this, false, true);
@@ -258,42 +280,4 @@ void YunlinkRosBridgeNode::setupReconnectTimer() {
             false,
             true);
     }
-}
-
-void YunlinkRosBridgeNode::setupSystemServiceClients() {
-    if (!params_.enable_system_services) {
-        return;
-    }
-
-    const std::string list_name = params_.sunray_system_ns + "/list_features";
-    const std::string get_name = params_.sunray_system_ns + "/get_features";
-    const std::string start_name = params_.sunray_system_ns + "/start_feature";
-    const std::string stop_name = params_.sunray_system_ns + "/stop_feature";
-    list_features_client_ = nh_.serviceClient<sunray_msgs::ListFeatures>(list_name, false);
-    get_features_client_ = nh_.serviceClient<sunray_msgs::GetFeatures>(get_name, false);
-    start_feature_client_ = nh_.serviceClient<sunray_msgs::StartFeature>(start_name, false);
-    stop_feature_client_ = nh_.serviceClient<sunray_msgs::StopFeature>(stop_name, false);
-}
-
-void YunlinkRosBridgeNode::startSystemServiceWorker() {
-    if (!params_.enable_system_services) {
-        return;
-    }
-    stop_system_service_worker_ = false;
-    system_service_worker_ = std::thread(&YunlinkRosBridgeNode::systemServiceWorkerLoop, this);
-}
-
-void YunlinkRosBridgeNode::stopSystemServiceWorker() {
-    {
-        std::lock_guard<std::mutex> lock(system_service_mu_);
-        stop_system_service_worker_ = true;
-    }
-    system_service_cv_.notify_all();
-    if (system_service_worker_.joinable()) {
-        system_service_worker_.join();
-    }
-}
-
-void YunlinkRosBridgeNode::onEndpointDiscoveryTimer(const ros::TimerEvent&) {
-    endpoint_discovery_.publish_once();
 }
