@@ -537,13 +537,12 @@ void UIState::move_group_selection_up() {
     return;
   }
 
-  group_selection_index--;
-  if (group_selection_index < 0) {
-    group_selection_index = static_cast<int>(group_render_items.size()) - 1;
-  }
+  group_selection_index =
+      find_next_selectable_group_index(group_selection_index - 1, -1);
 
   // 更新详细信息显示
   update_current_item_info();
+  ensure_group_selection_visible();
 }
 
 /**
@@ -555,13 +554,12 @@ void UIState::move_group_selection_down() {
     return;
   }
 
-  group_selection_index++;
-  if (group_selection_index >= static_cast<int>(group_render_items.size())) {
-    group_selection_index = 0;
-  }
+  group_selection_index =
+      find_next_selectable_group_index(group_selection_index + 1, 1);
 
   // 更新详细信息显示
   update_current_item_info();
+  ensure_group_selection_visible();
 }
 
 /**
@@ -1114,6 +1112,47 @@ void UIState::calculate_module_visible_count() {
   if (module_visible_count < 3) {
     module_visible_count = 3;
   }
+
+  group_visible_count =
+      std::max(3, std::min(available_content_height,
+                           static_cast<int>(group_render_items.size())));
+
+  if (group_visible_count < 3) {
+    group_visible_count = 3;
+  }
+}
+
+/**
+ * @brief 确保当前组选项可见（滚动到可视区域内）
+ */
+void UIState::ensure_group_selection_visible() {
+  if (group_render_items.empty()) {
+    group_scroll_offset = 0;
+    return;
+  }
+
+  if (!is_selectable_group_index(group_selection_index)) {
+    group_selection_index =
+        find_next_selectable_group_index(group_selection_index, 1);
+  }
+
+  if (group_selection_index < 0) {
+    group_scroll_offset = 0;
+    return;
+  }
+
+  if (group_selection_index < group_scroll_offset) {
+    group_scroll_offset = group_selection_index;
+  }
+
+  if (group_selection_index >= group_scroll_offset + group_visible_count) {
+    group_scroll_offset = group_selection_index - group_visible_count + 1;
+  }
+
+  const int max_offset = std::max(
+      0, static_cast<int>(group_render_items.size()) - group_visible_count);
+  group_scroll_offset =
+      std::max(0, std::min(group_scroll_offset, max_offset));
 }
 
 void UIState::handle_resolve_button() {
@@ -1185,6 +1224,28 @@ void UIState::scroll_module_list(int direction) {
   // 如果滚动位置发生变化，触发重新渲染
   if (module_scroll_offset != old_offset) {
     // 触发动画请求（如果需要的话）
+    animation_in_progress = true;
+  }
+}
+
+/**
+ * @brief 调整模块组列表滚动位置
+ * 支持手动滚动控制（如鼠标滚轮事件）
+ */
+void UIState::scroll_group_list(int direction) {
+  if (group_render_items.empty()) {
+    return;
+  }
+
+  const int old_offset = group_scroll_offset;
+  const int max_offset = std::max(
+      0, static_cast<int>(group_render_items.size()) - group_visible_count);
+
+  group_scroll_offset += direction;
+  group_scroll_offset =
+      std::max(0, std::min(group_scroll_offset, max_offset));
+
+  if (group_scroll_offset != old_offset) {
     animation_in_progress = true;
   }
 }

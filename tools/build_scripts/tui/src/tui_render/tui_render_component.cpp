@@ -142,7 +142,7 @@ ftxui::Component UIRenderer::create_component() {
       terminal_width = terminal_size.dimx;
       terminal_height = terminal_size.dimy;
     } catch (...) {}
-    
+
     // 计算详情区高度：默认4行（描述1 + 详情3），若描述换行，则在此基础上额外增加至多3行
     const int content_width = std::max(20, terminal_width - 4);
     const std::string desc_label_for_calc = "描述: ";
@@ -175,14 +175,37 @@ ftxui::Component UIRenderer::create_component() {
     std::vector<Element> left_column_elements;
     left_column_elements.push_back(text("模块组") | bold | center);
     left_column_elements.push_back(separator());
-    for (size_t i = 0; i < state_.group_render_items.size(); ++i) {
+
+    // 左右栏共享同一可见高度，窗口缩放后同步更新。
+    const int column_content_height = std::max(3, available_height_for_columns - 4);
+    state_.group_visible_count =
+        std::max(3, std::min(column_content_height,
+                             static_cast<int>(state_.group_render_items.size())));
+    state_.ensure_group_selection_visible();
+
+    if (!state_.group_render_items.empty()) {
+      const int start_index = state_.group_scroll_offset;
+      const int end_index = std::min(
+          static_cast<int>(state_.group_render_items.size()),
+          start_index + state_.group_visible_count);
+
+      for (int i = start_index; i < end_index; ++i) {
       const auto &item = state_.group_render_items[i];
       bool is_selected = (state_.group_selection_index == (int)i);
       bool is_hovered = (state_.group_hover_index == (int)i);
       left_column_elements.push_back(
           render_group_item(item, is_selected, false, is_hovered));
-    }
-    if (state_.group_render_items.empty()) {
+      }
+
+      const int total_groups = static_cast<int>(state_.group_render_items.size());
+      if (total_groups > state_.group_visible_count) {
+        std::string scroll_info = "(" + std::to_string(start_index + 1) + "-" +
+                                  std::to_string(end_index) + "/" +
+                                  std::to_string(total_groups) + ")";
+        left_column_elements.push_back(
+            text(scroll_info) | dim | color(Color::GrayLight) | center);
+      }
+    } else {
       left_column_elements.push_back(text("没有可用的模块组") | dim | center);
     }
 
@@ -190,20 +213,19 @@ ftxui::Component UIRenderer::create_component() {
     std::vector<Element> right_column_elements;
     right_column_elements.push_back(text("所有模块") | bold | center);
     right_column_elements.push_back(separator());
-    
+
     // 按当前真实布局计算右栏可见行数，避免终端缩放后与旧高度公式不一致。
-    const int column_content_height = std::max(3, available_height_for_columns - 4);
     state_.module_visible_count =
         std::max(3, std::min(column_content_height,
                              static_cast<int>(state_.module_render_items.size())));
     state_.ensure_module_selection_visible();
-    
+
     if (!state_.module_render_items.empty()) {
       const int start_index = state_.module_scroll_offset;
       const int end_index = std::min(
           static_cast<int>(state_.module_render_items.size()),
           start_index + state_.module_visible_count);
-      
+
       for (int i = start_index; i < end_index; ++i) {
         const auto &item = state_.module_render_items[i];
         bool is_selected = (i == state_.module_selection_index);
@@ -212,12 +234,12 @@ ftxui::Component UIRenderer::create_component() {
         right_column_elements.push_back(
             render_module_item(item, is_selected, is_focused, is_hovered));
       }
-      
+
       // 显示滚动指示器（如果需要）
       const int total_modules = static_cast<int>(state_.module_render_items.size());
       if (total_modules > state_.module_visible_count) {
-        std::string scroll_info = "(" + std::to_string(start_index + 1) + "-" + 
-                                  std::to_string(end_index) + "/" + 
+        std::string scroll_info = "(" + std::to_string(start_index + 1) + "-" +
+                                  std::to_string(end_index) + "/" +
                                   std::to_string(total_modules) + ")";
         right_column_elements.push_back(
             text(scroll_info) | dim | color(Color::GrayLight) | center);

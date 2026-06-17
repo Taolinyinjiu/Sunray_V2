@@ -69,6 +69,7 @@ public:
                                    const std::vector<struct RenderItem> &right_items,
                                    int left_content_start_y, int right_content_start_y,
                                    int left_column_width, int right_column_start_x,
+                                   int left_scroll_offset = 0, int left_visible_count = -1,
                                    int right_scroll_offset = 0, int right_visible_count = -1);
 
   /// 获取指定Y的元素信息（单列）

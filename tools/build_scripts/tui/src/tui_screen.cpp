@@ -166,16 +166,27 @@ void ScreenCoordinateMapper::rebuild_dual_column_mapping(
     const std::vector<RenderItem> &left_items,
     const std::vector<RenderItem> &right_items, int left_content_start_y,
     int right_content_start_y, int left_column_width, int right_column_start_x,
+    int left_scroll_offset, int left_visible_count,
     int right_scroll_offset, int right_visible_count) {
 
   coordinate_map.clear();
 
   // 使用传入的动态参数，而不是硬编码偏移量
 
-  // 映射左栏项目（组）- 组 label 标题不可点击
-  for (size_t i = 0; i < left_items.size(); ++i) {
+  // 映射左栏项目（组）- 考虑滚动偏移，组 label 标题不可点击
+  int left_count = (left_visible_count > 0)
+                       ? left_visible_count
+                       : static_cast<int>(left_items.size());
+  int left_end_index = std::min(static_cast<int>(left_items.size()),
+                                left_scroll_offset + left_count);
+
+  for (int i = left_scroll_offset; i < left_end_index; ++i) {
+    if (i < 0 || i >= static_cast<int>(left_items.size())) {
+      continue;
+    }
+
     const auto &item = left_items[i];
-    int screen_y = left_content_start_y + static_cast<int>(i);
+    int screen_y = left_content_start_y + (i - left_scroll_offset);
 
     ElementType element_type = ElementType::UNKNOWN;
     if (item.type == RenderItem::GROUP_HEADER) {
@@ -188,8 +199,7 @@ void ScreenCoordinateMapper::rebuild_dual_column_mapping(
       element_type = ElementType::INFO_TEXT;
     }
 
-    ElementInfo element_info(element_type, static_cast<int>(i),
-                             item.identifier);
+    ElementInfo element_info(element_type, i, item.identifier);
 
     // label 标题、禁用组和普通说明行不可点击
     if (!item.is_selectable || item.is_disabled ||
