@@ -31,6 +31,15 @@ mavros_msgs::AttitudeTarget to_attitude_target_msg(
     return msg;
 }
 
+double compute_landing_touchdown_acc(double gravity,
+                                     double touchdown_thrust_cmd,
+                                     double anchor_thrust) {
+    const double safe_gravity = std::max(gravity, 1e-6);
+    const double safe_anchor = std::max(anchor_thrust, 1e-6);
+    const double target_thrust = std::clamp(touchdown_thrust_cmd, 0.0, anchor_thrust);
+    return std::clamp(safe_gravity * target_thrust / safe_anchor, 0.0, safe_gravity);
+}
+
 void copy_vec3(const Eigen::Vector3d& src, float dst[3]) {
     dst[0] = static_cast<float>(src.x());
     dst[1] = static_cast<float>(src.y());
@@ -990,7 +999,7 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         std::clamp(takeoff_accff_tuning_.hover_thrust_reference / hover_gain_denominator,
                    takeoff_accff_tuning_.hover_thrust_gain_min,
                    1.0);
-    const double base_prelift_net_acc = std::clamp(commanded_vmax, 0.10, 0.60);
+    const double base_prelift_net_acc = std::clamp(commanded_vmax, 0.05, 0.45);
     const double velocity_limited_a_target =
         geometric_controller_param_.gravity + base_prelift_net_acc * hover_thrust_gain;
     const double prelift_a_target =
@@ -1458,16 +1467,34 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
         controller_.reset_vertical_integral();
     }
 
+    const double landing_touchdown_acc =
+        compute_landing_touchdown_acc(geometric_controller_param_.gravity,
+                                      landing_accff_tuning_.touchdown_thrust_cmd,
+                                      landing_accff_state_.anchor_thrust > 0.0
+                                          ? landing_accff_state_.anchor_thrust
+                                          : geometric_controller_param_.hover_thrust_init);
+
     // ── 阶段切换:NearGround → TouchdownRelease ───────────────────────────
     if (landing_accff_state_.phase == takeoff_land::LandingPhaseAccFF::NearGround) {
         bool should_touchdown = false;
-        if (landing_accff_tuning_.touchdown_landed_state && px4_landed) {
+        if (px4_landed) {
             should_touchdown = true;
         }
         const bool settle_now =
             height_above_ground < landing_accff_tuning_.touchdown_h_settle_m &&
             uav_odometry_.velocity.norm() < landing_accff_tuning_.touchdown_v_settle_mps;
+        const bool release_complete =
+            landing_accff_state_.release_progress <= 0.05 &&
+            height_above_ground <= std::max(landing_accff_tuning_.touchdown_h_settle_m,
+                                            0.5 * near_ground_h);
         if (settle_now) {
+            if (landing_accff_state_.settle_start == ros::Time(0)) {
+                landing_accff_state_.settle_start = now;
+            } else if ((now - landing_accff_state_.settle_start).toSec() >=
+                       landing_accff_tuning_.touchdown_dwell_s) {
+                should_touchdown = true;
+            }
+        } else if (release_complete) {
             if (landing_accff_state_.settle_start == ros::Time(0)) {
                 landing_accff_state_.settle_start = now;
             } else if ((now - landing_accff_state_.settle_start).toSec() >=
@@ -1478,8 +1505,11 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
             landing_accff_state_.settle_start = ros::Time(0);
         }
         if (should_touchdown) {
-            ROS_INFO("[land_accff] NearGround -> TouchdownRelease, h=%.3f v=%.3f px4_landed=%d",
+            ROS_INFO("[land_accff] NearGround -> TouchdownRelease, h=%.3f v=%.3f "
+                     "release_u=%.2f a_touchdown=%.2f target_thrust=%.3f px4_landed=%d",
                      height_above_ground, uav_odometry_.velocity.norm(),
+                     landing_accff_state_.release_progress, landing_touchdown_acc,
+                     landing_accff_tuning_.touchdown_thrust_cmd,
                      static_cast<int>(px4_landed));
             landing_accff_state_.phase = takeoff_land::LandingPhaseAccFF::TouchdownRelease;
             landing_accff_state_.phase_start = now;
@@ -1622,11 +1652,11 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
     desc_speed *= xy_speed_scale;
 
     // a_ff 在 HighDescent 固定为 g;NearGround 按 s 在 a_touchdown 与 g 之间插值。
+    // a_touchdown 由目标低推力命令按当前降落锚点反推,确保释放终点能进入 PX4 landed 可识别的低推力区。
     // 进一步用 jerk-bounded ramp 平滑跨帧跳变(防止 h 抖动反映到 a_ff)。
     const double a_target =
         near_ground_phase
-            ? landing_accff_tuning_.a_touchdown_mps2 +
-                  s * (gravity - landing_accff_tuning_.a_touchdown_mps2)
+            ? landing_touchdown_acc + s * (gravity - landing_touchdown_acc)
             : gravity;
     double dt = (now - landing_accff_state_.last_update).toSec();
     if (!(dt > 0.0) || dt > 5.0 * nominal_dt) {
@@ -1681,8 +1711,10 @@ bool Geometric_Controller::land_accff(double max_land_velocity) {
             geometric_controller_param_.hover_thrust_min,
             geometric_controller_param_.hover_thrust_max);
         const double gravity_safe = std::max(gravity, 1e-6);
+        const double low_thrust_limit =
+            std::clamp(landing_accff_tuning_.touchdown_thrust_cmd, 0.0, anchor);
         const double touchdown_release_limit =
-            std::clamp(anchor * (a_ff_now / gravity_safe), 0.0, anchor);
+            std::clamp(anchor * (a_ff_now / gravity_safe), low_thrust_limit, anchor);
         constexpr double kNearGroundBrakeMargin = 0.03;
         const double near_entry_limit =
             std::clamp(anchor + kNearGroundBrakeMargin,

@@ -1,3 +1,4 @@
+/** @file @brief YunLink ROS bridge 主节点接口与运行时状态定义。 */
 #pragma once
 
 #include <cstdint>
@@ -24,6 +25,7 @@
 
 #include "discovery/bridge_endpoint_discovery.hpp"
 
+/** @brief bridge 的 ROS topic、YunLink 端口、诊断和发现参数集合。 */
 struct BridgeParams {
     std::string local_odom_topic{"/uav1/sunray/localization/local_odom"};
     std::string odom_state_topic{"/uav1/sunray/localization/odom_state"};
@@ -57,42 +59,36 @@ struct BridgeParams {
     std::string endpoint_id_file;
 };
 
+/** @brief 负责 YunLink runtime 与 Sunray ROS topic/service 之间的双向适配。 */
 class YunlinkRosBridgeNode {
   public:
-    YunlinkRosBridgeNode();
-    ~YunlinkRosBridgeNode();
+    YunlinkRosBridgeNode();  ///< @brief 构造并启动 bridge runtime、ROS 订阅发布和诊断定时器。
+    ~YunlinkRosBridgeNode(); ///< @brief 停止后台线程、端点发现和 YunLink runtime。
 
-    void onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg);
-    void onOdomState(const sunray_msgs::OdomState::ConstPtr& msg);
-    void onControlCmd(const sunray_msgs::UAVControlCMD::ConstPtr& msg);
-    void onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg);
-    void onCommandExecutionStatus(const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg);
-    void onPx4State(const sunray_msgs::Px4State::ConstPtr& msg);
-    void onExternalOdomDiagnostic(const nav_msgs::Odometry::ConstPtr& msg);
-    void onGlobalOdomDiagnostic(const nav_msgs::Odometry::ConstPtr& msg);
-    void onDiagnosticTimer(const ros::TimerEvent&);
+    void onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg); ///< @brief 转发本地里程计 snapshot。 @param msg ROS 本地里程计消息。
+    void onOdomState(const sunray_msgs::OdomState::ConstPtr& msg); ///< @brief 转发定位状态 snapshot。 @param msg Sunray 定位状态消息。
+    void onControlCmd(const sunray_msgs::UAVControlCMD::ConstPtr& msg); ///< @brief 转发控制命令 snapshot。 @param msg Sunray 控制命令消息。
+    void onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg); ///< @brief 转发控制状态 snapshot。 @param msg Sunray 控制状态消息。
+    void onCommandExecutionStatus(const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg); ///< @brief 转发命令执行状态 snapshot。 @param msg 控制侧发布的命令执行状态。
+    void onPx4State(const sunray_msgs::Px4State::ConstPtr& msg); ///< @brief 转发 PX4 状态 snapshot 并缓存当前高度。 @param msg Sunray PX4 状态消息。
+    void onExternalOdomDiagnostic(const nav_msgs::Odometry::ConstPtr& msg); ///< @brief 记录外部里程计诊断输入。 @param msg 外部里程计消息。
+    void onGlobalOdomDiagnostic(const nav_msgs::Odometry::ConstPtr& msg); ///< @brief 记录全局里程计诊断输入。 @param msg 全局里程计消息。
+    void onDiagnosticTimer(const ros::TimerEvent& event); ///< @brief 周期发布 bridge 运行诊断。 @param event ROS 定时器事件。
 
-    void onTakeoffCommand(const yunlink::InboundCommandView<yunlink::TakeoffCommand>& view);
-    void onLandCommand(const yunlink::InboundCommandView<yunlink::LandCommand>& view);
-    void onReturnCommand(const yunlink::InboundCommandView<yunlink::ReturnCommand>& view);
-    void onGotoCommand(const yunlink::InboundCommandView<yunlink::GotoCommand>& view);
-    void onVelocitySetpointCommand(
-        const yunlink::InboundCommandView<yunlink::VelocitySetpointCommand>& view);
-    void onFeatureListRequest(
-        const yunlink::InboundSystemServiceRequestView<yunlink::FeatureListRequest>& view);
-    void onFeatureGetRequest(
-        const yunlink::InboundSystemServiceRequestView<yunlink::FeatureGetRequest>& view);
-    void onFeatureStartRequest(
-        const yunlink::InboundSystemServiceRequestView<yunlink::FeatureStartRequest>& view);
-    void onFeatureStopRequest(
-        const yunlink::InboundSystemServiceRequestView<yunlink::FeatureStopRequest>& view);
+    void onTakeoffCommand(const yunlink::InboundCommandView<yunlink::TakeoffCommand>& view); ///< @brief 将 YunLink 起飞命令转成 Sunray 控制命令。 @param view 入站起飞命令视图。
+    void onLandCommand(const yunlink::InboundCommandView<yunlink::LandCommand>& view); ///< @brief 将 YunLink 降落命令转成 Sunray 控制命令。 @param view 入站降落命令视图。
+    void onReturnCommand(const yunlink::InboundCommandView<yunlink::ReturnCommand>& view); ///< @brief 将 YunLink 返航命令转成 Sunray 控制命令。 @param view 入站返航命令视图。
+    void onGotoCommand(const yunlink::InboundCommandView<yunlink::GotoCommand>& view); ///< @brief 将 YunLink 定点命令转成 Sunray 控制命令。 @param view 入站定点命令视图。
+    void onVelocitySetpointCommand(const yunlink::InboundCommandView<yunlink::VelocitySetpointCommand>& view); ///< @brief 将 YunLink 速度设定命令转成 Sunray 控制命令。 @param view 入站速度设定命令视图。
+    void onFeatureListRequest(const yunlink::InboundSystemServiceRequestView<yunlink::FeatureListRequest>& view); ///< @brief 转发功能列表请求到 sunray_system。 @param view 入站功能列表请求视图。
+    void onFeatureGetRequest(const yunlink::InboundSystemServiceRequestView<yunlink::FeatureGetRequest>& view); ///< @brief 转发功能查询请求到 sunray_system。 @param view 入站功能查询请求视图。
+    void onFeatureStartRequest(const yunlink::InboundSystemServiceRequestView<yunlink::FeatureStartRequest>& view); ///< @brief 转发功能启动请求到 sunray_system。 @param view 入站功能启动请求视图。
+    void onFeatureStopRequest(const yunlink::InboundSystemServiceRequestView<yunlink::FeatureStopRequest>& view); ///< @brief 转发功能停止请求到 sunray_system。 @param view 入站功能停止请求视图。
 
   private:
   public:
-    enum class BridgeFlowDirection {
-        kRosToYunlink,
-        kYunlinkToRos,
-    };
+    /** @brief bridge 诊断事件的转发方向。 */
+    enum class BridgeFlowDirection { kRosToYunlink, kYunlinkToRos };
 
   private:
     struct TopicDiagnosticRuntime {
@@ -108,6 +104,12 @@ class YunlinkRosBridgeNode {
         ros::Time previous_receive_time{0.0};
         ros::Time last_event_log_time{0.0};
         std::string detail;
+        std::string last_status;
+        std::string last_transition;
+        ros::Time last_transition_time{0.0};
+        uint64_t publish_fail_count{0};
+        double expected_min_hz{0.0};
+        bool sparse{false};
     };
 
     struct FlowDiagnosticRuntime {
@@ -117,6 +119,8 @@ class YunlinkRosBridgeNode {
         bool stale_by_age{false};
         bool has_message{false};
         uint64_t message_count{0};
+        uint64_t publish_count{0};
+        uint64_t fail_count{0};
         double hz{0.0};
         ros::Time last_receive_time{0.0};
         ros::Time previous_receive_time{0.0};
@@ -130,12 +134,7 @@ class YunlinkRosBridgeNode {
         std::string detail;
     };
 
-    enum class SystemServiceJobKind {
-        kFeatureList,
-        kFeatureGet,
-        kFeatureStart,
-        kFeatureStop,
-    };
+    enum class SystemServiceJobKind { kFeatureList, kFeatureGet, kFeatureStart, kFeatureStop };
 
     struct SystemServiceJob {
         SystemServiceJobKind kind{SystemServiceJobKind::kFeatureList};
@@ -173,11 +172,8 @@ class YunlinkRosBridgeNode {
     yunlink::TargetSelector targetSelector() const;
     float latestPx4Height(bool* has_height = nullptr) const;
     sunray_msgs::UAVControlCMD makeBaseControlCmd(uint8_t control_cmd) const;
-    void publishControlCmd(const char* name,
-                           const sunray_msgs::UAVControlCMD& cmd,
-                           uint64_t session_id,
-                           uint64_t correlation_id,
-                           uint64_t message_id,
+    void publishControlCmd(const char* name, const sunray_msgs::UAVControlCMD& cmd,
+                           uint64_t session_id, uint64_t correlation_id, uint64_t message_id,
                            const std::string& detail = std::string());
     void recordRosToYunlinkEvent(TopicDiagnosticRuntime* runtime,
                                  const ros::Time& receive_time,
@@ -188,6 +184,11 @@ class YunlinkRosBridgeNode {
                                    const std::string& key,
                                    const std::string& detail,
                                    const ros::Time& event_time);
+    void recordPublishFailureUnlocked(const std::string& direction,
+                                      const std::string& key,
+                                      uint32_t error_code,
+                                      const std::string& detail,
+                                      const ros::Time& event_time);
     void updateTopicDiagnostic(TopicDiagnosticRuntime* runtime, const ros::Time& receive_time);
     yunlink::SunrayTopicDiagnosticSnapshot
     makeTopicDiagnosticSnapshot(const TopicDiagnosticRuntime& runtime, const ros::Time& now) const;
@@ -202,6 +203,7 @@ class YunlinkRosBridgeNode {
                                             int stale_timeout_ms,
                                             bool require_publisher,
                                             bool stale_by_age);
+    void recordRosToYunlinkPublishResult(const char* name, yunlink::ErrorCode ec);
 
     template <typename PublishFn, typename PayloadT>
     void publishSnapshot(const char* name, PublishFn publish_fn, const PayloadT& payload) {
@@ -210,8 +212,8 @@ class YunlinkRosBridgeNode {
         }
 
         const auto ec = (runtime_.*publish_fn)(peer_id_, targetSelector(), payload, session_id_);
+        recordRosToYunlinkPublishResult(name, ec);
         if (ec != yunlink::ErrorCode::kOk) {
-            peer_ready_ = false;
             ROS_WARN_THROTTLE(5.0,
                               "yunlink_ros_bridge publish %s failed, ec=%u",
                               name,
@@ -242,15 +244,10 @@ class YunlinkRosBridgeNode {
     BridgeEndpointDiscovery endpoint_discovery_;
     BridgeParams params_;
     std::string peer_id_;
-    size_t takeoff_command_sub_token_{0};
-    size_t land_command_sub_token_{0};
-    size_t return_command_sub_token_{0};
-    size_t goto_command_sub_token_{0};
-    size_t velocity_setpoint_command_sub_token_{0};
-    size_t feature_list_request_sub_token_{0};
-    size_t feature_get_request_sub_token_{0};
-    size_t feature_start_request_sub_token_{0};
-    size_t feature_stop_request_sub_token_{0};
+    size_t takeoff_command_sub_token_{0}, land_command_sub_token_{0}, return_command_sub_token_{0};
+    size_t goto_command_sub_token_{0}, velocity_setpoint_command_sub_token_{0};
+    size_t feature_list_request_sub_token_{0}, feature_get_request_sub_token_{0};
+    size_t feature_start_request_sub_token_{0}, feature_stop_request_sub_token_{0};
     uint64_t session_id_{0};
     bool peer_ready_{false};
     mutable std::mutex px4_state_mu_;
@@ -260,6 +257,19 @@ class YunlinkRosBridgeNode {
     std::deque<SystemServiceJob> system_service_jobs_;
     std::thread system_service_worker_;
     bool stop_system_service_worker_{false};
+    bool runtime_started_{false};
+    uint64_t connect_attempt_count_{0}, session_lost_count_{0};
+    uint64_t ros_to_yunlink_publish_count_{0}, ros_to_yunlink_fail_count_{0};
+    uint64_t yunlink_to_ros_command_count_{0}, yunlink_to_ros_publish_count_{0};
+    uint64_t yunlink_to_ros_fail_count_{0};
+    std::string last_connect_error_;
+    std::string last_session_error_;
+    std::string last_publish_error_;
+    std::string last_fail_direction_;
+    std::string last_fail_key_;
+    uint32_t last_fail_error_code_{0};
+    std::string last_fail_detail_;
+    ros::Time last_error_time_{0.0};
     float latest_px4_height_m_{0.0F};
     bool has_px4_height_{false};
     TopicDiagnosticRuntime external_odom_diag_;

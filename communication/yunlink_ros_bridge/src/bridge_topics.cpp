@@ -1,7 +1,10 @@
+/** @file @brief Sunray ROS 状态话题到 YunLink snapshot 的转发实现。 */
 #include "bridge_node.hpp"
 
 #include "bridge_mapping.hpp"
 
+/// topic 回调只镜像状态，权威控制状态仍在 Sunray 包内。
+/// 转发本地里程计到 YunLink。
 void YunlinkRosBridgeNode::onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg) {
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
@@ -12,6 +15,7 @@ void YunlinkRosBridgeNode::onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg) 
     publishSnapshot("local_odom", &yunlink::Runtime::publish_local_odom, payload);
 }
 
+/// 转发定位状态并同步诊断里程计 topic 元信息。
 void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& msg) {
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
@@ -20,11 +24,10 @@ void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& m
         recordRosToYunlinkEvent(&odom_state_diag_,
                                 msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
                                 detail);
-        external_odom_diag_.topic = msg->subtopic_name_external_odom;
-        external_odom_diag_.configured = !msg->subtopic_name_external_odom.empty();
-        external_odom_diag_.detail = msg->subtopic_name_external_relocalization;
-        global_odom_diag_.topic = msg->pubtopic_name_global_odom;
-        global_odom_diag_.configured = !msg->pubtopic_name_global_odom.empty();
+        external_odom_diag_.detail = "source_topic=" + msg->subtopic_name_external_odom;
+        if (!msg->subtopic_name_external_relocalization.empty()) {
+            external_odom_diag_.detail += " relocalization=" + msg->subtopic_name_external_relocalization;
+        }
         local_odom_diag_.topic = msg->pubtopic_name_local_odom;
         local_odom_diag_.configured = !msg->pubtopic_name_local_odom.empty();
     }
@@ -49,7 +52,9 @@ void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& m
     publishSnapshot("odom_state", &yunlink::Runtime::publish_odom_state, payload);
 }
 
+/// 转发 Sunray 控制命令 snapshot，包含 bridge 下发和本地发布的命令。
 void YunlinkRosBridgeNode::onControlCmd(const sunray_msgs::UAVControlCMD::ConstPtr& msg) {
+    // 同步 bridge 转发命令和本地 Sunray 命令到同一条 snapshot 流。
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
         recordRosToYunlinkEvent(&uav_control_cmd_diag_,
@@ -60,6 +65,7 @@ void YunlinkRosBridgeNode::onControlCmd(const sunray_msgs::UAVControlCMD::ConstP
     publishSnapshot("uav_control_cmd", &yunlink::Runtime::publish_uav_control_cmd, payload);
 }
 
+/// 转发控制状态 snapshot，不在 bridge 内判断任务是否完成。
 void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg) {
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
@@ -88,14 +94,17 @@ void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::Co
     publishSnapshot("uav_control_state", &yunlink::Runtime::publish_uav_control_state, payload);
 }
 
+/// 转发控制侧命令执行状态，保留与原 YunLink 命令的关联 ID。
 void YunlinkRosBridgeNode::onCommandExecutionStatus(
     const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg) {
+    // 执行结果权威来源是 sunray_uav_control；bridge 只做 snapshot 转换。
     const auto payload = mapCommandExecutionStatus(*msg);
     publishSnapshot("command_execution_status",
                     &yunlink::Runtime::publish_command_execution_status,
                     payload);
 }
 
+/// 转发 PX4 状态，并缓存高度供机体系速度命令使用。
 void YunlinkRosBridgeNode::onPx4State(const sunray_msgs::Px4State::ConstPtr& msg) {
     {
         std::lock_guard<std::mutex> lock(px4_state_mu_);

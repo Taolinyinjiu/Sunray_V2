@@ -1,3 +1,4 @@
+/** @file @brief bridge 终端诊断面板渲染实现。 */
 #include "bridge_tui_node.hpp"
 
 #include <algorithm>
@@ -17,12 +18,14 @@ const char* kAnsiTitle = "\033[1;36m";
 
 }  // namespace
 
+/// 初始化默认行、参数和 ROS 订阅/定时器。
 BridgeTuiNode::BridgeTuiNode() : nh_(), pnh_("~") {
     setupDefaults();
     loadParams();
     setupRos();
 }
 
+/// 建立 TUI 固定显示的 ROS->YunLink 和 YunLink->ROS 行。
 void BridgeTuiNode::setupDefaults() {
     ros_to_yunlink_["local_odom"] = FlowRow{"local_odom", "local_odom"};
     ros_to_yunlink_["odom_state"] = FlowRow{"odom_state", "odom_state"};
@@ -41,12 +44,14 @@ void BridgeTuiNode::setupDefaults() {
     yunlink_to_ros_["feature_stop"] = FlowRow{"feature_stop", "feature_stop"};
 }
 
+/// 加载 TUI 订阅话题、刷新频率和 stale 超时。
 void BridgeTuiNode::loadParams() {
     pnh_.param<std::string>("monitor_diagnostic_topic", diagnostic_topic_, diagnostic_topic_);
     pnh_.param<double>("print_hz", print_hz_, print_hz_);
     pnh_.param<int>("stale_timeout_ms", stale_timeout_ms_, stale_timeout_ms_);
 }
 
+/// 订阅 bridge DiagnosticArray 并创建刷新定时器。
 void BridgeTuiNode::setupRos() {
     diagnostic_sub_ =
         nh_.subscribe(diagnostic_topic_, 1, &BridgeTuiNode::onDiagnostics, this, ros::TransportHints().tcpNoDelay());
@@ -57,6 +62,7 @@ void BridgeTuiNode::setupRos() {
                                    true);
 }
 
+/// 清空上一帧数据，避免缺失状态沿用上一帧。
 void BridgeTuiNode::resetSnapshotLocked() {
     recent_events_.clear();
     connection_ = ConnectionState{};
@@ -84,6 +90,7 @@ void BridgeTuiNode::resetSnapshotLocked() {
     }
 }
 
+/// 解析 bridge 发布的 DiagnosticArray，更新 TUI 内存快照。
 void BridgeTuiNode::onDiagnostics(const diagnostic_msgs::DiagnosticArray::ConstPtr& msg) {
     std::lock_guard<std::mutex> lock(mu_);
     last_snapshot_time_ = msg->header.stamp;
@@ -130,6 +137,7 @@ void BridgeTuiNode::onDiagnostics(const diagnostic_msgs::DiagnosticArray::ConstP
     }
 }
 
+/// 从单个 DiagnosticStatus 提取一行流向状态。
 void BridgeTuiNode::updateFlowRow(FlowRow* row, const diagnostic_msgs::DiagnosticStatus& status) {
     if (row == nullptr) {
         return;
@@ -147,6 +155,7 @@ void BridgeTuiNode::updateFlowRow(FlowRow* row, const diagnostic_msgs::Diagnosti
     row->has_message = findValue(status, "has_message") == "true";
 }
 
+/// 按 key 查找 DiagnosticStatus 中的 value。
 std::string BridgeTuiNode::findValue(const diagnostic_msgs::DiagnosticStatus& status, const char* key) {
     for (const auto& item : status.values) {
         if (item.key == key) {
@@ -156,10 +165,12 @@ std::string BridgeTuiNode::findValue(const diagnostic_msgs::DiagnosticStatus& st
     return "";
 }
 
+/// 定时重绘终端面板。
 void BridgeTuiNode::onPrintTimer(const ros::TimerEvent&) {
     std::cout << "\033[2J\033[H" << buildPanel() << std::flush;
 }
 
+/// 生成完整终端面板文本。
 std::string BridgeTuiNode::buildPanel() const {
     std::lock_guard<std::mutex> lock(mu_);
     std::ostringstream ss;
@@ -216,6 +227,7 @@ std::string BridgeTuiNode::buildPanel() const {
     return ss.str();
 }
 
+/// 格式化消息年龄。
 std::string BridgeTuiNode::formatAge(uint64_t age_ms, bool has_message) {
     if (!has_message) {
         return "-";
@@ -228,6 +240,7 @@ std::string BridgeTuiNode::formatAge(uint64_t age_ms, bool has_message) {
     return std::to_string(age_ms) + "ms";
 }
 
+/// 格式化频率。
 std::string BridgeTuiNode::formatHz(double hz) {
     if (hz <= 0.0) {
         return "0.0";
@@ -237,6 +250,7 @@ std::string BridgeTuiNode::formatHz(double hz) {
     return ss.str();
 }
 
+/// 格式化事件时间戳。
 std::string BridgeTuiNode::formatStamp(double stamp_sec) {
     if (stamp_sec <= 0.0) {
         return "-";
@@ -246,6 +260,7 @@ std::string BridgeTuiNode::formatStamp(double stamp_sec) {
     return ss.str();
 }
 
+/// 根据状态选择终端颜色。
 std::string BridgeTuiNode::colorStatus(const std::string& status) {
     if (status == "OK") {
         return colorText(status, kAnsiGood);
@@ -256,6 +271,7 @@ std::string BridgeTuiNode::colorStatus(const std::string& status) {
     return colorText(status, kAnsiWarn);
 }
 
+/// 包装 ANSI 颜色控制码。
 std::string BridgeTuiNode::colorText(const std::string& text, const char* color) {
     return std::string(color) + text + kAnsiReset;
 }

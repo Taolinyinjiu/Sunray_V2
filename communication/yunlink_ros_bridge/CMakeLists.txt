@@ -50,6 +50,7 @@ include_directories(
 
 add_executable(yunlink_ros_bridge_node
   src/main.cpp
+  src/diagnostics/bridge_forwarding_diagnostics.cpp
   src/diagnostics/bridge_monitor_state.cpp
   src/diagnostics/bridge_runtime_diagnostics.cpp
   src/discovery/bridge_endpoint_discovery.cpp
@@ -60,6 +61,7 @@ add_executable(yunlink_ros_bridge_node
   src/runtime/bridge_control_publish.cpp
   src/runtime/bridge_runtime_core.cpp
   src/runtime/bridge_runtime_session.cpp
+  src/runtime/bridge_runtime_services.cpp
 )
 add_dependencies(yunlink_ros_bridge_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(yunlink_ros_bridge_node

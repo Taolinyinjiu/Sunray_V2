@@ -53,11 +53,11 @@ struct LandingAccFFTuning {
     double near_ground_h_m{0.10};
     double near_ground_vz_mps{0.10};
     double a_touchdown_mps2{5.4};
+    double touchdown_thrust_cmd{0.08};
     double ramp_time_s{0.6};
     double jerk_max_mps3{8.0};
     double a_min_mps2{0.0};
     double a_max_mps2{12.0};
-    bool   touchdown_landed_state{true};
     double touchdown_h_settle_m{0.05};
     double touchdown_v_settle_mps{0.05};
     double touchdown_dwell_s{0.30};

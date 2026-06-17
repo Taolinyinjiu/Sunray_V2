@@ -288,11 +288,14 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     const double gravity = geometric_controller_param_.gravity;
     const double hover_init = std::clamp(geometric_controller_param_.hover_thrust_init, 0.05, 0.80);
 
-    // 起飞:a_start 对应 thrust ≈ 0.08(略高于 idle,远低于悬停);a_target = g + 0.5。
+    // 起飞:a_start 对应 thrust ≈ 0.08(略高于 idle,远低于悬停);
+    // a_target 略高于 g,PreLift 只负责柔和建立推力,后续爬升速度交给 AirborneCurve。
     takeoff_accff_tuning_.a_start_mps2 = std::clamp(gravity * 0.08 / hover_init, 0.5, gravity);
-    takeoff_accff_tuning_.a_target_mps2 = gravity + 0.5;
-    takeoff_accff_tuning_.ramp_time_s = 1.2;
-    takeoff_accff_tuning_.jerk_max_mps3 = 8.0;
+    takeoff_accff_tuning_.a_target_mps2 = gravity + 0.35;
+    takeoff_accff_tuning_.ramp_time_s = 3.0;
+    takeoff_accff_tuning_.jerk_max_mps3 =
+        1.2 * (takeoff_accff_tuning_.a_target_mps2 - takeoff_accff_tuning_.a_start_mps2) /
+        std::max(takeoff_accff_tuning_.ramp_time_s, 0.2);
     takeoff_accff_tuning_.a_min_mps2 = 0.0;
     takeoff_accff_tuning_.a_max_mps2 = gravity + 5.0;
     takeoff_accff_tuning_.hover_thrust_reference = 0.375;
@@ -302,16 +305,19 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     takeoff_accff_tuning_.odom_ahead_vz_tolerance_mps = 0.05;
     takeoff_accff_tuning_.odom_thrust_scale_min = 0.72;
 
-    // 降落:a_touchdown 低于 g,NearGround 支持高度/时间混合释放;
-    // 0.88g 比原 0.92g 留出更多地效穿透余量,但仍不是直接切零推力。
+    // 降落:a_touchdown 由低推力目标反推,NearGround 支持高度/时间混合释放;
+    // 低推力目标必须由控制器主动产生,不能依赖 PX4 landed 先触发。
     landing_accff_tuning_.near_ground_h_m = 0.10;
     landing_accff_tuning_.near_ground_vz_mps = 0.10;
-    landing_accff_tuning_.a_touchdown_mps2 = 0.88 * gravity;
+    landing_accff_tuning_.touchdown_thrust_cmd = 0.08;
+    landing_accff_tuning_.a_touchdown_mps2 =
+        gravity * landing_accff_tuning_.touchdown_thrust_cmd / hover_init;
     landing_accff_tuning_.ramp_time_s = 1.5;
-    landing_accff_tuning_.jerk_max_mps3 = 1.0;
+    landing_accff_tuning_.jerk_max_mps3 =
+        1.2 * (gravity - landing_accff_tuning_.a_touchdown_mps2) /
+        std::max(landing_accff_tuning_.ramp_time_s, 0.2);
     landing_accff_tuning_.a_min_mps2 = 0.0;
     landing_accff_tuning_.a_max_mps2 = gravity + 2.0;
-    landing_accff_tuning_.touchdown_landed_state = true;
     landing_accff_tuning_.touchdown_h_settle_m = 0.05;
     landing_accff_tuning_.touchdown_v_settle_mps = 0.05;
     landing_accff_tuning_.touchdown_dwell_s = 0.30;
@@ -329,7 +335,9 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         throw std::runtime_error(
             "derived takeoff_accff acc values are inconsistent (check gravity / hover_thrust_percent)");
     }
-    if (!(landing_accff_tuning_.a_touchdown_mps2 > landing_accff_tuning_.a_min_mps2 &&
+    if (!(landing_accff_tuning_.touchdown_thrust_cmd >= 0.0 &&
+          landing_accff_tuning_.touchdown_thrust_cmd < hover_init &&
+          landing_accff_tuning_.a_touchdown_mps2 > landing_accff_tuning_.a_min_mps2 &&
           landing_accff_tuning_.a_touchdown_mps2 < gravity)) {
         throw std::runtime_error(
             "derived landing_accff a_touchdown is inconsistent (check gravity)");

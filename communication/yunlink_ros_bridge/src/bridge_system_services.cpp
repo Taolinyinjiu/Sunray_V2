@@ -1,13 +1,16 @@
+/** @file @brief YunLink system-service 请求到 sunray_system ROS service 的适配实现。 */
 #include "bridge_node.hpp"
 
 namespace {
 
+/// 组合 sunray_system 命名空间和 service 后缀。
 std::string service_name(const std::string& ns, const char* suffix) {
     return ns + "/" + suffix;
 }
 
 }  // namespace
 
+/// 请求回调只入队任务，避免 ROS service 等待阻塞 runtime 回调路径。
 void YunlinkRosBridgeNode::onFeatureListRequest(
     const yunlink::InboundSystemServiceRequestView<yunlink::FeatureListRequest>& view) {
     recordYunlinkToRosEvent("feature_list", "list_features");
@@ -17,6 +20,7 @@ void YunlinkRosBridgeNode::onFeatureListRequest(
     enqueueSystemServiceJob(std::move(job));
 }
 
+/// 接收 YunLink feature_get 请求并放入后台 service 队列。
 void YunlinkRosBridgeNode::onFeatureGetRequest(
     const yunlink::InboundSystemServiceRequestView<yunlink::FeatureGetRequest>& view) {
     recordYunlinkToRosEvent("feature_get", view.payload.feature_name);
@@ -27,6 +31,7 @@ void YunlinkRosBridgeNode::onFeatureGetRequest(
     enqueueSystemServiceJob(std::move(job));
 }
 
+/// 接收 YunLink feature_start 请求并放入后台 service 队列。
 void YunlinkRosBridgeNode::onFeatureStartRequest(
     const yunlink::InboundSystemServiceRequestView<yunlink::FeatureStartRequest>& view) {
     recordYunlinkToRosEvent("feature_start", view.payload.feature_name);
@@ -37,6 +42,7 @@ void YunlinkRosBridgeNode::onFeatureStartRequest(
     enqueueSystemServiceJob(std::move(job));
 }
 
+/// 接收 YunLink feature_stop 请求并放入后台 service 队列。
 void YunlinkRosBridgeNode::onFeatureStopRequest(
     const yunlink::InboundSystemServiceRequestView<yunlink::FeatureStopRequest>& view) {
     recordYunlinkToRosEvent("feature_stop", view.payload.feature_name);
@@ -47,6 +53,7 @@ void YunlinkRosBridgeNode::onFeatureStopRequest(
     enqueueSystemServiceJob(std::move(job));
 }
 
+/// 将 system-service 请求放入 worker 队列并唤醒后台线程。
 void YunlinkRosBridgeNode::enqueueSystemServiceJob(SystemServiceJob job) {
     {
         std::lock_guard<std::mutex> lock(system_service_mu_);
@@ -55,6 +62,7 @@ void YunlinkRosBridgeNode::enqueueSystemServiceJob(SystemServiceJob job) {
     system_service_cv_.notify_one();
 }
 
+/// 串行处理 YunLink system-service 请求，避免阻塞 runtime 回调线程。
 void YunlinkRosBridgeNode::systemServiceWorkerLoop() {
     while (true) {
         SystemServiceJob job;
@@ -70,6 +78,7 @@ void YunlinkRosBridgeNode::systemServiceWorkerLoop() {
             system_service_jobs_.pop_front();
         }
 
+        // 每个 handler 只转换一组 request/response，feature 执行仍在 sunray_system。
         switch (job.kind) {
         case SystemServiceJobKind::kFeatureList:
             handleFeatureListJob(job);
@@ -87,6 +96,7 @@ void YunlinkRosBridgeNode::systemServiceWorkerLoop() {
     }
 }
 
+/// 按配置的超时策略等待 Sunray ROS service 可用。
 bool YunlinkRosBridgeNode::waitForService(ros::ServiceClient& client, const char* name) const {
     if (params_.system_service_timeout_sec <= 0.0) {
         return client.exists();
@@ -98,6 +108,7 @@ bool YunlinkRosBridgeNode::waitForService(ros::ServiceClient& client, const char
     return false;
 }
 
+/// 调用 sunray_system/list_features 并发布 YunLink 响应。
 void YunlinkRosBridgeNode::handleFeatureListJob(const SystemServiceJob& job) {
     yunlink::FeatureListResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "list_features");
@@ -125,6 +136,7 @@ void YunlinkRosBridgeNode::handleFeatureListJob(const SystemServiceJob& job) {
     }
 }
 
+/// 调用 sunray_system/get_features 并发布 YunLink 响应。
 void YunlinkRosBridgeNode::handleFeatureGetJob(const SystemServiceJob& job) {
     yunlink::FeatureGetResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "get_features");
@@ -163,6 +175,7 @@ void YunlinkRosBridgeNode::handleFeatureGetJob(const SystemServiceJob& job) {
     }
 }
 
+/// 调用 sunray_system/start_feature 并发布 YunLink 响应。
 void YunlinkRosBridgeNode::handleFeatureStartJob(const SystemServiceJob& job) {
     yunlink::FeatureStartResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "start_feature");
@@ -196,6 +209,7 @@ void YunlinkRosBridgeNode::handleFeatureStartJob(const SystemServiceJob& job) {
     }
 }
 
+/// 调用 sunray_system/stop_feature 并发布 YunLink 响应。
 void YunlinkRosBridgeNode::handleFeatureStopJob(const SystemServiceJob& job) {
     yunlink::FeatureStopResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "stop_feature");
