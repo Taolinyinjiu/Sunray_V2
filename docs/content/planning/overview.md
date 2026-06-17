@@ -9,7 +9,7 @@
 - `sunray_planner`：Sunray 自己维护的规划接口、消息、工具和后续自研规划器代码。理论上它不应该强依赖第三方 planner 的内部包。
 - `third_party_planner_examples`：第三方开源规划器源码，以及 Sunray 为这些规划器提供的接口示例或适配示例。
 
-这样分类后，新开发者可以先学习 `sunray_planner` 中的统一接口；需要研究 EGO、Diff、FUEL、SUPER 等开源算法时，再进入 `third_party_planner_examples`。后续如果 Sunray 自研全局规划、局部规划、探索规划逐步重写源码，也应优先放在 `sunray_planner` 体系下。
+这样分类后，新开发者可以先学习 `sunray_planner` 中的统一接口；需要研究 EGO、Diff、FUEL、SUPER、NAVRL 等开源算法时，再进入 `third_party_planner_examples`。后续如果 Sunray 自研全局规划、局部规划、探索规划逐步重写源码，也应优先放在 `sunray_planner` 体系下。
 
 ## 目录结构
 
@@ -27,12 +27,18 @@ planning/
     diff_planner_example/
       diff_planner/            # Diff planner 源码
       sunray_diff_adapter/     # 预留适配包目录
-    fuel_example/
-      FUEL/                    # FUEL 源码
+    fuel_planner_example/
+      fuel_planner/            # FUEL 源码
       sunray_fuel_adapter/     # 预留适配包目录
-    super_example/
-      SUPER/                   # SUPER 源码
+    super_planner_example/
+      super_planner/           # SUPER 源码
+      rog_map/                 # SUPER 地图组件
       sunray_super_adapter/    # 预留适配包目录
+    navrl_planner_example/
+      onboard_detector/        # NAVRL 动态障碍物检测包
+      map_manager/             # NAVRL 地图管理包
+      navigation_runner/       # NAVRL 导航运行包
+      sunray_navrl_adapter/    # NAVRL 到 Sunray 控制接口的适配包
 ```
 
 ### sunray_planner
@@ -69,7 +75,7 @@ planning/
 
 ### third_party_planner_examples
 
-`third_party_planner_examples` 按规划器拆分第三方算法源码和 Sunray 适配示例。目录名统一使用 `_example` 后缀，表示这些目录不是 Sunray 自研 planner 主线，而是第三方开源规划器的 Sunray 接入样例。第三方源码尽量保持原样，`sunray_xxx_adapter` 放 Sunray 侧的话题、消息和控制命令转换代码。当前只有 EGO 已有可用 adapter，Diff/FUEL/SUPER 的 adapter 目录先用 `.gitkeep` 占位。
+`third_party_planner_examples` 按规划器拆分第三方算法源码和 Sunray 适配示例。目录名统一使用 `_example` 后缀，表示这些目录不是 Sunray 自研 planner 主线，而是第三方开源规划器的 Sunray 接入样例。第三方源码尽量保持原样，`sunray_xxx_adapter` 放 Sunray 侧的话题、消息和控制命令转换代码。
 
 | 路径 | 说明 |
 | --- | --- |
@@ -78,10 +84,15 @@ planning/
 | `third_party_planner_examples/ego_planner_example/sunray_ego_adapter` | EGO 输出到 `UAVControlCMD` 的 Sunray 适配包。 |
 | `third_party_planner_examples/diff_planner_example/diff_planner` | Diff planner 源码，当前由 `sunray_planning` 的 `DiffPlanner` 适配。 |
 | `third_party_planner_examples/diff_planner_example/sunray_diff_adapter` | 预留 Diff adapter 目录。 |
-| `third_party_planner_examples/fuel_example/FUEL` | FUEL 探索规划源码，目前 Sunray 状态机中保留枚举但未接入可用适配器。 |
-| `third_party_planner_examples/fuel_example/sunray_fuel_adapter` | 预留 FUEL adapter 目录。 |
-| `third_party_planner_examples/super_example/SUPER` | SUPER 高速导航规划源码，目前 Sunray 状态机中保留枚举但未接入可用适配器。 |
-| `third_party_planner_examples/super_example/sunray_super_adapter` | 预留 SUPER adapter 目录。 |
+| `third_party_planner_examples/fuel_planner_example/fuel_planner` | FUEL 探索规划源码，目前 Sunray 状态机中保留枚举但未接入可用适配器。 |
+| `third_party_planner_examples/fuel_planner_example/sunray_fuel_adapter` | 预留 FUEL adapter 目录。 |
+| `third_party_planner_examples/super_planner_example/super_planner` | SUPER 高速导航规划源码，目前 Sunray 状态机中保留枚举但未接入可用适配器。 |
+| `third_party_planner_examples/super_planner_example/rog_map` | SUPER 使用的 ROG-MAP 地图组件。 |
+| `third_party_planner_examples/super_planner_example/sunray_super_adapter` | 预留 SUPER adapter 目录。 |
+| `third_party_planner_examples/navrl_planner_example/onboard_detector` | NAVRL 动态障碍物检测和服务包。 |
+| `third_party_planner_examples/navrl_planner_example/map_manager` | NAVRL 占据地图、ESDF 和动态地图管理包。 |
+| `third_party_planner_examples/navrl_planner_example/navigation_runner` | NAVRL 安全动作、策略推理和导航运行包。 |
+| `third_party_planner_examples/navrl_planner_example/sunray_navrl_adapter` | 预留 NAVRL adapter 目录。 |
 
 建议开发 Sunray 适配逻辑时优先改 `sunray_planner/sunray_planning` 和 `third_party_planner_examples/planner_tools`，不要直接改第三方算法核心，除非确认是算法包自身 bug。确实修改第三方源码时，最好同步记录修改原因，方便以后更新上游版本。
 

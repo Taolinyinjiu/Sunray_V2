@@ -101,7 +101,7 @@ sources_list:
         # 定位源序号
         source_id: 5
         # 订阅的里程计话题
-        odometry_topic: "${agent_key}/pengyu_sim/odom"
+        odometry_topic: "${agent_key}/sunray_mavros_sim/odom"
         # 订阅的重定位话题
         relocalization_topic: ""
         # local odom 超时判定时间

@@ -1,4 +1,49 @@
 quick_launch_groups:
+  - category: "sunray_mavros_sim"
+    scripts:
+      - title: "navrl_sim"
+        description: "sunray_mavros_sim 仿真 + NavRL 适配 + 定位融合 + 无人机控制 + NavRL navigation_node"
+        items:
+          - title: "sunray_mavros_sim"
+            ref: "sunray_mavros_sim/sunray_mavros_sim"
+            delay_sec: 2.0
+
+          - title: "NavRL2Sunray_sim"
+            ref: "sunray_mavros_sim/NavRL2Sunray_sim"
+            delay_sec: 1.0
+
+          - title: "localization_fusion"
+            ref: "定位融合/无人机定位融合"
+            delay_sec: 1.0
+
+          - title: "sunray_uav_control"
+            ref: "无人机控制/单机无人机控制"
+            args:
+              - "agent_name:=uav"
+              - "agent_id:=1"
+              - "enable_uav_control_monitor:=true"
+            delay_sec: 1.0
+
+          - title: "NavRLTerminalControl"
+            ref: "sunray_mavros_sim/NavRLTerminalControl"
+            delay_sec: 0.5
+
+          - title: "手动启动 NavRL navigation_node"
+            command: |
+              echo ""
+              echo "请在新终端手动执行 NavRL navigation_node："
+              echo ""
+              echo "cd /home/amov/Sunray_v2"
+              echo "source devel/setup.bash"
+              echo "source /home/amov/miniconda3/etc/profile.d/conda.sh"
+              echo "conda activate NavRL"
+              echo "rosrun navigation_runner navigation_node.py"
+              echo ""
+              echo "如果当前终端已经配置好 ROS 和 conda，也可以只执行："
+              echo "conda activate NavRL && rosrun navigation_runner navigation_node.py"
+              echo ""
+              read -r -p "按 Enter 关闭这个提示终端..."
+
   - category: "pengyu_sim"
     scripts:
       - title: "单无人机控制验证（pengyu_sim）"

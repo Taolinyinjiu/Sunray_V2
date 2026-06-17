@@ -261,7 +261,13 @@ post_build_actions() {
     
     if [[ -f "devel/setup.bash" ]]; then
         print_status "ROS工作空间设置文件已生成: devel/setup.bash"
-        echo "使用以下命令设置环境: ${CYAN}source devel/setup.bash${NC}"
+        # 这里会让后处理阶段能直接使用最新 ROS 环境；但如果用户通过 ./build.sh
+        # 启动脚本，子进程无法反向修改当前终端环境。
+        # 需要当前终端后续命令立即识别新包时，shell 机制上仍需在终端中 source 一次。
+        # shellcheck disable=SC1091
+        source "devel/setup.bash"
+        print_success "已在构建脚本进程内执行: source devel/setup.bash"
+        print_warning "如果后续命令在当前终端执行仍找不到新包，请在该终端执行: source devel/setup.bash"
     fi
     
     local available_gb=$(($(df "$WORKSPACE_ROOT" | awk 'NR==2 {print $4}') / 1024 / 1024))

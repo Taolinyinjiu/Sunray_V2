@@ -1,10 +1,14 @@
-<!-- title: Diff 第三方规划示例 -->
+<!-- title: Diff规划器源码架构 -->
 
 <section id="diff-planner-example">
 
-## Diff 第三方规划示例
+## Diff规划器源码架构
 
 `planning/third_party_planner_examples/diff_planner_example/diff_planner` 是 Diff planner 源码区。当前 Sunray 把它视为 EGO 的另一个 planner 适配目标，通过 `sunray_planning` 中的 `DiffPlanner` adapter 接入。
+
+### 源码功能包结构
+
+`diff_planner` 是 Diff planner 第三方源码聚合包，内部包含路径搜索、环境地图、轨迹优化、管理节点和轨迹工具等子包。
 
 ### 目录结构
 

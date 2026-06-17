@@ -112,11 +112,46 @@
         "default": "planning/ego_planner_example.md",
         "children": [
           {"title": "planner_tools", "file": "planning/planner_tools.md"},
-          {"title": "EGO 第三方规划示例", "file": "planning/ego_planner_example.md"},
-          {"title": "EGO 源码结构", "file": "planning/ego_planner_source.md"},
-          {"title": "Diff 第三方规划示例", "file": "planning/diff_planner_example.md"},
-          {"title": "FUEL 第三方规划示例", "file": "planning/fuel_example.md"},
-          {"title": "SUPER 第三方规划示例", "file": "planning/super_example.md"}
+          {
+            "title": "EGO规划器",
+            "default": "planning/ego_planner_example.md",
+            "children": [
+              {"title": "sunray_ego_adapter", "file": "planning/ego_planner_example.md"},
+              {"title": "EGO规划器源码架构", "file": "planning/ego_planner_source.md"}
+            ]
+          },
+          {
+            "title": "Diff规划器",
+            "default": "planning/diff_adapter.md",
+            "children": [
+              {"title": "sunray_diff_adapter", "file": "planning/diff_adapter.md"},
+              {"title": "Diff规划器源码架构", "file": "planning/diff_planner_example.md"}
+            ]
+          },
+          {
+            "title": "FUEL规划器",
+            "default": "planning/fuel_adapter.md",
+            "children": [
+              {"title": "sunray_fuel_adapter", "file": "planning/fuel_adapter.md"},
+              {"title": "FUEL规划器源码架构", "file": "planning/fuel_example.md"}
+            ]
+          },
+          {
+            "title": "SUPER规划器",
+            "default": "planning/super_adapter.md",
+            "children": [
+              {"title": "sunray_super_adapter", "file": "planning/super_adapter.md"},
+              {"title": "SUPER规划器源码架构", "file": "planning/super_example.md"}
+            ]
+          },
+          {
+            "title": "NAVRL规划器",
+            "default": "planning/navrl_adapter.md",
+            "children": [
+              {"title": "sunray_navrl_adapter", "file": "planning/navrl_adapter.md"},
+              {"title": "NAVRL规划器源码架构", "file": "planning/navrl_example.md"}
+            ]
+          }
         ]
       }
     ]
@@ -185,6 +220,16 @@
     "files": ["simulation/index.md"],
     "sections": [
       {"id": "simulation", "title": "仿真"}
+    ]
+  },
+  {
+    "group": "MAVROS 仿真",
+    "title": "MAVROS 仿真",
+    "files": [
+      "simulation/sunray_mavros_sim.md"
+    ],
+    "sections": [
+      {"id": "simulation-sunray-mavros-sim", "title": "sunray_mavros_sim"}
     ]
   },
   {

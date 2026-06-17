@@ -1,0 +1,39 @@
+# sunray_mavros_sim_node 主节点参数。
+#
+# 读取模块：
+#   sunray_mavros_sim_node.cpp
+#
+# 说明：
+#   本文件只放“整个单节点仿真器的通用参数”，包括无人机身份和统一状态打印。
+#   地图、雷达、动力学、PX4 控制和 fake MAVROS 的业务参数放在各自 YAML 中。
+
+# 无人机名称前缀。
+# 会和 agent_id 一起组成运行时实际无人机话题前缀。
+agent_name: uav
+
+# 无人机编号。
+# 最终话题前缀由 "/" + agent_name + agent_id 拼成。
+agent_id: 1
+
+# 全局坐标系 frame_id。
+# 读取模块：
+#   1. GlobalMapServer：作为全局地图点云 /map_generator/global_cloud 的 header.frame_id。
+#   2. LocalMid360Simulator：作为 ~/sunray_mavros_sim/cloud_world_frame 的 header.frame_id，
+#      也是 TF 的父坐标系，即 global_frame_id -> sensor_frame_id。
+#   3. QuadrotorSimulator：作为 ~/sunray_mavros_sim/odom 和 ~/sunray_mavros_sim/navsat 的 header.frame_id。
+#   4. FakeMavrosBridge：不直接读取本参数，但它会转发 QuadrotorSimulator 的 odom/imu，
+#      所以 ~/mavros/local_position/odom 会继承这里设置的 frame_id。
+# 推荐：
+#   对接 NavRL/map_manager 时使用 map，因为 map_manager 的点云和 RViz 固定坐标系使用 map。
+#   如果你的其他模块固定使用 world，可以改成 world，但要保证全局地图、odom、局部点云语义一致。
+global_frame_id: map
+
+# 是否在终端周期打印所有关键模块的统一状态。
+# true：主节点定时依次调用 GlobalMapServer、LocalMid360Simulator、
+#       QuadrotorSimulator、PX4_CONTROL_SIM、FakeMavrosBridge 的 printStatus()。
+# false：不打印周期状态，只保留 ROS 常规启动日志和告警。
+enable_status_print: true
+
+# 统一状态打印频率，单位 Hz。
+# 只由 sunray_mavros_sim_node.cpp 读取，各模块内部不再单独读取打印频率。
+status_print_hz: 1.0

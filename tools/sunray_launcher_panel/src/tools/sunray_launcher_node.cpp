@@ -92,6 +92,7 @@ struct QuickLaunchStep
     std::string title;
     std::string package;
     std::string launch;
+    std::string command;
     std::vector<std::string> args;
     double delay_sec{0.0};
     int linked_launch_index{-1};
@@ -987,6 +988,14 @@ private:
             {
                 step.launch = xmlRpcToString(item_value["launch"]);
             }
+            if (item_value.hasMember("command"))
+            {
+                step.command = xmlRpcToString(item_value["command"]);
+            }
+            if (item_value.hasMember("args"))
+            {
+                step.args = xmlRpcToStringList(item_value["args"]);
+            }
             if (item_value.hasMember("delay_sec") &&
                 (item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeDouble ||
                  item_value["delay_sec"].getType() == XmlRpc::XmlRpcValue::TypeInt))
@@ -995,7 +1004,7 @@ private:
             }
 
             resolveQuickLaunchStep(step);
-            if (!step.package.empty() && !step.launch.empty())
+            if (!step.command.empty() || (!step.package.empty() && !step.launch.empty()))
             {
                 group.steps.push_back(step);
             }
@@ -2056,6 +2065,11 @@ private:
 
     QString buildQuickStepRoslaunchCommand(const QuickLaunchStep &step) const
     {
+        if (!step.command.empty())
+        {
+            return QString::fromStdString(step.command);
+        }
+
         if (step.linked_launch_index >= 0)
         {
             const auto edited_it = edited_launch_commands_.find(step.linked_launch_index);
@@ -2070,6 +2084,11 @@ private:
 
     QString buildQuickStepDisplayCommand(const QuickLaunchStep &step) const
     {
+        if (!step.command.empty())
+        {
+            return QString::fromStdString(step.command).simplified();
+        }
+
         if (step.linked_launch_index >= 0)
         {
             const auto edited_it = edited_launch_commands_.find(step.linked_launch_index);

@@ -4,6 +4,7 @@ build/
 devel/
 logs/
 vins_logs/
+outputs/
 .catkin_tools/
 
 # Media files

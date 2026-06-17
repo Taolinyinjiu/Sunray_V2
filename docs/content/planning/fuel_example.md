@@ -1,15 +1,19 @@
-<!-- title: FUEL 第三方规划示例 -->
+<!-- title: FUEL规划器源码架构 -->
 
 <section id="fuel-example">
 
-## FUEL 第三方规划示例
+## FUEL规划器源码架构
 
-`planning/third_party_planner_examples/fuel_example/FUEL` 是第三方 FUEL 探索规划源码。Sunray 当前状态机中保留了 FUEL 类型枚举，但还没有接入可用 adapter；因此它目前更适合作为算法源码和后续适配对象，而不是默认规划链路的一部分。
+`planning/third_party_planner_examples/fuel_planner_example/fuel_planner` 是第三方 FUEL 探索规划源码。Sunray 当前状态机中保留了 FUEL 类型枚举，但还没有接入可用 adapter；因此它目前更适合作为算法源码和后续适配对象，而不是默认规划链路的一部分。
+
+### 源码功能包结构
+
+`fuel_planner` 保留第三方探索规划源码，负责 frontier 信息维护、探索路径规划、局部视点选择和轨迹生成。
 
 ### Sunray 中的位置
 
 ```text
-planning/third_party_planner_examples/fuel_example/FUEL/
+planning/third_party_planner_examples/fuel_planner_example/fuel_planner/
 ├── fuel_planner/
 └── uav_simulator/
 ```
@@ -43,7 +47,7 @@ FUEL 是面向无人机自主探索的第三方规划框架，全称 Fast UAV Ex
 本仓库保留了上游示例资源，路径通常位于：
 
 ```text
-planning/third_party_planner_examples/fuel_example/FUEL/files/
+planning/third_party_planner_examples/fuel_planner_example/fuel_planner/files/
 ```
 
 手册页面不直接嵌入这些相对路径图片，避免迁移到网站后出现破图。
@@ -105,7 +109,7 @@ By default you can see an office-like environment. Trigger the quadrotor to star
 ### Exploring Different Environments
 
 The exploration environments in our simulator are represented by [.pcd files](https://pointclouds.org/documentation/tutorials/pcd_file_format.html).
-We provide several sample environments, which can be selected in `planning/third_party_planner_examples/fuel_example/FUEL/fuel_planner/exploration_manager/launch/simulator.xml`:
+We provide several sample environments, which can be selected in `planning/third_party_planner_examples/fuel_planner_example/fuel_planner/fuel_planner/exploration_manager/launch/simulator.xml`:
 
 
 ```xml
@@ -116,8 +120,8 @@ We provide several sample environments, which can be selected in `planning/third
 
 Example maps include `office.pcd`, `office2.pcd`, `office3.pcd` and `pillar.pcd`.
 
-If you want to use your own environments, place the `.pcd` files in `planning/third_party_planner_examples/fuel_example/FUEL/uav_simulator/map_generator/resource`, and follow the comments above to specify it.
-You may also need to change the bounding box of explored space in `planning/third_party_planner_examples/fuel_example/FUEL/fuel_planner/exploration_manager/launch/exploration.launch`:
+If you want to use your own environments, place the `.pcd` files in `planning/third_party_planner_examples/fuel_planner_example/fuel_planner/uav_simulator/map_generator/resource`, and follow the comments above to specify it.
+You may also need to change the bounding box of explored space in `planning/third_party_planner_examples/fuel_planner_example/fuel_planner/fuel_planner/exploration_manager/launch/exploration.launch`:
 
 ```xml
     <arg name="box_min_x" value="-10.0"/>

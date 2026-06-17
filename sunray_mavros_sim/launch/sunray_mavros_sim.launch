@@ -1,0 +1,90 @@
+<launch>
+    <!--
+      sunray_mavros_sim 的唯一启动入口。
+
+      本 launch 只启动一个 ROS node：sunray_mavros_sim_node。
+      该 node 在同一个进程内创建 5 个模块：
+        1. GlobalMapServer：读取 PCD，发布全局点云。
+        2. LocalMid360Simulator：基于全局地图和 odom 生成 MID360 风格局部点云。
+        3. QuadrotorSimulator：订阅电机 RPM，发布 odom / imu / navsat。
+        4. PX4_CONTROL_SIM：订阅 MAVROS setpoint，转换成电机 RPM。
+        5. FakeMavrosBridge：发布假的 MAVROS 状态、odom、imu 和常用服务。
+
+      常用 topic：
+        /map_generator/global_cloud
+        ~/sunray_mavros_sim/odom
+        ~/sunray_mavros_sim/imu
+        ~/sunray_mavros_sim/cloud_world_frame
+        ~/sunray_mavros_sim/cloud_sensor_frame
+        ~/mavros/state
+        ~/mavros/local_position/odom
+        ~/mavros/imu/data
+    -->
+
+    <!--
+      配置文件按模块拆分，并使用完全一致的加载方式：
+        <rosparam file="$(arg xxx_config)" command="load" subst_value="true" />
+
+      subst_value="true" 允许 YAML 中使用 $(find sunray_mavros_sim) 这样的 roslaunch
+      替换语法。所有文件都会加载到 sunray_mavros_sim_node 的私有参数空间。
+
+      参数归属：
+        node_config:
+          读取模块：sunray_mavros_sim_node
+          内容：agent_name、agent_id、global_frame_id、统一状态打印开关和频率。
+          注意：global_frame_id 是全包共享参数，会被 GlobalMapServer、
+                LocalMid360Simulator、QuadrotorSimulator 同时读取，用于统一全局地图、
+                局部点云、TF、odom 和 navsat 的全局坐标系。
+
+        global_map_server_config:
+          读取模块：GlobalMapServer
+          内容：PCD 地图路径、全局点云话题、降采样、地图偏移。
+
+        local_mid360_simulator_config:
+          读取模块：LocalMid360Simulator
+          内容：MID360 局部点云视场、量程、角分辨率、发布频率。
+
+        quadrotor_simulator_config:
+          读取模块：QuadrotorSimulator；其中质量/重力/机臂/电机关键参数也会被
+                PX4_CONTROL_SIM 读取，用于 setpoint 转 RPM。
+          内容：动力学频率、控制超时、初始位姿、刚体参数、电机参数。
+
+        imu_model_config:
+          读取模块：QuadrotorSimulator 内部的 sunray_imu_sim::ImuModel
+          内容：IMU preset、bias、噪声、协方差、安装误差、时间异步。
+
+        px4_control_sim_config:
+          读取模块：PX4_CONTROL_SIM
+          内容：PX4 setpoint 转 RPM 的 PID/限幅、PX4 控制更新频率。
+
+        fake_mavros_bridge_config:
+          读取模块：FakeMavrosBridge
+          内容：fake MAVROS 发布频率、初始 armed/mode 状态和电池状态。
+    -->
+    <arg name="node_config" default="$(find sunray_mavros_sim)/config/sunray_mavros_sim_node.yaml" />
+    <arg name="global_map_server_config" default="$(find sunray_mavros_sim)/config/global_map_server.yaml" />
+    <arg name="local_mid360_simulator_config" default="$(find sunray_mavros_sim)/config/local_mid360_simulator.yaml" />
+    <arg name="quadrotor_simulator_config" default="$(find sunray_mavros_sim)/config/quadrotor_simulator.yaml" />
+    <arg name="imu_model_config" default="$(find sunray_mavros_sim)/config/imu_model.yaml" />
+    <arg name="px4_control_sim_config" default="$(find sunray_mavros_sim)/config/px4_control_sim.yaml" />
+    <arg name="fake_mavros_bridge_config" default="$(find sunray_mavros_sim)/config/fake_mavros_bridge.yaml" />
+
+    <!--
+      唯一 node。
+
+      如果同名参数在多个 YAML 中出现，后加载的文件覆盖先加载的文件。
+      默认配置已按模块拆分，正常情况下不需要依赖覆盖关系。
+    -->
+    <node name="sunray_mavros_sim_node"
+          pkg="sunray_mavros_sim"
+          type="sunray_mavros_sim_node"
+          output="screen">
+        <rosparam file="$(arg node_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg global_map_server_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg local_mid360_simulator_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg quadrotor_simulator_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg imu_model_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg px4_control_sim_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg fake_mavros_bridge_config)" command="load" subst_value="true" />
+    </node>
+</launch>

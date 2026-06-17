@@ -1,0 +1,79 @@
+# ImuModel IMU 误差模型参数。
+#
+# 模块功能：
+#   给 QuadrotorSimulator 的真实运动状态叠加 IMU 噪声、bias、安装误差和协方差，
+#   生成 /<agent>/sunray_mavros_sim/imu。
+#
+# 读取模块：
+#   QuadrotorSimulator 内部调用的 sunray_imu_sim::ImuModel
+
+imu:
+  # 是否启用 IMU 误差模型。
+  # true：按本文件参数加噪；false：尽量输出理想 IMU。
+  enable: true
+
+  # 随机数种子。
+  # 固定该值可以让每次仿真的随机噪声可复现。
+  random_seed: 1
+
+  # 内置 IMU 预设。
+  # 可选值：ideal、vn100、mti680g、adis16470、gq7、custom。
+  # custom 会主要使用下面手动填写的 bias/noise 参数。
+  preset: vn100
+
+  # 姿态协方差对角线，写入 sensor_msgs/Imu.orientation_covariance。
+  orientation_covariance: [1.0e-6, 1.0e-6, 1.0e-6]
+
+  # 角速度协方差对角线，写入 sensor_msgs/Imu.angular_velocity_covariance。
+  angular_velocity_covariance: [1.0e-6, 1.0e-6, 1.0e-6]
+
+  # 线加速度协方差对角线，写入 sensor_msgs/Imu.linear_acceleration_covariance。
+  linear_acceleration_covariance: [4.0e-4, 4.0e-4, 4.0e-4]
+
+  # 陀螺零偏，单位 deg/hour。
+  # preset=custom 时建议按实际 IMU 指标填写。
+  # gyro_bias_degph: [0.0, 0.0, 0.0]
+
+  # 加速度计零偏，单位 ug。
+  # preset=custom 时建议按实际 IMU 指标填写。
+  # accel_bias_ug: [0.0, 0.0, 0.0]
+
+  # 陀螺角随机游走，单位 deg/sqrt(hour)。
+  # gyro_arw_deg_sqrt_hour: [0.0, 0.0, 0.0]
+
+  # 加速度计速度随机游走，单位 ug/sqrt(Hz)。
+  # accel_vrw_ug_sqrt_hz: [0.0, 0.0, 0.0]
+
+  # 陀螺相关零偏，单位 deg/hour。
+  gyro_corr_bias_degph: [0.0, 0.0, 0.0]
+
+  # 陀螺相关零偏时间常数，单位 s。
+  gyro_corr_tau_s: [0.0, 0.0, 0.0]
+
+  # 加速度计相关零偏，单位 ug。
+  accel_corr_bias_ug: [0.0, 0.0, 0.0]
+
+  # 加速度计相关零偏时间常数，单位 s。
+  accel_corr_tau_s: [0.0, 0.0, 0.0]
+
+  # 陀螺比例因子误差，单位 ppm。
+  gyro_scale_factor_ppm: [0.0, 0.0, 0.0]
+
+  # 加速度计比例因子误差，单位 ppm。
+  accel_scale_factor_ppm: [0.0, 0.0, 0.0]
+
+  # 陀螺安装误差，单位 arcsec。
+  # 6 个数对应非正交/安装误差矩阵的上三角和下三角项。
+  gyro_installation_error_arcsec: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+  # 加速度计安装误差，单位 arcsec。
+  accel_installation_error_arcsec: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+  # 加速度计二次项误差，单位 ug/g^2。
+  accel_quadratic_ug_g2: [0.0, 0.0, 0.0]
+
+  # IMU 杆臂，单位 cm。
+  accel_lever_arm_cm: [0.0, 0.0, 0.0]
+
+  # 陀螺和加速度计采样时间异步，单位 ms。
+  gyro_accel_time_async_ms: 0.0

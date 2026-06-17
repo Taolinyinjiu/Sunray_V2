@@ -1,20 +1,22 @@
-<!-- title: SUPER 第三方规划示例 -->
+<!-- title: SUPER规划器源码架构 -->
 
 <section id="super-example">
 
-## SUPER 第三方规划示例
+## SUPER规划器源码架构
 
-`planning/third_party_planner_examples/super_example/SUPER` 是第三方 SUPER 高速安全导航规划源码。Sunray 当前状态机中保留了 SUPER 类型枚举，但还没有接入可用 adapter；因此它目前更适合作为算法研究和后续适配对象。
+`planning/third_party_planner_examples/super_planner_example/super_planner` 是第三方 SUPER 高速安全导航规划源码。Sunray 当前状态机中保留了 SUPER 类型枚举，但还没有接入可用 adapter；因此它目前更适合作为算法研究和后续适配对象。
+
+### 源码功能包结构
+
+`super_planner` 保留第三方高速安全导航规划源码，`rog_map` 是 SUPER 使用的地图组件。上游项目中的 `mission_planner`、`mars_uav_sim` 等 demo 目录当前不作为 Sunray 构建模块。
 
 ### Sunray 中的位置
 
 ```text
-planning/third_party_planner_examples/super_example/SUPER/
-├── mars_uav_sim
-├── mission_planner
-├── rog_map
-├── scripts
-└── super_planner
+planning/third_party_planner_examples/super_planner_example/
+├── super_planner/
+├── rog_map/
+└── sunray_super_adapter/
 ```
 
 主要子目录：
@@ -22,10 +24,8 @@ planning/third_party_planner_examples/super_example/SUPER/
 | 子目录 | 说明 |
 | --- | --- |
 | `super_planner` | SUPER planner 核心。 |
-| `rog_map` | ROG-Map 占据栅格地图。 |
-| `mission_planner` | 任务规划和 benchmark/click demo。 |
-| `mars_uav_sim` | MARS UAV 仿真相关包。 |
-| `scripts` | ROS 版本选择等脚本。 |
+| `rog_map` | ROG-MAP 地图组件。 |
+| `sunray_super_adapter` | Sunray 侧预留适配包。 |
 
 ### 上游项目信息
 

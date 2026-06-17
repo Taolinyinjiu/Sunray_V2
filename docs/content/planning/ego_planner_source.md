@@ -1,8 +1,8 @@
-<!-- title: EGO 源码结构 -->
+<!-- title: EGO规划器源码架构 -->
 
 <section id="ego-planner-source">
 
-## EGO 源码结构
+## EGO规划器源码架构
 
 `planning/third_party_planner_examples/ego_planner_example/ego-planner-swarm` 是当前仓库中保留的 EGO planner 示例源码。这个目录的定位不是 Sunray 自研规划器，而是“第三方开源规划器源码 + Sunray 接口示例”。
 

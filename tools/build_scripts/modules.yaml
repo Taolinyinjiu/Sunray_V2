@@ -227,6 +227,31 @@ modules:
     dependencies: []
     conflicts_with: ["ego_planner_swarm", "fuel_planner", "diff_planner"]
 
+  onboard_detector:
+    description: "NavRL planner 示例的机载动态障碍物检测包，提供动态障碍物服务和检测节点"
+    label: planning
+    source_path: "planning/third_party_planner_examples/navrl_planner_example/onboard_detector"
+    build_path: "build/onboard_detector"
+    dependencies: []
+  map_manager:
+    description: "NavRL planner 示例的地图管理包，提供占据地图、ESDF、动态地图和地图查询服务"
+    label: planning
+    source_path: "planning/third_party_planner_examples/navrl_planner_example/map_manager"
+    build_path: "build/map_manager"
+    dependencies: ["onboard_detector"]
+  navigation_runner:
+    description: "NavRL planner 示例的导航运行包，提供安全动作和策略推理服务"
+    label: planning
+    source_path: "planning/third_party_planner_examples/navrl_planner_example/navigation_runner"
+    build_path: "build/navigation_runner"
+    dependencies: ["onboard_detector", "map_manager"]
+  sunray_navrl_adapter:
+    description: "NavRL planner 到 Sunray 控制接口的适配示例，预留 NavRL 控制命令转换节点"
+    label: planning
+    source_path: "planning/third_party_planner_examples/navrl_planner_example/sunray_navrl_adapter"
+    build_path: "build/sunray_navrl_adapter"
+    dependencies: ["sunray_msgs", "sunray_common", "navigation_runner"]
+
   # ----- simulation: Gazebo、仿真插件和 Sunray 仿真入口 -----
   simulator_utils:
     description: "仿真通用工具包，提供 Gazebo 和仿真场景复用能力"
@@ -246,6 +271,12 @@ modules:
     source_path: "simulation/sunray_simulator"
     build_path: "build/sunray_simulator"
     dependencies: ["gazebo_plugin", "sunray_common", "sunray_msgs"]
+  sunray_mavros_sim:
+    description: "sunray_mavros_sim，无人机动力学、全局点云、局部点云/深度图数值仿真"
+    label: simulation
+    source_path: "sunray_mavros_sim"
+    build_path: "build/sunray_mavros_sim"
+    dependencies: ["sunray_common", "sunray_msgs"]
 
   # ----- swarm: 多机集群控制和集群示例 -----
   sunray_swarm_control:
@@ -348,6 +379,12 @@ groups:
     label: Test
     description: "定位融合测试预设，包含 MAVROS、VRPN 和 localization_fusion"
     modules: ["sunray_mavros", "vrpn_client_ros", "localization_fusion"]
+
+  # ----- Other: 第三方示例和临时构建预设 -----
+  navrl:
+    label: Other
+    description: "NavRL 第三方规划器示例预设，包含检测、地图、导航运行和 Sunray 适配包"
+    modules: ["onboard_detector", "map_manager", "navigation_runner", "sunray_navrl_adapter"]
 
   # ----- Simulation: 仿真环境预设 -----
   Simulation:

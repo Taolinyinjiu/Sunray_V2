@@ -395,6 +395,25 @@
     });
   }
 
+  function stripHeadingNumber(text) {
+    return text.replace(/^\s*(?:\d+[.、]|\d+(?:\.\d+)+[.、]?)\s+/, "").trim();
+  }
+
+  function numberPageHeadings() {
+    const counters = [0, 0, 0];
+    content.querySelectorAll("h2, h3, h4").forEach((heading) => {
+      const level = Number(heading.tagName.slice(1));
+      const index = level - 2;
+      counters[index] += 1;
+      for (let i = index + 1; i < counters.length; i += 1) {
+        counters[i] = 0;
+      }
+
+      const number = counters.slice(0, index + 1).join(".");
+      heading.textContent = `${number}. ${stripHeadingNumber(heading.textContent)}`;
+    });
+  }
+
   function buildPageToc(page) {
     if (!pageToc) {
       return;
@@ -448,6 +467,7 @@
         const markdown = await loadPageMarkdown(page);
         content.innerHTML = marked.parse(markdown);
         assignHeadingIds(page);
+        numberPageHeadings();
         buildPageToc(page);
         currentFile = page.file;
       }

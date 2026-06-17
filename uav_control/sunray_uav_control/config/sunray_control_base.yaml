@@ -27,7 +27,7 @@ basic_param:
     #      会使用 geometric_controller_param。
     # 注意:
     #   - 当前加载代码只允许 0 或 1。
-    controller_types: 1
+    controller_types: 0
 
     # 控制器高频循环频率，单位 Hz，必须 > 10。
     # 使用位置:

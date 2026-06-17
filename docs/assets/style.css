@@ -116,6 +116,10 @@ a:hover {
   padding-left: 28px;
 }
 
+.nav-item.depth-3 {
+  padding-left: 44px;
+}
+
 .nav-children.is-collapsed {
   display: none;
 }
@@ -130,6 +134,20 @@ a:hover {
   top: 4px;
   bottom: 6px;
   left: 21px;
+  width: 1px;
+  background: #e3ebf5;
+}
+
+.nav-children.depth-3 {
+  position: relative;
+}
+
+.nav-children.depth-3::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 6px;
+  left: 37px;
   width: 1px;
   background: #e3ebf5;
 }

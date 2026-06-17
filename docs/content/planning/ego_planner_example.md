@@ -1,8 +1,8 @@
-<!-- title: EGO 第三方规划示例 -->
+<!-- title: sunray_ego_adapter -->
 
 <section id="ego-planner-example">
 
-## EGO 第三方规划示例
+## sunray_ego_adapter
 
 路径：
 
@@ -13,6 +13,16 @@ planning/third_party_planner_examples/ego_planner_example
 `third_party_planner_examples/ego_planner_example` 用于验证 EGO planner 与 Sunray 无人机控制链路的集成。EGO planner 根据定位和点云生成 `position_cmd`，`sunray_ego_adapter` 中的 `Ego2Sunray` 节点再把该指令转换为 `sunray_msgs/UAVControlCMD`，发送给 `sunray_uav_control` 执行。
 
 当前主要覆盖已经测试过的 Gazebo 仿真流程。
+
+### 功能包结构
+
+#### 适配功能包：sunray_ego_adapter
+
+`sunray_ego_adapter` 是 Sunray 侧适配包，核心节点 `Ego2Sunray` 订阅 EGO 输出的 `position_cmd`，转换并发布 `sunray_msgs/UAVControlCMD` 给 `sunray_uav_control`。
+
+#### 源码功能包：ego-planner-swarm
+
+`ego-planner-swarm` 是 EGO planner 第三方源码包，负责局部地图、目标点输入、轨迹搜索、轨迹优化和轨迹发布。更细的源码分层见“EGO规划器源码架构”页面。
 
 ### 总体数据流
 

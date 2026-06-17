@@ -1,4 +1,4 @@
-airframe_type: sunray_150
+airframe_type: sunray_test
 features:
 - name: Mavros(N150-ACM0)
   group: Mavros模块
@@ -471,4 +471,19 @@ features:
     args:
     - agent_name:=uav
     - agent_id:=1
+    delay_sec: 1.0
+- name: planner_navrl_real_adapter
+  group: 第三方规划模块
+  description: NAVRL真机规划器：启动地图管理与Sunray控制指令转换
+  auto_start: false
+  stop_timeout_sec: 8.0
+  launches:
+  - name: navrl_real_adapter
+    package: sunray_navrl_adapter
+    file: NavRL2Sunray.launch
+    args:
+    - agent_name:=uav
+    - agent_id:=1
+    - rviz:=false
+    - use_safety_shield:=false
     delay_sec: 1.0

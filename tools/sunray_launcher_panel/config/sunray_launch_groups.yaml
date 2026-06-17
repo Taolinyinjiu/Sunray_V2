@@ -2,6 +2,23 @@ external_workspaces:
   - "~/pengyu_sim"
 
 launch_groups:
+  - name: "sunray_mavros_sim"
+    items:
+      - title: "sunray_mavros_sim"
+        package: "sunray_mavros_sim"
+        launch: "sunray_mavros_sim.launch"
+        description: "启动 sunray_mavros_sim 一体化仿真：全局地图、局部 MID360 点云、动力学、odom、imu 和 fake MAVROS。"
+
+      - title: "NavRL2Sunray_sim"
+        package: "sunray_navrl_adapter"
+        launch: "NavRL2Sunray_sim.launch"
+        description: "启动 NavRL 仿真适配链路：map_manager、NavRL2Sunray 适配节点、安全模块和 RViz。"
+
+      - title: "NavRLTerminalControl"
+        package: "sunray_navrl_adapter"
+        launch: "NavRLTerminalControl.launch"
+        description: "启动 NavRL 终端控制节点，用于从终端/RViz 目标转换并发布 Sunray UAV 控制指令。"
+
   - name: "Sunray简易地面站"
     items:
       - title: "Sunray简易地面站"
@@ -299,14 +316,14 @@ launch_groups:
   - name: "pengyu_sim仿真器"
     items:
       - title: "全局点云发布"
-        package: "map_generator"
+        package: "sunray_sim_map"
         launch: "map_publisher.launch"
         args:
           - "launch_rviz:=false"
         description: "外部 pengyu_sim 包：发布全局点云地图，常用于单无人机规划验证。"
 
       - title: "局部点云渲染"
-        package: "local_sensing"
+        package: "sunray_sim_sensing"
         launch: "local_sensing_mid360.launch"
         description: "外部 pengyu_sim 包：根据全局地图和机器人位姿渲染局部点云。"
 
