@@ -253,9 +253,13 @@ bool Geometric_Controller::init_ulog_logger() {
     ulog_output_topic_ =
         ulog_logger_.advertise<controller_data_types::GeometricControllerOutputRecord>(
             "geometric_controller_output");
+    ulog_runtime_topic_ =
+        ulog_logger_.advertise<controller_data_types::GeometricControllerRuntimeRecord>(
+            "geometric_controller_runtime");
 
     if (!ulog_param_topic_.valid() || !ulog_input_topic_.valid() ||
-        !ulog_debug_topic_.valid() || !ulog_output_topic_.valid()) {
+        !ulog_debug_topic_.valid() || !ulog_output_topic_.valid() ||
+        !ulog_runtime_topic_.valid()) {
         ROS_WARN("[Geometric_Controller] failed to advertise geometric controller ULog topics");
         ulog_logger_.close();
         ulog_enabled_ = false;
@@ -409,6 +413,62 @@ void Geometric_Controller::write_ulog_sample(
         !ulog_logger_.write(ulog_output_topic_, output_record)) {
         ROS_WARN_THROTTLE(1.0,
                           "[Geometric_Controller] failed to write ULog sample: %s",
+                          ulog_logger_.lastError().c_str());
+        ulog_logger_.close();
+        ulog_enabled_ = false;
+    }
+}
+
+void Geometric_Controller::write_runtime_record(
+    RuntimeEarlyReturnReason reason,
+    const curve::QuinticCurveState* curve_result,
+    double commanded_height,
+    double commanded_vmax,
+    double rel_height,
+    double prelift_a_ff,
+    double takeoff_thrust_limit,
+    double odom_ahead_ratio,
+    double odom_correction_scale,
+    ThrustCommandPolicy thrust_policy) {
+    if (!ulog_enabled_ || !ulog_logger_.isOpen() || !ulog_runtime_topic_.valid()) {
+        return;
+    }
+
+    const control_common::Mavros_State px4_state = mavros_helper_.get_state();
+
+    controller_data_types::GeometricControllerRuntimeRecord record;
+    record.timestamp = sunray_logger::rosTimeToUs(ros::Time::now());
+    record.controller_ready = controller_ready_.load(std::memory_order_relaxed) ? 1U : 0U;
+    record.odom_valid = has_uav_odometry_.load(std::memory_order_relaxed) ? 1U : 0U;
+    record.early_return_reason = static_cast<uint8_t>(reason);
+    record.takeoff_phase = static_cast<uint8_t>(takeoff_accff_state_.phase);
+    record.takeoff_curve_valid =
+        curve_result != nullptr && curve_result->valid ? 1U : 0U;
+    record.takeoff_curve_rebased = takeoff_accff_state_.curve_started ? 1U : 0U;
+    record.px4_connected = px4_state.connected ? 1U : 0U;
+    record.px4_armed = px4_state.armed ? 1U : 0U;
+    record.px4_flight_mode = static_cast<uint8_t>(px4_state.flight_mode);
+    record.px4_landed_state = static_cast<uint8_t>(px4_state.landed_state);
+    record.thrust_policy = static_cast<uint8_t>(thrust_policy);
+    if (curve_result != nullptr) {
+        copy_vec3(curve_result->position, record.takeoff_curve_position);
+        copy_vec3(curve_result->velocity, record.takeoff_curve_velocity);
+        copy_vec3(curve_result->acceleration, record.takeoff_curve_acceleration);
+    }
+    record.commanded_height = static_cast<float>(commanded_height);
+    record.commanded_vmax = static_cast<float>(commanded_vmax);
+    record.rel_height = static_cast<float>(rel_height);
+    record.odom_vz = static_cast<float>(uav_odometry_.velocity.z());
+    record.prelift_a_ff = static_cast<float>(prelift_a_ff);
+    record.takeoff_thrust_limit = static_cast<float>(takeoff_thrust_limit);
+    record.odom_ahead_ratio = static_cast<float>(odom_ahead_ratio);
+    record.odom_correction_scale = static_cast<float>(odom_correction_scale);
+    record.accepted_hover_thrust =
+        static_cast<float>(controller_.get_accepted_hover_thrust());
+
+    if (!ulog_logger_.write(ulog_runtime_topic_, record)) {
+        ROS_WARN_THROTTLE(1.0,
+                          "[Geometric_Controller] failed to write ULog runtime sample: %s",
                           ulog_logger_.lastError().c_str());
         ulog_logger_.close();
         ulog_enabled_ = false;
@@ -1075,9 +1135,33 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         land_complete_.store(false, std::memory_order_relaxed);
     }
     if (!controller_ready_.load(std::memory_order_relaxed)) {
+        write_runtime_record(RuntimeEarlyReturnReason::NotReady,
+                             nullptr,
+                             0.0,
+                             0.0,
+                             0.0,
+                             0.0,
+                             0.0,
+                             0.0,
+                             1.0,
+                             ThrustCommandPolicy::UseEstimatedAnchor);
         return false;
     }
     if (takeoff_complete_.load(std::memory_order_relaxed)) {
+        const double current_rel_height =
+            has_uav_odometry_.load(std::memory_order_relaxed)
+                ? uav_odometry_.position.z() - ground_height_ref_
+                : 0.0;
+        write_runtime_record(RuntimeEarlyReturnReason::TakeoffAlreadyComplete,
+                             nullptr,
+                             std::max(relative_takeoff_height, 0.05),
+                             std::max(max_takeoff_velocity, 0.05),
+                             current_rel_height,
+                             0.0,
+                             0.0,
+                             0.0,
+                             1.0,
+                             ThrustCommandPolicy::UseEstimatedAnchor);
         return hover();
     }
 
@@ -1147,6 +1231,16 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         setpoint_cmd.thrust = 0.0;
         mavros_helper_.pub_attitude_setpoint(setpoint_cmd);
         cache_attitude_setpoint(setpoint_cmd);
+        write_runtime_record(RuntimeEarlyReturnReason::WaitingOffboard,
+                             nullptr,
+                             commanded_height,
+                             commanded_vmax,
+                             uav_odometry_.position.z() - ground_height_ref_,
+                             0.0,
+                             takeoff_thrust_limit,
+                             0.0,
+                             1.0,
+                             ThrustCommandPolicy::UseFixedAnchor);
 
         if (start_checkout_offboard_time_ == ros::Time(0)) {
             start_checkout_offboard_time_ = now;
@@ -1172,6 +1266,16 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         takeoff_accff_state_.curve_started = false;
         takeoff_arrival_state_ = arrival_helper::State{};
         mavros_helper_.set_arm(true);
+        write_runtime_record(RuntimeEarlyReturnReason::WaitingArm,
+                             nullptr,
+                             commanded_height,
+                             commanded_vmax,
+                             uav_odometry_.position.z() - ground_height_ref_,
+                             0.0,
+                             takeoff_thrust_limit,
+                             0.0,
+                             1.0,
+                             ThrustCommandPolicy::UseFixedAnchor);
         return false;
     }
 
@@ -1226,6 +1330,16 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         setpoint.thrust = std::min(output.thrust, takeoff_thrust_limit);
         mavros_helper_.pub_attitude_setpoint(setpoint);
         cache_attitude_setpoint(setpoint);
+        write_runtime_record(RuntimeEarlyReturnReason::PreLiftOutput,
+                             nullptr,
+                             commanded_height,
+                             commanded_vmax,
+                             rel_height,
+                             a_ff,
+                             takeoff_thrust_limit,
+                             0.0,
+                             1.0,
+                             ThrustCommandPolicy::UseFixedAnchor);
 
         const double elapsed = (now - takeoff_accff_state_.phase_start).toSec();
         const bool ramp_ready = a_ff >= 0.99 * prelift_a_target;
@@ -1290,10 +1404,30 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
                 fallback_vmax,
                 uav_odometry_.velocity.z(),
                 commanded_vmax);
+            write_runtime_record(RuntimeEarlyReturnReason::AirborneCurveInvalidFallback,
+                                 &curve_result,
+                                 commanded_height,
+                                 commanded_vmax,
+                                 rel_height,
+                                 takeoff_accff_state_.a_ff_prev,
+                                 takeoff_thrust_limit,
+                                 0.0,
+                                 1.0,
+                                 ThrustCommandPolicy::UseEstimatedAnchor);
         }
         if (!curve_result.valid) {
             ROS_ERROR_THROTTLE(1.0,
                                "[takeoff_accff] AirborneCurve remains invalid after fallback");
+            write_runtime_record(RuntimeEarlyReturnReason::AirborneCurveInvalid,
+                                 &curve_result,
+                                 commanded_height,
+                                 commanded_vmax,
+                                 rel_height,
+                                 takeoff_accff_state_.a_ff_prev,
+                                 takeoff_thrust_limit,
+                                 0.0,
+                                 1.0,
+                                 ThrustCommandPolicy::UseEstimatedAnchor);
             return false;
         }
 
@@ -1351,6 +1485,16 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         setpoint.thrust = std::min(output.thrust, dynamic_thrust_limit);
         mavros_helper_.pub_attitude_setpoint(setpoint);
         cache_attitude_setpoint(setpoint);
+        write_runtime_record(RuntimeEarlyReturnReason::AirborneCurveOutput,
+                             &curve_result,
+                             commanded_height,
+                             commanded_vmax,
+                             rel_height,
+                             takeoff_accff_state_.a_ff_prev,
+                             dynamic_thrust_limit,
+                             odom_ahead_ratio,
+                             odom_correction_scale,
+                             ThrustCommandPolicy::UseEstimatedAnchor);
 
         ROS_INFO_THROTTLE(0.5,
                           "[takeoff_accff] AirborneCurve thrust=%.3f limit=%.3f "
@@ -1385,6 +1529,16 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
 
         ROS_INFO("[takeoff_accff] AirborneCurve complete -> Hold (estimator hover_thrust=%.3f)",
                  controller_.get_accepted_hover_thrust());
+        write_runtime_record(RuntimeEarlyReturnReason::TakeoffComplete,
+                             &curve_result,
+                             commanded_height,
+                             commanded_vmax,
+                             rel_height,
+                             takeoff_accff_state_.a_ff_prev,
+                             dynamic_thrust_limit,
+                             odom_ahead_ratio,
+                             odom_correction_scale,
+                             ThrustCommandPolicy::UseEstimatedAnchor);
         takeoff_complete_.store(true, std::memory_order_relaxed);
         // 不再 seed estimator:AirborneCurve 段已经持续喂数据,收敛值就是当前可信状态,
         // 强行 seed 当前 setpoint.thrust 反而会重置收敛进度。

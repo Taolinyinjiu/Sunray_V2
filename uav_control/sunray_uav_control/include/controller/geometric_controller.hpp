@@ -91,6 +91,19 @@ class Geometric_Controller : public Controller_Interface {
         Takeoff = 2,
     };
 
+    enum class RuntimeEarlyReturnReason : uint8_t {
+        Normal = 0,
+        NotReady = 1,
+        WaitingOffboard = 2,
+        WaitingArm = 3,
+        PreLiftOutput = 4,
+        AirborneCurveInvalidFallback = 5,
+        AirborneCurveInvalid = 6,
+        AirborneCurveOutput = 7,
+        TakeoffComplete = 8,
+        TakeoffAlreadyComplete = 9,
+    };
+
     // ----------------------配置相关-----------------------
     Geometric_AttitudeControl_Param_t geometric_controller_param_;
     Geometric_AttitudeControl controller_;
@@ -143,6 +156,16 @@ class Geometric_Controller : public Controller_Interface {
     bool init_ulog_logger();
     void write_ulog_param_snapshot();
     void write_ulog_sample(const control_common::Mavros_SetpointAttitude& setpoint);
+    void write_runtime_record(RuntimeEarlyReturnReason reason,
+                              const curve::QuinticCurveState* curve_result,
+                              double commanded_height,
+                              double commanded_vmax,
+                              double rel_height,
+                              double prelift_a_ff,
+                              double takeoff_thrust_limit,
+                              double odom_ahead_ratio,
+                              double odom_correction_scale,
+                              ThrustCommandPolicy thrust_policy);
     void feed_thrust_estimator_from_setpoint(
         const control_common::Mavros_SetpointAttitude& setpoint,
         bool is_hover_context);
@@ -165,6 +188,8 @@ class Geometric_Controller : public Controller_Interface {
         ulog_debug_topic_;
     sunray_logger::UlogTopic<controller_data_types::GeometricControllerOutputRecord>
         ulog_output_topic_;
+    sunray_logger::UlogTopic<controller_data_types::GeometricControllerRuntimeRecord>
+        ulog_runtime_topic_;
 
     // ---------------------定时器回调函数---------------------
     void pub_px4_state_timer_cb(const ros::TimerEvent&);    // 定时发布 PX4State

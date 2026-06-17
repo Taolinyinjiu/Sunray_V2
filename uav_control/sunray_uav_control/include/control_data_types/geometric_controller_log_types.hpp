@@ -347,4 +347,91 @@ struct GeometricControllerOutputRecord {
     }
 };
 
+struct GeometricControllerRuntimeRecord {
+    uint64_t timestamp = 0;
+    uint8_t controller_ready = 0;
+    uint8_t odom_valid = 0;
+    uint8_t early_return_reason = 0;
+    uint8_t takeoff_phase = 0;
+    uint8_t takeoff_curve_valid = 0;
+    uint8_t takeoff_curve_rebased = 0;
+    uint8_t px4_connected = 0;
+    uint8_t px4_armed = 0;
+    uint8_t px4_flight_mode = 0;
+    uint8_t px4_landed_state = 0;
+    uint8_t thrust_policy = 0;
+    float takeoff_curve_position[3] = {0.0f, 0.0f, 0.0f};
+    float takeoff_curve_velocity[3] = {0.0f, 0.0f, 0.0f};
+    float takeoff_curve_acceleration[3] = {0.0f, 0.0f, 0.0f};
+    float commanded_height = 0.0f;
+    float commanded_vmax = 0.0f;
+    float rel_height = 0.0f;
+    float odom_vz = 0.0f;
+    float prelift_a_ff = 0.0f;
+    float takeoff_thrust_limit = 0.0f;
+    float odom_ahead_ratio = 0.0f;
+    float odom_correction_scale = 0.0f;
+    float accepted_hover_thrust = 0.0f;
+
+    static const char* formatName() {
+        return "sunray_geometric_controller_runtime";
+    }
+
+    static std::vector<sunray_logger::UlogField> fields() {
+        return {
+            {"uint64_t", "timestamp"},
+            {"uint8_t", "controller_ready"},
+            {"uint8_t", "odom_valid"},
+            {"uint8_t", "early_return_reason"},
+            {"uint8_t", "takeoff_phase"},
+            {"uint8_t", "takeoff_curve_valid"},
+            {"uint8_t", "takeoff_curve_rebased"},
+            {"uint8_t", "px4_connected"},
+            {"uint8_t", "px4_armed"},
+            {"uint8_t", "px4_flight_mode"},
+            {"uint8_t", "px4_landed_state"},
+            {"uint8_t", "thrust_policy"},
+            {"float[3]", "takeoff_curve_position"},
+            {"float[3]", "takeoff_curve_velocity"},
+            {"float[3]", "takeoff_curve_acceleration"},
+            {"float", "commanded_height"},
+            {"float", "commanded_vmax"},
+            {"float", "rel_height"},
+            {"float", "odom_vz"},
+            {"float", "prelift_a_ff"},
+            {"float", "takeoff_thrust_limit"},
+            {"float", "odom_ahead_ratio"},
+            {"float", "odom_correction_scale"},
+            {"float", "accepted_hover_thrust"},
+        };
+    }
+
+    void serialize(sunray_logger::BinaryWriter& writer) const {
+        writer.write(timestamp);
+        writer.write(controller_ready);
+        writer.write(odom_valid);
+        writer.write(early_return_reason);
+        writer.write(takeoff_phase);
+        writer.write(takeoff_curve_valid);
+        writer.write(takeoff_curve_rebased);
+        writer.write(px4_connected);
+        writer.write(px4_armed);
+        writer.write(px4_flight_mode);
+        writer.write(px4_landed_state);
+        writer.write(thrust_policy);
+        writer.writeArray(takeoff_curve_position, 3);
+        writer.writeArray(takeoff_curve_velocity, 3);
+        writer.writeArray(takeoff_curve_acceleration, 3);
+        writer.write(commanded_height);
+        writer.write(commanded_vmax);
+        writer.write(rel_height);
+        writer.write(odom_vz);
+        writer.write(prelift_a_ff);
+        writer.write(takeoff_thrust_limit);
+        writer.write(odom_ahead_ratio);
+        writer.write(odom_correction_scale);
+        writer.write(accepted_hover_thrust);
+    }
+};
+
 }  // namespace controller_data_types
