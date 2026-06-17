@@ -5,6 +5,8 @@ CHECK_SCRIPT_NAME="${SUNRAY_CHECK_SCRIPT_NAME:-$(basename "$0")}"
 CHECK_DRY_RUN=false
 CHECK_AUTO_YES=false
 CHECK_FORCE_TUI=false
+CHECK_SKIP_APT_UPDATE=false
+CHECK_STRICT_APT_UPDATE=false
 CHECK_SELECTED_MODULES=()
 CHECK_RESOLVED_MODULES=()
 
@@ -212,6 +214,14 @@ parse_check_arguments() {
                 CHECK_DRY_RUN=true
                 shift
                 ;;
+            --skip-apt-update)
+                CHECK_SKIP_APT_UPDATE=true
+                shift
+                ;;
+            --strict-apt-update)
+                CHECK_STRICT_APT_UPDATE=true
+                shift
+                ;;
             --from-tui)
                 shift
                 ;;
@@ -359,6 +369,8 @@ ${YELLOW}选项:${NC}
   --tui               启动TUI交互式选择
   --resolve           执行解决依赖脚本
   --dry-run           只显示检查计划
+  --skip-apt-update   解决依赖时跳过 apt-get update
+  --strict-apt-update apt-get update 失败时立即失败
   --version, -V       显示版本
 
 ${YELLOW}示例:${NC}
@@ -367,12 +379,16 @@ ${YELLOW}示例:${NC}
   $CHECK_SCRIPT_NAME realsense2_camera fast_lio
   $CHECK_SCRIPT_NAME -s
   $CHECK_SCRIPT_NAME --resolve livox_ros_driver2
+  $CHECK_SCRIPT_NAME --resolve --skip-apt-update S_150_Basic
   $CHECK_SCRIPT_NAME --resolve --dry-run livox_ros_driver2
+  ./install_sunray_dependency.sh
+  ./install_sunray_dependency.sh --dry-run 4
 
 ${YELLOW}说明:${NC}
-  • 默认进入TUI，TUI中可选择检查依赖或执行解决依赖脚本
+  • 默认进入TUI，TUI中可选择模块并检查依赖
   • 检查依赖不会安装软件，也不会编译模块
-  • 解决依赖会执行 tools/check_scripts/check/reslove/<module>/*.sh
+  • 推荐使用根目录 ./install_sunray_dependency.sh 进入数字菜单并解决依赖
+  • --resolve 会执行 tools/check_scripts/check/reslove/<module>/*.sh
   • 已安装基础 ROS Noetic 环境后通常自带的 ROS 包，不需要在这里重复检查
   • modules.yaml 负责模块和模块之间的关系
   • module_config.yaml 只声明模块额外需要的 ROS 包、系统库、SDK 或头文件

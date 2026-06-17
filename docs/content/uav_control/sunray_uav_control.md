@@ -499,7 +499,7 @@ odom_topic_name: "${agent_key}/sunray/localization/local_odom"
 | --- | --- |
 | `takeoff_relative_height` | 起飞相对高度 |
 | `takeoff_max_velocity` | 起飞最大速度 |
-| `land_type` | `0` Sunray 控制降落，`1` PX4 AUTO.LAND |
+| `land_type` | `0` Sunray AccFF 控制降落，`1` PX4 AUTO.LAND |
 | `land_max_velocity` | 降落最大速度 |
 | `return_with_land` | 返航到 home 点后是否自动降落 |
 
@@ -535,13 +535,12 @@ odom_topic_name: "${agent_key}/sunray/localization/local_odom"
 | `hover_thrust_percent` | 归一化悬停推力初值 |
 | `control_type` | `0` 输出姿态+推力，`1` 输出角速度+推力 |
 | `hover_thrust_estimator_type` | `0` RLS，`1` EKF 加速度观测 |
-| `takeoff_land_type` | `0` 直接推力起降，`1` 加速度前馈起降 |
 | `pos_kp/ki/kd` | 位置环 PID |
 | `vel_kp/ki/kd` | 速度环 PID |
 | `max_acc` | 反馈加速度限幅 |
 | `attitude_tau` | 姿态控制时间常数 |
 
-`takeoff_land_type=1` 的 AccFF 起飞会在内部根据 `hover_thrust_percent`
+`Geometric_Controller` 的 Sunray 托管起飞固定使用 AccFF。AccFF 起飞会在内部根据 `hover_thrust_percent`
 调整起飞净加速度：悬停推力高于参考值时，只降低 `a_target - gravity`
 这部分净起飞加速度，不缩放重力补偿本身。同时起飞阶段会把最终推力限制在
 `hover_thrust_percent + margin` 附近，避免高悬停推力机型在 PreLift /
@@ -553,7 +552,8 @@ AirborneCurve 阶段因为同一加速度需求被换算成过大的归一化推
 而是按加速度/推力曲线完成预升后直接进入 AirborneCurve，避免近地已经托起但传感器判据未触发时
 长期卡在 TAKEOFF；这些状态只作为日志观测和实飞诊断依据。
 
-AccFF 降落按起飞的逆过程处理近地阶段。进入降落时会从悬停推力估计器取一次
+`land_type=0` 时,Sunray 托管降落固定使用 AccFF;`land_type=1` 时仍交给 PX4
+`AUTO.LAND`。AccFF 降落按起飞的逆过程处理近地阶段。进入降落时会从悬停推力估计器取一次
 snapshot 作为固定换算锚点，后续不实时跟随估计器抖动。HighDescent 内 `a_ff` 基本保持 `g`，
 推力基本稳定，主要维持下降速度。NearGround 直接基于锁存地面高度触发，默认只在地面上方约
 0.10 m 内开始显著改变 `a_ff` 和推力上限，并以地面高度为参考，不再设置 `current_z + 0.05`

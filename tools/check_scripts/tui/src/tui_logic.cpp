@@ -226,20 +226,29 @@ void UILogic::execute_resolve() {
   save_current_selection();
 
   std::string project_root = get_project_root_dir();
-  std::string check_script = project_root + "/check.sh";
-  if (!std::filesystem::exists(check_script)) {
+  std::string installer_script = project_root + "/install_sunray_dependency.sh";
+  if (!std::filesystem::exists(installer_script)) {
     state_.check_task_title = "解决依赖";
     state_.check_task_running = false;
     state_.check_task_exit_code = 1;
     state_.check_log_lines.clear();
-    append_check_log_line("错误: 找不到依赖检查脚本 " + check_script);
+    append_check_log_line("错误: 找不到依赖安装脚本 " + installer_script);
     append_check_log_line("项目根目录: " + project_root);
     return;
   }
 
-  std::string full_cmd = shell_quote(check_script) + " --resolve-from-tui " +
-                         format_cli_arguments(selected_modules);
-  run_command_in_check_panel("解决依赖", full_cmd);
+  std::string full_cmd = shell_quote(installer_script);
+  for (const auto &module : selected_modules) {
+    full_cmd += " --module " + shell_quote(module);
+  }
+
+  state_.check_task_title = "解决依赖";
+  state_.check_task_running = false;
+  state_.check_task_exit_code = 0;
+  state_.check_log_lines.clear();
+  append_check_log_line("依赖安装可能需要交互式 sudo，TUI 不直接执行安装脚本。");
+  append_check_log_line("请退出 TUI 后在终端执行:");
+  append_check_log_line(full_cmd);
 }
 
 void UILogic::execute_primary_action() {

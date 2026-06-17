@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 sdk_dir="$repo_root/drivers/Livox_SDK2"
 build_dir="$sdk_dir/build"
@@ -12,7 +14,7 @@ if [[ ! -d "$sdk_dir" ]]; then
     exit 1
 fi
 
-cmake -S "$sdk_dir" -B "$build_dir"
-cmake --build "$build_dir" -j"$(nproc)"
-sudo cmake --install "$build_dir"
-sudo ldconfig
+sunray_run cmake -S "$sdk_dir" -B "$build_dir"
+sunray_run cmake --build "$build_dir" -j"$(nproc)"
+sunray_run sudo cmake --install "$build_dir"
+sunray_run sudo ldconfig

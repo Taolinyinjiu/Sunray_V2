@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Sunray Geometric Controller ULog analysis.
 
-Loads sunray_geometric_controller_{param,input,debug,output} topics,
-merges them on timestamp, then produces 7 PNG plots, a console summary
+Loads sunray_geometric_controller_{param,input,debug,output,runtime} topics,
+merges the control topics on timestamp, then produces PNG plots, a console summary
 and a markdown diagnostic report covering position tracking, velocity
 noise, vel-error preprocessing chain, a_fb decomposition, thrust + hover
-estimator, attitude tracking, loop timing.
+estimator, attitude tracking, loop timing, and AccFF landing runtime state.
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ class LogData:
     df: pd.DataFrame
     params: dict
     nominal_dt: float
+    runtime_df: Optional[pd.DataFrame] = None
 
     @property
     def has(self):
@@ -96,6 +97,7 @@ def load_log(path: Path, dt_max: float) -> LogData:
     df_i = _topic_to_df(ulog, "sunray_geometric_controller_input")
     df_d = _topic_to_df(ulog, "sunray_geometric_controller_debug")
     df_o = _topic_to_df(ulog, "sunray_geometric_controller_output")
+    df_r = _topic_to_df(ulog, "sunray_geometric_controller_runtime")
 
     params = _params_dict(df_p)
 
@@ -125,15 +127,23 @@ def load_log(path: Path, dt_max: float) -> LogData:
     if df.empty:
         raise RuntimeError("merge produced empty dataframe")
 
-    df["t"] = df["t"] - df["t"].iloc[0]
+    t0_abs = float(df["t"].iloc[0])
+    df["t"] = df["t"] - t0_abs
 
     if "debug.current_dt" in df.columns and dt_max > 0:
         mask = df["debug.current_dt"] <= dt_max
         df = df[mask].reset_index(drop=True)
 
+    runtime_df = None
+    if df_r is not None and not df_r.empty and "timestamp" in df_r.columns:
+        runtime_df = df_r.copy()
+        runtime_df["t"] = runtime_df["timestamp"].astype(np.int64) / 1e6 - t0_abs
+        runtime_df = runtime_df.sort_values("t").reset_index(drop=True)
+
     controller_hz = float(params.get("controller_hz", 100.0)) or 100.0
     nominal_dt = 1.0 / controller_hz
-    return LogData(path=path, df=df, params=params, nominal_dt=nominal_dt)
+    return LogData(path=path, df=df, params=params, nominal_dt=nominal_dt,
+                   runtime_df=runtime_df)
 
 
 def _vec3(params, key, default=0.0):
@@ -520,6 +530,107 @@ def analyze_timing(log: LogData, out_dir: Path, stem: str):
 
 
 # ---------------------------------------------------------------------------
+# Section 9: AccFF landing runtime
+# ---------------------------------------------------------------------------
+def analyze_landing_runtime(log: LogData, out_dir: Path, stem: str):
+    print("\n[9] AccFF landing runtime")
+    df = log.runtime_df
+    if df is None or df.empty:
+        print("  skip: missing runtime topic")
+        return None
+
+    required = [
+        "landing_phase",
+        "landing_height_above_ground",
+        "landing_release_progress",
+        "landing_setpoint_thrust",
+        "landing_thrust_release_limit",
+        "landing_xy_error",
+        "landing_ref_vz",
+        "landing_odom_vz",
+    ]
+    if not _has_cols(df, required):
+        print("  skip: runtime topic lacks landing fields (older log version)")
+        return None
+
+    if "early_return_reason" in df.columns:
+        landing_mask = (
+            (df["landing_phase"].astype(float) > 0.0) |
+            (df["early_return_reason"].astype(float).isin([13.0, 14.0, 15.0]))
+        )
+    else:
+        landing_mask = df["landing_phase"].astype(float) > 0.0
+    landing = df[landing_mask].copy()
+    if landing.empty:
+        print("  skip: no landing samples in runtime topic")
+        return None
+
+    t = landing["t"].to_numpy(dtype=float)
+    fig, axs = plt.subplots(5, 1, figsize=(12, 11), sharex=True)
+    axs[0].step(t, landing["landing_phase"], where="post", label="phase", lw=1.0)
+    if "landing_near_ground_trigger" in landing.columns:
+        axs[0].step(t, landing["landing_near_ground_trigger"], where="post",
+                    label="trigger", lw=1.0)
+    axs[0].set_ylabel("phase / trigger")
+    axs[0].grid(True); axs[0].legend(fontsize=8)
+
+    axs[1].plot(t, landing["landing_height_above_ground"], label="height", lw=1.0)
+    if "landing_near_ground_h" in landing.columns:
+        axs[1].plot(t, landing["landing_near_ground_h"], label="near_h", lw=0.9, ls="--")
+    if "landing_ground_effect_release_h" in landing.columns:
+        axs[1].plot(t, landing["landing_ground_effect_release_h"],
+                    label="ground_effect_h", lw=0.9, ls=":")
+    axs[1].set_ylabel("height [m]")
+    axs[1].grid(True); axs[1].legend(fontsize=8)
+
+    axs[2].plot(t, landing["landing_release_progress"], label="release_u", lw=1.0)
+    if "landing_a_ff" in landing.columns:
+        axs[2].plot(t, landing["landing_a_ff"], label="a_ff", lw=1.0)
+    axs[2].set_ylabel("release / a_ff")
+    axs[2].grid(True); axs[2].legend(fontsize=8)
+
+    axs[3].plot(t, landing["landing_setpoint_thrust"], label="setpoint", lw=1.0)
+    axs[3].plot(t, landing["landing_thrust_release_limit"], label="limit", lw=1.0)
+    if "landing_anchor_thrust" in landing.columns:
+        axs[3].plot(t, landing["landing_anchor_thrust"], label="anchor", lw=0.9, ls="--")
+    axs[3].set_ylabel("thrust")
+    axs[3].grid(True); axs[3].legend(fontsize=8)
+
+    axs[4].plot(t, landing["landing_xy_error"], label="xy_error", lw=1.0)
+    axs[4].plot(t, landing["landing_ref_vz"], label="ref_vz", lw=1.0)
+    axs[4].plot(t, landing["landing_odom_vz"], label="odom_vz", lw=1.0)
+    axs[4].set_ylabel("xy [m] / vz [m/s]")
+    axs[4].set_xlabel("t [s]")
+    axs[4].grid(True); axs[4].legend(fontsize=8)
+
+    fig.suptitle("AccFF landing runtime")
+    _save(fig, out_dir, stem, "08_landing_runtime")
+
+    phases = sorted(int(v) for v in landing["landing_phase"].dropna().unique())
+    triggers = []
+    if "landing_near_ground_trigger" in landing.columns:
+        triggers = sorted(int(v) for v in landing["landing_near_ground_trigger"].dropna().unique())
+    min_release = float(np.nanmin(landing["landing_release_progress"]))
+    min_height = float(np.nanmin(landing["landing_height_above_ground"]))
+    max_xy = float(np.nanmax(landing["landing_xy_error"]))
+    min_thrust_margin = float(np.nanmin(
+        landing["landing_thrust_release_limit"] - landing["landing_setpoint_thrust"]
+    ))
+    print(f"  phases: {phases}  triggers: {triggers}")
+    print(f"  min height={min_height:.3f}m  min release_u={min_release:.3f}  max xy_error={max_xy:.3f}m")
+    print(f"  min thrust_limit-setpoint={min_thrust_margin:.3f}")
+    return {
+        "phases": phases,
+        "triggers": triggers,
+        "min_release": min_release,
+        "min_height": min_height,
+        "max_xy": max_xy,
+        "min_thrust_margin": min_thrust_margin,
+        "samples": int(len(landing)),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Diagnosis & Markdown report
 # ---------------------------------------------------------------------------
 LEVEL_BADGE = {"OK": "🟢 OK", "WARN": "🟡 WARN", "ERROR": "🔴 ERROR", "INFO": "ℹ️ INFO"}
@@ -703,6 +814,39 @@ def diagnose_timing(res):
                         "overrun_pct": float(overrun)}}
 
 
+def diagnose_landing(res):
+    if res is None:
+        return {"level": "INFO", "lines": ["AccFF 降落 runtime 数据缺失或无降落样本。"], "suggestions": []}
+    level = "OK"
+    obs, sug = [], []
+    phases = res["phases"]
+    triggers = res["triggers"]
+    obs.append(f"降落 runtime 样本 {res['samples']} 帧，phase={phases}，trigger={triggers}。")
+    obs.append(
+        f"最低高度 {res['min_height']:.3f} m，最小 release_u={res['min_release']:.3f}，"
+        f"最大 XY 误差 {res['max_xy']:.3f} m。"
+    )
+    if 1 not in phases and 2 not in phases:
+        level = _level_max(level, "WARN")
+        obs.append("没有进入 NearGround 或 TouchdownRelease，降落可能仍停留在 HighDescent。")
+        sug.append("检查 `landing_height_above_ground` 是否低于 near_h，或是否满足地效卡滞触发条件。")
+    if 2 not in triggers and 1 not in triggers and 1 in phases:
+        level = _level_max(level, "WARN")
+        obs.append("进入 NearGround 但 trigger 字段未记录有效来源。")
+    if 1 in phases and res["min_release"] > 0.25:
+        level = _level_max(level, "WARN")
+        obs.append("NearGround 已进入，但 release_u 没有充分下降，推力释放可能仍不足。")
+        sug.append("检查 `ramp_time_s`、`landing_release_progress` 和 `landing_thrust_release_limit`。")
+    if res["max_xy"] > 0.25:
+        level = _level_max(level, "WARN")
+        obs.append("降落期间 XY 误差超过 hold 阈值，下降速度可能被主动压低。")
+    if level == "OK":
+        obs.append("AccFF 降落阶段、释放进度和 XY 误差记录正常。")
+    return {"level": level, "lines": obs, "suggestions": sug,
+            "metrics": {"min_height_m": res["min_height"], "min_release": res["min_release"],
+                        "max_xy_m": res["max_xy"]}}
+
+
 def generate_diagnostic_report(log: LogData, results: dict, out_dir: Path,
                                stem: str, console_text: str) -> Path:
     diag = {
@@ -712,6 +856,7 @@ def generate_diagnostic_report(log: LogData, results: dict, out_dir: Path,
         "thrust":   diagnose_thrust(results.get("thrust"), log.df),
         "attitude": diagnose_attitude(results.get("attitude")),
         "timing":   diagnose_timing(results.get("timing")),
+        "landing":  diagnose_landing(results.get("landing")),
     }
 
     overall = "OK"
@@ -734,7 +879,6 @@ def generate_diagnostic_report(log: LogData, results: dict, out_dir: Path,
     md.append(f"- 样本数：{len(df)} 帧")
     md.append(f"- 实测速率：{rate:.1f} Hz（标称 {p.get('controller_hz', 'NA')} Hz）")
     md.append(f"- 控制类型：{int(p.get('control_type', -1))}（0=Attitude, 1=BodyRate）")
-    md.append(f"- 起降模式：{int(p.get('takeoff_land_type', -1))}（0=Direct, 1=AccFF）")
     md.append(f"- hover_thrust_init：{p.get('hover_thrust_init', 'NA')}")
     md.append(f"- 整机质量：{p.get('mass_kg', 'NA')} kg\n")
 
@@ -755,7 +899,8 @@ def generate_diagnostic_report(log: LogData, results: dict, out_dir: Path,
     md.append("| 领域 | 状态 |")
     md.append("|---|---|")
     name_map = {"position": "位置跟踪", "velocity": "速度噪声", "acc": "a_fb 构成",
-                "thrust": "推力 / 估计器", "attitude": "姿态跟踪", "timing": "控制周期"}
+                "thrust": "推力 / 估计器", "attitude": "姿态跟踪", "timing": "控制周期",
+                "landing": "AccFF 降落"}
     for k, label in name_map.items():
         md.append(f"| {label} | {LEVEL_BADGE[diag[k]['level']]} |")
     md.append("")
@@ -768,6 +913,7 @@ def generate_diagnostic_report(log: LogData, results: dict, out_dir: Path,
         ("thrust",   "推力与悬停估计器", "05_thrust"),
         ("attitude", "姿态跟踪", "06_attitude"),
         ("timing",   "控制周期", "07_timing"),
+        ("landing",  "AccFF 降落 runtime", "08_landing_runtime"),
     ]
     for key, label, png_suffix in sections:
         d = diag[key]
@@ -792,7 +938,7 @@ def generate_diagnostic_report(log: LogData, results: dict, out_dir: Path,
 
     md.append("## 5. 调参建议汇总\n")
     all_sug = []
-    for k in ("position", "velocity", "acc", "thrust", "attitude", "timing"):
+    for k in ("position", "velocity", "acc", "thrust", "attitude", "timing", "landing"):
         for s in diag[k]["suggestions"]:
             all_sug.append(f"- [{name_map[k]}] {s}")
     if all_sug:
@@ -914,6 +1060,7 @@ def main():
         results["thrust"]   = analyze_thrust(log, out_dir, stem)
         results["attitude"] = analyze_attitude(log, out_dir, stem)
         results["timing"]   = analyze_timing(log, out_dir, stem)
+        results["landing"]  = analyze_landing_runtime(log, out_dir, stem)
         print_summary(log, results)
 
     console_text = buf.getvalue()

@@ -108,6 +108,9 @@ class Geometric_Controller : public Controller_Interface {
         TakeoffFailedAlready = 10,
         LowHeightInvalidFailed = 11,
         AirborneCurveInvalidFailed = 12,
+        LandingAccFFOutput = 13,
+        LandingTouchdownRelease = 14,
+        LandingComplete = 15,
     };
 
     struct TakeoffAccFFRebaseResult {
@@ -141,17 +144,9 @@ class Geometric_Controller : public Controller_Interface {
     bool check_mavros_stream_ready();  // 检查 mavros_helper 数据流是否稳定
     bool has_valid_imu_data();
     Eigen::Vector3d get_world_acc_from_imu();
-    void seed_rc_thrust_filter(takeoff_land::RCThrustFilterState& state,
-                               double thrust,
-                               const ros::Time& now);
-    double update_rc_thrust_filter(takeoff_land::RCThrustFilterState& state,
-                                   double target_thrust,
-                                   double tau_s,
-                                   const ros::Time& now);
-    void maybe_rebase_takeoff_curve_start();
     TakeoffAccFFRebaseResult
-    maybe_rebase_takeoff_curve_start_accff(double commanded_vmax,
-                                           double commanded_height);
+    rebase_takeoff_accff_curve_start(double commanded_vmax,
+                                     double commanded_height);
     bool handle_takeoff_accff_unrecovered_invalid(
         const curve::QuinticCurveState& curve_result,
         double commanded_height,
@@ -159,13 +154,10 @@ class Geometric_Controller : public Controller_Interface {
         double rel_height,
         double takeoff_thrust_limit,
         const TakeoffAccFFRebaseResult& rebase);
-    // 起降 AccFF 路径专用拆分实现,与 takeoff()/land() 两层路由配合使用
-    bool takeoff_direct_thrust(double relative_takeoff_height, double max_takeoff_velocity);
     bool takeoff_accff(double relative_takeoff_height, double max_takeoff_velocity);
-    bool land_direct_thrust(double max_land_velocity);
     bool land_accff(double max_land_velocity);
     bool land_px4_autoland();
-    // 统一清理 takeoff/land 双路径状态,所有控制流出口都应调用
+    // 统一清理 AccFF 起降状态,所有控制流出口都应调用
     void reset_takeoff_land_contexts();
     void clear_takeoff_failure_state();
     void mark_takeoff_failed(control_common::TakeoffFailureReason reason);
@@ -181,7 +173,6 @@ class Geometric_Controller : public Controller_Interface {
     double integrate_limited_yaw_rate(double yaw_rate_cmd, const ros::Time& now);
     void warn_if_trajectory_exceeds_limits(
         const controller_data_types::TargetTrajectoryPoint_t& trajpoint) const;
-    void reset_stage_thrust_filters();
     void cache_attitude_setpoint(const control_common::Mavros_SetpointAttitude& setpoint);
     bool init_ulog_logger();
     void write_ulog_param_snapshot();
@@ -243,19 +234,11 @@ class Geometric_Controller : public Controller_Interface {
     ros::Time start_checkout_offboard_time_{ros::Time(0)};
     ros::Time last_checkout_offboard_time_{ros::Time(0)};
 
-    takeoff_land::TakeoffTuning takeoff_tuning_{};
-    takeoff_land::TakeoffState takeoff_state_{};
-
     // 共享轨迹曲线：takeoff/move_point 轮流占用，通过 owner 显式管理生命周期。
     curve::QuinticCurve motion_curve_;
     MotionCurveOwner motion_curve_owner_{MotionCurveOwner::None};
 
-    // 降落阶段相关状态
-    takeoff_land::LandingTuning landing_tuning_{};
-    takeoff_land::LandingState landing_state_{};
-
-    // 加速度前馈起降 (takeoff_land_type=1) 调参与运行状态,与 direct 路径并行
-    int takeoff_land_type_{0};
+    // AccFF 起降调参与运行状态。
     takeoff_land::TakeoffAccFFTuning takeoff_accff_tuning_{};
     takeoff_land::TakeoffAccFFState  takeoff_accff_state_{};
     TakeoffAccFFRebaseResult last_takeoff_accff_rebase_result_{};

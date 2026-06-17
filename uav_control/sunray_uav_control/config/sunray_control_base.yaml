@@ -173,7 +173,7 @@ takeoff_land_param:
     #   - FSM 收到 TAKEOFF 后调用 sunray_controller_->takeoff(relative_height, max_velocity)。
     # 生效范围:
     #   - controller_types=0: PX4_OriginController 生成位置 setpoint 起飞。
-    #   - controller_types=1: Geometric_Controller 使用 direct thrust 或 AccFF 起飞路径。
+    #   - controller_types=1: Geometric_Controller 使用 AccFF 起飞路径。
     takeoff_relative_height: 0.6
 
     # 起飞过程最大竖直速度，单位 m/s，必须 > 0。
@@ -183,7 +183,7 @@ takeoff_land_param:
     takeoff_max_velocity: 0.3
 
     # 降落模式。
-    #   0: Sunray land，由当前控制器持续生成下降 setpoint/推力。
+    #   0: Sunray land，由当前控制器使用 AccFF 持续生成下降 setpoint/推力。
     #   1: PX4 auto land，通过 MAVROS/PX4 自动降落流程处理。
     # 注意:
     #   - land_type=1 更依赖 PX4 参数和模式切换是否配置正确。
@@ -318,14 +318,6 @@ geometric_controller_param:
   #   0: RLS 最小二乘估计。
   #   1: EKF 加速度观测估计。
   hover_thrust_estimator_type: 0
-
-  # 起降策略类型。
-  #   0: direct thrust，较直接地从推力/参考高度构造起降。
-  #   1: AccFF，基于加速度前馈构造起降。
-  # 注意:
-  #   - 仅 land_type=0 的 Sunray land 会走这里的降落策略。
-  #   - land_type=1 时会切到 PX4 auto land。
-  takeoff_land_type: 1
 
   # 位置环 PID 参数，数组顺序为 [x, y, z]。
   # move_point、hover、trajectory 等带位置误差的控制会使用位置环。

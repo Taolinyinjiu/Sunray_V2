@@ -282,18 +282,8 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
         }
     }
 
-    // ---------------- takeoff_land_type 路由 ----------------
-    if (!controller_param["takeoff_land_type"]) {
-        throw std::runtime_error("missing param 'geometric_controller_param.takeoff_land_type'");
-    }
-    takeoff_land_type_ = controller_param["takeoff_land_type"].as<int>();
-    if (takeoff_land_type_ != 0 && takeoff_land_type_ != 1) {
-        throw std::runtime_error(
-            "param 'geometric_controller_param.takeoff_land_type' must be 0 (direct thrust) or 1 (AccFF)");
-    }
-
     // ---------------- AccFF 起降参数:由 gravity / hover_thrust_init 推导 ----------------
-    // 设计原则:yaml 仅暴露 takeoff_land_type 开关,AccFF 内部参数全部从基础物理量推导,
+    // 设计原则:AccFF 内部参数全部从基础物理量推导,
     // 避免向用户暴露 ramp/jerk/touchdown 这类纯调试维度。详见 ai_result/accff_takeoff_landing_todo.md。
     const double gravity = geometric_controller_param_.gravity;
     const double hover_init = std::clamp(geometric_controller_param_.hover_thrust_init, 0.05, 0.80);
@@ -312,12 +302,12 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     takeoff_accff_tuning_.odom_ahead_vz_tolerance_mps = 0.05;
     takeoff_accff_tuning_.odom_thrust_scale_min = 0.72;
 
-    // 降落:a_touchdown 低于 g,NearGround 只在锁存地面高度上方约 0.10 m 内释放推力;
-    // 取 0.92g 保持温和贴地,避免末端突然卸力。
+    // 降落:a_touchdown 低于 g,NearGround 支持高度/时间混合释放;
+    // 0.88g 比原 0.92g 留出更多地效穿透余量,但仍不是直接切零推力。
     landing_accff_tuning_.near_ground_h_m = 0.10;
     landing_accff_tuning_.near_ground_vz_mps = 0.10;
-    landing_accff_tuning_.a_touchdown_mps2 = 0.92 * gravity;
-    landing_accff_tuning_.ramp_time_s = 2.0;
+    landing_accff_tuning_.a_touchdown_mps2 = 0.88 * gravity;
+    landing_accff_tuning_.ramp_time_s = 1.5;
     landing_accff_tuning_.jerk_max_mps3 = 1.0;
     landing_accff_tuning_.a_min_mps2 = 0.0;
     landing_accff_tuning_.a_max_mps2 = gravity + 2.0;
@@ -325,6 +315,13 @@ void Geometric_Controller::load_and_validate_config_or_throw() {
     landing_accff_tuning_.touchdown_h_settle_m = 0.05;
     landing_accff_tuning_.touchdown_v_settle_mps = 0.05;
     landing_accff_tuning_.touchdown_dwell_s = 0.30;
+    landing_accff_tuning_.ground_effect_release_h_m =
+        std::max(0.20, landing_accff_tuning_.near_ground_h_m + 0.15);
+    landing_accff_tuning_.ground_effect_stall_vz_mps = 0.05;
+    landing_accff_tuning_.ground_effect_dwell_s = 0.40;
+    landing_accff_tuning_.xy_slow_error_m = 0.12;
+    landing_accff_tuning_.xy_hold_error_m = 0.25;
+    landing_accff_tuning_.xy_hold_timeout_s = 1.50;
 
     // 推导值的健全性校验:防止 gravity/hover_thrust_init 极端取值后失稳
     if (!(takeoff_accff_tuning_.a_start_mps2 < takeoff_accff_tuning_.a_target_mps2 &&

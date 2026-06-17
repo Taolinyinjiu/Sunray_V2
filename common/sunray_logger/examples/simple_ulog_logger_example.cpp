@@ -5,9 +5,48 @@
 #include <vector>
 
 #include <ros/ros.h>
+#include <ros/package.h>
 
 #include <sunray_logger/records/odom_record.hpp>
+#include <sunray_logger/ros_text_log.hpp>
 #include <sunray_logger/ulog_logger.hpp>
+
+namespace {
+
+std::string parentPath(const std::string& path) {
+    const std::string::size_type slash = path.find_last_of('/');
+    if (slash == std::string::npos) {
+        return std::string();
+    }
+    if (slash == 0U) {
+        return "/";
+    }
+    return path.substr(0, slash);
+}
+
+std::string joinPath(const std::string& directory, const std::string& filename) {
+    if (directory.empty() || directory.back() == '/') {
+        return directory + filename;
+    }
+    return directory + "/" + filename;
+}
+
+std::string defaultLogPath() {
+    const std::string package_path = ros::package::getPath("sunray_logger");
+    if (package_path.empty()) {
+        return "logs/sunray_logger_example.ulg";
+    }
+
+    // package_path = <Sunray root>/common/sunray_logger
+    const std::string repo_root = parentPath(parentPath(package_path));
+    if (repo_root.empty()) {
+        return "logs/sunray_logger_example.ulg";
+    }
+
+    return joinPath(joinPath(repo_root, "logs"), "sunray_logger_example.ulg");
+}
+
+}  // namespace
 
 // 这个示例演示两类日志数据的写入：
 // 1. common/sunray_logger 已经提供的基础类型：sunray_logger::OdomRecord
@@ -79,9 +118,9 @@ int main(int argc, char** argv) {
         ros::Time::init();
     }
 
-    // 默认输出到 /tmp。优先读取 ROS 私有参数 ~log_path；
+    // 默认输出到 Sunray 根目录的 logs/。优先读取 ROS 私有参数 ~log_path；
     // 如果没有通过 rosrun/roslaunch 传参，也允许使用命令行第一个普通参数覆盖。
-    std::string log_path = "/tmp/sunray_logger_example.ulg";
+    std::string log_path = defaultLogPath();
     if (private_nh) {
         private_nh->param<std::string>("log_path", log_path, log_path);
     }
@@ -113,10 +152,15 @@ int main(int argc, char** argv) {
     // 所以所有需要记录的 topic 应在开始写数据前统一注册。
     const auto odom_topic = logger.advertise<sunray_logger::OdomRecord>("odom");
     const auto control_topic = logger.advertise<ControlCmdRecord>("control_cmd");
-    if (!odom_topic.valid() || !control_topic.valid()) {
+    const auto text_event_topic = logger.enableTextEventTopic();
+    if (!odom_topic.valid() || !control_topic.valid() || !text_event_topic.valid()) {
         ROS_ERROR("failed to advertise example ULog topics");
         return 1;
     }
+
+    // 所有数据 topic 注册完成后，才可以写入 data 或 text message；
+    // 第一次写入会结束 ULog header，之后不能再 advertise 新 topic。
+    SUNRAY_ULOG_INFO(logger, "simple_ulog_logger_example", "ULog example started: %s", log_path.c_str());
 
     ros::Rate rate(100.0);
     for (int i = 0; (standalone_mode || ros::ok()) && i < 20; ++i) {
@@ -158,6 +202,11 @@ int main(int argc, char** argv) {
         if (!logger.write(odom_topic, odom) || !logger.write(control_topic, cmd)) {
             ROS_ERROR("failed to write example ULog data: %s", logger.lastError().c_str());
             return 1;
+        }
+
+        if (i == 10) {
+            SUNRAY_ULOG_WARN(logger, "simple_ulog_logger_example",
+                             "synthetic warning example at sample %d", i);
         }
 
         // 模拟 100 Hz 左右的写入节奏。真实模块中通常在控制循环或 ROS callback 中写。

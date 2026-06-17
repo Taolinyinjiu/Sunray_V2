@@ -26,7 +26,7 @@ ftxui::Element UIRenderer::render_check_output_panel(int content_width) {
   rows.push_back(separatorLight());
 
   if (state_.check_log_lines.empty()) {
-    rows.push_back(text("选择模块后点击“检查依赖”或“解决依赖”。") |
+    rows.push_back(text("选择模块后点击“检查依赖”，或生成终端依赖安装命令。") |
                    dim | color(Color::GrayLight));
   } else {
     const int max_log_rows = panel_content_height - 2;

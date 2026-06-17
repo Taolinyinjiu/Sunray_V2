@@ -1,0 +1,58 @@
+# Sunray dependency installer menu.
+#
+# Keep menu ids stable. Add new entries with new ids instead of reordering
+# existing ones, because users may remember or automate these numbers.
+menus:
+  - id: 1
+    title: "Sunray-150 Basic dependencies"
+    target_type: group
+    target: S_150_Basic
+    description: "MAVROS, VRPN, web_cam, localization_fusion, UAV control"
+
+  - id: 2
+    title: "Sunray-150 Lidar dependencies"
+    target_type: group
+    target: S_150_Lidar
+    description: "Livox, FAST-LIO, web_cam, mocap related dependencies"
+
+  - id: 3
+    title: "RealSense camera dependencies"
+    target_type: module
+    target: realsense2_camera
+    description: "ddynamic_reconfigure, OpenCV, librealsense development files"
+
+  - id: 4
+    title: "Livox lidar driver dependencies"
+    target_type: module
+    target: livox_ros_driver2
+    description: "apt development packages and Livox_SDK2 install"
+
+  - id: 5
+    title: "FAST-LIO dependencies"
+    target_type: module
+    target: fast_lio
+    description: "PCL, Eigen3, Python headers, matplotlib-cpp header"
+
+  - id: 6
+    title: "SUPER planner dependencies"
+    target_type: module
+    target: super_planner
+    description: "yaml-cpp, Boost, Eigen3, PCL, ncurses, libdw"
+
+  - id: 7
+    title: "VINS-Fusion dependencies"
+    target_type: module
+    target: vins_fusion
+    description: "OpenCV, Ceres, Eigen3, Boost"
+
+  - id: 8
+    title: "USB web camera dependencies"
+    target_type: module
+    target: web_cam
+    description: "OpenCV, FFmpeg development libraries, v4l"
+
+  - id: 9
+    title: "List all check modules"
+    target_type: action
+    target: list_modules
+    description: "Show modules known by tools/check_scripts/modules.yaml"

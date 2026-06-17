@@ -12,7 +12,6 @@ struct GeometricControllerParamRecord {
     uint64_t timestamp = 0;
     uint8_t enable_ulog = 0;
     uint8_t control_type = 0;
-    uint8_t takeoff_land_type = 0;
     uint8_t hover_thrust_estimator_type = 0;
     float mass_kg = 0.0f;
     float gravity = 0.0f;
@@ -51,7 +50,6 @@ struct GeometricControllerParamRecord {
             {"uint64_t", "timestamp"},
             {"uint8_t", "enable_ulog"},
             {"uint8_t", "control_type"},
-            {"uint8_t", "takeoff_land_type"},
             {"uint8_t", "hover_thrust_estimator_type"},
             {"float", "mass_kg"},
             {"float", "gravity"},
@@ -87,7 +85,6 @@ struct GeometricControllerParamRecord {
         writer.write(timestamp);
         writer.write(enable_ulog);
         writer.write(control_type);
-        writer.write(takeoff_land_type);
         writer.write(hover_thrust_estimator_type);
         writer.write(mass_kg);
         writer.write(gravity);
@@ -378,6 +375,20 @@ struct GeometricControllerRuntimeRecord {
     uint8_t rebase_fallback_level = 0;
     uint8_t takeoff_failed = 0;
     uint8_t takeoff_failure_reason = 0;
+    uint8_t landing_phase = 0;
+    uint8_t landing_near_ground_trigger = 0;
+    float landing_height_above_ground = 0.0f;
+    float landing_near_ground_h = 0.0f;
+    float landing_ground_effect_release_h = 0.0f;
+    float landing_release_progress = 1.0f;
+    float landing_a_ff = 0.0f;
+    float landing_anchor_thrust = 0.0f;
+    float landing_thrust_release_limit = 0.0f;
+    float landing_setpoint_thrust = 0.0f;
+    float landing_xy_error = 0.0f;
+    float landing_desc_speed = 0.0f;
+    float landing_ref_vz = 0.0f;
+    float landing_odom_vz = 0.0f;
 
     static const char* formatName() {
         return "sunray_geometric_controller_runtime";
@@ -415,6 +426,20 @@ struct GeometricControllerRuntimeRecord {
             {"uint8_t", "rebase_fallback_level"},
             {"uint8_t", "takeoff_failed"},
             {"uint8_t", "takeoff_failure_reason"},
+            {"uint8_t", "landing_phase"},
+            {"uint8_t", "landing_near_ground_trigger"},
+            {"float", "landing_height_above_ground"},
+            {"float", "landing_near_ground_h"},
+            {"float", "landing_ground_effect_release_h"},
+            {"float", "landing_release_progress"},
+            {"float", "landing_a_ff"},
+            {"float", "landing_anchor_thrust"},
+            {"float", "landing_thrust_release_limit"},
+            {"float", "landing_setpoint_thrust"},
+            {"float", "landing_xy_error"},
+            {"float", "landing_desc_speed"},
+            {"float", "landing_ref_vz"},
+            {"float", "landing_odom_vz"},
         };
     }
 
@@ -449,6 +474,20 @@ struct GeometricControllerRuntimeRecord {
         writer.write(rebase_fallback_level);
         writer.write(takeoff_failed);
         writer.write(takeoff_failure_reason);
+        writer.write(landing_phase);
+        writer.write(landing_near_ground_trigger);
+        writer.write(landing_height_above_ground);
+        writer.write(landing_near_ground_h);
+        writer.write(landing_ground_effect_release_h);
+        writer.write(landing_release_progress);
+        writer.write(landing_a_ff);
+        writer.write(landing_anchor_thrust);
+        writer.write(landing_thrust_release_limit);
+        writer.write(landing_setpoint_thrust);
+        writer.write(landing_xy_error);
+        writer.write(landing_desc_speed);
+        writer.write(landing_ref_vz);
+        writer.write(landing_odom_vz);
     }
 };
 

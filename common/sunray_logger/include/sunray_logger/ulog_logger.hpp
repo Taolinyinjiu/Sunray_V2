@@ -9,6 +9,7 @@
 #include <ros/console.h>
 
 #include <sunray_logger/binary_writer.hpp>
+#include <sunray_logger/records/text_event_record.hpp>
 #include <sunray_logger/time_utils.hpp>
 #include <sunray_logger/ulog_record.hpp>
 #include <sunray_logger/ulog_writer.hpp>
@@ -59,6 +60,8 @@ public:
         topic_names_.clear();
         pending_subscriptions_.clear();
         subscriptions_written_ = false;
+        text_event_topic_ = UlogTopic<TextEventRecord>();
+        next_text_event_id_ = 1;
         return writer_.open(path, options, wallTimeNowToUs());
     }
 
@@ -110,6 +113,16 @@ public:
         return UlogTopic<RecordT>(msg_id, topic_name, format_name);
     }
 
+    UlogTopic<TextEventRecord> enableTextEventTopic(const std::string& topic_name = "sunray_text_event",
+                                                    uint8_t multi_id = 0) {
+        if (text_event_topic_.valid()) {
+            return text_event_topic_;
+        }
+
+        text_event_topic_ = advertise<TextEventRecord>(topic_name, multi_id);
+        return text_event_topic_;
+    }
+
     template <typename RecordT>
     bool write(const UlogTopic<RecordT>& topic, const RecordT& record) {
         validateRecordType<RecordT>();
@@ -158,6 +171,43 @@ public:
         return writer_.writeTextMessage(log_level, timestamp_us, message);
     }
 
+    bool writeTextEvent(uint8_t log_level,
+                        uint64_t timestamp_us,
+                        uint32_t event_id,
+                        uint32_t module_hash,
+                        uint32_t message_hash) {
+        if (!text_event_topic_.valid()) {
+            return false;
+        }
+
+        TextEventRecord record;
+        record.timestamp = timestamp_us;
+        record.event_id = event_id;
+        record.level = static_cast<uint32_t>(log_level);
+        record.module_hash = module_hash;
+        record.message_hash = message_hash;
+
+        return write(text_event_topic_, record);
+    }
+
+    bool writeTextWithEvent(uint8_t log_level,
+                            uint64_t timestamp_us,
+                            const std::string& message,
+                            uint32_t module_hash,
+                            uint32_t message_hash,
+                            uint32_t* event_id_out = nullptr) {
+        const uint32_t event_id = next_text_event_id_++;
+        if (event_id_out != nullptr) {
+            *event_id_out = event_id;
+        }
+
+        const std::string event_message = "[E" + std::to_string(event_id) + "] " + message;
+        const bool text_ok = writeText(log_level, timestamp_us, event_message);
+        const bool event_ok = writeTextEvent(log_level, timestamp_us, event_id, module_hash, message_hash);
+
+        return text_ok && (event_ok || !text_event_topic_.valid());
+    }
+
     std::string lastError() const {
         return writer_.lastError();
     }
@@ -199,6 +249,8 @@ private:
     std::set<std::string> topic_names_;
     std::vector<PendingSubscription> pending_subscriptions_;
     bool subscriptions_written_ = false;
+    UlogTopic<TextEventRecord> text_event_topic_;
+    uint32_t next_text_event_id_ = 1;
 };
 
 }  // namespace sunray_logger

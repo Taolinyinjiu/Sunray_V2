@@ -64,7 +64,7 @@ modules:
   vrpn_client_ros:
     cmake_packages:
       - name: VRPN
-        hint: "sudo apt install libvrpn-dev"
+        hint: "sudo apt install ros-noetic-vrpn"
 
   web_cam:
     cmake_packages:
