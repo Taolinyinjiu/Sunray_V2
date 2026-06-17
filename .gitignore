@@ -50,6 +50,7 @@ __pycache__/
 
 # Build scripts
 /tools/build_scripts/bin/
+/tools/build_scripts/bin/sunray_tui
 /tools/build_scripts/tui/build/
 /tools/build_scripts/tui/third_party/
 /tools/build_scripts/build_deprecated/
