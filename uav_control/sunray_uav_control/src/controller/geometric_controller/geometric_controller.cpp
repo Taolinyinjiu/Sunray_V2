@@ -1114,16 +1114,61 @@ void Geometric_Controller::reset_takeoff_land_contexts() {
     controller_.clear_fixed_anchor_override();
 }
 
-void Geometric_Controller::maybe_rebase_takeoff_curve_start_accff(double max_takeoff_velocity) {
+void Geometric_Controller::maybe_rebase_takeoff_curve_start_accff(double max_takeoff_velocity,
+                                                                  double commanded_height) {
     if (takeoff_accff_state_.curve_started ||
         motion_curve_owner_ != MotionCurveOwner::Takeoff ||
         !has_uav_odometry_.load(std::memory_order_relaxed)) {
         return;
     }
+
+    const double target_z = ground_height_ref_ + commanded_height;
+    const double remaining_z = target_z - uav_odometry_.position.z();
+
+    // 剩余高度过小:不能继续用旧地面起点的曲线(get_result 会按地面起点重新输出参考,
+    // 把飞机拉回下方)。直接走完成路径,由本次调用上层判定到位、悬停在当前位置。
+    // 注意:这里只标记 curve_started=true,实际的完成判定与 takeoff_complete_ 设置
+    // 由 takeoff_accff() 主循环统一处理(见外层 invalid fallback 与 arrival_helper)。
+    if (remaining_z < 0.05) {
+        ROS_INFO("[takeoff_accff] rebase skipped: remaining_z=%.3f < 0.05, "
+                 "rebuilding minimal curve to current pose to drive immediate arrival",
+                 remaining_z);
+        // 给一段最小可解曲线:起点=终点=当前 odom,vel=0。
+        // QuinticCurve 在 dist≈0 时仍可解(全 0 系数),get_result 输出当前点静止参考,
+        // 与 hover 等价,但保留曲线 owner 为 Takeoff 让 arrival_helper 在主循环判定到位。
+        const Eigen::Vector3d locked_pos = uav_odometry_.position;
+        motion_curve_.set_start_trajpoint(locked_pos, Eigen::Vector3d::Zero());
+        motion_curve_.set_end_trajpoint(locked_pos, Eigen::Vector3d::Zero());
+        motion_curve_.set_curve_time(0.05);  // 用 Time 约束跳过 solve_time_from_maxvel
+        motion_curve_.reset_start_time();
+        takeoff_accff_state_.curve_started = true;
+        return;
+    }
+
     Eigen::Vector3d rebased_velocity = uav_odometry_.velocity;
     const double z_limit = std::max(0.05, max_takeoff_velocity);
     rebased_velocity.z() = std::clamp(rebased_velocity.z(), -z_limit, z_limit);
+
+    // 起点 = 当前 odom;终点 = 以 ground_height_ref_ 为基准重算,
+    // 避免 PreLift 中飞机漂升后,旧终点(初始化时锁存的 arm_pos+commanded_height)
+    // 已经贴近甚至低于当前位置,导致 solve_time_from_maxvel 因 dist≈0 失败。
     motion_curve_.set_start_trajpoint(uav_odometry_.position, rebased_velocity);
+    motion_curve_.set_end_trajpoint(
+        Eigen::Vector3d(uav_odometry_.position.x(), uav_odometry_.position.y(), target_z),
+        Eigen::Vector3d::Zero());
+    // 切回 Vel 约束,让 get_result() 重新走 solve_time_from_maxvel。
+    // reset_start_time 让 dt 从 0 重新计时。两者必须同时调用,缺一不可。
+    motion_curve_.set_curve_maxvel(max_takeoff_velocity);
+    motion_curve_.reset_start_time();
+
+    ROS_INFO("[takeoff_accff] rebase: start=(%.2f,%.2f,%.2f) vz=%.2f end_z=%.2f remaining=%.2f",
+             uav_odometry_.position.x(),
+             uav_odometry_.position.y(),
+             uav_odometry_.position.z(),
+             rebased_velocity.z(),
+             target_z,
+             remaining_z);
+
     takeoff_accff_state_.curve_started = true;
 }
 
@@ -1389,12 +1434,10 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
 
     // ── 阶段 4：AirborneCurve  rebase + 五次项曲线 + estimated anchor ───────
     {
-        maybe_rebase_takeoff_curve_start_accff(commanded_vmax);
+        maybe_rebase_takeoff_curve_start_accff(commanded_vmax, commanded_height);
         curve::QuinticCurveState curve_result = motion_curve_.get_result();
         if (!curve_result.valid) {
-            const double fallback_vmax =
-                std::min(std::max(commanded_vmax + 0.05, commanded_vmax),
-                         max_velocity_.z());
+            const double fallback_vmax = std::min(commanded_vmax + 0.05, max_velocity_.z());
             motion_curve_.set_curve_maxvel(fallback_vmax);
             curve_result = motion_curve_.get_result();
             ROS_WARN_THROTTLE(
@@ -1417,7 +1460,9 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
         }
         if (!curve_result.valid) {
             ROS_ERROR_THROTTLE(1.0,
-                               "[takeoff_accff] AirborneCurve remains invalid after fallback");
+                               "[takeoff_accff] AirborneCurve remains invalid after fallback, "
+                               "marking takeoff complete and degrading to hover at current position "
+                               "to satisfy FSM contract and prevent uncontrolled flight");
             write_runtime_record(RuntimeEarlyReturnReason::AirborneCurveInvalid,
                                  &curve_result,
                                  commanded_height,
@@ -1428,7 +1473,17 @@ bool Geometric_Controller::takeoff_accff(double relative_takeoff_height,
                                  0.0,
                                  1.0,
                                  ThrustCommandPolicy::UseEstimatedAnchor);
-            return false;
+            // 必须同步设置 takeoff_complete_:FSM 在 TAKEOFF 状态下只看 is_takeoff_complete()
+            // 来推进状态,return hover() 不影响 FSM。不设这个标志会导致下一周期 FSM 重新调
+            // takeoff_accff,陷入 invalid → hover → invalid 的循环重启,无法跳出 TAKEOFF 状态。
+            update_hover_reference(uav_odometry_.position,
+                                   takeoff_accff_state_.yaw,
+                                   "accff_airbornecurve_invalid_fallback");
+            takeoff_complete_.store(true, std::memory_order_relaxed);
+            controller_.reset_integral();
+            clear_motion_curve();
+            reset_takeoff_land_contexts();
+            return hover();
         }
 
         const double z_ahead =

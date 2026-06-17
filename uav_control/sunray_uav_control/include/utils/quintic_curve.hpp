@@ -33,6 +33,12 @@ class QuinticCurve {
     void set_curve_maxvel(double vel);
     // 重置曲线参数
     void clear();
+    // 仅重置内部 start_time_,保留起点/终点/约束类型不变。
+    // 用途:当外部已经更新 set_start_trajpoint / set_end_trajpoint / set_curve_maxvel
+    // 之后,可调用本接口让下一次 get_result() 的 dt 从 0 重新计时。
+    // 注意:本接口不重置 curve_constraint_type_,如需重新求解 T,
+    //      请同时调用 set_curve_maxvel() 切回 Vel 约束。
+    void reset_start_time();
     // 提供曲线状态查询接口
     bool is_ready();
     // 曲线是否已走完（时间超过 curve_time_）
@@ -118,6 +124,13 @@ inline void QuinticCurve::clear() {
     curve_time_ = 0.0;
     curve_maxvel_ = 0.0;
     result_ = QuinticCurveState{};
+}
+
+// 仅重置 start_time_,保留起点/终点/约束。
+// 用于 rebase:在更新 set_start_trajpoint / set_end_trajpoint 之后调用,
+// 让下一次 get_result() 重新打时间戳并重新触发 Vel→Time 求解。
+inline void QuinticCurve::reset_start_time() {
+    start_time_ = ros::Time(0);
 }
 
 inline bool QuinticCurve::is_ready() {
