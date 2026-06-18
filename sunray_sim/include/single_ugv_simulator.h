@@ -2,7 +2,7 @@
 #define SUNRAY_SIM_SINGLE_UGV_SIMULATOR_H
 
 #include "local_mid360_simulator.h"
-#include "ugv_simulator.h"
+#include "ugv_plant.h"
 
 #include <Eigen/Dense>
 #include <pcl/point_cloud.h>
@@ -33,7 +33,7 @@ private:
     double init_yaw_{0.0};
 
     std::unique_ptr<LocalMid360Simulator> local_mid360_;
-    std::unique_ptr<UgvSimulator> ugv_;
+    std::unique_ptr<UgvPlant> ugv_;
 };
 }  // namespace sunray_sim
 

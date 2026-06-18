@@ -1,0 +1,110 @@
+# sunray_sim 6 机 + 6 车混合集群场景配置。
+#
+# 用途：
+#   在同一个 sunray_sim_node 进程内同时启动：
+#     /uav1 ... /uav6
+#     /ugv1 ... /ugv6
+#
+# 说明：
+#   当前 UAV 集群控制和 UGV 集群控制是两套独立链路。
+#   本场景用于同时验证 UAV 集群、UGV 集群、定位融合、控制链路和 RViz 显示。
+
+uav:
+  # 启动 UAV 仿真。
+  enable: true
+
+  # 无人机名称前缀，最终命名空间为 /uav1 ... /uav6。
+  agent_name: uav
+
+  # 需要创建的 UAV 编号列表。
+  agent_ids: [1, 2, 3, 4, 5, 6]
+
+ugv:
+  # 启动 UGV 仿真。
+  enable: true
+
+  # 无人车名称前缀，最终命名空间为 /ugv1 ... /ugv6。
+  agent_name: ugv
+
+  # 需要创建的 UGV 编号列表。
+  agent_ids: [1, 2, 3, 4, 5, 6]
+
+# 全局坐标系 frame_id。
+global_frame_id: map
+
+# 混合集群默认关闭感知链路，优先保证 12 个智能体的动力学、定位、控制和 marker 显示轻量稳定。
+# 如需验证规划/避障或局部 MID360 点云，将这里改成 true。
+enable_sensing: false
+
+# 混合集群下终端输出很多，默认关闭周期状态面板。
+enable_status_print: false
+status_print_hz: 1.0
+
+vehicles:
+  # UAV 初始队形：放在 y >= 0 区域。
+  uav1:
+    init_x: 0.0
+    init_y: 0.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav2:
+    init_x: 2.0
+    init_y: 0.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav3:
+    init_x: 4.0
+    init_y: 0.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav4:
+    init_x: 0.0
+    init_y: 2.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav5:
+    init_x: 2.0
+    init_y: 2.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav6:
+    init_x: 4.0
+    init_y: 2.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  # UGV 初始队形：放在 y < 0 区域，避免和 UAV 初始位置重叠。
+  ugv1:
+    init_x: 0.0
+    init_y: -4.0
+    init_yaw: 0.0
+
+  ugv2:
+    init_x: 2.0
+    init_y: -4.0
+    init_yaw: 0.0
+
+  ugv3:
+    init_x: 4.0
+    init_y: -4.0
+    init_yaw: 0.0
+
+  ugv4:
+    init_x: 0.0
+    init_y: -6.0
+    init_yaw: 0.0
+
+  ugv5:
+    init_x: 2.0
+    init_y: -6.0
+    init_yaw: 0.0
+
+  ugv6:
+    init_x: 4.0
+    init_y: -6.0
+    init_yaw: 0.0

@@ -6,7 +6,6 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <numeric>
 #include <sstream>
 
 namespace sunray_sim
@@ -16,7 +15,7 @@ namespace
 constexpr const char* kAnsiReset = "\033[0m";
 constexpr const char* kAnsiTitle = "\033[1;36m";
 constexpr const char* kAnsiGood = "\033[1;32m";
-constexpr const char* kAnsiWarn = "\033[1;33m";
+constexpr const char* kAnsiBad = "\033[1;31m";
 
 void setMarkerColor(visualization_msgs::Marker& marker,
                     const double r,
@@ -50,8 +49,8 @@ SimVisualizer::SimVisualizer(ros::NodeHandle& nh,
     nh_.param<std::string>("global_frame_id", global_frame_id_, global_frame_id_);
     nh_.param<double>("visualizer/publish_rate", publish_rate_, 10.0);
     publish_rate_ = std::max(0.1, publish_rate_);
-    nh_.param<double>("visualizer/marker_scale", marker_scale_, 1.5);
-    marker_scale_ = std::max(0.2, marker_scale_);
+    nh_.param<double>("visualizer/marker_scale", marker_scale_, 1.0);
+    marker_scale_ = std::max(0.1, marker_scale_);
     nh_.param<int>("visualizer/path_max_points", path_max_points_, 500);
     path_max_points_ = std::max(2, path_max_points_);
     nh_.param<double>("visualizer/path_min_interval", path_min_interval_, 0.15);
@@ -68,12 +67,17 @@ SimVisualizer::SimVisualizer(ros::NodeHandle& nh,
 
     odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(
         agent_prefix_ + "/sunray_sim/odom", 20, &SimVisualizer::odomCallback, this);
-    rpm_sub_ = nh_.subscribe<std_msgs::Float32MultiArray>(
-        agent_prefix_ + "/sunray_sim/cmd_RPM", 20, &SimVisualizer::rpmCallback, this);
-    mavros_state_sub_ = nh_.subscribe<mavros_msgs::State>(
-        agent_prefix_ + "/mavros/state", 20, &SimVisualizer::mavrosStateCallback, this);
+    if (!is_ugv_)
+    {
+        rpm_sub_ = nh_.subscribe<std_msgs::Float32MultiArray>(
+            agent_prefix_ + "/sunray_sim/cmd_RPM", 20, &SimVisualizer::rpmCallback, this);
+        mavros_state_sub_ = nh_.subscribe<mavros_msgs::State>(
+            agent_prefix_ + "/mavros/state", 20, &SimVisualizer::mavrosStateCallback, this);
+    }
     cloud_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>(
         agent_prefix_ + "/sunray_sim/cloud_world_frame", 5, &SimVisualizer::cloudCallback, this);
+    collision_sub_ = nh_.subscribe<std_msgs::Bool>(
+        agent_prefix_ + "/sunray_sim/collision", 10, &SimVisualizer::collisionCallback, this);
     marker_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(marker_topic_, 1);
 
     publish_timer_ = nh_.createTimer(ros::Duration(1.0 / publish_rate_),
@@ -124,6 +128,12 @@ void SimVisualizer::cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
     latest_cloud_points_ = msg->width * msg->height;
     last_cloud_time_ = ros::Time::now();
+}
+
+void SimVisualizer::collisionCallback(const std_msgs::Bool::ConstPtr& msg)
+{
+    in_collision_ = msg->data;
+    last_collision_time_ = ros::Time::now();
 }
 
 void SimVisualizer::publishTimerCallback(const ros::TimerEvent&)
@@ -203,11 +213,14 @@ void SimVisualizer::appendUavMarkers(visualization_msgs::MarkerArray& markers,
                                      const Eigen::Matrix3d& body_to_world) const
 {
     const double scale = marker_scale_;
-    const double arm = 0.34 * scale;
-    const double rotor_radius = 0.105 * scale;
-    const double rotor_height = 0.030 * scale;
-    const double body_radius = 0.085 * scale;
-    const double arrow_length = 0.42 * scale;
+    // UAV marker 按 200 mm 轴距建模。这里的 wheelbase 是对角电机间距，
+    // 因此中心到任意电机的距离为 wheelbase / 2。
+    const double wheelbase = 0.20 * scale;
+    const double arm = wheelbase * 0.5;
+    const double rotor_radius = 0.026 * scale;
+    const double rotor_height = 0.010 * scale;
+    const double body_radius = 0.030 * scale;
+    const double arrow_length = 0.16 * scale;
     const double x_arm_offset = arm / std::sqrt(2.0);
 
     visualization_msgs::Marker body = makeMarker(0, "uav_body", visualization_msgs::Marker::SPHERE, stamp);
@@ -220,7 +233,7 @@ void SimVisualizer::appendUavMarkers(visualization_msgs::MarkerArray& markers,
     markers.markers.push_back(body);
 
     visualization_msgs::Marker arms = makeMarker(1, "uav_x_frame", visualization_msgs::Marker::LINE_LIST, stamp);
-    arms.scale.x = 0.040 * scale;
+    arms.scale.x = 0.012 * scale;
     setMarkerColor(arms, 0.92, 0.95, 1.00, 1.0);
     const Eigen::Vector3d front_right = body_to_world * Eigen::Vector3d(x_arm_offset, -x_arm_offset, 0.0);
     const Eigen::Vector3d rear_left = body_to_world * Eigen::Vector3d(-x_arm_offset, x_arm_offset, 0.0);
@@ -261,9 +274,9 @@ void SimVisualizer::appendUavMarkers(visualization_msgs::MarkerArray& markers,
         makeMarker(20, "uav_heading", visualization_msgs::Marker::ARROW, stamp);
     heading.points.push_back(makePoint(position));
     heading.points.push_back(makePoint(position + body_to_world * Eigen::Vector3d(arrow_length, 0.0, 0.0)));
-    heading.scale.x = 0.045 * scale;
-    heading.scale.y = 0.100 * scale;
-    heading.scale.z = 0.100 * scale;
+    heading.scale.x = 0.012 * scale;
+    heading.scale.y = 0.030 * scale;
+    heading.scale.z = 0.030 * scale;
     setMarkerColor(heading, 0.10, 0.95, 0.35, 1.0);
     markers.markers.push_back(heading);
 }
@@ -274,13 +287,13 @@ void SimVisualizer::appendUgvMarkers(visualization_msgs::MarkerArray& markers,
                                      const Eigen::Matrix3d& body_to_world) const
 {
     const double scale = marker_scale_;
-    const double body_length = 0.80 * scale;
-    const double body_width = 0.42 * scale;
-    const double body_height = 0.20 * scale;
-    const double wheel_length = 0.22 * scale;
-    const double wheel_width = 0.070 * scale;
-    const double wheel_height = 0.16 * scale;
-    const double arrow_length = 0.60 * scale;
+    const double body_length = 0.25 * scale;
+    const double body_width = 0.13 * scale;
+    const double body_height = 0.06 * scale;
+    const double wheel_length = 0.07 * scale;
+    const double wheel_width = 0.022 * scale;
+    const double wheel_height = 0.05 * scale;
+    const double arrow_length = 0.19 * scale;
     const Eigen::Vector3d body_center = position + Eigen::Vector3d(0.0, 0.0, body_height * 0.5);
 
     visualization_msgs::Marker body = makeMarker(0, "ugv_body", visualization_msgs::Marker::CUBE, stamp);
@@ -293,20 +306,20 @@ void SimVisualizer::appendUgvMarkers(visualization_msgs::MarkerArray& markers,
     markers.markers.push_back(body);
 
     visualization_msgs::Marker cabin = makeMarker(1, "ugv_cabin", visualization_msgs::Marker::CUBE, stamp);
-    cabin.pose.position = makePoint(position + body_to_world * Eigen::Vector3d(0.10 * scale, 0.0, 0.0) +
-                                    Eigen::Vector3d(0.0, 0.0, body_height + 0.10 * scale));
+    cabin.pose.position = makePoint(position + body_to_world * Eigen::Vector3d(0.03 * scale, 0.0, 0.0) +
+                                    Eigen::Vector3d(0.0, 0.0, body_height + 0.03 * scale));
     cabin.pose.orientation = latest_odom_.pose.pose.orientation;
-    cabin.scale.x = 0.34 * scale;
-    cabin.scale.y = 0.34 * scale;
-    cabin.scale.z = 0.18 * scale;
+    cabin.scale.x = 0.11 * scale;
+    cabin.scale.y = 0.11 * scale;
+    cabin.scale.z = 0.06 * scale;
     setMarkerColor(cabin, 0.12, 0.62, 0.95, 1.0);
     markers.markers.push_back(cabin);
 
     const std::array<Eigen::Vector3d, 4> wheel_offsets = {
-        Eigen::Vector3d(0.26 * scale, -0.27 * scale, wheel_height * 0.5),
-        Eigen::Vector3d(0.26 * scale, 0.27 * scale, wheel_height * 0.5),
-        Eigen::Vector3d(-0.26 * scale, -0.27 * scale, wheel_height * 0.5),
-        Eigen::Vector3d(-0.26 * scale, 0.27 * scale, wheel_height * 0.5)};
+        Eigen::Vector3d(0.08 * scale, -0.085 * scale, wheel_height * 0.5),
+        Eigen::Vector3d(0.08 * scale, 0.085 * scale, wheel_height * 0.5),
+        Eigen::Vector3d(-0.08 * scale, -0.085 * scale, wheel_height * 0.5),
+        Eigen::Vector3d(-0.08 * scale, 0.085 * scale, wheel_height * 0.5)};
     for (std::size_t i = 0; i < wheel_offsets.size(); ++i)
     {
         visualization_msgs::Marker wheel =
@@ -322,22 +335,22 @@ void SimVisualizer::appendUgvMarkers(visualization_msgs::MarkerArray& markers,
 
     visualization_msgs::Marker front =
         makeMarker(20, "ugv_heading", visualization_msgs::Marker::ARROW, stamp);
-    const Eigen::Vector3d arrow_start = position + Eigen::Vector3d(0.0, 0.0, body_height + 0.18 * scale);
+    const Eigen::Vector3d arrow_start = position + Eigen::Vector3d(0.0, 0.0, body_height + 0.06 * scale);
     front.points.push_back(makePoint(arrow_start));
     front.points.push_back(makePoint(arrow_start + body_to_world * Eigen::Vector3d(arrow_length, 0.0, 0.0)));
-    front.scale.x = 0.045 * scale;
-    front.scale.y = 0.120 * scale;
-    front.scale.z = 0.120 * scale;
+    front.scale.x = 0.014 * scale;
+    front.scale.y = 0.038 * scale;
+    front.scale.z = 0.038 * scale;
     setMarkerColor(front, 0.10, 0.95, 0.35, 1.0);
     markers.markers.push_back(front);
 
     visualization_msgs::Marker front_bar =
         makeMarker(22, "ugv_front_bar", visualization_msgs::Marker::CUBE, stamp);
-    front_bar.pose.position = makePoint(position + body_to_world * Eigen::Vector3d(0.42 * scale, 0.0, body_height * 0.62));
+    front_bar.pose.position = makePoint(position + body_to_world * Eigen::Vector3d(0.13 * scale, 0.0, body_height * 0.62));
     front_bar.pose.orientation = latest_odom_.pose.pose.orientation;
-    front_bar.scale.x = 0.035 * scale;
+    front_bar.scale.x = 0.011 * scale;
     front_bar.scale.y = body_width * 0.92;
-    front_bar.scale.z = 0.060 * scale;
+    front_bar.scale.z = 0.019 * scale;
     setMarkerColor(front_bar, 0.08, 0.95, 0.38, 1.0);
     markers.markers.push_back(front_bar);
 }
@@ -383,8 +396,8 @@ void SimVisualizer::appendCommonMarkers(visualization_msgs::MarkerArray& markers
     {
         visualization_msgs::Marker text =
             makeMarker(40, is_ugv_ ? "ugv_status_text" : "uav_status_text", visualization_msgs::Marker::TEXT_VIEW_FACING, stamp);
-        text.pose.position = makePoint(position + Eigen::Vector3d(0.0, 0.0, (is_ugv_ ? 0.62 : 0.78) * scale));
-        text.scale.z = 0.22 * scale;
+        text.pose.position = makePoint(position + Eigen::Vector3d(0.0, 0.0, (is_ugv_ ? 0.22 : 0.30) * scale));
+        text.scale.z = (is_ugv_ ? 0.08 : 0.10) * scale;
         std::ostringstream text_stream;
         text_stream << std::fixed << std::setprecision(2)
                     << agent_prefix_ << "  "
@@ -394,57 +407,31 @@ void SimVisualizer::appendCommonMarkers(visualization_msgs::MarkerArray& markers
         setMarkerColor(text, 0.05, 1.00, 0.30, 1.0);
         markers.markers.push_back(text);
     }
+
+    if (in_collision_)
+    {
+        visualization_msgs::Marker collision_text =
+            makeMarker(41, is_ugv_ ? "ugv_collision_text" : "uav_collision_text", visualization_msgs::Marker::TEXT_VIEW_FACING, stamp);
+        collision_text.pose.position =
+            makePoint(position + Eigen::Vector3d(0.0, 0.0, (is_ugv_ ? 0.33 : 0.48) * scale));
+        collision_text.scale.z = (is_ugv_ ? 0.11 : 0.16) * scale;
+        collision_text.text = "碰撞";
+        setMarkerColor(collision_text, 1.00, 0.05, 0.02, 1.0);
+        markers.markers.push_back(collision_text);
+    }
 }
 
 void SimVisualizer::printStatus() const
 {
-    const ros::Time now = ros::Time::now();
-    const bool odom_ok = has_odom_ && (now - last_odom_time_).toSec() < 0.5;
-    const bool rpm_ok = has_rpm_ && (now - last_rpm_time_).toSec() < 0.5;
-    const bool state_ok = has_mavros_state_ && (now - last_mavros_state_time_).toSec() < 0.5;
-    const bool cloud_ok = !last_cloud_time_.isZero() && (now - last_cloud_time_).toSec() < 0.5;
-
-    double avg_rpm = 0.0;
-    if (has_rpm_ && !latest_rpm_.data.empty())
-    {
-        avg_rpm = std::accumulate(latest_rpm_.data.begin(), latest_rpm_.data.end(), 0.0) /
-                  static_cast<double>(latest_rpm_.data.size());
-    }
-
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
     ss << kAnsiTitle << "=================== sim_visualizer [" << agent_prefix_
        << "] ===================" << kAnsiReset << "\n";
-    ss << kAnsiGood << " 基本状态 " << kAnsiReset
-       << "odom = " << (odom_ok ? kAnsiGood : kAnsiWarn) << (odom_ok ? "正常" : "等待") << kAnsiReset;
-    if (!is_ugv_)
-    {
-        ss << "  rpm = " << (rpm_ok ? kAnsiGood : kAnsiWarn) << (rpm_ok ? "正常" : "等待") << kAnsiReset
-           << "  mavros_state = " << (state_ok ? kAnsiGood : kAnsiWarn) << (state_ok ? "正常" : "等待") << kAnsiReset;
-    }
-    ss << "  local_cloud = " << (cloud_ok ? kAnsiGood : kAnsiWarn) << (cloud_ok ? "正常" : "等待") << kAnsiReset
-       << "\n";
-    ss << kAnsiGood << " 订阅话题 " << kAnsiReset
-       << "odom -> " << agent_prefix_ << "/sunray_sim/odom";
-    if (!is_ugv_)
-    {
-        ss << "  cmd_RPM -> " << agent_prefix_ << "/sunray_sim/cmd_RPM"
-           << "\n"
-           << "          mavros_state -> " << agent_prefix_ << "/mavros/state";
-    }
-    ss << "  local_cloud -> " << agent_prefix_ << "/sunray_sim/cloud_world_frame"
-       << "\n";
     ss << kAnsiGood << " 发布话题 " << kAnsiReset
-       << "MarkerArray -> " << marker_topic_
-       << "\n";
-    ss << kAnsiGood << " 可视化 " << kAnsiReset
-       << "频率 = " << publish_rate_ << " Hz"
-       << "  缩放 = " << marker_scale_
-       << "  轨迹点 = " << path_points_.size() << "/" << path_max_points_
-       << "  局部点云点数 = " << latest_cloud_points_;
-    if (!is_ugv_)
+       << "MarkerArray -> " << marker_topic_;
+    if (in_collision_)
     {
-        ss << "  平均RPM = " << avg_rpm;
+        ss << "\n" << kAnsiBad << " 碰撞状态 " << kAnsiReset << "检测到碰撞";
     }
 
     std::cout << ss.str() << std::endl;

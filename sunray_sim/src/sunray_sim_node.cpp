@@ -50,17 +50,6 @@ std::vector<int> loadAgentIds(ros::NodeHandle& nh, const std::string& param_name
     return agent_ids;
 }
 
-std::vector<int> loadAgentIdsWithFallback(ros::NodeHandle& nh,
-                                          const std::string& param_name,
-                                          const std::string& fallback_param_name)
-{
-    if (nh.hasParam(param_name))
-    {
-        return loadAgentIds(nh, param_name);
-    }
-    return loadAgentIds(nh, fallback_param_name);
-}
-
 std::string joinAgentPrefixes(const std::string& agent_name, const std::vector<int>& agent_ids)
 {
     std::ostringstream ss;
@@ -86,7 +75,6 @@ int main(int argc, char** argv)
 
     // uav/agent_name + uav/agent_ids 决定无人机命名空间；
     // ugv/agent_name + ugv/agent_ids 决定无人车命名空间。
-    // 为兼容旧配置，uav 会回退读取顶层 agent_name / agent_ids。
     bool enable_uav = true;
     bool enable_ugv = false;
     nh.param<bool>("uav/enable", enable_uav, true);
@@ -94,12 +82,11 @@ int main(int argc, char** argv)
 
     std::string uav_agent_name = "uav";
     std::string ugv_agent_name = "ugv";
-    nh.param<std::string>("agent_name", uav_agent_name, std::string("uav"));
-    nh.param<std::string>("uav/agent_name", uav_agent_name, uav_agent_name);
+    nh.param<std::string>("uav/agent_name", uav_agent_name, std::string("uav"));
     nh.param<std::string>("ugv/agent_name", ugv_agent_name, std::string("ugv"));
 
     const std::vector<int> uav_agent_ids = enable_uav
-                                               ? loadAgentIdsWithFallback(nh, "uav/agent_ids", "agent_ids")
+                                               ? loadAgentIds(nh, "uav/agent_ids")
                                                : std::vector<int>();
     const std::vector<int> ugv_agent_ids = enable_ugv
                                                ? loadAgentIds(nh, "ugv/agent_ids")
@@ -188,10 +175,10 @@ int main(int argc, char** argv)
     for (const int agent_id : ugv_agent_ids)
     {
         ugv_simulators.emplace_back(new sunray_sim::SingleUgvSimulator(nh,
-                                                                              global_map,
-                                                                              enable_sensing,
-                                                                              ugv_agent_name,
-                                                                              agent_id));
+                                                                       global_map,
+                                                                       enable_sensing,
+                                                                       ugv_agent_name,
+                                                                       agent_id));
         if (enable_visualizer)
         {
             visualizers.emplace_back(new sunray_sim::SimVisualizer(nh, ugv_agent_name, agent_id));

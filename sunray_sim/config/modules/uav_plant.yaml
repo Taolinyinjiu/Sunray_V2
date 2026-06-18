@@ -1,20 +1,20 @@
-# QuadrotorSimulator 四旋翼动力学仿真模块参数。
+# UavPlant 四旋翼动力学仿真模块参数。
 #
 # 模块功能：
 #   订阅 /<agent>/sunray_sim/cmd_RPM，积分四旋翼动力学，并发布
 #   /<agent>/sunray_sim/odom、imu、navsat。
 #
 # 读取模块：
-#   1. QuadrotorSimulator：读取动力学、电机、IMU 和超时参数。
-#   2. Px4ControlSim：也会读取 dynamics/mass、dynamics/gravity、
+#   1. UavPlant：读取动力学、电机、IMU 和超时参数。
+#   2. Px4MavrosSim：也会读取 dynamics/mass、dynamics/gravity、
 #      dynamics/arm_length、motor/k_F、motor/k_T、motor/rpm_max。
 #      这些参数必须和动力学模块一致，否则同一条 setpoint 会在控制转换和
 #      动力学积分中对应不同推力。
 #
-# 初始位姿参数不在本文件中配置，已放到 single_uav_simulator.yaml。
+# 初始位姿参数不在本文件中配置，已放到场景配置的 vehicles 分组。
 
 # odom/navsat 的 header.frame_id 不在本文件单独配置。
-# 它统一读取 sunray_sim_node.yaml 中的 global_frame_id。
+# 它统一读取场景配置中的 global_frame_id。
 
 # 机体坐标系 frame_id。
 # 用作 ~/sunray_sim/odom 的 child_frame_id，以及 ~/sunray_sim/imu 的 header.frame_id。

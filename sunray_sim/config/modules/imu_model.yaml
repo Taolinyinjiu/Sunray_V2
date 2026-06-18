@@ -1,11 +1,11 @@
 # ImuModel IMU 误差模型参数。
 #
 # 模块功能：
-#   给 QuadrotorSimulator 的真实运动状态叠加 IMU 噪声、bias、安装误差和协方差，
+#   给 UavPlant 的真实运动状态叠加 IMU 噪声、bias、安装误差和协方差，
 #   生成 /<agent>/sunray_sim/imu。
 #
 # 读取模块：
-#   QuadrotorSimulator 内部调用的 sunray_imu_sim::ImuModel
+#   UavPlant 内部调用的 sunray_imu_sim::ImuModel
 
 imu:
   # 是否启用 IMU 误差模型。

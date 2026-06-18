@@ -59,8 +59,7 @@ quick_launch_groups:
             package: "sunray_sim"
             launch: "sunray_sim.launch"
             args:
-              - "node_config_file:=sunray_sim_node_swarm6.yaml"
-              - "single_uav_simulator_config_file:=single_uav_simulator_swarm6.yaml"
+              - "scenario_config_file:=uav_swarm6.yaml"
             delay_sec: 2.0
 
           - ref: "定位融合/集群无人机定位融合"
@@ -112,6 +111,61 @@ quick_launch_groups:
 
           - ref: "无人车集群控制/无人车集群控制仿真"
 
+      - title: "6机6车混合集群控制验证"
+        description: "sunray_sim 6机6车混合仿真 + UAV/UGV 定位融合 + UAV/UGV 控制 + UAV/UGV 集群控制"
+        items:
+          - ref: "sunray_sim/sunray_sim_6机6车混合集群"
+            delay_sec: 2.0
+
+          - title: "UAV 集群定位融合"
+            ref: "定位融合/集群无人机定位融合"
+            args:
+              - "source_id:=5"
+              - "agent_name:=uav"
+              - "agent_num:=6"
+            delay_sec: 1.0
+
+          - title: "UGV 集群定位融合"
+            ref: "定位融合/集群无人车定位融合"
+            args:
+              - "source_id:=5"
+              - "agent_name:=ugv"
+              - "agent_num:=6"
+            delay_sec: 1.0
+
+          - title: "UAV 集群控制"
+            ref: "无人机控制/集群无人机控制"
+            args:
+              - "agent_name:=uav"
+              - "agent_num:=6"
+              - "enable_monitor:=true"
+            delay_sec: 1.0
+
+          - title: "UGV 集群控制"
+            ref: "无人车控制/集群无人车控制"
+            args:
+              - "agent_name:=ugv"
+              - "swarm_num:=6"
+              - "enable_monitor:=true"
+            delay_sec: 1.0
+
+          - title: "UAV 集群控制仿真"
+            ref: "无人机集群控制/无人机集群控制仿真"
+            args:
+              - "agent_name:=uav"
+              - "swarm_num:=6"
+              - "enable_monitor:=true"
+              - "enable_rviz:=false"
+            delay_sec: 1.0
+
+          - title: "UGV 集群控制仿真"
+            ref: "无人车集群控制/无人车集群控制仿真"
+            args:
+              - "agent_name:=ugv"
+              - "swarm_num:=6"
+              - "enable_monitor:=true"
+              - "enable_rviz:=false"
+
       - title: "navrl_sim"
         description: "sunray_sim 仿真 + NavRL 适配 + 定位融合 + 无人机控制 + NavRL navigation_node"
         items:
@@ -152,6 +206,34 @@ quick_launch_groups:
               echo ""
               echo "如果当前终端已经配置好 ROS 和 conda，也可以只执行："
               echo "conda activate NavRL && rosrun navigation_runner navigation_node.py"
+              echo ""
+              read -r -p "按 Enter 关闭这个提示终端..."
+
+      - title: "navrl_ugv_sim"
+        description: "sunray_sim 单车仿真 + NavRL UGV 适配，直接输出麦轮 cmd_vel"
+        items:
+          - title: "sunray_sim_单车"
+            ref: "sunray_sim/sunray_sim_单车"
+            delay_sec: 2.0
+
+          - title: "NavRL2SunrayUGV_sim"
+            ref: "sunray_sim/NavRL2SunrayUGV_sim"
+            delay_sec: 1.0
+
+          - title: "手动启动 NavRL navigation_node"
+            command: |
+              echo ""
+              echo "请在新终端手动执行 NavRL navigation_node："
+              echo ""
+              echo "cd /home/amov/Sunray_v2"
+              echo "source devel/setup.bash"
+              echo "source /home/amov/miniconda3/etc/profile.d/conda.sh"
+              echo "conda activate NavRL"
+              echo "rosrun navigation_runner navigation_node.py /uav1/sunray_sim/odom:=/ugv1/sunray_sim/odom"
+              echo ""
+              echo "说明：NavRL 原始脚本在非 PX4 仿真模式下默认订阅 /uav1/sunray_sim/odom，"
+              echo "这里通过 ROS remap 直接改到 /ugv1/sunray_sim/odom。"
+              echo "NavRL 输出的世界系速度会由 NavRL2SunrayUGV_sim 转为车体系 cmd_vel。"
               echo ""
               read -r -p "按 Enter 关闭这个提示终端..."
 

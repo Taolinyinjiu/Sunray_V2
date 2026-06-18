@@ -1,5 +1,5 @@
-#ifndef SUNRAY_SIM_QUADROTOR_SIMULATOR_H
-#define SUNRAY_SIM_QUADROTOR_SIMULATOR_H
+#ifndef SUNRAY_SIM_UAV_PLANT_H
+#define SUNRAY_SIM_UAV_PLANT_H
 
 #include "imu_model.h"
 #include "quadrotor_dynamics.h"
@@ -16,14 +16,14 @@
 
 namespace sunray_sim
 {
-class QuadrotorSimulator
+class UavPlant
 {
 public:
-    QuadrotorSimulator(ros::NodeHandle& nh,
-                       const std::string& agent_name,
-                       int agent_id,
-                       const Eigen::Vector3d& init_pos,
-                       double init_yaw);
+    UavPlant(ros::NodeHandle& nh,
+             const std::string& agent_name,
+             int agent_id,
+             const Eigen::Vector3d& init_pos,
+             double init_yaw);
     void printStatus() const;
 
 private:

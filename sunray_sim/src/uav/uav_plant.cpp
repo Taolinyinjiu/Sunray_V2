@@ -1,4 +1,4 @@
-#include "quadrotor_simulator.h"
+#include "uav_plant.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,7 +24,7 @@ Eigen::Matrix3d rotationBodyToWorld(const Eigen::Vector4d& quat)
 }
 }  // namespace
 
-QuadrotorSimulator::QuadrotorSimulator(ros::NodeHandle& nh,
+UavPlant::UavPlant(ros::NodeHandle& nh,
                                        const std::string& agent_name,
                                        const int agent_id,
                                        const Eigen::Vector3d& init_pos,
@@ -79,13 +79,13 @@ QuadrotorSimulator::QuadrotorSimulator(ros::NodeHandle& nh,
     imu_model_.configure(imu_config);
 
     motor_rpm_sub_ = nh_.subscribe<std_msgs::Float32MultiArray>(
-        agent_prefix_ + "/sunray_sim/cmd_RPM", 100, &QuadrotorSimulator::motorRpmCallback, this);
+        agent_prefix_ + "/sunray_sim/cmd_RPM", 100, &UavPlant::motorRpmCallback, this);
     odom_pub_ = nh_.advertise<nav_msgs::Odometry>(agent_prefix_ + "/sunray_sim/odom", 10);
     imu_pub_ = nh_.advertise<sensor_msgs::Imu>(agent_prefix_ + "/sunray_sim/imu", 10);
     navsat_pub_ = nh_.advertise<sensor_msgs::NavSatFix>(agent_prefix_ + "/sunray_sim/navsat", 10);
 
     update_timer_ = nh_.createTimer(ros::Duration(dt_),
-                                    &QuadrotorSimulator::updateTimerCallback,
+                                    &UavPlant::updateTimerCallback,
                                     this);
 
     ROS_INFO("[sunray_sim] dynamics started for %s at %.1f Hz, IMU %s",
@@ -94,7 +94,7 @@ QuadrotorSimulator::QuadrotorSimulator(ros::NodeHandle& nh,
              imu_model_.summary().c_str());
 }
 
-void QuadrotorSimulator::motorRpmCallback(const std_msgs::Float32MultiArray::ConstPtr& msg)
+void UavPlant::motorRpmCallback(const std_msgs::Float32MultiArray::ConstPtr& msg)
 {
     if (msg->data.size() < 4)
     {
@@ -107,7 +107,7 @@ void QuadrotorSimulator::motorRpmCallback(const std_msgs::Float32MultiArray::Con
     last_motor_rpm_msg_time_ = ros::Time::now();
 }
 
-void QuadrotorSimulator::updateTimerCallback(const ros::TimerEvent&)
+void UavPlant::updateTimerCallback(const ros::TimerEvent&)
 {
     const ros::Time now = ros::Time::now();
     const bool cmd_alive = has_motor_rpm_cmd_ &&
@@ -133,7 +133,7 @@ void QuadrotorSimulator::updateTimerCallback(const ros::TimerEvent&)
     has_previous_state_ = true;
 }
 
-Eigen::Vector3d QuadrotorSimulator::computeBodySpecificForce(const DroneState& state, const double dt) const
+Eigen::Vector3d UavPlant::computeBodySpecificForce(const DroneState& state, const double dt) const
 {
     if (!has_previous_state_ || dt <= 0.0)
     {
@@ -145,7 +145,7 @@ Eigen::Vector3d QuadrotorSimulator::computeBodySpecificForce(const DroneState& s
     return body_to_world.transpose() * (world_acc - gravity_world);
 }
 
-Eigen::Vector3d QuadrotorSimulator::computeBodyAngularAcceleration(const DroneState& state, const double dt) const
+Eigen::Vector3d UavPlant::computeBodyAngularAcceleration(const DroneState& state, const double dt) const
 {
     if (!has_previous_state_ || dt <= 0.0)
     {
@@ -154,7 +154,7 @@ Eigen::Vector3d QuadrotorSimulator::computeBodyAngularAcceleration(const DroneSt
     return (state.ang_vel - previous_state_.ang_vel) / dt;
 }
 
-void QuadrotorSimulator::publishOdometry(const DroneState& state)
+void UavPlant::publishOdometry(const DroneState& state)
 {
     nav_msgs::Odometry odom_msg;
     odom_msg.header.stamp = ros::Time::now();
@@ -176,7 +176,7 @@ void QuadrotorSimulator::publishOdometry(const DroneState& state)
     odom_pub_.publish(odom_msg);
 }
 
-void QuadrotorSimulator::publishImu(const DroneState& state, const ros::Time& stamp)
+void UavPlant::publishImu(const DroneState& state, const ros::Time& stamp)
 {
     sunray_imu_sim::ImuTruth truth;
     truth.stamp = stamp;
@@ -190,7 +190,7 @@ void QuadrotorSimulator::publishImu(const DroneState& state, const ros::Time& st
     imu_pub_.publish(imu_model_.generateMessage(truth));
 }
 
-void QuadrotorSimulator::publishNavSatFix(const DroneState& state, const ros::Time& stamp)
+void UavPlant::publishNavSatFix(const DroneState& state, const ros::Time& stamp)
 {
     sensor_msgs::NavSatFix navsat_msg;
     navsat_msg.header.stamp = stamp;
@@ -211,7 +211,7 @@ void QuadrotorSimulator::publishNavSatFix(const DroneState& state, const ros::Ti
     navsat_pub_.publish(navsat_msg);
 }
 
-void QuadrotorSimulator::printStatus() const
+void UavPlant::printStatus() const
 {
     const DroneState& state = quadrotor_->getState();
     const bool cmd_alive = has_motor_rpm_cmd_ &&
@@ -220,7 +220,7 @@ void QuadrotorSimulator::printStatus() const
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
 
-    ss << kAnsiTitle << "=================== quadrotor_simulator [" << agent_prefix_
+    ss << kAnsiTitle << "=================== uav_plant [" << agent_prefix_
        << "] ===================" << kAnsiReset << "\n";
 
     ss << kAnsiGood << " 基本状态 " << kAnsiReset

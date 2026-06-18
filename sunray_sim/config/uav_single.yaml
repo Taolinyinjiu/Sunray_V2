@@ -1,0 +1,56 @@
+# sunray_sim 单无人机场景配置。
+#
+# 用途：
+#   默认启动 1 架 UAV，适合单机控制、单机规划、NavRL 单机仿真验证。
+#
+# 读取模块：
+#   sunray_sim_node、SingleUavSimulator。
+#
+# 说明：
+#   这个文件是普通用户最常改的“场景入口配置”之一。
+#   地图、雷达、动力学、IMU、PX4 控制、fake MAVROS、RViz marker 等细节参数
+#   放在 config/modules/ 目录中。
+
+uav:
+  # 是否启动无人机仿真。
+  enable: true
+
+  # 无人机名称前缀，最终命名空间为 /uav1。
+  agent_name: uav
+
+  # 无人机编号列表。单机时只写 [1]。
+  agent_ids: [1]
+
+ugv:
+  # 本场景不启动无人车。
+  enable: false
+  agent_name: ugv
+  agent_ids: [1]
+
+# 全局坐标系 frame_id。
+# 全局地图、局部点云、TF、odom、navsat 都使用这个 frame。
+# 对接 NavRL/map_manager 时建议保持 map。
+global_frame_id: map
+
+# 是否启用感知链路。
+# true：启动全局 PCD 地图和局部 MID360 点云。
+# false：只运行动力学、IMU、fake MAVROS 和可视化 marker。
+enable_sensing: true
+
+# 是否在终端周期打印统一状态面板。
+enable_status_print: true
+
+# 状态面板打印频率，单位 Hz。
+status_print_hz: 1.0
+
+# 车辆初始位姿。
+# key 必须等于 agent_name + agent_id，例如 uav1。
+vehicles:
+  uav1:
+    # 初始位置，单位 m，global_frame_id 坐标系。
+    init_x: 0.0
+    init_y: 0.0
+    init_z: 0.0
+
+    # 初始偏航角，单位 rad。
+    init_yaw: 0.0

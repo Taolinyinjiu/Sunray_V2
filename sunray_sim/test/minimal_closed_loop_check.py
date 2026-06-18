@@ -98,33 +98,27 @@ def has_launch_arg(extra_launch_args, name):
     return any(arg.startswith(prefix) for arg in extra_launch_args)
 
 
-def create_node_config(args):
-    config_file = tempfile.NamedTemporaryFile(
-        mode="w",
-        prefix="sunray_sim_test_node_",
-        suffix=".yaml",
-        delete=False,
-    )
-    config_file.write("# minimal_closed_loop_check.py 自动生成的临时主节点配置。\n")
-    config_file.write("agent_name: %s\n" % args.agent_name)
-    config_file.write("agent_ids: [%d]\n" % args.agent_id)
-    config_file.write("global_frame_id: %s\n" % args.global_frame)
-    config_file.write("enable_sensing: true\n")
-    config_file.write("enable_status_print: false\n")
-    config_file.write("status_print_hz: 1.0\n")
-    config_file.close()
-    return config_file.name
-
-
-def create_single_uav_config(args):
+def create_scenario_config(args):
     vehicle_name = args.agent_name + str(args.agent_id)
     config_file = tempfile.NamedTemporaryFile(
         mode="w",
-        prefix="sunray_sim_test_vehicle_",
+        prefix="sunray_sim_test_scenario_",
         suffix=".yaml",
         delete=False,
     )
-    config_file.write("# minimal_closed_loop_check.py 自动生成的临时无人机初始位姿配置。\n")
+    config_file.write("# minimal_closed_loop_check.py 自动生成的临时场景配置。\n")
+    config_file.write("uav:\n")
+    config_file.write("  enable: true\n")
+    config_file.write("  agent_name: %s\n" % args.agent_name)
+    config_file.write("  agent_ids: [%d]\n" % args.agent_id)
+    config_file.write("ugv:\n")
+    config_file.write("  enable: false\n")
+    config_file.write("  agent_name: ugv\n")
+    config_file.write("  agent_ids: [1]\n")
+    config_file.write("global_frame_id: %s\n" % args.global_frame)
+    config_file.write("enable_sensing: true\n")
+    config_file.write("enable_status_print: %s\n" % ("true" if args.keep_status_print else "false"))
+    config_file.write("status_print_hz: 1.0\n")
     config_file.write("vehicles:\n")
     config_file.write("  %s:\n" % vehicle_name)
     config_file.write("    init_x: 0.0\n")
@@ -140,18 +134,15 @@ def start_launch(args):
     launch_file = os.path.join(package_path, "launch", "sunray_sim.launch")
     uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
     roslaunch.configure_logging(uuid)
-    temp_node_config = None
-    temp_single_uav_config = None
+    temp_scenario_config = None
     launch_args = ["rviz:=false"] + args.launch_arg
-    if not args.keep_status_print and not has_launch_arg(launch_args, "node_config"):
-        temp_node_config = create_node_config(args)
-        launch_args.append("node_config:=" + temp_node_config)
-    if not has_launch_arg(launch_args, "single_uav_simulator_config"):
-        temp_single_uav_config = create_single_uav_config(args)
-        launch_args.append("single_uav_simulator_config:=" + temp_single_uav_config)
+    if (not has_launch_arg(launch_args, "scenario_config") and
+            not has_launch_arg(launch_args, "scenario_config_file")):
+        temp_scenario_config = create_scenario_config(args)
+        launch_args.append("scenario_config:=" + temp_scenario_config)
     parent = roslaunch.parent.ROSLaunchParent(uuid, [(launch_file, launch_args)])
     parent.start()
-    return parent, temp_node_config, temp_single_uav_config
+    return parent, temp_scenario_config
 
 
 def wait_for_odom(monitor, timeout):
@@ -234,7 +225,7 @@ def evaluate(monitor, args, start_z):
 def parse_args():
     parser = argparse.ArgumentParser(description="sunray_sim 最小闭环验证脚本")
     parser.add_argument("--no-launch", action="store_true", help="不自动启动 launch，只检查已经运行的仿真节点")
-    parser.add_argument("--launch-arg", action="append", default=[], help="传给 roslaunch 的额外参数，例如 node_config:=xxx.yaml")
+    parser.add_argument("--launch-arg", action="append", default=[], help="传给 roslaunch 的额外参数，例如 scenario_config_file:=uav_single.yaml")
     parser.add_argument("--keep-status-print", action="store_true", help="自动启动 launch 时保留仿真节点状态面板打印")
     parser.add_argument("--agent-name", default="uav", help="无人机名称前缀")
     parser.add_argument("--agent-id", type=int, default=1, help="无人机编号")
@@ -261,12 +252,11 @@ def main():
     agent_prefix = "/" + args.agent_name + str(args.agent_id)
 
     launch_parent = None
-    temp_node_config = None
-    temp_single_uav_config = None
+    temp_scenario_config = None
     try:
         if not args.no_launch:
             print("[sunray_sim test] 启动仿真 launch...")
-            launch_parent, temp_node_config, temp_single_uav_config = start_launch(args)
+            launch_parent, temp_scenario_config = start_launch(args)
             time.sleep(1.0)
 
         rospy.init_node("sunray_sim_minimal_closed_loop_check", anonymous=True)
@@ -298,10 +288,8 @@ def main():
         if launch_parent is not None:
             print("[sunray_sim test] 关闭仿真 launch...")
             launch_parent.shutdown()
-        if temp_node_config and os.path.exists(temp_node_config):
-            os.unlink(temp_node_config)
-        if temp_single_uav_config and os.path.exists(temp_single_uav_config):
-            os.unlink(temp_single_uav_config)
+        if temp_scenario_config and os.path.exists(temp_scenario_config):
+            os.unlink(temp_scenario_config)
 
 
 if __name__ == "__main__":

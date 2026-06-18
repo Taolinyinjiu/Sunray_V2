@@ -58,14 +58,13 @@ Visualization Manager:
       Marker Topic: /rl_navigation/raycast
       Name: MarkerArray
       Namespaces:
-        raycast_lines: true
-        raycast_points: true
+        {}
       Queue Size: 100
       Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 3.950000047683716
+        Max Value: 2.549999952316284
         Min Value: -0.05000000074505806
         Value: true
       Axis: Z
@@ -135,7 +134,7 @@ Visualization Manager:
       Marker Topic: /rl_navigation/goal
       Name: MarkerArray
       Namespaces:
-        goal_point: true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -184,8 +183,7 @@ Visualization Manager:
       Marker Topic: /rl_navigation/cmd
       Name: MarkerArray
       Namespaces:
-        rl_action: true
-        safe_action: true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -401,14 +399,23 @@ Visualization Manager:
       Value: false
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /uav1/sunray_sim/rviz_markers
+      Marker Topic: /uav1/sunray_sim/visualization
       Name: MarkerArray
       Namespaces:
-        quadrotor_arms: true
-        quadrotor_body: true
-        quadrotor_heading: true
-        quadrotor_position_text: true
-        quadrotor_rotors: true
+        {}
+      Queue Size: 100
+      Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /ugv1/sunray_sim/visualization
+      Name: MarkerArray
+      Namespaces:
+        ugv_body: true
+        ugv_cabin: true
+        ugv_front_bar: true
+        ugv_heading: true
+        ugv_status_text: true
+        ugv_wheels: true
       Queue Size: 100
       Value: true
   Enabled: true
@@ -439,7 +446,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 22.45183563232422
+      Distance: 24.42706298828125
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -447,17 +454,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 3.86843204498291
-        Y: -2.279928684234619
-        Z: 2.164198398590088
+        X: 2.139141082763672
+        Y: -0.22961151599884033
+        Z: 1.6544990539550781
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7747969627380371
+      Pitch: 0.47979724407196045
       Target Frame: <Fixed Frame>
-      Yaw: 3.7086174488067627
+      Yaw: 2.218599796295166
     Saved: ~
 Window Geometry:
   Displays:

@@ -7,6 +7,7 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/Bool.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -27,6 +28,7 @@ private:
     void rpmCallback(const std_msgs::Float32MultiArray::ConstPtr& msg);
     void mavrosStateCallback(const mavros_msgs::State::ConstPtr& msg);
     void cloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void collisionCallback(const std_msgs::Bool::ConstPtr& msg);
     void publishTimerCallback(const ros::TimerEvent& event);
     void publishMarkers(const ros::Time& stamp);
     void appendUavMarkers(visualization_msgs::MarkerArray& markers,
@@ -56,6 +58,7 @@ private:
     ros::Subscriber rpm_sub_;
     ros::Subscriber mavros_state_sub_;
     ros::Subscriber cloud_sub_;
+    ros::Subscriber collision_sub_;
     ros::Publisher marker_pub_;
     ros::Timer publish_timer_;
 
@@ -66,9 +69,11 @@ private:
     ros::Time last_rpm_time_;
     ros::Time last_mavros_state_time_;
     ros::Time last_cloud_time_;
+    ros::Time last_collision_time_;
     bool has_odom_{false};
     bool has_rpm_{false};
     bool has_mavros_state_{false};
+    bool in_collision_{false};
     uint32_t latest_cloud_points_{0};
 
     std::vector<Eigen::Vector3d> path_points_;
@@ -76,7 +81,7 @@ private:
     bool has_path_point_{false};
 
     double publish_rate_{10.0};
-    double marker_scale_{1.5};
+    double marker_scale_{1.0};
     double path_min_interval_{0.15};
     int path_max_points_{500};
     bool show_velocity_arrow_{true};

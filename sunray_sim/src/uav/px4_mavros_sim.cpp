@@ -1,25 +1,23 @@
-#include "px4_control_sim.h"
-#include <ros/ros.h>
-#include <mavros_msgs/AttitudeTarget.h>
-#include <mavros_msgs/PositionTarget.h>
-#include <mavros_msgs/State.h>
-#include <nav_msgs/Odometry.h>
+#include "px4_mavros_sim.h"
+
 #include <std_msgs/Float32MultiArray.h>
-#include <Eigen/Dense>
+
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 namespace {
+constexpr uint8_t kMavResultAccepted = 0;
+constexpr int64_t kEkf2EvCtrlVisionPosYaw = (1 << 0) | (1 << 1) | (1 << 3);
+constexpr int64_t kEkf2HgtRefVision = 3;
 constexpr const char* kAnsiReset = "\033[0m";
 constexpr const char* kAnsiTitle = "\033[1;35m";
-constexpr const char* kAnsiLabel = "\033[1;37m";
 constexpr const char* kAnsiGood = "\033[1;32m";
 constexpr const char* kAnsiWarn = "\033[1;33m";
-constexpr const char* kAnsiMuted = "\033[0;90m";
 
 double wrapAngle(double angle)
 {
@@ -45,9 +43,9 @@ double radToDeg(double rad)
     return rad * 180.0 / M_PI;
 }
 
-const char* stateText(bool ok)
+const char* readyText(bool ok)
 {
-    return ok ? "正常" : "异常";
+    return ok ? "正常" : "等待";
 }
 
 std::string joinNames(const std::vector<std::string>& names)
@@ -73,7 +71,7 @@ std::string joinNames(const std::vector<std::string>& names)
 namespace sunray_sim
 {
 
-Px4ControlSim::Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name)
+Px4MavrosSim::Px4MavrosSim(ros::NodeHandle& nh, const std::string& uav_name)
     : nh_(nh), uav_name_(uav_name), dt_(0.005)
 {
     double px4_update_rate = 200.0;
@@ -102,21 +100,79 @@ Px4ControlSim::Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name)
     nh_.param("limits/max_roll_pitch_rate", max_roll_pitch_rate_, 0.5);
     nh_.param("limits/max_yaw_rate", max_yaw_rate_, 0.6);
     max_tilt_rad_ = max_tilt_rad_ * M_PI / 180.0;
+    nh_.param("px4_mavros/mavros_publish_rate", mavros_publish_rate_hz_, 50.0);
+    mavros_publish_rate_hz_ = std::max(1.0, mavros_publish_rate_hz_);
+    nh_.param("px4_mavros/on_ground_height_threshold_m",
+              on_ground_height_threshold_m_,
+              0.05);
+    nh_.param("px4_mavros/on_ground_velocity_threshold_mps",
+              on_ground_velocity_threshold_mps_,
+              0.10);
+    nh_.param("px4_mavros/battery_voltage_v", battery_voltage_v_, 15.2f);
+    nh_.param("px4_mavros/battery_current_a", battery_current_a_, 0.0f);
+    nh_.param("px4_mavros/battery_remaining", battery_remaining_, 0.9f);
+    int system_load_raw_param = static_cast<int>(system_load_raw_);
+    nh_.param("px4_mavros/system_load_raw", system_load_raw_param, 150);
+    system_load_raw_ = static_cast<uint16_t>(system_load_raw_param);
+    nh_.param("px4_mavros/start_connected", connected_, true);
+    nh_.param("px4_mavros/start_armed", armed_, true);
+    nh_.param("px4_mavros/start_manual_input", manual_input_, true);
+    nh_.param("px4_mavros/start_mode", current_mode_, std::string("OFFBOARD"));
+
+    params_["EKF2_EV_CTRL"] = makeIntegerParamValue(kEkf2EvCtrlVisionPosYaw);
+    params_["EKF2_HGT_REF"] = makeIntegerParamValue(kEkf2HgtRefVision);
+    params_["EKF2_EV_DELAY"] = makeRealParamValue(0.0);
 
     // 初始化PID参数
     initPIDParams();
     
-    // 订阅mavros话题
-    attitude_target_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/attitude", 10, &Px4ControlSim::attitudeTargetCallback, this);
-    position_target_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/local", 10, &Px4ControlSim::positionTargetCallback, this);
-    odom_sub_ = nh_.subscribe(uav_name_ + "/sunray_sim/odom", 10, &Px4ControlSim::odomCallback, this);
-    mavros_state_sub_ = nh_.subscribe(uav_name_ + "/mavros/state", 10, &Px4ControlSim::mavrosStateCallback, this);
+    attitude_target_sub_ = nh_.subscribe(
+        uav_name_ + "/mavros/setpoint_raw/attitude", 10, &Px4MavrosSim::attitudeTargetCallback, this);
+    position_target_sub_ = nh_.subscribe(
+        uav_name_ + "/mavros/setpoint_raw/local", 10, &Px4MavrosSim::positionTargetCallback, this);
+    odom_sub_ = nh_.subscribe(uav_name_ + "/sunray_sim/odom", 20, &Px4MavrosSim::odomCallback, this);
+    imu_sub_ = nh_.subscribe(uav_name_ + "/sunray_sim/imu", 20, &Px4MavrosSim::imuCallback, this);
+    navsat_sub_ = nh_.subscribe(uav_name_ + "/sunray_sim/navsat", 20, &Px4MavrosSim::navsatCallback, this);
     
-    // 发布电机RPM
     motor_rpm_pub_ = nh_.advertise<std_msgs::Float32MultiArray>(uav_name_ + "/sunray_sim/cmd_RPM", 10);
+    state_pub_ = nh_.advertise<mavros_msgs::State>(uav_name_ + "/mavros/state", 10);
+    extended_state_pub_ =
+        nh_.advertise<mavros_msgs::ExtendedState>(uav_name_ + "/mavros/extended_state", 10);
+    sys_status_pub_ = nh_.advertise<mavros_msgs::SysStatus>(uav_name_ + "/mavros/sys_status", 10);
+    estimator_status_pub_ =
+        nh_.advertise<mavros_msgs::EstimatorStatus>(uav_name_ + "/mavros/estimator_status", 10);
+    local_odom_pub_ = nh_.advertise<nav_msgs::Odometry>(uav_name_ + "/mavros/local_position/odom", 10);
+    local_pose_pub_ =
+        nh_.advertise<geometry_msgs::PoseStamped>(uav_name_ + "/mavros/local_position/pose", 10);
+    local_velocity_pub_ =
+        nh_.advertise<geometry_msgs::TwistStamped>(uav_name_ + "/mavros/local_position/velocity_local", 10);
+    global_position_pub_ =
+        nh_.advertise<sensor_msgs::NavSatFix>(uav_name_ + "/mavros/global_position/global", 10);
+    gps_raw_pub_ =
+        nh_.advertise<mavros_msgs::GPSRAW>(uav_name_ + "/mavros/gpsstatus/gps1/raw", 10);
+    imu_pub_ = nh_.advertise<sensor_msgs::Imu>(uav_name_ + "/mavros/imu/data", 10);
+    target_local_pub_ =
+        nh_.advertise<mavros_msgs::PositionTarget>(uav_name_ + "/mavros/setpoint_raw/target_local", 10);
+    target_attitude_pub_ =
+        nh_.advertise<mavros_msgs::AttitudeTarget>(uav_name_ + "/mavros/setpoint_raw/target_attitude", 10);
+
+    set_mode_srv_ =
+        nh_.advertiseService(uav_name_ + "/mavros/set_mode", &Px4MavrosSim::setModeService, this);
+    arming_srv_ =
+        nh_.advertiseService(uav_name_ + "/mavros/cmd/arming", &Px4MavrosSim::armingService, this);
+    command_long_srv_ =
+        nh_.advertiseService(uav_name_ + "/mavros/cmd/command", &Px4MavrosSim::commandLongService, this);
+    param_get_srv_ =
+        nh_.advertiseService(uav_name_ + "/mavros/param/get", &Px4MavrosSim::paramGetService, this);
+    param_set_srv_ =
+        nh_.advertiseService(uav_name_ + "/mavros/param/set", &Px4MavrosSim::paramSetService, this);
+
     update_timer_ = nh_.createTimer(ros::Duration(dt_),
-                                    &Px4ControlSim::updateTimerCallback,
+                                    &Px4MavrosSim::updateTimerCallback,
                                     this);
+    mavros_publish_timer_ = nh_.createTimer(ros::Duration(1.0 / mavros_publish_rate_hz_),
+                                            &Px4MavrosSim::mavrosPublishTimerCallback,
+                                            this);
     
     // 初始化状态
     current_state_.pos.setZero();
@@ -164,8 +220,13 @@ Px4ControlSim::Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name)
     use_yaw_ = false;
     use_yaw_rate_ = false;
     
-    ROS_INFO("Px4ControlSim initialized for %s at %.1f Hz", uav_name_.c_str(), px4_update_rate);
-    ROS_INFO("Px4ControlSim params: mass=%.3f gravity=%.3f k_F=%.6e arm=%.3f rpm_max=%.1f",
+    ROS_INFO("[px4_mavros_sim] started for %s control=%.1f Hz mavros=%.1f Hz mode=%s armed=%s",
+             uav_name_.c_str(),
+             px4_update_rate,
+             mavros_publish_rate_hz_,
+             current_mode_.c_str(),
+             armed_ ? "true" : "false");
+    ROS_INFO("[px4_mavros_sim] params: mass=%.3f gravity=%.3f k_F=%.6e arm=%.3f rpm_max=%.1f",
              mass_,
              gravity_,
              motor_k_f_,
@@ -173,12 +234,12 @@ Px4ControlSim::Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name)
              motor_max_rpm_);
 }
 
-void Px4ControlSim::updateTimerCallback(const ros::TimerEvent&)
+void Px4MavrosSim::updateTimerCallback(const ros::TimerEvent&)
 {
     update();
 }
 
-void Px4ControlSim::initPIDParams()
+void Px4MavrosSim::initPIDParams()
 {
     nh_.param("position_control/kp_x", pos_pid_kp_(0), 1.0);
     nh_.param("position_control/kp_y", pos_pid_kp_(1), 1.0);
@@ -211,7 +272,7 @@ void Px4ControlSim::initPIDParams()
     bodyrate_pid_integral_.setZero();
 }
 
-bool Px4ControlSim::isSupportedPositionTarget(const mavros_msgs::PositionTarget& msg,
+bool Px4MavrosSim::isSupportedPositionTarget(const mavros_msgs::PositionTarget& msg,
                                                 std::string& reason) const
 {
     const uint16_t mask = msg.type_mask;
@@ -335,7 +396,7 @@ bool Px4ControlSim::isSupportedPositionTarget(const mavros_msgs::PositionTarget&
     return true;
 }
 
-bool Px4ControlSim::isSupportedAttitudeTarget(const mavros_msgs::AttitudeTarget& msg,
+bool Px4MavrosSim::isSupportedAttitudeTarget(const mavros_msgs::AttitudeTarget& msg,
                                                 std::string& reason) const
 {
     const uint8_t mask = msg.type_mask;
@@ -408,7 +469,7 @@ bool Px4ControlSim::isSupportedAttitudeTarget(const mavros_msgs::AttitudeTarget&
     return true;
 }
 
-void Px4ControlSim::warnUnsupportedPositionTargetOnce(const mavros_msgs::PositionTarget& msg,
+void Px4MavrosSim::warnUnsupportedPositionTargetOnce(const mavros_msgs::PositionTarget& msg,
                                                         const std::string& reason)
 {
     const uint32_t key = (static_cast<uint32_t>(msg.coordinate_frame) << 16) |
@@ -419,14 +480,14 @@ void Px4ControlSim::warnUnsupportedPositionTargetOnce(const mavros_msgs::Positio
                                      "，原因：" + reason;
     if (warned_position_target_keys_.insert(key).second)
     {
-        ROS_WARN("[px4_control_sim] unsupported PositionTarget frame=%u type_mask=%u: %s",
+        ROS_WARN("[Px4MavrosSim] unsupported PositionTarget frame=%u type_mask=%u: %s",
                  msg.coordinate_frame,
                  msg.type_mask,
                  reason.c_str());
     }
 }
 
-void Px4ControlSim::warnUnsupportedAttitudeTargetOnce(const mavros_msgs::AttitudeTarget& msg,
+void Px4MavrosSim::warnUnsupportedAttitudeTargetOnce(const mavros_msgs::AttitudeTarget& msg,
                                                         const std::string& reason)
 {
     last_rejected_setpoint_reason_ = "AttitudeTarget mask=" +
@@ -434,20 +495,20 @@ void Px4ControlSim::warnUnsupportedAttitudeTargetOnce(const mavros_msgs::Attitud
                                      "，原因：" + reason;
     if (warned_attitude_target_masks_.insert(msg.type_mask).second)
     {
-        ROS_WARN("[px4_control_sim] unsupported AttitudeTarget type_mask=%u: %s",
+        ROS_WARN("[Px4MavrosSim] unsupported AttitudeTarget type_mask=%u: %s",
                  msg.type_mask,
                  reason.c_str());
     }
 }
 
-void Px4ControlSim::markSupportedSetpoint()
+void Px4MavrosSim::markSupportedSetpoint()
 {
     has_setpoint_ = true;
     setpoint_timed_out_ = false;
     last_supported_setpoint_time_ = ros::Time::now();
 }
 
-void Px4ControlSim::clearControllerOutput()
+void Px4MavrosSim::clearControllerOutput()
 {
     desired_state_.thrust.setZero();
     desired_state_.torque.setZero();
@@ -459,9 +520,14 @@ void Px4ControlSim::clearControllerOutput()
     filtered_acc_xy_initialized_ = false;
 }
 
-void Px4ControlSim::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg)
+void Px4MavrosSim::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg)
 {
     mavros_msgs::AttitudeTarget att_target = *msg;
+    latest_attitude_target_ = att_target;
+    latest_attitude_target_.header.stamp = ros::Time::now();
+    has_attitude_target_ = true;
+    target_attitude_pub_.publish(latest_attitude_target_);
+
     std::string unsupported_reason;
     if (!isSupportedAttitudeTarget(att_target, unsupported_reason))
     {
@@ -535,9 +601,14 @@ void Px4ControlSim::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::Co
     }
 }
 
-void Px4ControlSim::positionTargetCallback(const mavros_msgs::PositionTarget::ConstPtr& msg)
+void Px4MavrosSim::positionTargetCallback(const mavros_msgs::PositionTarget::ConstPtr& msg)
 {
     mavros_msgs::PositionTarget pos_target = *msg;
+    latest_local_target_ = pos_target;
+    latest_local_target_.header.stamp = ros::Time::now();
+    has_local_target_ = true;
+    target_local_pub_.publish(latest_local_target_);
+
     std::string unsupported_reason;
     if (!isSupportedPositionTarget(pos_target, unsupported_reason))
     {
@@ -625,8 +696,11 @@ void Px4ControlSim::positionTargetCallback(const mavros_msgs::PositionTarget::Co
     markSupportedSetpoint();
 }
 
-void Px4ControlSim::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
+void Px4MavrosSim::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
+    latest_odom_ = *msg;
+    has_odom_ = true;
+
     // 更新当前状态
     current_state_.pos << msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z;
     current_state_.vel << msg->twist.twist.linear.x, msg->twist.twist.linear.y, msg->twist.twist.linear.z;
@@ -641,32 +715,26 @@ void Px4ControlSim::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     current_state_.euler_angles(0) = atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy));
     current_state_.euler_angles(1) = asin(clampUnit(2.0 * (qw * qy - qz * qx)));
     current_state_.euler_angles(2) = atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
-    has_odom_ = true;
+    publishLocalPositionOutputs(ros::Time::now());
 }
 
-void Px4ControlSim::mavrosStateCallback(const mavros_msgs::State::ConstPtr& msg)
+void Px4MavrosSim::imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 {
-    mavros_armed_ = msg->armed;
-    mavros_mode_ = msg->mode;
-    has_mavros_state_ = true;
-
-    if (!mavros_armed_)
-    {
-        has_setpoint_ = false;
-        setpoint_timed_out_ = false;
-        px4_setpoint_.collective_thrust = 0.0;
-        px4_setpoint_.bodyrate_roll_pitch.setZero();
-        px4_setpoint_.bodyrate_yaw_rate = 0.0;
-        px4_setpoint_.att_roll_pitch.setZero();
-        px4_setpoint_.att_yaw = 0.0;
-        clearControllerOutput();
-        publishZeroMotorRPM();
-    }
+    latest_imu_ = *msg;
+    has_imu_ = true;
+    imu_pub_.publish(latest_imu_);
 }
 
-void Px4ControlSim::update()
+void Px4MavrosSim::navsatCallback(const sensor_msgs::NavSatFix::ConstPtr& msg)
 {
-    if (has_mavros_state_ && !mavros_armed_)
+    latest_navsat_ = *msg;
+    has_navsat_ = true;
+    publishGlobalPositionOutputs(ros::Time::now());
+}
+
+void Px4MavrosSim::update()
+{
+    if (!armed_)
     {
         publishZeroMotorRPM();
         return;
@@ -740,7 +808,155 @@ void Px4ControlSim::update()
     publishMotorRPM(desired_state_.motor_rpm);
 }
 
-void Px4ControlSim::positionControl()
+void Px4MavrosSim::mavrosPublishTimerCallback(const ros::TimerEvent&)
+{
+    const ros::Time now = ros::Time::now();
+
+    mavros_msgs::State state_msg;
+    state_msg.header.stamp = now;
+    state_msg.connected = connected_;
+    state_msg.armed = armed_;
+    state_msg.guided = true;
+    state_msg.manual_input = manual_input_;
+    state_msg.mode = current_mode_;
+    state_msg.system_status = system_status_;
+    state_pub_.publish(state_msg);
+
+    mavros_msgs::ExtendedState extended_state_msg;
+    extended_state_msg.header.stamp = now;
+    extended_state_msg.vtol_state = mavros_msgs::ExtendedState::VTOL_STATE_UNDEFINED;
+    extended_state_msg.landed_state = estimateLandedState();
+    extended_state_pub_.publish(extended_state_msg);
+
+    mavros_msgs::SysStatus sys_status_msg;
+    sys_status_msg.header.stamp = now;
+    sys_status_msg.voltage_battery = static_cast<uint16_t>(battery_voltage_v_ * 1000.0f);
+    sys_status_msg.current_battery = static_cast<int16_t>(battery_current_a_ * 100.0f);
+    sys_status_msg.battery_remaining = static_cast<int8_t>(battery_remaining_ * 100.0f);
+    sys_status_msg.load = system_load_raw_;
+    sys_status_pub_.publish(sys_status_msg);
+
+    mavros_msgs::EstimatorStatus estimator_msg;
+    estimator_msg.header.stamp = now;
+    estimator_msg.attitude_status_flag = true;
+    estimator_msg.velocity_horiz_status_flag = true;
+    estimator_msg.velocity_vert_status_flag = true;
+    estimator_msg.pos_horiz_rel_status_flag = true;
+    estimator_msg.pos_horiz_abs_status_flag = true;
+    estimator_msg.pos_vert_abs_status_flag = true;
+    estimator_msg.pos_vert_agl_status_flag = true;
+    estimator_msg.pred_pos_horiz_abs_status_flag = true;
+    estimator_msg.pred_pos_horiz_rel_status_flag = true;
+    estimator_status_pub_.publish(estimator_msg);
+
+    if (has_odom_)
+    {
+        publishLocalPositionOutputs(now);
+    }
+    if (has_navsat_)
+    {
+        publishGlobalPositionOutputs(now);
+    }
+    if (has_imu_)
+    {
+        latest_imu_.header.stamp = now;
+        imu_pub_.publish(latest_imu_);
+    }
+    if (has_local_target_)
+    {
+        latest_local_target_.header.stamp = now;
+        target_local_pub_.publish(latest_local_target_);
+    }
+    if (has_attitude_target_)
+    {
+        latest_attitude_target_.header.stamp = now;
+        target_attitude_pub_.publish(latest_attitude_target_);
+    }
+}
+
+bool Px4MavrosSim::setModeService(mavros_msgs::SetMode::Request& req,
+                                  mavros_msgs::SetMode::Response& res)
+{
+    if (!req.custom_mode.empty())
+    {
+        const bool numeric_mode = std::all_of(req.custom_mode.begin(),
+                                              req.custom_mode.end(),
+                                              [](unsigned char ch) { return std::isdigit(ch); });
+        current_mode_ = numeric_mode ? ("CMODE(" + req.custom_mode + ")") : req.custom_mode;
+    }
+    connected_ = true;
+    res.mode_sent = true;
+    ROS_INFO("[px4_mavros_sim] set_mode request=%s -> mode=%s",
+             req.custom_mode.c_str(),
+             current_mode_.c_str());
+    return true;
+}
+
+bool Px4MavrosSim::armingService(mavros_msgs::CommandBool::Request& req,
+                                 mavros_msgs::CommandBool::Response& res)
+{
+    armed_ = req.value;
+    connected_ = true;
+    res.success = true;
+    res.result = kMavResultAccepted;
+    if (!armed_)
+    {
+        has_setpoint_ = false;
+        setpoint_timed_out_ = false;
+        px4_setpoint_.collective_thrust = 0.0;
+        px4_setpoint_.bodyrate_roll_pitch.setZero();
+        px4_setpoint_.bodyrate_yaw_rate = 0.0;
+        px4_setpoint_.att_roll_pitch.setZero();
+        px4_setpoint_.att_yaw = 0.0;
+        clearControllerOutput();
+        publishZeroMotorRPM();
+    }
+    ROS_INFO("[px4_mavros_sim] arming -> %s", armed_ ? "true" : "false");
+    return true;
+}
+
+bool Px4MavrosSim::commandLongService(mavros_msgs::CommandLong::Request& req,
+                                      mavros_msgs::CommandLong::Response& res)
+{
+    if (req.command == 400 && req.param1 == 0.0)
+    {
+        armed_ = false;
+        has_setpoint_ = false;
+        clearControllerOutput();
+        publishZeroMotorRPM();
+    }
+    res.success = true;
+    res.result = kMavResultAccepted;
+    ROS_WARN("[px4_mavros_sim] command_long accepted: command=%u", req.command);
+    return true;
+}
+
+bool Px4MavrosSim::paramGetService(mavros_msgs::ParamGet::Request& req,
+                                   mavros_msgs::ParamGet::Response& res)
+{
+    const auto it = params_.find(req.param_id);
+    if (it == params_.end())
+    {
+        res.success = false;
+        res.value = makeIntegerParamValue(0);
+        ROS_WARN("[px4_mavros_sim] param_get miss: %s", req.param_id.c_str());
+        return true;
+    }
+    res.success = true;
+    res.value = it->second;
+    return true;
+}
+
+bool Px4MavrosSim::paramSetService(mavros_msgs::ParamSet::Request& req,
+                                   mavros_msgs::ParamSet::Response& res)
+{
+    params_[req.param_id] = req.value;
+    res.success = true;
+    res.value = req.value;
+    return true;
+}
+
+void Px4MavrosSim::positionControl()
 {
     desired_state_.vel_xy.setZero();
     desired_state_.vel_z = 0.0;
@@ -768,7 +984,7 @@ void Px4ControlSim::positionControl()
     desired_state_.vel_z = clampValue(desired_state_.vel_z, -max_vel_z_, max_vel_z_);
 }
 
-void Px4ControlSim::velocityControl()
+void Px4MavrosSim::velocityControl()
 {
     Eigen::Vector3d desired_vel;
     desired_vel << desired_state_.vel_xy(0), desired_state_.vel_xy(1), desired_state_.vel_z;
@@ -804,7 +1020,7 @@ void Px4ControlSim::velocityControl()
     desired_state_.acc(2) = clampValue(desired_state_.acc(2), -max_acc_z_, max_acc_z_);
 }
 
-void Px4ControlSim::accelerationToAttitude()
+void Px4MavrosSim::accelerationToAttitude()
 {
     // 这里采用简化做法：
     // 先根据期望加速度求总推力方向，再把它近似映射成 roll/pitch。
@@ -838,7 +1054,7 @@ void Px4ControlSim::accelerationToAttitude()
     }
 }
 
-void Px4ControlSim::attitudeControl()
+void Px4MavrosSim::attitudeControl()
 {
     Eigen::Vector3d desired_att;
     desired_att << desired_state_.att_roll_pitch(0), desired_state_.att_roll_pitch(1), desired_state_.att_yaw;
@@ -862,7 +1078,7 @@ void Px4ControlSim::attitudeControl()
     desired_state_.bodyrate_yaw_rate = clampValue(desired_yaw_rate, -max_yaw_rate_, max_yaw_rate_);
 }
 
-void Px4ControlSim::bodyrateControl()
+void Px4MavrosSim::bodyrateControl()
 {
     Eigen::Vector3d desired_bodyrate(desired_state_.bodyrate_roll_pitch(0), 
                                      desired_state_.bodyrate_roll_pitch(1), 
@@ -877,7 +1093,7 @@ void Px4ControlSim::bodyrateControl()
                            bodyrate_pid_ki_.cwiseProduct(bodyrate_pid_integral_);
 }
 
-Eigen::Vector3d Px4ControlSim::computeRealThrust(double collective_thrust)
+Eigen::Vector3d Px4MavrosSim::computeRealThrust(double collective_thrust)
 {
     /**
      * 计算公式：
@@ -904,7 +1120,7 @@ Eigen::Vector3d Px4ControlSim::computeRealThrust(double collective_thrust)
     return thrust_vector;
 }
 
-Eigen::Vector4d Px4ControlSim::computeMotorThrust(double thrust, const Eigen::Vector3d& torque)
+Eigen::Vector4d Px4MavrosSim::computeMotorThrust(double thrust, const Eigen::Vector3d& torque)
 {
     // 这里默认混控矩阵与当前动力学模型采用同一套电机编号和符号定义。
     // 如果后续调整动力学中的电机顺序，这里必须同步修改。
@@ -946,7 +1162,7 @@ Eigen::Vector4d Px4ControlSim::computeMotorThrust(double thrust, const Eigen::Ve
     return motor_thrust;
 }
 
-Eigen::Vector4d Px4ControlSim::computeMotorRPMFromThrust(const Eigen::Vector4d& motor_thrust)
+Eigen::Vector4d Px4MavrosSim::computeMotorRPMFromThrust(const Eigen::Vector4d& motor_thrust)
 {
     // 推力模型采用 T = k_F * rpm^2，因此反算 RPM 时需要开平方。
     Eigen::Vector4d motor_rpm;
@@ -963,7 +1179,7 @@ Eigen::Vector4d Px4ControlSim::computeMotorRPMFromThrust(const Eigen::Vector4d& 
 
 
 
-void Px4ControlSim::publishMotorRPM(const Eigen::Vector4d& motor_rpm)
+void Px4MavrosSim::publishMotorRPM(const Eigen::Vector4d& motor_rpm)
 {
     // 发布电机RPM
     std_msgs::Float32MultiArray rpm_msg;
@@ -975,17 +1191,100 @@ void Px4ControlSim::publishMotorRPM(const Eigen::Vector4d& motor_rpm)
     motor_rpm_pub_.publish(rpm_msg);
 }
 
-void Px4ControlSim::publishZeroMotorRPM()
+void Px4MavrosSim::publishZeroMotorRPM()
 {
     publishMotorRPM(Eigen::Vector4d::Zero());
 }
 
-void Px4ControlSim::printStatus() const
+void Px4MavrosSim::publishLocalPositionOutputs(const ros::Time& stamp)
+{
+    nav_msgs::Odometry odom_msg = latest_odom_;
+    odom_msg.header.stamp = stamp;
+    local_odom_pub_.publish(odom_msg);
+
+    geometry_msgs::PoseStamped pose_msg;
+    pose_msg.header = odom_msg.header;
+    pose_msg.pose = odom_msg.pose.pose;
+    local_pose_pub_.publish(pose_msg);
+
+    geometry_msgs::TwistStamped velocity_msg;
+    velocity_msg.header = odom_msg.header;
+    velocity_msg.twist = odom_msg.twist.twist;
+    local_velocity_pub_.publish(velocity_msg);
+}
+
+void Px4MavrosSim::publishGlobalPositionOutputs(const ros::Time& stamp)
+{
+    sensor_msgs::NavSatFix global_msg = latest_navsat_;
+    global_msg.header.stamp = stamp;
+    global_position_pub_.publish(global_msg);
+
+    mavros_msgs::GPSRAW gps_msg;
+    gps_msg.header = global_msg.header;
+    gps_msg.fix_type = mavros_msgs::GPSRAW::GPS_FIX_TYPE_3D_FIX;
+    gps_msg.lat = static_cast<int32_t>(std::llround(global_msg.latitude * 1.0e7));
+    gps_msg.lon = static_cast<int32_t>(std::llround(global_msg.longitude * 1.0e7));
+    gps_msg.alt = static_cast<int32_t>(std::llround(global_msg.altitude * 1000.0));
+    gps_msg.eph = 100;
+    gps_msg.epv = 150;
+    gps_msg.vel = 0;
+    if (has_odom_)
+    {
+        const double vx = latest_odom_.twist.twist.linear.x;
+        const double vy = latest_odom_.twist.twist.linear.y;
+        const double vz = latest_odom_.twist.twist.linear.z;
+        gps_msg.vel = static_cast<uint16_t>(std::llround(std::hypot(std::hypot(vx, vy), vz) * 100.0));
+    }
+    gps_msg.satellites_visible = 12;
+    gps_msg.alt_ellipsoid = gps_msg.alt;
+    gps_msg.h_acc = 1000;
+    gps_msg.v_acc = 1500;
+    gps_msg.vel_acc = 100;
+    gps_raw_pub_.publish(gps_msg);
+}
+
+uint8_t Px4MavrosSim::estimateLandedState() const
+{
+    if (!has_odom_)
+    {
+        return mavros_msgs::ExtendedState::LANDED_STATE_UNDEFINED;
+    }
+    const double z = latest_odom_.pose.pose.position.z;
+    const double vz = latest_odom_.twist.twist.linear.z;
+    if (!armed_ && z <= std::max(on_ground_height_threshold_m_, 0.10))
+    {
+        return mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND;
+    }
+    if (z <= on_ground_height_threshold_m_ &&
+        std::fabs(vz) <= on_ground_velocity_threshold_mps_)
+    {
+        return mavros_msgs::ExtendedState::LANDED_STATE_ON_GROUND;
+    }
+    return mavros_msgs::ExtendedState::LANDED_STATE_IN_AIR;
+}
+
+mavros_msgs::ParamValue Px4MavrosSim::makeIntegerParamValue(const int64_t value)
+{
+    mavros_msgs::ParamValue param;
+    param.integer = value;
+    param.real = static_cast<double>(value);
+    return param;
+}
+
+mavros_msgs::ParamValue Px4MavrosSim::makeRealParamValue(const double value)
+{
+    mavros_msgs::ParamValue param;
+    param.integer = static_cast<int64_t>(value);
+    param.real = value;
+    return param;
+}
+
+void Px4MavrosSim::printStatus() const
 {
     std::cout << buildStatusPanel() << std::endl;
 }
 
-std::string Px4ControlSim::buildStatusPanel() const
+std::string Px4MavrosSim::buildStatusPanel() const
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
@@ -994,22 +1293,22 @@ std::string Px4ControlSim::buildStatusPanel() const
     const std::string setpoint_status = has_setpoint_ ? "正常" : (setpoint_timed_out_ ? "超时" : "等待");
     const char* odom_color = has_odom_ ? kAnsiGood : kAnsiWarn;
 
-    ss << kAnsiTitle << "=================== px4_control_sim_node [" << uav_name_
+    ss << kAnsiTitle << "=================== px4_mavros_sim [" << uav_name_
        << "] ===================" << kAnsiReset << "\n";
 
     ss << kAnsiGood << " 基本状态 " << kAnsiReset
-       << "状态话题（订阅） -> " << uav_name_ << "/mavros/state"
-       << "\n"
-       << "          Name = " << uav_name_
+       << "connected = " << (connected_ ? kAnsiGood : kAnsiWarn) << (connected_ ? "true" : "false") << kAnsiReset
+       << "  armed = " << (armed_ ? "true" : "false")
+       << "  mode = " << current_mode_
        << "  控制周期 = " << dt_ << " s"
-       << "  MAVROS状态 = " << (has_mavros_state_ ? kAnsiGood : kAnsiWarn) << stateText(has_mavros_state_) << kAnsiReset
-       << "  解锁 = " << (mavros_armed_ ? "是" : "否")
-       << "  PX4模式 = " << mavros_mode_
+       << "  MAVROS发布 = " << mavros_publish_rate_hz_ << " Hz"
        << "\n";
 
     ss << kAnsiGood << " 本机状态 " << kAnsiReset
-       << "里程计话题（订阅） -> " << uav_name_ << "/sunray_sim/odom"
-       << "  ODOM状态 = " << odom_color << stateText(has_odom_) << kAnsiReset
+       << "odom -> " << uav_name_ << "/sunray_sim/odom"
+       << "  " << odom_color << readyText(has_odom_) << kAnsiReset
+       << "  imu = " << (has_imu_ ? kAnsiGood : kAnsiWarn) << readyText(has_imu_) << kAnsiReset
+       << "  navsat = " << (has_navsat_ ? kAnsiGood : kAnsiWarn) << readyText(has_navsat_) << kAnsiReset
        << "\n";
 
     switch (control_mode_)
@@ -1141,12 +1440,18 @@ std::string Px4ControlSim::buildStatusPanel() const
        << "  电机输出 = (" << desired_state_.motor_rpm(0) << ", "
        << desired_state_.motor_rpm(1) << ", "
        << desired_state_.motor_rpm(2) << ", "
-       << desired_state_.motor_rpm(3) << ") rpm";
+       << desired_state_.motor_rpm(3) << ") rpm"
+       << "\n";
+
+    ss << kAnsiGood << " MAVROS输出 " << kAnsiReset
+       << "state, extended_state, sys_status, estimator_status"
+       << "\n"
+       << "           local_position/{odom,pose,velocity_local}, global_position/global, gpsstatus/gps1/raw, imu/data";
 
     return ss.str();
 }
 
-const char* Px4ControlSim::controlModeName() const
+const char* Px4MavrosSim::controlModeName() const
 {
     switch (control_mode_) {
     case POSITION_CONTROL:

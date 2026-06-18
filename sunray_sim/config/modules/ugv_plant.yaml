@@ -1,15 +1,20 @@
-# UgvSimulator 无人车轻量动力学参数。
+# UgvPlant 无人车轻量动力学参数。
 #
 # 模块功能：
 #   订阅 /<ugv>/sunray/ugv_control/cmd_vel，积分平面运动，
 #   发布 /<ugv>/sunray_sim/odom 和 /<ugv>/sunray_sim/imu。
 #
 # 读取模块：
-#   UgvSimulator
+#   UgvPlant
 
 ugv:
   # 无人车动力学更新和 odom/imu 发布频率，单位 Hz。
   publish_rate: 100.0
+
+  # UGV odom 中发布的 z 高度，单位 m。
+  # UGV 动力学仍然只积分 x/y/yaw 平面运动；该参数只改变 odom.pose.pose.position.z。
+  # 默认设为 1.0，方便直接接入 NAVRL 这类带“起飞高度检查”的空中机器人规划代码。
+  odom_height: 1.0
 
   # 底盘类型。
   # differential：差速轮，忽略 cmd_vel.linear.y。

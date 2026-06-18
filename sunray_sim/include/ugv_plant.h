@@ -1,5 +1,5 @@
-#ifndef SUNRAY_SIM_UGV_SIMULATOR_H
-#define SUNRAY_SIM_UGV_SIMULATOR_H
+#ifndef SUNRAY_SIM_UGV_PLANT_H
+#define SUNRAY_SIM_UGV_PLANT_H
 
 #include "imu_model.h"
 #include "ugv_dynamics.h"
@@ -14,14 +14,14 @@
 
 namespace sunray_sim
 {
-class UgvSimulator
+class UgvPlant
 {
 public:
-    UgvSimulator(ros::NodeHandle& nh,
-                 const std::string& agent_name,
-                 int agent_id,
-                 const Eigen::Vector3d& init_pos,
-                 double init_yaw);
+    UgvPlant(ros::NodeHandle& nh,
+             const std::string& agent_name,
+             int agent_id,
+             const Eigen::Vector3d& init_pos,
+             double init_yaw);
 
     void printStatus() const;
 
@@ -61,6 +61,7 @@ private:
     ros::Timer update_timer_;
     ros::Time last_update_time_;
     double publish_rate_{100.0};
+    double odom_height_{1.0};
 };
 }  // namespace sunray_sim
 

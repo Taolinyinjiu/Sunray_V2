@@ -1,22 +1,39 @@
-#ifndef SUNRAY_SIM_PX4_CONTROL_H
-#define SUNRAY_SIM_PX4_CONTROL_H
+#ifndef SUNRAY_SIM_PX4_MAVROS_SIM_H
+#define SUNRAY_SIM_PX4_MAVROS_SIM_H
 
-#include <ros/ros.h>
-#include <mavros_msgs/AttitudeTarget.h>
-#include <mavros_msgs/PositionTarget.h>
-#include <mavros_msgs/State.h>
-#include <nav_msgs/Odometry.h>
 #include <Eigen/Dense>
+
+#include <mavros_msgs/AttitudeTarget.h>
+#include <mavros_msgs/CommandBool.h>
+#include <mavros_msgs/CommandLong.h>
+#include <mavros_msgs/EstimatorStatus.h>
+#include <mavros_msgs/ExtendedState.h>
+#include <mavros_msgs/GPSRAW.h>
+#include <mavros_msgs/ParamGet.h>
+#include <mavros_msgs/ParamSet.h>
+#include <mavros_msgs/ParamValue.h>
+#include <mavros_msgs/PositionTarget.h>
+#include <mavros_msgs/SetMode.h>
+#include <mavros_msgs/State.h>
+#include <mavros_msgs/SysStatus.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TwistStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <ros/ros.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/NavSatFix.h>
+
 #include <cstdint>
 #include <set>
 #include <string>
+#include <unordered_map>
 
 namespace sunray_sim
 {
-class Px4ControlSim
+class Px4MavrosSim
 {
 public:// 构造函数
-    Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name);
+    Px4MavrosSim(ros::NodeHandle& nh, const std::string& uav_name);
     void update();
     void printStatus() const;
     
@@ -103,8 +120,6 @@ private:
     bool use_yaw_;
     bool use_yaw_rate_;
     bool has_odom_{false};
-    bool mavros_armed_{true};
-    bool has_mavros_state_{false};
     bool setpoint_timed_out_{false};
     
     // ROS节点和话题
@@ -115,16 +130,57 @@ private:
     ros::Subscriber attitude_target_sub_;
     ros::Subscriber position_target_sub_;
     ros::Subscriber odom_sub_;
-    ros::Subscriber mavros_state_sub_;
+    ros::Subscriber imu_sub_;
+    ros::Subscriber navsat_sub_;
     
     // 发布者
     ros::Publisher motor_rpm_pub_;
     ros::Timer update_timer_;
-    std::string mavros_mode_{"OFFBOARD"};
+    ros::Publisher state_pub_;
+    ros::Publisher extended_state_pub_;
+    ros::Publisher sys_status_pub_;
+    ros::Publisher estimator_status_pub_;
+    ros::Publisher local_odom_pub_;
+    ros::Publisher local_pose_pub_;
+    ros::Publisher local_velocity_pub_;
+    ros::Publisher global_position_pub_;
+    ros::Publisher gps_raw_pub_;
+    ros::Publisher imu_pub_;
+    ros::Publisher target_local_pub_;
+    ros::Publisher target_attitude_pub_;
+    ros::ServiceServer set_mode_srv_;
+    ros::ServiceServer arming_srv_;
+    ros::ServiceServer command_long_srv_;
+    ros::ServiceServer param_get_srv_;
+    ros::ServiceServer param_set_srv_;
+    ros::Timer mavros_publish_timer_;
+
     ros::Time last_supported_setpoint_time_;
     std::string last_rejected_setpoint_reason_;
     std::set<uint32_t> warned_position_target_keys_;
     std::set<uint8_t> warned_attitude_target_masks_;
+    nav_msgs::Odometry latest_odom_;
+    sensor_msgs::Imu latest_imu_;
+    sensor_msgs::NavSatFix latest_navsat_;
+    mavros_msgs::PositionTarget latest_local_target_;
+    mavros_msgs::AttitudeTarget latest_attitude_target_;
+    bool has_imu_{false};
+    bool has_navsat_{false};
+    bool has_local_target_{false};
+    bool has_attitude_target_{false};
+    bool connected_{true};
+    bool armed_{true};
+    bool manual_input_{true};
+    std::string current_mode_{"OFFBOARD"};
+    uint8_t system_status_{4};
+    std::unordered_map<std::string, mavros_msgs::ParamValue> params_;
+    double mavros_publish_rate_hz_{50.0};
+    double on_ground_height_threshold_m_{0.05};
+    double on_ground_velocity_threshold_mps_{0.10};
+    float battery_voltage_v_{15.2f};
+    float battery_current_a_{0.0f};
+    float battery_remaining_{0.9f};
+    uint16_t system_load_raw_{150};
     
     // 当前状态（由里程计话题获取）
     struct State {
@@ -210,14 +266,31 @@ private:
     void attitudeTargetCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg);
     void positionTargetCallback(const mavros_msgs::PositionTarget::ConstPtr& msg);
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
-    void mavrosStateCallback(const mavros_msgs::State::ConstPtr& msg);
+    void imuCallback(const sensor_msgs::Imu::ConstPtr& msg);
+    void navsatCallback(const sensor_msgs::NavSatFix::ConstPtr& msg);
     void updateTimerCallback(const ros::TimerEvent& event);
+    void mavrosPublishTimerCallback(const ros::TimerEvent& event);
+    bool setModeService(mavros_msgs::SetMode::Request& req,
+                        mavros_msgs::SetMode::Response& res);
+    bool armingService(mavros_msgs::CommandBool::Request& req,
+                       mavros_msgs::CommandBool::Response& res);
+    bool commandLongService(mavros_msgs::CommandLong::Request& req,
+                            mavros_msgs::CommandLong::Response& res);
+    bool paramGetService(mavros_msgs::ParamGet::Request& req,
+                         mavros_msgs::ParamGet::Response& res);
+    bool paramSetService(mavros_msgs::ParamSet::Request& req,
+                         mavros_msgs::ParamSet::Response& res);
     bool isSupportedPositionTarget(const mavros_msgs::PositionTarget& msg, std::string& reason) const;
     bool isSupportedAttitudeTarget(const mavros_msgs::AttitudeTarget& msg, std::string& reason) const;
     void warnUnsupportedPositionTargetOnce(const mavros_msgs::PositionTarget& msg, const std::string& reason);
     void warnUnsupportedAttitudeTargetOnce(const mavros_msgs::AttitudeTarget& msg, const std::string& reason);
     void markSupportedSetpoint();
     void clearControllerOutput();
+    void publishLocalPositionOutputs(const ros::Time& stamp);
+    void publishGlobalPositionOutputs(const ros::Time& stamp);
+    uint8_t estimateLandedState() const;
+    static mavros_msgs::ParamValue makeIntegerParamValue(int64_t value);
+    static mavros_msgs::ParamValue makeRealParamValue(double value);
     std::string buildStatusPanel() const;
     const char* controlModeName() const;
     
@@ -329,4 +402,4 @@ private:
 };
 }  // namespace sunray_sim
 
-#endif  // SUNRAY_SIM_PX4_CONTROL_H
+#endif  // SUNRAY_SIM_PX4_MAVROS_SIM_H

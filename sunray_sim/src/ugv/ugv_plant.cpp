@@ -1,4 +1,4 @@
-#include "ugv_simulator.h"
+#include "ugv_plant.h"
 
 #include <boost/array.hpp>
 
@@ -37,7 +37,7 @@ void fillDiagonalCovariance(boost::array<double, 36>& covariance,
 }
 }  // namespace
 
-UgvSimulator::UgvSimulator(ros::NodeHandle& nh,
+UgvPlant::UgvPlant(ros::NodeHandle& nh,
                            const std::string& agent_name,
                            const int agent_id,
                            const Eigen::Vector3d& init_pos,
@@ -50,6 +50,7 @@ UgvSimulator::UgvSimulator(ros::NodeHandle& nh,
 {
     nh_.param<std::string>("global_frame_id", global_frame_id_, global_frame_id_);
     nh_.param<double>("ugv/publish_rate", publish_rate_, publish_rate_);
+    nh_.param<double>("ugv/odom_height", odom_height_, odom_height_);
     publish_rate_ = std::max(1.0, publish_rate_);
 
     base_frame_id_ = agent_frame_prefix_ + "/base_link";
@@ -64,23 +65,23 @@ UgvSimulator::UgvSimulator(ros::NodeHandle& nh,
     dynamics_.reset(init_pos.x(), init_pos.y(), init_yaw);
     imu_model_.configure(loadImuConfig());
 
-    cmd_sub_ = nh_.subscribe<geometry_msgs::Twist>(cmd_topic_, 20, &UgvSimulator::cmdCallback, this);
+    cmd_sub_ = nh_.subscribe<geometry_msgs::Twist>(cmd_topic_, 20, &UgvPlant::cmdCallback, this);
     odom_pub_ = nh_.advertise<nav_msgs::Odometry>(odom_topic_, 20);
     imu_pub_ = nh_.advertise<sensor_msgs::Imu>(imu_topic_, 20);
 
     last_update_time_ = ros::Time::now();
     update_timer_ = nh_.createTimer(ros::Duration(1.0 / publish_rate_),
-                                    &UgvSimulator::timerCallback,
+                                    &UgvPlant::timerCallback,
                                     this);
 
-    ROS_INFO("[ugv_simulator] started for %s init_pos=(%.2f, %.2f) init_yaw=%.2f rad",
+    ROS_INFO("[ugv_plant] started for %s init_pos=(%.2f, %.2f) init_yaw=%.2f rad",
              agent_prefix_.c_str(),
              init_pos.x(),
              init_pos.y(),
              init_yaw);
 }
 
-UgvDynamicParams UgvSimulator::loadDynamicParams() const
+UgvDynamicParams UgvPlant::loadDynamicParams() const
 {
     UgvDynamicParams params;
 
@@ -101,7 +102,7 @@ UgvDynamicParams UgvSimulator::loadDynamicParams() const
     return params;
 }
 
-sunray_imu_sim::ImuModelConfig UgvSimulator::loadImuConfig() const
+sunray_imu_sim::ImuModelConfig UgvPlant::loadImuConfig() const
 {
     sunray_imu_sim::ImuRosDefaults defaults;
     defaults.preset = "adis16470";
@@ -111,14 +112,14 @@ sunray_imu_sim::ImuModelConfig UgvSimulator::loadImuConfig() const
     return sunray_imu_sim::loadImuModelConfig(nh_, 9.81, defaults);
 }
 
-void UgvSimulator::cmdCallback(const geometry_msgs::Twist::ConstPtr& msg)
+void UgvPlant::cmdCallback(const geometry_msgs::Twist::ConstPtr& msg)
 {
     last_cmd_ = *msg;
     last_cmd_time_ = ros::Time::now();
     has_received_cmd_ = true;
 }
 
-void UgvSimulator::timerCallback(const ros::TimerEvent& event)
+void UgvPlant::timerCallback(const ros::TimerEvent& event)
 {
     const ros::Time now = event.current_real;
     double dt = (now - last_update_time_).toSec();
@@ -142,7 +143,7 @@ void UgvSimulator::timerCallback(const ros::TimerEvent& event)
     publishImu(now, dt);
 }
 
-geometry_msgs::Quaternion UgvSimulator::yawToQuaternion(const double yaw)
+geometry_msgs::Quaternion UgvPlant::yawToQuaternion(const double yaw)
 {
     geometry_msgs::Quaternion q;
     q.x = 0.0;
@@ -152,7 +153,7 @@ geometry_msgs::Quaternion UgvSimulator::yawToQuaternion(const double yaw)
     return q;
 }
 
-void UgvSimulator::publishOdometry(const ros::Time& stamp)
+void UgvPlant::publishOdometry(const ros::Time& stamp)
 {
     const UgvState& state = dynamics_.state();
 
@@ -163,7 +164,7 @@ void UgvSimulator::publishOdometry(const ros::Time& stamp)
 
     odom.pose.pose.position.x = state.position.x();
     odom.pose.pose.position.y = state.position.y();
-    odom.pose.pose.position.z = 0.0;
+    odom.pose.pose.position.z = odom_height_;
     odom.pose.pose.orientation = yawToQuaternion(state.yaw);
 
     odom.twist.twist.linear.x = state.velocity_body.x();
@@ -189,7 +190,7 @@ void UgvSimulator::publishOdometry(const ros::Time& stamp)
     odom_pub_.publish(odom);
 }
 
-void UgvSimulator::publishImu(const ros::Time& stamp, const double dt)
+void UgvPlant::publishImu(const ros::Time& stamp, const double dt)
 {
     const UgvState& state = dynamics_.state();
     sunray_imu_sim::ImuTruth truth;
@@ -205,7 +206,7 @@ void UgvSimulator::publishImu(const ros::Time& stamp, const double dt)
     imu_pub_.publish(imu_model_.generateMessage(truth));
 }
 
-void UgvSimulator::printStatus() const
+void UgvPlant::printStatus() const
 {
     const UgvState& state = dynamics_.state();
     const bool cmd_alive = has_received_cmd_ &&
@@ -220,12 +221,13 @@ void UgvSimulator::printStatus() const
 
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
-    ss << kAnsiTitle << "=================== ugv_simulator [" << agent_prefix_
+    ss << kAnsiTitle << "=================== ugv_plant [" << agent_prefix_
        << "] ===================" << kAnsiReset << "\n";
     ss << kAnsiLabel << " 基本状态 " << kAnsiReset
        << "模型 = " << type_color << type_name << kAnsiReset
        << "  指令状态 = " << cmd_color << cmd_name << kAnsiReset
        << "  更新频率 = " << publish_rate_ << " Hz"
+       << "  odom高度 = " << odom_height_ << " m"
        << "  frame = " << global_frame_id_ << "\n";
     ss << kAnsiLabel << " 当前状态 " << kAnsiReset
        << "x = " << std::setw(6) << state.position.x() << " m"

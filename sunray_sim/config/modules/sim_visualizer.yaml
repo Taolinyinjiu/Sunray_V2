@@ -1,7 +1,7 @@
 # SimVisualizer RViz 可视化模块参数。
 #
 # 模块功能：
-#   订阅本包内部 odom、局部点云状态，以及 UAV 专用的 cmd_RPM/fake MAVROS state，
+#   订阅本包内部 odom、局部点云状态、碰撞状态，以及 UAV 专用的 cmd_RPM/fake MAVROS state，
 #   合成为一个 visualization_msgs/MarkerArray 话题，方便 RViz 一次性显示：
 #     1. UAV：X 型四旋翼机架、前方绿色电机、后方红色电机；
 #     2. UGV：矩形车体、驾驶舱、四个车轮和绿色车头方向标识；
@@ -14,6 +14,8 @@
 #
 # 注意：
 #   本模块只负责显示，不参与动力学、控制、IMU 或点云仿真计算。
+#   UGV 模式不会订阅 /<ugv>/mavros/state 或 /<ugv>/sunray_sim/cmd_RPM，
+#   这两个话题只用于 UAV 可视化状态。
 
 visualizer:
   # 是否启用 RViz 可视化模块。
@@ -30,8 +32,14 @@ visualizer:
   marker_topic: ""
 
   # 车辆 marker 整体缩放系数。
-  # UAV/UGV 都使用该缩放系数；只影响 RViz 显示大小，不影响动力学尺寸、质量或电机参数。
-  marker_scale: 1.5
+  # UAV 默认按 200 mm 轴距绘制：
+  #   - marker_scale = 1.0：电机对角距离约 0.20 m；
+  #   - marker_scale = 2.0：电机对角距离约 0.40 m。
+  # UGV 默认按 250 mm 车长绘制：
+  #   - marker_scale = 1.0：车体长度约 0.25 m；
+  #   - marker_scale = 2.0：车体长度约 0.50 m。
+  # 该参数只影响 RViz 显示大小，不影响动力学尺寸、质量或电机参数。
+  marker_scale: 1.0
 
   # 轨迹最大保留点数。
   # 点数越多，RViz 中轨迹越长，但 MarkerArray 消息也会更大。

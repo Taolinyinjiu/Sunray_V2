@@ -1,0 +1,44 @@
+# sunray_sim 单无人车场景配置。
+#
+# 用途：
+#   默认启动 1 辆 UGV，适合单车控制和单车规划验证。
+#
+# 读取模块：
+#   sunray_sim_node、SingleUgvSimulator。
+
+uav:
+  # 本场景不启动 UAV。
+  enable: false
+  agent_name: uav
+  agent_ids: [1]
+
+ugv:
+  # 启动 UGV 仿真。
+  enable: true
+
+  # 无人车名称前缀，最终命名空间为 /ugv1。
+  agent_name: ugv
+
+  # 无人车编号列表。单车时只写 [1]。
+  agent_ids: [1]
+
+# 全局坐标系 frame_id。
+global_frame_id: map
+
+# UGV 默认也启用感知链路：
+#   发布公共全局地图；
+#   为 UGV 生成局部 MID360 点云。
+enable_sensing: true
+
+# 单车默认打开状态面板，方便调试。
+enable_status_print: true
+status_print_hz: 1.0
+
+vehicles:
+  ugv1:
+    # 初始平面位置，单位 m，global_frame_id 坐标系。
+    init_x: 0.0
+    init_y: 0.0
+
+    # 初始偏航角，单位 rad。
+    init_yaw: 0.0

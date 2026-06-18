@@ -25,18 +25,10 @@ find_package(PCL REQUIRED)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES
-    sunray_quadrotor_dynamics
-    sunray_imu_model
-    sunray_px4_control_sim
-    sunray_fake_mavros_bridge
-    sunray_global_map_server
-    sunray_local_mid360_simulator
-    sunray_quadrotor_simulator
-    sunray_ugv_dynamics
-    sunray_ugv_simulator
-    sunray_sim_visualizer
-    sunray_single_uav_simulator
-    sunray_single_ugv_simulator
+    sunray_sim_sensing
+    sunray_sim_uav
+    sunray_sim_ugv
+    sunray_sim_core
   CATKIN_DEPENDS
     geometry_msgs
     mavros_msgs
@@ -58,76 +50,51 @@ include_directories(
   ${PCL_INCLUDE_DIRS}
 )
 
-add_library(sunray_quadrotor_dynamics src/quadrotor_dynamics.cpp)
-target_link_libraries(sunray_quadrotor_dynamics ${catkin_LIBRARIES})
-
-add_library(sunray_ugv_dynamics src/ugv_dynamics.cpp)
-target_link_libraries(sunray_ugv_dynamics ${catkin_LIBRARIES})
-
-add_library(sunray_imu_model src/imu_model.cpp)
-target_link_libraries(sunray_imu_model ${catkin_LIBRARIES})
-
-add_library(sunray_px4_control_sim src/px4_control_sim.cpp)
-target_link_libraries(sunray_px4_control_sim ${catkin_LIBRARIES})
-
-add_library(sunray_fake_mavros_bridge src/fake_mavros_bridge.cpp)
-target_link_libraries(sunray_fake_mavros_bridge ${catkin_LIBRARIES})
-
-add_library(sunray_global_map_server src/global_map_server.cpp)
+add_library(sunray_sim_sensing
+  src/map_sensing/global_map_server.cpp
+  src/map_sensing/local_mid360_simulator.cpp
+  src/imu/imu_model.cpp
+)
 target_link_libraries(
-  sunray_global_map_server
+  sunray_sim_sensing
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
 
-add_library(sunray_quadrotor_simulator src/quadrotor_simulator.cpp)
+add_library(sunray_sim_uav
+  src/uav/uav_plant.cpp
+  src/uav/quadrotor_dynamics.cpp
+  src/uav/px4_mavros_sim.cpp
+)
 target_link_libraries(
-  sunray_quadrotor_simulator
+  sunray_sim_uav
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  sunray_quadrotor_dynamics
-  sunray_imu_model
+  sunray_sim_sensing
 )
 
-add_library(sunray_ugv_simulator src/ugv_simulator.cpp)
+add_library(sunray_sim_ugv
+  src/ugv/ugv_plant.cpp
+  src/ugv/ugv_dynamics.cpp
+)
 target_link_libraries(
-  sunray_ugv_simulator
+  sunray_sim_ugv
   ${catkin_LIBRARIES}
-  sunray_ugv_dynamics
-  sunray_imu_model
+  sunray_sim_sensing
 )
 
-add_library(sunray_local_mid360_simulator src/local_mid360_simulator.cpp)
-target_link_libraries(
-  sunray_local_mid360_simulator
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
+add_library(sunray_sim_core
+  src/core/single_uav_simulator.cpp
+  src/core/single_ugv_simulator.cpp
+  src/core/sim_visualizer.cpp
 )
-
-add_library(sunray_single_uav_simulator src/single_uav_simulator.cpp)
 target_link_libraries(
-  sunray_single_uav_simulator
+  sunray_sim_core
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  sunray_local_mid360_simulator
-  sunray_quadrotor_simulator
-  sunray_px4_control_sim
-  sunray_fake_mavros_bridge
-)
-
-add_library(sunray_single_ugv_simulator src/single_ugv_simulator.cpp)
-target_link_libraries(
-  sunray_single_ugv_simulator
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  sunray_local_mid360_simulator
-  sunray_ugv_simulator
-)
-
-add_library(sunray_sim_visualizer src/sim_visualizer.cpp)
-target_link_libraries(
-  sunray_sim_visualizer
-  ${catkin_LIBRARIES}
+  sunray_sim_sensing
+  sunray_sim_uav
+  sunray_sim_ugv
 )
 
 add_executable(sunray_sim_node src/sunray_sim_node.cpp)
@@ -136,25 +103,17 @@ target_link_libraries(
   sunray_sim_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
-  sunray_global_map_server
-  sunray_single_uav_simulator
-  sunray_single_ugv_simulator
-  sunray_sim_visualizer
+  sunray_sim_sensing
+  sunray_sim_uav
+  sunray_sim_ugv
+  sunray_sim_core
 )
 
 install(TARGETS
-  sunray_quadrotor_dynamics
-  sunray_imu_model
-  sunray_px4_control_sim
-  sunray_fake_mavros_bridge
-  sunray_global_map_server
-  sunray_local_mid360_simulator
-  sunray_quadrotor_simulator
-  sunray_ugv_dynamics
-  sunray_ugv_simulator
-  sunray_sim_visualizer
-  sunray_single_uav_simulator
-  sunray_single_ugv_simulator
+  sunray_sim_sensing
+  sunray_sim_uav
+  sunray_sim_ugv
+  sunray_sim_core
   sunray_sim_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

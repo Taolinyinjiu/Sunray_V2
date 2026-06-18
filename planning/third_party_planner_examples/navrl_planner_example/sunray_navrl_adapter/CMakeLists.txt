@@ -38,6 +38,18 @@ target_link_libraries(NavRL2Sunray_node
   ${catkin_LIBRARIES}
 )
 
+add_executable(NavRL2SunrayUGV_node
+  src/NavRL2SunrayUGV.cpp
+)
+
+add_dependencies(NavRL2SunrayUGV_node
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(NavRL2SunrayUGV_node
+  ${catkin_LIBRARIES}
+)
+
 add_executable(NavRLTerminalControl_node
   src/NavRLTerminalControl.cpp
 )

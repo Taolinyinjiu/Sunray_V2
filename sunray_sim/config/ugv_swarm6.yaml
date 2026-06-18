@@ -1,0 +1,67 @@
+# sunray_sim 6 车无人车场景配置。
+#
+# 用途：
+#   在同一个 sunray_sim_node 进程内启动 /ugv1 到 /ugv6，
+#   适合 UGV 集群控制、集群规划和多车感知验证。
+#
+# 读取模块：
+#   sunray_sim_node、SingleUgvSimulator。
+
+uav:
+  # 本场景不启动 UAV。
+  enable: false
+  agent_name: uav
+  agent_ids: [1]
+
+ugv:
+  # 启动 UGV 仿真。
+  enable: true
+
+  # 无人车名称前缀，最终命名空间为 /ugv1 ... /ugv6。
+  agent_name: ugv
+
+  # 需要创建的 UGV 编号列表。
+  agent_ids: [1, 2, 3, 4, 5, 6]
+
+# 全局坐标系 frame_id。
+global_frame_id: map
+
+# 集群验证默认启用感知链路：
+#   发布一份公共全局地图；
+#   每辆 UGV 各自发布一份局部 MID360 点云。
+enable_sensing: true
+
+# 集群下终端输出较多，默认关闭周期状态面板。
+enable_status_print: false
+status_print_hz: 1.0
+
+vehicles:
+  ugv1:
+    init_x: 0.0
+    init_y: 0.0
+    init_yaw: 0.0
+
+  ugv2:
+    init_x: 2.0
+    init_y: 0.0
+    init_yaw: 0.0
+
+  ugv3:
+    init_x: 4.0
+    init_y: 0.0
+    init_yaw: 0.0
+
+  ugv4:
+    init_x: 0.0
+    init_y: 2.0
+    init_yaw: 0.0
+
+  ugv5:
+    init_x: 2.0
+    init_y: 2.0
+    init_yaw: 0.0
+
+  ugv6:
+    init_x: 4.0
+    init_y: 2.0
+    init_yaw: 0.0

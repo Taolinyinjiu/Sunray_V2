@@ -1,10 +1,9 @@
 #ifndef SUNRAY_SIM_SINGLE_UAV_SIMULATOR_H
 #define SUNRAY_SIM_SINGLE_UAV_SIMULATOR_H
 
-#include "fake_mavros_bridge.h"
 #include "local_mid360_simulator.h"
-#include "px4_control_sim.h"
-#include "quadrotor_simulator.h"
+#include "px4_mavros_sim.h"
+#include "uav_plant.h"
 
 #include <Eigen/Dense>
 #include <pcl/point_cloud.h>
@@ -35,9 +34,8 @@ private:
     double init_yaw_{0.0};
 
     std::unique_ptr<LocalMid360Simulator> local_mid360_;
-    std::unique_ptr<QuadrotorSimulator> quadrotor_;
-    std::unique_ptr<Px4ControlSim> px4_control_;
-    std::unique_ptr<FakeMavrosBridge> fake_mavros_;
+    std::unique_ptr<UavPlant> quadrotor_;
+    std::unique_ptr<Px4MavrosSim> px4_mavros_;
 };
 }  // namespace sunray_sim
 

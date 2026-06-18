@@ -38,6 +38,7 @@ class Navigation:
         self.target_dir = None
         self.stable_times = 0
         self.has_action = False
+        self.goal_hold_latched = False
         self.laser_points_msg = None
 
         self.height_control = False 
@@ -74,6 +75,7 @@ class Navigation:
             # 以下odom三选一均可
             self.odom_sub1 = rospy.Subscriber("/uav1/sunray_sim/odom", Odometry, self.odom_callback)
             self.odom_sub2 = rospy.Subscriber("/uav1/sunray/localization/local_odom", Odometry, self.odom_callback)
+            self.odom_sub3 = rospy.Subscriber("/ugv1/sunray_sim/odom", Odometry, self.odom_callback)
             self.odom_sub = rospy.Subscriber("/CERLAB/quadcopter/odom", Odometry, self.odom_callback)
             self.action_pub = rospy.Publisher("/CERLAB/quadcopter/cmd_vel", TwistStamped, queue_size=10)
             self.pose_pub = rospy.Publisher("/CERLAB/quadcopter/setpoint_pose", PoseStamped, queue_size=10)
@@ -168,7 +170,7 @@ class Navigation:
                 self.pose_pub.publish(pose)
                 rate.sleep()
             last_req = rospy.Time.now()
-        while (not rospy.is_shutdown() and not (np.abs(self.odom.pose.pose.position.z - takeoff_height) <= 0.2)):
+        while (not rospy.is_shutdown() and not (np.abs(self.odom.pose.pose.position.z - takeoff_height) <= 0.5)):
             if (self.px4_control):
                 if (self.mavros_state.mode != "OFFBOARD" and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
                     if(self.set_mode_client.call(self.offb_set_mode).mode_sent == True):
@@ -303,6 +305,7 @@ class Navigation:
 
         self.goal_received = True
         self.stable_times = 0
+        self.goal_hold_latched = False
         rospy.loginfo(
             "[nav-ros]: received goal: pos=(%.2f, %.2f, %.2f), target_dir=(%.2f, %.2f, %.2f)",
             self.goal.pose.position.x,
@@ -515,6 +518,11 @@ class Navigation:
             self.pose_pub.publish(self.takeoff_pose)
             return
 
+        # 到达目标后进入锁存保持状态：目标点只发布一次位置设定值，之后不再继续发布速度指令。
+        # Sunray 的 MOVE_POINT 是事件型命令，发送一次即可持续定点保持；继续发布速度指令反而容易在目标附近抖动。
+        if (self.goal_hold_latched):
+            return
+
         # safety_stop 由 safety_check() 线程中的终端 Enter 键触发。
         # stop_pose 是触发停止时记录的当前 odom 位姿，不是目标点，也不是固定参数。
         # 这里持续发布 stop_pose，用于在人工暂停期间保持当前位置。
@@ -576,7 +584,7 @@ class Navigation:
                 safe_cmd_vel_local = 0.5 * safe_cmd_vel_local/np.linalg.norm(safe_cmd_vel_local)
                 safe_cmd_vel_world = 0.5 * safe_cmd_vel_world/np.linalg.norm(safe_cmd_vel_world)
         # Sunray适配修改：原始NAVRL在1.0m内清零速度，仍然持续发布cmd_vel。
-        # 这里改为0.2m内发布明确的位置设定值，使适配器转换为Sunray MOVE_POINT定点保持。
+        # 这里改为0.4m内发布明确的位置设定值，使适配器转换为Sunray MOVE_POINT定点保持。
         # elif (distance <= 1.0):
         #     safe_cmd_vel_local *= 0.
         #     safe_cmd_vel_world *= 0.
@@ -593,7 +601,13 @@ class Navigation:
             goal_pose_msg.pose.orientation.y = quaternion[1]
             goal_pose_msg.pose.orientation.z = quaternion[2]
             self.pose_pub.publish(goal_pose_msg)
+            self.cmd_vel_world = np.zeros(3)
+            self.safe_cmd_vel_world = np.zeros(3)
             self.has_action = True
+            self.goal_hold_latched = True
+            rospy.loginfo(
+                "[nav-ros]: goal reached within 0.4 m, publish one setpoint_pose and stop velocity commands."
+            )
             return
 
         # final action

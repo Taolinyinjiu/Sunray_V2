@@ -4,7 +4,7 @@
 
 ## 1. sunray_navrl_adapter
 
-`planning/third_party_planner_examples/navrl_planner_example/sunray_navrl_adapter` 是 NAVRL 接入 Sunray 控制链路的适配包。它不运行 NAVRL 神经网络本体，而是负责启动 NAVRL 所需的占据地图服务，并把 `navigation_runner` 发布的控制话题转换为 `sunray_msgs/UAVControlCMD`。
+`planning/third_party_planner_examples/navrl_planner_example/sunray_navrl_adapter` 是 NAVRL 接入 Sunray 控制链路的适配包。它不运行 NAVRL 神经网络本体，而是负责启动 NAVRL 所需的占据地图服务，并把 `navigation_runner` 发布的控制话题转换为 Sunray 可消费的控制输入。
 
 ### 1.1 适配包功能
 
@@ -20,13 +20,27 @@ navigation_runner/navigation_node.py
 
 如果 NAVRL 发布 `/CERLAB/quadcopter/setpoint_pose`，适配器会转换为 Sunray `MOVE_POINT`。如果 NAVRL 发布 `/CERLAB/quadcopter/cmd_vel`，适配器会转换为 Sunray `MOVE_VELOCITY` 定高速度控制。
 
+单无人车仿真使用 `NavRL2SunrayUGV_node`：
+
+```text
+navigation_runner/navigation_node.py
+  -> /CERLAB/quadcopter/cmd_vel  世界系速度
+  -> NavRL2SunrayUGV_node
+  -> /ugv1/sunray/ugv_control/cmd_vel  车体系速度
+  -> sunray_sim UgvPlant
+```
+
+UGV 版本不启动 `localization_fusion`，也不启动 `sunray_ugv_control`；它直接把 NavRL 输出接到 `sunray_sim` 的麦克纳姆轮模型。由于 `sunray_sim` 的 UGV `cmd_vel` 是车体系速度，适配器会根据 `/ugv1/sunray_sim/odom` 当前 yaw 把 NavRL 世界系速度转换到车体系后再发布。
+
 ### 1.2 主要文件
 
 | 文件 | 作用 |
 | --- | --- |
 | `src/NavRL2Sunray.cpp` | 订阅 NAVRL 速度/位置话题，转换为 Sunray 控制指令，并打印输入输出状态。 |
+| `src/NavRL2SunrayUGV.cpp` | 订阅 NAVRL 世界系速度和 UGV odom，转换为 `sunray_sim` UGV 车体系 `cmd_vel`。 |
 | `src/NavRLTerminalControl.cpp` | 手动目标点和控制命令终端工具。交互式节点建议手动 `rosrun` 启动，不建议通过 `roslaunch` 脚本管理器启动。 |
 | `launch/NavRL2Sunray_sim.launch` | 仿真入口，读取 `sunray_sim` 的 odom 和传感器系局部点云。 |
+| `launch/NavRL2SunrayUGV_sim.launch` | 单 UGV 仿真入口，读取 `sunray_sim` UGV odom 和传感器系局部点云，直接发布 UGV `cmd_vel`。 |
 | `launch/NavRL2Sunray.launch` | 真机入口，读取 Sunray 定位 odom 和局部点云。 |
 | `launch/NavRLTerminalControl.launch` | 终端交互工具的 launch 入口。 |
 | `config/sim_config.yaml` | 仿真占据地图参数。 |
@@ -46,7 +60,18 @@ navigation_runner/navigation_node.py
 | 输入 | `/move_base_simple/goal` | `geometry_msgs/PoseStamped` | RViz 或终端发布的导航目标点。 |
 | 输出 | `/uav1/sunray/uav_control/control_cmd` | `sunray_msgs/UAVControlCMD` | 发给 Sunray 控制器。 |
 
-#### 1.3.2 真机默认话题
+#### 1.3.2 单 UGV 仿真默认话题
+
+| 方向 | 话题 | 消息 | 说明 |
+| --- | --- | --- | --- |
+| 输入 | `/ugv1/sunray_sim/odom` | `nav_msgs/Odometry` | sunray_sim UGV 里程计，用于获取当前位置和 yaw。 |
+| 输入 | `/ugv1/sunray_sim/cloud_sensor_frame` | `sensor_msgs/PointCloud2` | 仿真局部点云，供 `map_manager` 建占据地图。 |
+| 输入 | `/CERLAB/quadcopter/cmd_vel` | `geometry_msgs/TwistStamped` | NAVRL 输出的世界系速度。 |
+| 输入 | `/CERLAB/quadcopter/setpoint_pose` | `geometry_msgs/PoseStamped` | NAVRL 输出的目标朝向；UGV 适配器将其转换为原地 yaw 角速度。 |
+| 输入 | `/move_base_simple/goal` | `geometry_msgs/PoseStamped` | RViz 或终端发布的导航目标点。 |
+| 输出 | `/ugv1/sunray/ugv_control/cmd_vel` | `geometry_msgs/Twist` | 发给 `sunray_sim` UGV 麦克纳姆轮模型的车体系速度。 |
+
+#### 1.3.3 真机默认话题
 
 | 方向 | 话题 | 消息 | 说明 |
 | --- | --- | --- | --- |

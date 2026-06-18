@@ -8,14 +8,14 @@
 
 # PCD 地图文件路径。
 # launch 使用 subst_value="true" 加载本文件，所以这里可以使用 $(find sunray_sim)。
-map_name: "$(find sunray_sim)/resource/small_forest01cutoff.pcd"
+map_name: "$(find sunray_sim)/resource/simple_pillars_10x10.pcd"
 
 # 全局地图点云发布话题。
 # 这是环境级公共话题，不带 /uav1 这样的无人机前缀；多机共用同一张环境地图。
 global_map_topic: /sunray_sim/global_cloud
 
 # 全局地图点云 frame_id 不在本文件单独配置。
-# 它统一读取 sunray_sim_node.yaml 中的 global_frame_id。
+# 它统一读取场景配置中的 global_frame_id。
 
 # 是否给地图添加外包围盒边界点。
 # 0：不添加；1：添加。

@@ -12,30 +12,39 @@ launch_groups:
         package: "sunray_sim"
         launch: "sunray_sim.launch"
         args:
-          - "node_config_file:=sunray_sim_node_swarm6.yaml"
-          - "single_uav_simulator_config_file:=single_uav_simulator_swarm6.yaml"
+          - "scenario_config_file:=uav_swarm6.yaml"
         description: "启动 6 架无人机的 sunray_sim 一体化仿真，用于集群控制/规划验证。"
 
       - title: "sunray_sim_单车"
         package: "sunray_sim"
         launch: "sunray_sim.launch"
         args:
-          - "node_config_file:=sunray_sim_node_ugv.yaml"
-          - "single_uav_simulator_config_file:=single_uav_simulator.yaml"
+          - "scenario_config_file:=ugv_single.yaml"
         description: "启动单辆无人车的 sunray_sim 轻量仿真，用于 UGV 控制验证。"
 
       - title: "sunray_sim_6车集群"
         package: "sunray_sim"
         launch: "sunray_sim.launch"
         args:
-          - "node_config_file:=sunray_sim_node_ugv_swarm6.yaml"
-          - "single_uav_simulator_config_file:=single_ugv_simulator_swarm6.yaml"
+          - "scenario_config_file:=ugv_swarm6.yaml"
         description: "启动 6 辆无人车的 sunray_sim 轻量仿真，用于 UGV 集群控制验证。"
+
+      - title: "sunray_sim_6机6车混合集群"
+        package: "sunray_sim"
+        launch: "sunray_sim.launch"
+        args:
+          - "scenario_config_file:=uav_ugv_swarm6.yaml"
+        description: "启动 6 架无人机和 6 辆无人车的 sunray_sim 混合集群仿真。"
 
       - title: "NavRL2Sunray_sim"
         package: "sunray_navrl_adapter"
         launch: "NavRL2Sunray_sim.launch"
         description: "启动 NavRL 仿真适配链路：map_manager、NavRL2Sunray 适配节点、安全模块和 RViz。"
+
+      - title: "NavRL2SunrayUGV_sim"
+        package: "sunray_navrl_adapter"
+        launch: "NavRL2SunrayUGV_sim.launch"
+        description: "启动 NavRL 单无人车仿真适配链路：map_manager、NavRL2SunrayUGV 适配节点和 RViz，直接输出 sunray_sim UGV cmd_vel。"
 
       - title: "NavRLTerminalControl"
         package: "sunray_navrl_adapter"
@@ -236,26 +245,20 @@ launch_groups:
   - name: "路径规划"
     items:
       - title: "Sunray Planning Ego"
-        package: "sunray_planning"
-        launch: "sunray_planning.launch"
+        package: "sunray_ego_adapter"
+        launch: "Ego2Sunray.launch"
         args:
-          - "planner_type:=ego"
-          - "uav_name:=uav"
-          - "uav_id:=1"
-          - "enable_rviz:=false"
-          - "enable_rviz_bridge:=true"
-        description: "启动 sunray_planning 并接入 ego planner。"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        description: "启动 Ego2Sunray 适配节点，将 EGO planner 输出转换为 Sunray UAV 控制指令。"
 
       - title: "Sunray Planning Diff"
-        package: "sunray_planning"
-        launch: "sunray_planning.launch"
+        package: "sunray_diff_adapter"
+        launch: "Diff2Sunray.launch"
         args:
-          - "planner_type:=diff"
-          - "uav_name:=uav"
-          - "uav_id:=1"
-          - "enable_rviz:=false"
-          - "enable_rviz_bridge:=true"
-        description: "启动 sunray_planning 并接入 diff planner。"
+          - "agent_name:=uav"
+          - "agent_id:=1"
+        description: "启动 Diff2Sunray 适配节点，将 Diff planner 输出转换为 Sunray UAV 控制指令。"
 
       - title: "RViz Goal Bridge"
         package: "planner_tools"

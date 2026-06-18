@@ -11,6 +11,7 @@
 #include <limits>
 #include <sstream>
 #include <utility>
+#include <vector>
 
 namespace sunray_sim
 {
@@ -83,12 +84,18 @@ LocalMid360Simulator::LocalMid360Simulator(ros::NodeHandle& nh,
     nh_.param<double>("sensor_roll", sensor_rpy_deg_.x(), 0.0);
     nh_.param<double>("sensor_pitch", sensor_rpy_deg_.y(), 0.0);
     nh_.param<double>("sensor_yaw", sensor_rpy_deg_.z(), 0.0);
+    nh_.param<bool>("collision_check/enable", collision_check_enable_, true);
+    nh_.param<double>("collision_check/radius", collision_radius_, 0.15);
+    nh_.param<bool>("collision_check/z_filter_enable", collision_z_filter_enable_, true);
+    nh_.param<double>("collision_check/z_margin", collision_z_margin_, 0.0);
 
     sensing_horizon_ = std::max(0.1, sensing_horizon_);
     sensing_rate_ = std::max(0.1, sensing_rate_);
     polar_resolution_ = std::max(0.05, polar_resolution_);
     yaw_fov_ = clampValue(yaw_fov_, 1.0, 360.0);
     vertical_fov_ = clampValue(vertical_fov_, 1.0, 179.0);
+    collision_radius_ = std::max(0.01, collision_radius_);
+    collision_z_margin_ = std::max(0.0, collision_z_margin_);
     sensor_rotation_body_ = rpyToRotationMatrix(sensor_rpy_deg_.x() * kDegToRad,
                                                 sensor_rpy_deg_.y() * kDegToRad,
                                                 sensor_rpy_deg_.z() * kDegToRad);
@@ -106,6 +113,7 @@ LocalMid360Simulator::LocalMid360Simulator(ros::NodeHandle& nh,
         nh_.advertise<sensor_msgs::PointCloud2>(agent_prefix_ + "/sunray_sim/cloud_world_frame", 10);
     cloud_sensor_frame_pub_ =
         nh_.advertise<sensor_msgs::PointCloud2>(agent_prefix_ + "/sunray_sim/cloud_sensor_frame", 10);
+    collision_pub_ = nh_.advertise<std_msgs::Bool>(agent_prefix_ + "/sunray_sim/collision", 10);
 
     render_timer_ = nh_.createTimer(ros::Duration(1.0 / sensing_rate_),
                                     &LocalMid360Simulator::renderTimerCallback,
@@ -146,6 +154,78 @@ double LocalMid360Simulator::wrap360(const double degrees)
     return wrapped;
 }
 
+void LocalMid360Simulator::updateCollisionState(const Eigen::Vector3d& body_pos, const ros::Time& stamp)
+{
+    if (!collision_check_enable_)
+    {
+        if (in_collision_)
+        {
+            in_collision_ = false;
+            std_msgs::Bool collision_msg;
+            collision_msg.data = false;
+            collision_pub_.publish(collision_msg);
+        }
+        return;
+    }
+
+    pcl::PointXYZI search_point;
+    search_point.x = body_pos.x();
+    search_point.y = body_pos.y();
+    search_point.z = body_pos.z();
+
+    std::vector<int> indices;
+    std::vector<float> distances;
+    map_kdtree_.radiusSearch(search_point, collision_radius_, indices, distances);
+
+    bool detected = false;
+    double nearest_distance = std::numeric_limits<double>::infinity();
+    Eigen::Vector3d nearest_point = Eigen::Vector3d::Zero();
+    const double z_range = collision_radius_ + collision_z_margin_;
+    for (std::size_t i = 0; i < indices.size(); ++i)
+    {
+        const auto& map_pt = global_map_->points[indices[i]];
+        if (collision_z_filter_enable_ && std::fabs(static_cast<double>(map_pt.z) - body_pos.z()) > z_range)
+        {
+            continue;
+        }
+
+        const double distance = std::sqrt(static_cast<double>(distances[i]));
+        if (distance < nearest_distance)
+        {
+            nearest_distance = distance;
+            nearest_point = Eigen::Vector3d(map_pt.x, map_pt.y, map_pt.z);
+        }
+        detected = true;
+    }
+
+    if (detected && !in_collision_)
+    {
+        ++collision_count_;
+        nearest_collision_distance_ = nearest_distance;
+        nearest_collision_point_ = nearest_point;
+        ROS_ERROR("[sunray_sim] %s collision detected, count=%lu, distance=%.3f m, vehicle=(%.2f, %.2f, %.2f), obstacle=(%.2f, %.2f, %.2f)",
+                  agent_prefix_.c_str(),
+                  static_cast<unsigned long>(collision_count_),
+                  nearest_collision_distance_,
+                  body_pos.x(),
+                  body_pos.y(),
+                  body_pos.z(),
+                  nearest_collision_point_.x(),
+                  nearest_collision_point_.y(),
+                  nearest_collision_point_.z());
+    }
+    else if (detected)
+    {
+        nearest_collision_distance_ = nearest_distance;
+        nearest_collision_point_ = nearest_point;
+    }
+
+    in_collision_ = detected;
+    std_msgs::Bool collision_msg;
+    collision_msg.data = in_collision_;
+    collision_pub_.publish(collision_msg);
+}
+
 void LocalMid360Simulator::renderTimerCallback(const ros::TimerEvent&)
 {
     if (!has_odom_ || !global_map_ || global_map_->empty())
@@ -161,7 +241,11 @@ void LocalMid360Simulator::renderTimerCallback(const ros::TimerEvent&)
     const Eigen::Vector3d sensor_pos = body_pos + body_rot * sensor_offset_body_;
     const Eigen::Matrix3d sensor_rot = body_rot * sensor_rotation_body_;
     const Eigen::Quaterniond sensor_q(sensor_rot);
-    const ros::Time stamp = odom_.header.stamp.isZero() ? ros::Time::now() : odom_.header.stamp;
+    // 局部 MID360 按自己的 sensing_rate 定时输出。这里使用当前渲染时刻作为
+    // 点云和 sensor TF 时间戳，避免在 odom 没有更新时重复发布同一个 TF stamp。
+    const ros::Time stamp = ros::Time::now();
+
+    updateCollisionState(body_pos, stamp);
 
     pcl::PointXYZI search_point;
     search_point.x = sensor_pos.x();
@@ -339,6 +423,26 @@ void LocalMid360Simulator::printStatus() const
     }
     ss << "\n";
 
+    ss << kAnsiGood << " 碰撞检测 " << kAnsiReset
+       << "状态 = ";
+    if (!collision_check_enable_)
+    {
+        ss << kAnsiWarn << "关闭" << kAnsiReset;
+    }
+    else
+    {
+        ss << (in_collision_ ? kAnsiBad : kAnsiGood)
+           << (in_collision_ ? "碰撞" : "正常") << kAnsiReset
+           << "  碰撞次数 = " << collision_count_
+           << "  半径 = " << collision_radius_ << " m"
+           << "  z过滤 = " << (collision_z_filter_enable_ ? "开启" : "关闭");
+        if (in_collision_)
+        {
+            ss << "  最近距离 = " << nearest_collision_distance_ << " m";
+        }
+    }
+    ss << "\n";
+
     ss << kAnsiGood << " 订阅话题 " << kAnsiReset
        << "里程计 -> " << agent_prefix_ << "/sunray_sim/odom"
        << "\n";
@@ -347,6 +451,8 @@ void LocalMid360Simulator::printStatus() const
        << "全局系点云 -> " << agent_prefix_ << "/sunray_sim/cloud_world_frame"
        << "\n"
        << "          传感器系点云 -> " << agent_prefix_ << "/sunray_sim/cloud_sensor_frame"
+       << "\n"
+       << "          碰撞状态 -> " << agent_prefix_ << "/sunray_sim/collision"
        << "\n"
        << "          TF -> " << global_frame_id_ << " -> " << sensor_frame_id_;
 

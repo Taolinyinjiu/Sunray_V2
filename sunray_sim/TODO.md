@@ -20,16 +20,15 @@
 ### 1. 明确模块边界
 
 - 当前状态：
-  - `sunray_sim_node.cpp`：唯一入口，负责读取通用参数、创建地图，并按 `agent_ids` 创建一架或多架无人机仿真。
-  - `SingleUavSimulator`：持有单架无人机的局部感知、动力学、PX4 控制转换、fake MAVROS。
+  - `sunray_sim_node.cpp`：唯一入口，负责读取通用参数、创建地图，并按 `agent_ids` 创建一架或多架 UAV/UGV 仿真。
+  - `SingleUavSimulator`：持有单架无人机的局部感知、动力学和 PX4/MAVROS 仿真接口。
   - `GlobalMapServer`：读取 PCD，发布全局点云，并给局部雷达提供内存点云。
   - `LocalMid360Simulator`：用全局点云和 odom 生成局部点云。
-  - `QuadrotorSimulator` + `QuadrotorDynamics`：动力学积分、odom/imu/navsat 发布。
+  - `UavPlant` + `QuadrotorDynamics`：动力学积分、odom/imu/navsat 发布。
   - `SimVisualizer`：订阅仿真状态并发布 RViz MarkerArray。
-  - `Px4ControlSim`：把 MAVROS setpoint 转成电机 RPM。
-  - `FakeMavrosBridge`：发布假的 MAVROS 状态、odom、imu 和常用服务。
+  - `Px4MavrosSim`：把 MAVROS setpoint 转成电机 RPM，同时发布 fake MAVROS 状态、odom、imu 和常用服务。
 - 问题：
-  - 模块边界已经基本清楚，但参数仍有跨模块读取，例如 `Px4ControlSim` 读取 `dynamics/*` 和 `motor/*`。
+  - 模块边界已经基本清楚，但参数仍有跨模块读取，例如 `Px4MavrosSim` 读取 `dynamics/*` 和 `motor/*`。
   - `SingleUavSimulator` 当前是单架无人机组合器，主节点通过循环创建多个实例支持集群。
 - 建议：
   - 保留当前“一个 node + 多个类”的结构。
@@ -44,7 +43,7 @@
 - 当前状态：
   - `enable_sensing=false` 时不会启动 `GlobalMapServer` 和 `LocalMid360Simulator`。
 - 问题：
-  - 现在 `local_mid360_simulator.yaml` 和 `global_map_server.yaml` 仍会被 launch 加载，只是代码不创建模块。
+  - 现在 `modules/local_mid360_simulator.yaml` 和 `modules/global_map_server.yaml` 仍会被 launch 加载，只是代码不创建模块。
 - 建议：
   - 保持当前写法，原因是 launch 简单统一。
   - 后续可以在状态面板中明确显示“感知模块未启用”。
@@ -57,14 +56,14 @@
 ### 7. 机体参数读取改成单一来源
 
 - 当前状态：
-  - `QuadrotorSimulator` 和 `Px4ControlSim` 都读取 `dynamics/*`、`motor/*`。
+  - `UavPlant` 和 `Px4MavrosSim` 都读取 `dynamics/*`、`motor/*`。
 - 问题：
   - 虽然来自同一 YAML，但代码上是两套读取逻辑，后续新增参数时容易漏同步。
 - 建议：
   - 新增 `airframe_params.h/.cpp`：
     - `DynamicParams loadDynamicParams(nh)`
     - `MotorParams loadMotorParams(nh)`
-  - `QuadrotorSimulator` 和 `Px4ControlSim` 共用这套读取函数。
+  - `UavPlant` 和 `Px4MavrosSim` 共用这套读取函数。
 - 收益：
   - 参数一致性更强。
   - 后续支持不同机型更方便。
@@ -119,12 +118,14 @@
 ### 15. 配置文件继续按模块收敛
 
 - 当前状态：
-  - 配置已经拆成 node、single_uav、global_map、local_mid360、quadrotor、imu、px4、fake_mavros。
+  - 配置已经整理成 4 个场景入口和 `modules/` 高级模块参数。
+  - 场景入口负责 UAV/UGV 启用、编号、初始位姿和全局开关。
+  - `modules/uav_plant.yaml` 目前仍同时作为动力学参数和 Px4MavrosSim 混控参数来源。
 - 问题：
   - 共享参数仍散落在多个文件描述中。
 - 建议：
-  - 新增 `airframe.yaml` 或保留 `quadrotor_simulator.yaml` 但明确它是机体参数源。
-  - `Px4ControlSim` 不再直接“概念上拥有”机体参数，只引用同一份 airframe 参数。
+  - 新增 `airframe.yaml` 或保留 `modules/uav_plant.yaml` 但明确它是机体参数源。
+  - `Px4MavrosSim` 不再直接“概念上拥有”机体参数，只引用同一份 airframe 参数。
 - 收益：
   - 用户调参入口更清晰。
 
