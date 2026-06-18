@@ -11,52 +11,17 @@
 #include "sunray_fsm_param.hpp"
 #include "sunray_state_types.hpp"
 #include "sunray_msgs/UAVControlCMD.h"
-#include "sunray_msgs/UAVCommandExecutionStatus.h"
-#include "sunray_msgs/OdomState.h"
 #include "sunray_msgs/UAVControlState.h"
 #include <nav_msgs/Odometry.h>
 #include "controller/controller_interface.hpp"
 #include "control_data_types/uav_control_cmd_types.hpp"
+#include "odom_filter/odom_kalman_filter.hpp"
 #include <deque>
 #include <queue>
 #include <thread>
 #include <atomic>
 #include <mutex>
 #include <string>
-
-namespace control_common {
-
-enum class CommandExecutionState : uint8_t {
-    Idle = 0,
-    Accepted = 1,
-    Running = 2,
-    WaitingPhysicalState = 3,
-    Succeeded = 4,
-    Failed = 5,
-    Cancelled = 6,
-    Timeout = 7,
-};
-
-struct CommandExecutionStatus {
-    uint64_t yunlink_session_id{0};
-    uint64_t yunlink_message_id{0};
-    uint64_t yunlink_correlation_id{0};
-    uint8_t command_kind{sunray_msgs::UAVCommandExecutionStatus::COMMAND_UNKNOWN};
-    CommandExecutionState execution_state{CommandExecutionState::Idle};
-    uint8_t progress_percent{0};
-    bool active{false};
-    bool terminal{false};
-    bool success{false};
-    uint16_t result_code{0};
-    std::string detail;
-    uint8_t control_state{sunray_msgs::UAVControlState::OFF};
-    uint8_t px4_landed_state{0};
-    bool ready_for_takeoff{true};
-    bool ready_for_land{false};
-    std::string busy_reason;
-};
-
-}  // namespace control_common
 
 // Sunray_FSM指的是Sunray项目框架中的无人机控制状态机，然而由于我们希望Sunray项目的框架能够实现的，兼容或者说具有强的扩展性，
 // 在实现的过程中，我们希望这个Sunray_FSM能够进行一定的抽象，因此SUnray_FSM与mavros进行解耦
@@ -93,65 +58,53 @@ class Sunray_FSM {
 
     // ------------------------- FSM核心 -------------------------
     void init_transition_table();  // 初始化状态转移表
-    const std::vector<sunray_fsm::Transition>&
-    get_transition_table();  // 获取状态转移表，请注意，每一条状态转移的规则，对应一个结构体，所有结构体加起来，对应一个容器，因此使用vecotr作为返回类型
-    bool handle_event(sunray_fsm::SunrayEvent event);  // 状态转移句柄
-    bool handle_global_event(
-        sunray_fsm::SunrayEvent
-            event);  // KILL等全局高优先级事件(实际上目前只有kill一个事件在这里被处理)
+    // 获取状态转移表，请注意，每一条状态转移的规则，对应一个结构体，所有结构体加起来，对应一个容器，因此使用vecotr作为返回类型
+    const std::vector<sunray_fsm::Transition>& get_transition_table();
+    // 状态转移处理，参数为触发状态转移的事件  
+    bool handle_event(sunray_fsm::SunrayEvent event);  
+    // KILL等全局高优先级事件处理
+    bool handle_global_event(sunray_fsm::SunrayEvent event);  
 
     // ------------------------- 函数 -------------------------
-    // init() = load_param() + set_subscriber() + set_publisher() + register_controller
+    // 初始化部分
+    // init() = load_param() + init_subscriber() + init_publisher() + init_timer() + init_controller
     void load_param();           // 读取参数
     void init_subscriber();      // 初始化订阅者
     void init_publisher();       // 初始化发布者
-    void register_controller();  // 注册控制器
+    void init_timer();           // 初始化定时器
+    void init_controller();      // 初始化无人机控制器
 
     // 状态检查部分
-    void check_controller_ready();  // 检查controller是否就绪，就绪则Sunray_FSM State: OFF -> INIT
-    bool check_allow_takeoff(double relative_takeoff_height,
-                             double max_takeoff_velocity);   // 检查是否允许起飞
-    void check_rosmsg_timeout();  // 检查是否存在消息超时
-    // bool check_allow_move();     // 检查是否允许运动,这个需要再细想一下
+    // 1. 检查controller是否就绪，就绪则Sunray_FSM State: OFF -> INIT
+    void check_controller_ready();  
+    // 2. 检查是否允许起飞：check{起飞高度与速度，起飞权限，RC连接...}
+    bool check_allow_takeoff(double relative_takeoff_height, double max_takeoff_velocity);
+    // 3. 检查是否存在消息超时
+    void check_rosmsg_timeout();  
+    
+    // 里程计滤波处理部分 TODO:使用小状态卡尓曼滤波器估计滤波，或者a-b滤波器
     bool validate_odometry_sample(const control_common::UAVStateEstimate& odom,
                                   std::string* invalid_reason = nullptr) const;
     bool get_latest_valid_odometry(control_common::UAVStateEstimate& odom) const;
+
+    // 从最新的里程计数据设置悬停点
     bool set_hover_point_from_latest_odom();
+    
     // POINT_COMPLETED 后专用：优先把悬停点设为最近一次 move_point 目标，
     // 控制器没有可用目标时回退到 set_hover_point_from_latest_odom()。
     bool set_hover_point_to_target_or_odom();
+    
+    // 从起飞命令求解参数？
     bool resolve_takeoff_command_params(const control_common::UavControlCmd& cmd,
                                         double* relative_takeoff_height,
                                         double* max_takeoff_velocity,
                                         std::string* reject_reason = nullptr) const;
     double effective_land_max_velocity(const control_common::UavControlCmd& cmd) const;
-    bool should_track_command(control_common::UavControlCmd::ControlCmd cmd) const;
-    bool is_command_request_event(sunray_fsm::SunrayEvent event) const;
-    uint8_t command_kind_from_control_cmd(control_common::UavControlCmd::ControlCmd cmd) const;
-    uint8_t current_px4_landed_state() const;
-    void update_command_readiness_locked(sunray_fsm::SunrayState current_state,
-                                         control_common::CommandExecutionStatus* status) const;
-    void reset_command_execution_status_locked();
-    void mark_command_requested_locked(const control_common::UavControlCmd& cmd);
-    bool should_refresh_command_status_locked(const control_common::UavControlCmd& cmd) const;
-    void mark_command_transition_locked(sunray_fsm::SunrayState next_state,
-                                        const control_common::UavControlCmd& cmd);
-    void mark_command_terminal_locked(bool success,
-                                      control_common::CommandExecutionState state,
-                                      uint16_t result_code,
-                                      const std::string& detail);
-    void mark_command_waiting_physical_state_locked(const std::string& detail,
-                                                    uint8_t progress_percent);
-    void mark_command_rejected(const control_common::UavControlCmd& cmd,
-                               const std::string& reason,
-                               uint16_t result_code = 1);
 
     // --------------------------话题回调函数------------------------
     // 为了保持话题的高频回调，基本上回调函数都只负责将收到的消息转换为结构体变量缓存，不做其他处理
     void local_odom_callback(const nav_msgs::Odometry& msg);  // local系里程计回调函数
-    void localization_state_callback(const sunray_msgs::OdomState& msg);  // 用于查看里程计状态
     void uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg);  // 订阅控制指令话题
-    void system_check_callback();  // 系统状态检查话题
 
     // --------------------------定时器回调函数-------------------------
     void
@@ -177,17 +130,16 @@ class Sunray_FSM {
     ros::NodeHandle nh_;
     // ROS订阅者
     ros::Subscriber local_odom_sub_;
-    ros::Subscriber localization_state_sub_;
     ros::Subscriber uav_control_cmd_sub_;
-    ros::Subscriber system_check_sub_;
     // ROS话题发布者
     ros::Publisher sunray_fsm_state_pub_;
-    ros::Publisher command_execution_status_pub_;
     ros::Publisher sunray_odom_debug_pub_;
     // 控制器指针
     std::shared_ptr<Controller_Interface> sunray_controller_;  // 全局唯一的控制器实例
     // 里程计缓存
+    control_common::OdomKalmanFilter odom_kf_;
     control_common::UAVStateEstimate last_raw_odometry_;
+    // 控制闭环使用的里程计。启用 odom_filter 后该字段为 filtered odom。
     control_common::UAVStateEstimate last_odometry_;
     nav_msgs::Odometry last_self_odom_msg_;
     ros::Time last_raw_odom_receive_time_{ros::Time(0)};
@@ -213,8 +165,10 @@ class Sunray_FSM {
     Eigen::Vector3d home_point_{Eigen::Vector3d::Zero()};
     bool return_height_initialized_{false};
 
-    bool controller_ready_{false}; // controller_ready_ = true 则状态机由OFF -> INIT
-    bool control_msg_lost_{false}; // control_msg_lost_ = true 并且缓存的控制指令为velocity / trajectory 则状态机切换为 hover
+    // controller_ready_ = true 则状态机允许由OFF -> INIT
+    bool controller_ready_{false}; 
+    // control_msg_lost_ = true 并且缓存的控制指令为velocity / trajectory 则状态机切换为 hover    
+    bool control_msg_lost_{false}; 
 
     // 控制器循环的线程相关
     std::thread controller_update_thread_;
@@ -224,20 +178,12 @@ class Sunray_FSM {
     mutable std::mutex state_mutex_;  // fsm当前状态
     mutable std::mutex odom_mutex_;
     mutable std::mutex cmd_mutex_;
-    mutable std::mutex localization_status_mutex_;
     mutable std::mutex event_mutex_;  // fsm当前事件队列
-    mutable std::mutex command_status_mutex_;
 
     sunray_fsm::SunrayState fsm_state_{sunray_fsm::SunrayState::OFF};  // 当前状态
     std::queue<sunray_fsm::SunrayEvent> fsm_event_queue_;              // 事件队列
     sunray_fsm::sunray_fsm_config_t fsm_config_;                       // 状态机参数结构体
     std::vector<sunray_fsm::Transition> sunray_state_transmit_table_;  // 成员变量
-    control_common::CommandExecutionStatus command_status_;
     bool rc_connected{false};  // 遥控器连接状态，这里是从sunray_rc_joy_node节点传递？
-    bool has_localization_status_{false};
-    sunray_msgs::OdomState last_localization_status_;
-    ros::Time last_localization_status_receive_time_{ros::Time(0)};
-    double localization_status_rate_hz_{0.0};
-    std::deque<double> localization_status_rate_samples_s_;
     std::deque<double> odom_rate_samples_s_;
 };

@@ -1,3 +1,4 @@
+// NOTICE：本文件描述的数据类型会变成ulog日志中的数据字段
 #pragma once
 
 #include <cstdint>

@@ -97,17 +97,6 @@ void Sunray_FSM::update_controller_output() {
         sunray_controller_->move_point(home_target);
         // 如果到达了返航点,则根据参数配置,决定是降落还是切换为hover
         if (sunray_controller_->is_point_complete()) {
-            {
-                std::lock_guard<std::mutex> lk(command_status_mutex_);
-                if (command_status_.active &&
-                    command_status_.command_kind ==
-                        sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN) {
-                    mark_command_terminal_locked(true,
-                                                 control_common::CommandExecutionState::Succeeded,
-                                                 0,
-                                                 "return completed");
-                }
-            }
             if (fsm_config_.takeoff_land_param.return_with_land == true) {
                 enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_REQUEST);
             } else {
@@ -220,9 +209,15 @@ void Sunray_FSM::controller_update_loop() {
     // 循环
     while (ros::ok() && !stop_controller_thread_.load(std::memory_order_relaxed)) {
         control_common::UAVStateEstimate odom_snapshot;
+        control_common::UAVStateEstimate raw_odom_snapshot;
         const bool has_valid_odom = get_latest_valid_odometry(odom_snapshot);
         if (has_valid_odom && odom_snapshot.timestamp != last_pushed_odom_stamp) {
+            {
+                std::lock_guard<std::mutex> lk(odom_mutex_);
+                raw_odom_snapshot = last_raw_odometry_;
+            }
             sunray_controller_->set_current_odom(odom_snapshot);
+            sunray_controller_->set_external_odom_for_fusion(raw_odom_snapshot);
             last_pushed_odom_stamp = odom_snapshot.timestamp;
         }
         update_controller_output();

@@ -84,18 +84,19 @@ inline UavControlCmd::UavControlCmd(const sunray_msgs::UAVControlCMD& msg) {
     control_cmd = static_cast<ControlCmd>(msg.control_cmd);
     yaw_mode = static_cast<YawMode>(msg.yaw_mode);
     // 默认提取惯性系数据
+    // 位置数据
     position.x() = msg.desired_pos.x;
     position.y() = msg.desired_pos.y;
     position.z() = msg.desired_pos.z;
-
+    // 速度数据
     velocity.x() = msg.desired_vel.x;
     velocity.y() = msg.desired_vel.y;
     velocity.z() = msg.desired_vel.z;
-
+    // 加速度数据 
     acceleration.x() = msg.desired_acc.x;
     acceleration.y() = msg.desired_acc.y;
     acceleration.z() = msg.desired_acc.z;
-
+    // 加加速度数据
     jerk.x() = msg.desired_jerk.x;
     jerk.y() = msg.desired_jerk.y;
     jerk.z() = msg.desired_jerk.z;

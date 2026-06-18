@@ -58,6 +58,7 @@ add_library(sunray_uav_control_lib
   src/controller/geometric_controller/geometric_controller.cpp
   src/controller/geometric_controller/geometric_loadparam.cpp
   src/controller/core_algorithm/geometric_attitude_control.cpp
+  src/odom_filter/odom_kalman_filter.cpp
   src/utils/control_config_loader.cpp
   src/statemachine/sunray_fsm_loadparam.cpp
   src/statemachine/sunray_fsm.cpp
@@ -215,6 +216,21 @@ if(CATKIN_ENABLE_TESTING)
         ${EIGEN3_INCLUDE_DIRS}
     )
     target_link_libraries(body_frame_reference_helper_test
+        sunray_uav_control_lib
+    )
+  endif()
+
+  catkin_add_gtest(odom_kalman_filter_test
+    test/odom_kalman_filter_test.cpp
+  )
+  if(TARGET odom_kalman_filter_test)
+    target_include_directories(odom_kalman_filter_test
+      PRIVATE
+        include
+        ${catkin_INCLUDE_DIRS}
+        ${EIGEN3_INCLUDE_DIRS}
+    )
+    target_link_libraries(odom_kalman_filter_test
         sunray_uav_control_lib
     )
   endif()

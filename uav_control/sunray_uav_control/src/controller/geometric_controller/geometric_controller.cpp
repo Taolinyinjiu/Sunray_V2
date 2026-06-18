@@ -204,13 +204,22 @@ bool Geometric_Controller::is_ready() {
 void Geometric_Controller::set_current_odom(const control_common::UAVStateEstimate& odom) {
     uav_odometry_ = odom;
     const bool has_valid_timestamp = !odom.timestamp.isZero();
-    const bool is_new_odom = has_valid_timestamp && odom.timestamp != last_odom_timestamp_;
     has_uav_odometry_.store(has_valid_timestamp, std::memory_order_relaxed);
-    if (is_new_odom) {
+    if (has_valid_timestamp) {
         last_odom_timestamp_ = odom.timestamp;
-        can_fuse_.store(true, std::memory_order_relaxed);
     }
     has_imu_.store(has_valid_imu_data(), std::memory_order_relaxed);
+}
+
+void Geometric_Controller::set_external_odom_for_fusion(
+    const control_common::UAVStateEstimate& odom) {
+    external_fusion_odometry_ = odom;
+    const bool has_valid_timestamp = !odom.timestamp.isZero();
+    const bool is_new_odom = has_valid_timestamp && odom.timestamp != last_fusion_odom_timestamp_;
+    if (is_new_odom) {
+        last_fusion_odom_timestamp_ = odom.timestamp;
+        can_fuse_.store(true, std::memory_order_relaxed);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2050,5 +2059,5 @@ void Geometric_Controller::pub_vision_fuse_timer_cb(const ros::TimerEvent&) {
     if (!can_fuse_.exchange(false, std::memory_order_relaxed)) {
         return;
     }
-    mavros_helper_.pub_vision_pose(uav_odometry_);
+    mavros_helper_.pub_vision_pose(external_fusion_odometry_);
 }

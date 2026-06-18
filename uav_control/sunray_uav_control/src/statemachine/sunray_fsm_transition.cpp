@@ -1,4 +1,5 @@
 #include "statemachine/sunray_fsm.hpp"
+#include <ros/ros.h>
 
 // OFF -> INIT -> TAKEOFF -> HOVER -> MOVE
 // |                 |         |        |
@@ -228,15 +229,6 @@ bool Sunray_FSM::handle_global_event(sunray_fsm::SunrayEvent event) {
             std::lock_guard<std::mutex> lk(state_mutex_);
             fsm_state_ = sunray_fsm::SunrayState::EMERGENCY_KILL;
         }
-        {
-            std::lock_guard<std::mutex> lk(command_status_mutex_);
-            if (command_status_.active) {
-                mark_command_terminal_locked(false,
-                                             control_common::CommandExecutionState::Cancelled,
-                                             9,
-                                             "command interrupted by KILL");
-            }
-        }
         return true;
     }
     default:
@@ -281,16 +273,13 @@ bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
         //                                 如果t.guard不存在，则直接返回true
         const bool allow_checkout_state = (t.guard ? t.guard() : true);
         if (!allow_checkout_state) {
-            mark_command_rejected(current_cmd, "command rejected by current controller state", 3);
+            ROS_WARN_STREAM("[Sunray_FSM] command rejected by current controller state, event="
+                            << static_cast<int>(event));
             return false;
         }
         {
             std::lock_guard<std::mutex> lk(state_mutex_);
             fsm_state_ = t.transmit_state;
-        }
-        if (is_command_request_event(event)) {
-            std::lock_guard<std::mutex> lk(command_status_mutex_);
-            mark_command_transition_locked(t.transmit_state, current_cmd);
         }
         // (t.action ? t.action() : true) -> 如果t.action存在，则执行t.action()
         //                                   如果t.action不存在，则直接返回true
@@ -301,14 +290,20 @@ bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
         (void)need_action;
         return true;
     }
-    if (event == sunray_fsm::SunrayEvent::TAKEOFF_REQUEST ||
-        event == sunray_fsm::SunrayEvent::LAND_REQUEST ||
-        event == sunray_fsm::SunrayEvent::RETURN_REQUEST ||
-        event == sunray_fsm::SunrayEvent::POINT_REQUEST ||
-        event == sunray_fsm::SunrayEvent::VELOCITY_REQUEST ||
-        event == sunray_fsm::SunrayEvent::TRAJECTORY_REQUEST ||
-        event == sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST) {
-        mark_command_rejected(current_cmd, "command not allowed in current FSM state", 4);
+    switch (event) {
+    case sunray_fsm::SunrayEvent::TAKEOFF_REQUEST:
+    case sunray_fsm::SunrayEvent::LAND_REQUEST:
+    case sunray_fsm::SunrayEvent::RETURN_REQUEST:
+    case sunray_fsm::SunrayEvent::POINT_REQUEST:
+    case sunray_fsm::SunrayEvent::VELOCITY_REQUEST:
+    case sunray_fsm::SunrayEvent::TRAJECTORY_REQUEST:
+    case sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST:
+        ROS_WARN_STREAM("[Sunray_FSM] command not allowed in current FSM state, event="
+                        << static_cast<int>(event)
+                        << ", state=" << static_cast<int>(current_state));
+        break;
+    default:
+        break;
     }
     return false;
 }

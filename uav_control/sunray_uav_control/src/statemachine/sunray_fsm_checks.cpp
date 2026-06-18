@@ -83,6 +83,11 @@ void Sunray_FSM::check_rosmsg_timeout() {
     if (!last_valid_odom_receive_time_snapshot.isZero() &&
         (now - last_valid_odom_receive_time_snapshot).toSec() >
             fsm_config_.msg_timeout_param.local_odometry) {
+        {
+            std::lock_guard<std::mutex> lk(odom_mutex_);
+            has_valid_odometry_ = false;
+            odom_kf_.reset();
+        }
         // enqueue_fsm_event(sunray_fsm::SunrayEvent::KILL_REQUEST);
         // 里程计超时，切KILL？其实并不保险我个人认为
     }
@@ -108,60 +113,16 @@ void Sunray_FSM::check_move_completed() {
     if (current_state == sunray_fsm::SunrayState::TAKEOFF) {
         if (sunray_controller_->is_takeoff_failed()) {
             const auto reason = sunray_controller_->takeoff_failure_reason();
-            const std::string msg =
-                std::string("takeoff failed: ") + control_common::to_cstr(reason);
-            {
-                std::lock_guard<std::mutex> lk(command_status_mutex_);
-                mark_command_terminal_locked(false,
-                                             control_common::CommandExecutionState::Failed,
-                                             0,
-                                             msg);
-            }
+            ROS_WARN_STREAM("[Sunray_FSM] takeoff failed: " << control_common::to_cstr(reason));
             enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_FAILED);
             return;
         }
-        bool takeoff_state = sunray_controller_->is_takeoff_complete();
-        if (takeoff_state) {
-            {
-                std::lock_guard<std::mutex> lk(command_status_mutex_);
-                mark_command_terminal_locked(true,
-                                             control_common::CommandExecutionState::Succeeded,
-                                             0,
-                                             "takeoff completed");
-            }
+        if (sunray_controller_->is_takeoff_complete()) {
             enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_COMPLETED);
-        } else {
-            std::lock_guard<std::mutex> lk(command_status_mutex_);
-            mark_command_waiting_physical_state_locked("waiting for takeoff completion", 90);
         }
     } else if (current_state == sunray_fsm::SunrayState::LAND) {
-        bool land_state = sunray_controller_->is_land_complete();
-        if (land_state) {
-            {
-                std::lock_guard<std::mutex> lk(command_status_mutex_);
-                if (command_status_.active &&
-                    command_status_.command_kind ==
-                        sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND) {
-                    mark_command_terminal_locked(true,
-                                                 control_common::CommandExecutionState::Succeeded,
-                                                 0,
-                                                 "land completed");
-                }
-            }
+        if (sunray_controller_->is_land_complete()) {
             enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_COMPLETED);
-        } else {
-            std::lock_guard<std::mutex> lk(command_status_mutex_);
-            if (command_status_.active &&
-                command_status_.command_kind ==
-                    sunray_msgs::UAVCommandExecutionStatus::COMMAND_LAND) {
-                mark_command_waiting_physical_state_locked("waiting for PX4 ON_GROUND", 90);
-            }
-        }
-    } else if (current_state == sunray_fsm::SunrayState::RETURN) {
-        std::lock_guard<std::mutex> lk(command_status_mutex_);
-        if (command_status_.active &&
-            command_status_.command_kind == sunray_msgs::UAVCommandExecutionStatus::COMMAND_RETURN) {
-            mark_command_waiting_physical_state_locked("returning to home point", 90);
         }
     }
     // 对运动是否完成的判断，存在前提条件： control_cmd没有保持10Hz的发布频率
@@ -183,25 +144,10 @@ void Sunray_FSM::check_move_completed() {
     if (current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT ||
         current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY ||
         current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84) {
-        bool move_state = sunray_controller_->is_point_complete();
-        if (move_state) {
-            {
-                std::lock_guard<std::mutex> lk(command_status_mutex_);
-                mark_command_terminal_locked(true,
-                                             control_common::CommandExecutionState::Succeeded,
-                                             0,
-                                             "point command completed");
-            }
+        if (sunray_controller_->is_point_complete()) {
             enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_COMPLETED);
         }
     } else {
-        {
-            std::lock_guard<std::mutex> lk(command_status_mutex_);
-            mark_command_terminal_locked(true,
-                                         control_common::CommandExecutionState::Succeeded,
-                                         0,
-                                         "continuous command fell back to hover");
-        }
         enqueue_fsm_event(sunray_fsm::SunrayEvent::HOVER_REQUEST);
     }
 }

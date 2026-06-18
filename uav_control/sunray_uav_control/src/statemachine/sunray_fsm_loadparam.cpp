@@ -1,5 +1,6 @@
 #include "statemachine/sunray_fsm_loadparam.hpp"
 #include "utils/orientation_utils.hpp"
+#include <algorithm>
 #include <stdexcept>
 #include <ros/ros.h>
 
@@ -289,5 +290,41 @@ void loadVelocityParam(const YAML::Node& node, sunray_fsm::velocity_param_t& par
         if (param.yaw_rate <= 0) {
             throw std::runtime_error("the sunray control config param 'yaw_rate' must > 0");
         }
+    }
+}
+
+namespace {
+
+template <typename T>
+void load_optional(const YAML::Node& node, const char* key, T& value) {
+    if (node && node[key]) {
+        value = node[key].as<T>();
+    }
+}
+
+}  // namespace
+
+void loadOdomFilterParam(const YAML::Node& node,
+                         control_common::OdomKalmanFilterParam_t& param) {
+    if (!node) {
+        ROS_WARN("[Sunray_FSM] odom_filter_param missing, using built-in defaults");
+        return;
+    }
+    if (!node.IsMap()) {
+        throw std::runtime_error(
+            "the sunray control config odom_filter_param must be a valid map");
+    }
+
+    load_optional(node, "process_noise_acc", param.process_noise_acc);
+    load_optional(node, "meas_noise_pos", param.meas_noise_pos);
+    load_optional(node, "meas_noise_vel", param.meas_noise_vel);
+
+    if (param.process_noise_acc <= 0.0) {
+        throw std::runtime_error(
+            "the sunray control config odom_filter_param.process_noise_acc must > 0");
+    }
+    if (param.meas_noise_pos <= 0.0 || param.meas_noise_vel <= 0.0) {
+        throw std::runtime_error(
+            "the sunray control config odom_filter_param meas noise must > 0");
     }
 }

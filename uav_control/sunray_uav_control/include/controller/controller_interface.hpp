@@ -10,14 +10,26 @@
 
 class Controller_Interface {
   public:
+    // 析构函数
     virtual ~Controller_Interface() = default;
+    
     // ------------声明周期相关----------------
     virtual bool init() = 0;  // 使用显式的 init代替构造函数
-    virtual bool is_ready() = 0;
+    virtual bool is_ready() = 0; // 获取当前控制器状态，控制器就绪是FSM从OFF状态切换为INIT状态的条件之一
+    
     // -------------状态注入---------------
+    // 将获取的里程计数据注入控制器
     virtual void set_current_odom(const control_common::UAVStateEstimate& odom) = 0;
-    // 模式切换,本函数在状态机为INIT模式时触发,要求切换px4的模式为position模式,切断setpoint流传输 
+    // 将原始外部里程计注入 PX4 EKF 转发缓存。
+    // 默认空实现，避免不需要 fuse_odom 的控制器被迫维护额外状态。
+    virtual void set_external_odom_for_fusion(const control_common::UAVStateEstimate& odom) {
+        (void)odom;
+    }
+    
+    // -------------模式切换---------------
+    // 本函数在状态机为INIT模式时触发,要求切换px4的模式为position模式,切断setpoint流传输 
     virtual void set_position_mode() = 0;
+    
     // -------------运动相关接口-------------
     // 触发起飞，参数为起飞高度和最大起飞速度
     virtual bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) = 0;
@@ -48,6 +60,11 @@ class Controller_Interface {
     // 移动到WGS84下的某一点
     virtual bool move_point_wgs84(geographic_msgs::GeoPoint point) = 0;
     // ---------------------起降状态查询接口-----------------------
+    // [先占个位置] 查询起飞状态
+    virtual void get_takeoff_status(){};
+    // [先占个位置] 查询降落状态
+    virtual void get_land_status(){};
+
     virtual void reset_takeoff_status() {}
     virtual bool is_takeoff_complete() = 0;
     virtual bool is_takeoff_failed() const {

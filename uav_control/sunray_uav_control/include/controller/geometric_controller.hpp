@@ -20,17 +20,9 @@
  * @file geometric_controller.hpp
  * @brief 几何控制器适配层
  *
- * 继承 Controller_Interface，将 Geometric_AttitudeControl 核心算法封装为
- * 符合 Sunray 框架接口规范的控制器。
+ * 继承 Controller_Interface，将 Geometric_AttitudeControl 核心算法封装为符合 Sunray
+ * 框架接口规范的控制器。
  *
- * 与 PX4_LinearAttitude_Controller 的最大差异：
- *   - 发布 AttitudeTarget，可按配置选择 Attitude 或 BodyRate 模式
- *   - calculateControl 不需要 IMU 输入
- *   - move_trajectory 真正实现（直接将 trajpoint 传入核心算法）
- *   - takeoff 使用平滑爬升曲线，move_point 使用位置参考平滑
- *
- * 故意不引入的依赖：
- *   - PX4 参数管理职责（已迁移至 system_check 方向）
  */
 class Geometric_Controller : public Controller_Interface {
   public:
@@ -43,11 +35,12 @@ class Geometric_Controller : public Controller_Interface {
 
     // -------------状态注入---------------
     void set_current_odom(const control_common::UAVStateEstimate& odom) override;
+    void set_external_odom_for_fusion(const control_common::UAVStateEstimate& odom) override;
 
     // -------------运动相关接口------------
     // 在地面保持 setpoint 流，推力置 0
     void set_position_mode() override;
-    // 触发起飞（简化版：直接以目标高度点跟踪，不使用五次项曲线）
+    // 触发起飞
     bool takeoff(double relative_takeoff_height, double max_takeoff_velocity) override;
     // 触发降落
     bool land(bool land_type, double max_land_velocity) override;
@@ -61,33 +54,43 @@ class Geometric_Controller : public Controller_Interface {
     bool emergency_kill() override;
     // 运动到某一点（世界系）
     bool move_point(controller_data_types::TargetPoint_t point) override;
-    // 以速度控制运动（stub，暂不实现）
+    // 以速度控制运动
     bool move_velocity(controller_data_types::TargetVelocity_t velocity) override;
-    // 跟踪轨迹点（几何控制器的核心运动接口，真正实现）
+    // 跟踪轨迹点
     bool move_trajectory(controller_data_types::TargetTrajectoryPoint_t trajpoint) override;
-    // 运动到机体系某点（stub）
+    // 运动到机体系某点
     bool move_point_body(controller_data_types::TargetBodyPoint_t point) override;
-    // 以机体系速度运动（stub）
+    // 以机体系速度运动
     bool move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) override;
-    // 移动到 WGS84 坐标（stub）
+
+    // 移动到 WGS84 坐标（暂未实现）
     bool move_point_wgs84(geographic_msgs::GeoPoint point) override;
 
     // ---------------------起降状态查询接口-----------------------
+    // 重置起飞状态
     void reset_takeoff_status() override;
+    // 检查起飞是否完成
     bool is_takeoff_complete() override;
+    // 检查起飞是否失败
     bool is_takeoff_failed() const override;
+    // 获取起飞失败的原因
     control_common::TakeoffFailureReason takeoff_failure_reason() const override;
+    // 检查降落是否完成
     bool is_land_complete() override;
+    // 检查点运动是否完成
     bool is_point_complete() override;
+    // 获取当前 px4 降落状态
     uint8_t current_px4_landed_state() const override;
+    // 获取最后一次设置的姿态目标
     bool get_last_attitude_target(mavros_msgs::AttitudeTarget& msg) const override;
 
   private:
+    // 控制指令输出模式  
     enum class AttitudeCommandMode : uint8_t {
         Attitude = 0,
         BodyRate = 1,
     };
-
+    // 运动曲线所有者
     enum class MotionCurveOwner : uint8_t {
         None = 0,
         MovePoint = 1,
@@ -144,16 +147,14 @@ class Geometric_Controller : public Controller_Interface {
     bool check_mavros_stream_ready();  // 检查 mavros_helper 数据流是否稳定
     bool has_valid_imu_data();
     Eigen::Vector3d get_world_acc_from_imu();
-    TakeoffAccFFRebaseResult
-    rebase_takeoff_accff_curve_start(double commanded_vmax,
-                                     double commanded_height);
-    bool handle_takeoff_accff_unrecovered_invalid(
-        const curve::QuinticCurveState& curve_result,
-        double commanded_height,
-        double commanded_vmax,
-        double rel_height,
-        double takeoff_thrust_limit,
-        const TakeoffAccFFRebaseResult& rebase);
+    TakeoffAccFFRebaseResult rebase_takeoff_accff_curve_start(double commanded_vmax,
+                                                              double commanded_height);
+    bool handle_takeoff_accff_unrecovered_invalid(const curve::QuinticCurveState& curve_result,
+                                                  double commanded_height,
+                                                  double commanded_vmax,
+                                                  double rel_height,
+                                                  double takeoff_thrust_limit,
+                                                  const TakeoffAccFFRebaseResult& rebase);
     bool takeoff_accff(double relative_takeoff_height, double max_takeoff_velocity);
     bool land_accff(double max_land_velocity);
     bool land_px4_autoland();
@@ -187,13 +188,12 @@ class Geometric_Controller : public Controller_Interface {
                               double odom_ahead_ratio,
                               double odom_correction_scale,
                               ThrustCommandPolicy thrust_policy);
-    void feed_thrust_estimator_from_setpoint(
-        const control_common::Mavros_SetpointAttitude& setpoint,
-        bool is_hover_context);
-    bool
-    publish_trajectory_setpoint(const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
-                                ThrustCommandPolicy thrust_policy =
-                                    ThrustCommandPolicy::UseEstimatedAnchor);
+    void
+    feed_thrust_estimator_from_setpoint(const control_common::Mavros_SetpointAttitude& setpoint,
+                                        bool is_hover_context);
+    bool publish_trajectory_setpoint(
+        const controller_data_types::TargetTrajectoryPoint_t& trajpoint,
+        ThrustCommandPolicy thrust_policy = ThrustCommandPolicy::UseEstimatedAnchor);
 
     std::atomic<bool> controller_ready_{false};
 
@@ -220,7 +220,7 @@ class Geometric_Controller : public Controller_Interface {
     ros::NodeHandle nh_;
     MavrosHelper mavros_helper_;
 
-    // --------------------到达判断
+    // --------------------到达判断-----------------------
     // takeoff/move_point 共用配置，调用侧决定误差如何构造。
     arrival_helper::Config arrival_judge_config_{};
 
@@ -240,10 +240,10 @@ class Geometric_Controller : public Controller_Interface {
 
     // AccFF 起降调参与运行状态。
     takeoff_land::TakeoffAccFFTuning takeoff_accff_tuning_{};
-    takeoff_land::TakeoffAccFFState  takeoff_accff_state_{};
+    takeoff_land::TakeoffAccFFState takeoff_accff_state_{};
     TakeoffAccFFRebaseResult last_takeoff_accff_rebase_result_{};
     takeoff_land::LandingAccFFTuning landing_accff_tuning_{};
-    takeoff_land::LandingAccFFState  landing_accff_state_{};
+    takeoff_land::LandingAccFFState landing_accff_state_{};
 
     arrival_helper::State takeoff_arrival_state_{};
     arrival_helper::State point_arrival_state_{};
@@ -268,11 +268,15 @@ class Geometric_Controller : public Controller_Interface {
     std::atomic<bool> point_complete_{false};
 
     // --------------------里程计状态---------------------
+    // 控制闭环使用的里程计。接入 odom_filter 后该字段应为 filtered odom。
     control_common::UAVStateEstimate uav_odometry_;
+    // 转发给 PX4 EKF 的原始外部里程计。不要写入 filtered odom。
+    control_common::UAVStateEstimate external_fusion_odometry_;
     std::atomic<bool> has_uav_odometry_{false};
     std::atomic<bool> has_imu_{false};
     std::atomic<bool> can_fuse_{false};
     ros::Time last_odom_timestamp_{ros::Time(0)};
+    ros::Time last_fusion_odom_timestamp_{ros::Time(0)};
     bool imu_acc_is_specific_force_{true};
 
     // --------------------期望状态--------------------

@@ -40,6 +40,7 @@ class PX4_OriginController : public Controller_Interface {
     bool is_ready() override;  // is_ready()检查各项指标是否正常，比如里程计频率，融合参数等等
     // -------------状态注入---------------
     void set_current_odom(const control_common::UAVStateEstimate& odom) override;
+    void set_external_odom_for_fusion(const control_common::UAVStateEstimate& odom) override;
     // -------------运动相关接口------------
     // 在地面，保持setpoint流，该函数用于状态机INIT阶段保持setpoint流持续发布，设置为-100的z轴推力
     void set_position_mode() override;
@@ -155,10 +156,14 @@ class PX4_OriginController : public Controller_Interface {
     std::atomic<bool> land_complete_{false};
     std::atomic<bool> point_complete_{false};
     // --------------------里程计状态---------------------
+    // 控制闭环使用的里程计。接入 odom_filter 后该字段应为 filtered odom。
     control_common::UAVStateEstimate uav_odometry_;
+    // 转发给 PX4 EKF 的原始外部里程计。不要写入 filtered odom。
+    control_common::UAVStateEstimate external_fusion_odometry_;
     std::atomic<bool> has_uav_odometry_{false};
     std::atomic<bool> can_fuse_{false};
     ros::Time last_odom_timestamp_{ros::Time(0)};
+    ros::Time last_fusion_odom_timestamp_{ros::Time(0)};
     // --------------------期望状态--------------------
     controller_data_types::TargetTrajectoryPoint_t desired_state_;
     // ros定时器

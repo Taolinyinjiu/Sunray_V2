@@ -30,9 +30,10 @@ struct UAVStateEstimate {
     // 填充位置与姿态
     Eigen::Vector3d position = Eigen::Vector3d::Zero();
     Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
-    // 填充速度与角速度
+    // 填充速度
     Eigen::Vector3d velocity = Eigen::Vector3d::Zero();
     // 部分算法无法得到角速度，这里可能需要额外考虑？
+    // 补充，我们控制器实际上也没有使用角速度
     Eigen::Vector3d bodyrate = Eigen::Vector3d::Zero();
     // 构造函数
     UAVStateEstimate() = default;
