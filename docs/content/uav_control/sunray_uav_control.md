@@ -459,7 +459,7 @@ config/airframes/<airframe_type>.yaml
 | `sunray_150` | Sunray 150 系列实机 |
 | `sunray_300` | Sunray 300 系列实机 |
 | `gazebo_sim` | Gazebo 仿真 |
-| `pengyu_sim` | Pengyu 仿真 |
+| `pengyu_sim` | 历史 Pengyu 仿真参数，启动面板默认不再使用 |
 
 启动示例：
 

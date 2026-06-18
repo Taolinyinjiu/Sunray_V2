@@ -699,8 +699,8 @@ QString odomSourceName(const uint8_t source)
         return "GAZEBO";
     case sunray_msgs::OdomState::GAZEBO_ARUCO:
         return "GAZEBO_ARUCO";
-    case sunray_msgs::OdomState::PENGYU_SIM:
-        return "PENGYU_SIM";
+    case sunray_msgs::OdomState::SUNRAY_MAVROS_SIM:
+        return "SUNRAY_MAVROS_SIM";
     case sunray_msgs::OdomState::FASTLIO_EKF:
         return "FASTLIO_EKF";
     default:

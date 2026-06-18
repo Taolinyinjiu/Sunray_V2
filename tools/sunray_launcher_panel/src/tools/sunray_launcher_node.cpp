@@ -101,7 +101,7 @@ struct QuickLaunchStep
 struct QuickLaunchGroup
 {
     std::string title;
-    std::string category{"pengyu_sim"};
+    std::string category{"sunray_mavros_sim"};
     std::string description;
     std::vector<QuickLaunchStep> steps;
 };
@@ -898,10 +898,10 @@ private:
 
             if (category_value.hasMember("category") && category_value.hasMember("scripts"))
             {
-                std::string category = trimCopy(xmlRpcToString(category_value["category"], "pengyu_sim"));
+                std::string category = trimCopy(xmlRpcToString(category_value["category"], "sunray_mavros_sim"));
                 if (category.empty())
                 {
-                    category = "pengyu_sim";
+                    category = "sunray_mavros_sim";
                 }
 
                 XmlRpc::XmlRpcValue scripts = category_value["scripts"];
@@ -923,7 +923,7 @@ private:
 
             // Backward compatibility for the old flat list format.
             QuickLaunchGroup group;
-            if (parseQuickLaunchGroup(category_value, "pengyu_sim", group))
+            if (parseQuickLaunchGroup(category_value, "sunray_mavros_sim", group))
             {
                 addQuickLaunchGroup(group);
             }
@@ -942,7 +942,7 @@ private:
         }
 
         group = QuickLaunchGroup{};
-        group.category = category_fallback.empty() ? "pengyu_sim" : category_fallback;
+        group.category = category_fallback.empty() ? "sunray_mavros_sim" : category_fallback;
         group.title = xmlRpcToString(group_value["title"]);
         if (group_value.hasMember("category"))
         {
@@ -950,7 +950,7 @@ private:
         }
         if (group.category.empty())
         {
-            group.category = "pengyu_sim";
+            group.category = "sunray_mavros_sim";
         }
         if (group_value.hasMember("description"))
         {
@@ -1326,7 +1326,7 @@ private:
         });
 
         selected_command_ = new QTextEdit();
-        selected_command_->setPlaceholderText("roslaunch localization_fusion localization_fusion.launch source_id:=5 agent_name:=uav agent_id:=1");
+        selected_command_->setPlaceholderText("roslaunch sunray_mavros_sim sunray_mavros_sim.launch");
         selected_command_->setMinimumHeight(34);
         selected_command_->setMaximumHeight(40);
         selected_command_->setObjectName("commandEdit");

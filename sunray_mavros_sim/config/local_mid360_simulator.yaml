@@ -2,7 +2,7 @@
 #
 # 模块功能：
 #   使用 GlobalMapServer 提供的全局点云和 QuadrotorSimulator 发布的 odom，
-#   模拟 MID360 风格的全局坐标系局部点云、sensor 坐标系局部点云和深度图。
+#   模拟 MID360 风格的全局坐标系局部点云和 sensor 坐标系局部点云。
 #
 # 读取模块：
 #   LocalMid360Simulator
@@ -14,9 +14,41 @@ lidar_type: mid360
 # 它统一读取 sunray_mavros_sim_node.yaml 中的 global_frame_id。
 
 # 传感器坐标系 frame_id。
-# ~/sunray_mavros_sim/cloud_sensor_frame 和 depth_img 会使用该 frame。
-# TF 会发布 global_frame_id -> sensor_frame_id。
-sensor_frame_id: sensor
+# ~/sunray_mavros_sim/cloud_sensor_frame 会使用该 frame。
+# TF 会发布 global_frame_id -> sensor_frame_id，且包含下面配置的安装外参。
+# 留空时程序自动使用 <agent_name><agent_id>/sensor，例如 uav1/sensor。
+sensor_frame_id: ""
+
+# 传感器安装外参说明：
+#   1. 外参定义的是“雷达坐标系相对机体 odom 坐标系”的固定变换。
+#   2. 程序会先读取 QuadrotorSimulator 发布的 odom 作为机体位姿 body_pose。
+#   3. 雷达世界位置计算为：
+#        sensor_pos_world = body_pos_world + body_rot_world * sensor_offset_body
+#   4. 雷达世界姿态计算为：
+#        sensor_rot_world = body_rot_world * sensor_rot_body
+#   5. 局部点云视场裁剪、cloud_sensor_frame、cloud_world_frame 和 TF
+#      都会使用这个外参后的真实雷达位姿。
+#   6. 如果雷达有俯仰/横滚/偏航安装角，例如向下倾斜安装，模拟出来的局部点云会按该
+#      倾斜姿态进行视场裁剪和坐标转换。
+#   7. 默认全部为 0，表示雷达和机体 odom 坐标系完全重合，保持原有行为。
+
+# 雷达坐标系原点相对机体 odom 坐标系的 x 方向偏移，单位 m。
+sensor_offset_x: 0.0
+
+# 雷达坐标系原点相对机体 odom 坐标系的 y 方向偏移，单位 m。
+sensor_offset_y: 0.0
+
+# 雷达坐标系原点相对机体 odom 坐标系的 z 方向偏移，单位 m。
+sensor_offset_z: 0.0
+
+# 雷达坐标系相对机体 odom 坐标系的 roll 安装角，单位 deg。
+sensor_roll: 0.0
+
+# 雷达坐标系相对机体 odom 坐标系的 pitch 安装角，单位 deg。
+sensor_pitch: 0.0
+
+# 雷达坐标系相对机体 odom 坐标系的 yaw 安装角，单位 deg。
+sensor_yaw: 0.0
 
 # 是否按 360 度水平视场模拟雷达。
 # 1：水平 360 度；0：使用 yaw_fov 限制水平视场。
@@ -25,7 +57,7 @@ is_360lidar: 1
 # 局部点云最大感知距离，单位 m。
 sensing_horizon: 15.0
 
-# 局部点云和深度图发布频率，单位 Hz。
+# 局部点云发布频率，单位 Hz。
 sensing_rate: 10.0
 
 # 极坐标角分辨率，单位 deg。

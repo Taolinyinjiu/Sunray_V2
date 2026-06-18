@@ -1,6 +1,9 @@
 #include "quadrotor_dynamics.h"
 #include <cmath>
 
+namespace sunray_mavros_sim
+{
+
 QuadrotorDynamics::QuadrotorDynamics(const DynamicParams& dyn_params, const MotorParams& motor_p)
     : dynamic_params(dyn_params), motor_params(motor_p), sim_time(0.0)
 {
@@ -12,7 +15,7 @@ QuadrotorDynamics::QuadrotorDynamics(const DynamicParams& dyn_params, const Moto
     drone_state.quat = Eigen::Vector4d(1.0, 0.0, 0.0, 0.0);
     drone_state.vel = Eigen::Vector3d::Zero();
     drone_state.ang_vel = Eigen::Vector3d::Zero();
-    drone_state.motor_omega = Eigen::Vector4d::Zero();
+    drone_state.motor_rpm = Eigen::Vector4d::Zero();
     drone_state.motor_thrust = Eigen::Vector4d::Zero();
     drone_state.total_thrust = 0.0;
     drone_state.total_torque = Eigen::Vector3d::Zero();
@@ -25,7 +28,7 @@ void QuadrotorDynamics::reset(const Eigen::Vector3d& init_pos, const Eigen::Vect
     drone_state.quat = quaternionNormalize(init_quat);
     drone_state.vel = Eigen::Vector3d::Zero();
     drone_state.ang_vel = Eigen::Vector3d::Zero();
-    drone_state.motor_omega = Eigen::Vector4d::Zero();
+    drone_state.motor_rpm = Eigen::Vector4d::Zero();
     drone_state.motor_thrust = Eigen::Vector4d::Zero();
     drone_state.total_thrust = 0.0;
     drone_state.total_torque = Eigen::Vector3d::Zero();
@@ -33,11 +36,11 @@ void QuadrotorDynamics::reset(const Eigen::Vector3d& init_pos, const Eigen::Vect
     sim_time = 0.0;
 }
 
-void QuadrotorDynamics::hold()
+void QuadrotorDynamics::pause()
 {
     drone_state.vel = Eigen::Vector3d::Zero();
     drone_state.ang_vel = Eigen::Vector3d::Zero();
-    drone_state.motor_omega = Eigen::Vector4d::Zero();
+    drone_state.motor_rpm = Eigen::Vector4d::Zero();
     drone_state.motor_thrust = Eigen::Vector4d::Zero();
     drone_state.total_thrust = 0.0;
     drone_state.total_torque = Eigen::Vector3d::Zero();
@@ -77,46 +80,46 @@ double QuadrotorDynamics::clamp(double val, double min, double max)
 
 /**
  * 电机动力学模型（一阶响应）
- * 数学公式：ω(t+dt) = ω(t) + (ω_des - ω(t)) / τ * dt
+ * 数学公式：rpm(t+dt) = rpm(t) + (rpm_des - rpm(t)) / τ * dt
  * 其中：
  * - τ 为时间常数（上升或下降），单位s，反映电机响应速度，τ越小，响应越快
- * - ω_des 为期望转速，单位rpm，反映电机目标转速
- * - ω(t) 为当前转速，单位rpm，反映电机当前转速
+ * - rpm_des 为期望转速，单位 rpm，反映电机目标转速
+ * - rpm(t) 为当前转速，单位 rpm，反映电机当前转速
  * - dt 为时间步长，单位s，反映模拟时间间隔
  */
-double QuadrotorDynamics::motorDynamics(double omega_des, double omega_act, double dt)
+double QuadrotorDynamics::motorRpmDynamics(double rpm_des, double rpm_act, double dt)
 {
     // 选择上升或下降时间常数，根据期望转速和当前转速的关系
-    double tau = (omega_des > omega_act) ? motor_params.tau_up : motor_params.tau_down;
+    double tau = (rpm_des > rpm_act) ? motor_params.tau_up : motor_params.tau_down;
     // 计算下一个时间步的转速
-    double omega_next = omega_act + (omega_des - omega_act) / tau * dt;
+    double rpm_next = rpm_act + (rpm_des - rpm_act) / tau * dt;
     // 对转速进行限制
-    omega_next = clamp(omega_next, motor_params.omega_min, motor_params.omega_max);
+    rpm_next = clamp(rpm_next, motor_params.rpm_min, motor_params.rpm_max);
     // 返回数值
-    return omega_next;
+    return rpm_next;
 }
 
 void QuadrotorDynamics::updateMotors(double dt)
 {
     for (int i = 0; i < 4; ++i)
     {
-        drone_state.motor_omega(i) = motorDynamics(drone_input.motor_omega_des(i), drone_state.motor_omega(i), dt);
+        drone_state.motor_rpm(i) = motorRpmDynamics(drone_input.motor_rpm_des(i), drone_state.motor_rpm(i), dt);
     }
 }
 
 /**
  * 计算每个电机的推力
- * 数学公式：F_i = k_F * ω_i²
+ * 数学公式：F_i = k_F * rpm_i²
  * 其中：
  * - k_F 为电机推力系数，单位：N/rpm²
- * - ω_i 为第i个电机的转速，单位：rpm
+ * - rpm_i 为第 i 个电机的转速，单位：rpm
  * - F_i 为第i个电机的推力，单位：N
  */
 void QuadrotorDynamics::computeMotorThrust()
 {
     for (int i = 0; i < 4; ++i)
     {
-        drone_state.motor_thrust(i) = motor_params.k_F * drone_state.motor_omega(i) * drone_state.motor_omega(i);
+        drone_state.motor_thrust(i) = motor_params.k_F * drone_state.motor_rpm(i) * drone_state.motor_rpm(i);
     }
 }
 
@@ -130,12 +133,12 @@ void QuadrotorDynamics::computeTotalThrust()
  * 数学公式：
  * - 滚转扭矩 τ_x = L/√2 * (F2 + F3 - F1 - F4)
  * - 俯仰扭矩 τ_y = L/√2 * (F2 + F4 - F1 - F3)
- * - 偏航扭矩 τ_z = k_T * (ω3² + ω4² - ω1² - ω2²)
+ * - 偏航扭矩 τ_z = k_T * (rpm3² + rpm4² - rpm1² - rpm2²)
  * 其中：
  * - L 为无人机臂长，单位：m
  * - F1-F4 为四个电机的推力，单位：N
- * - ω1-ω4 为四个电机的转速，单位：rpm
- * - k_T 为电机扭矩系数，单位：Nm/rpm
+ * - rpm1-rpm4 为四个电机的转速，单位：rpm
+ * - k_T 为电机反扭矩系数，单位：Nm/rpm²
  * 电机布局（从上往下看）：
  *         F3 (左前，逆时针)       F1 (右前，顺时针)
  *              \                     /
@@ -180,14 +183,14 @@ void QuadrotorDynamics::computeTotalTorque()
     double F3 = drone_state.motor_thrust(2);
     double F4 = drone_state.motor_thrust(3);
     
-    double omega1 = drone_state.motor_omega(0);
-    double omega2 = drone_state.motor_omega(1);
-    double omega3 = drone_state.motor_omega(2);
-    double omega4 = drone_state.motor_omega(3);
+    double rpm1 = drone_state.motor_rpm(0);
+    double rpm2 = drone_state.motor_rpm(1);
+    double rpm3 = drone_state.motor_rpm(2);
+    double rpm4 = drone_state.motor_rpm(3);
     
     double tau_x = L / sqrt(2.0) * (F2 + F3 - F1 - F4);
     double tau_y = L / sqrt(2.0) * (F2 + F4 - F1 - F3);
-    double tau_z = k_T * (omega3*omega3 + omega4*omega4 - omega1*omega1 - omega2*omega2);
+    double tau_z = k_T * (rpm3 * rpm3 + rpm4 * rpm4 - rpm1 * rpm1 - rpm2 * rpm2);
     
     drone_state.total_torque << tau_x, tau_y, tau_z;
 }
@@ -402,3 +405,4 @@ Eigen::Vector4d QuadrotorDynamics::quaternionNormalize(const Eigen::Vector4d& qu
     }
     return quat / norm;
 }
+}  // namespace sunray_mavros_sim

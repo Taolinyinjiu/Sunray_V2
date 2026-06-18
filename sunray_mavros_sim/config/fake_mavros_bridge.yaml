@@ -1,8 +1,9 @@
 # FakeMavrosBridge 假 MAVROS 桥接模块参数。
 #
 # 模块功能：
-#   把 sunray_mavros_sim 内部 odom/imu 转发成 /<agent>/mavros/* 常用话题，
+#   把 sunray_mavros_sim 内部 odom/imu/navsat 转发成 /<agent>/mavros/* 常用话题，
 #   同时提供 set_mode、arming、param/get、param/set 等常见 MAVROS 服务。
+#   GPSRAW 使用内部 navsat 自动生成固定 3D fix 的简化数据，不单独配置 GPS 参数。
 #
 # 读取模块：
 #   FakeMavrosBridge

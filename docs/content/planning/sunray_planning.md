@@ -116,8 +116,8 @@ roslaunch sunray_planning sunray_planning.launch planner_type:=diff
  - rviz_goal_bridge 这个工具将rviz的2D nav goal话题数据转换为sunray_planning_cmd发布到surnay_planning模块
 
 当我们要进行一次实机仿真时，执行顺序为
-1. 启动仿真环节(pengyu_sim应该介入这里进行修改)
-roslaunch sunray
+1. 启动仿真环节
+roslaunch sunray_mavros_sim sunray_mavros_sim.launch
 2. 启动定位模块
 roslaunch localization_fusion localization_fusion.launch
 3. 启动sunray_planning模块
@@ -127,7 +127,7 @@ roslaunch sunray_planning sunray_planning.launch planner_type:=ego cloud_topic:=
 
 4. 启动控制节点
 roslaunch sunray_uav_control uav_control.launch
-> pengyu_sim的动力学模模型与gazebo似乎相差一些，主要表现在悬停油门，pengyu_sim似乎只需要0.2左右而gazebo是0.375附近，geometric_controller由于对悬停油门较为敏感，很难说在pengyu_sim上能否有好的表现，可以考虑先用px4_original_controller做测试，后续优化geometric_controller
+> sunray_mavros_sim 是轻量动力学仿真，和 Gazebo/PX4 SITL 不完全等价。做规划验证时建议优先使用 PX4 原生控制链路，确认闭环稳定后再调整更复杂的控制器。
 5. 启动控制终端（这一步只是为了起飞，用别的方式也行）
 rosrun uav_control_tools uav_terminal_control_node
 
@@ -135,7 +135,7 @@ rosrun uav_control_tools uav_terminal_control_node
 > 1.rviz的目标点捕获使用的是move_simple_goal话题
 > 2.rviz的目标点捕获工具似乎，是硬编码了uav1，这点需要注意下
 
-由于主要做的单机仿真，因此代码中可能有部分是uav1，pengyu_sim在适配planner的时候，可以先使用uav1进行测试，这些小bug正在被清理
+由于主要做的单机仿真，因此代码中可能有部分是 uav1。使用 sunray_mavros_sim 适配 planner 时，可以先使用 uav1 进行测试，这些小问题正在被清理。
 目前初步的想法是，使用agent_name与agent_id，不再区分uav与ugv，这样可以轻量化localization与planning模块
 
 </section>

@@ -5,45 +5,32 @@
 #   /<agent>/sunray_mavros_sim/odom、imu、navsat。
 #
 # 读取模块：
-#   1. QuadrotorSimulator：读取本文件全部参数。
-#   2. PX4_CONTROL_SIM：也会读取 dynamics/mass、dynamics/gravity、
-#      dynamics/arm_length、motor/k_F、motor/k_T、motor/omega_max。
+#   1. QuadrotorSimulator：读取动力学、电机、IMU 和超时参数。
+#   2. Px4ControlSim：也会读取 dynamics/mass、dynamics/gravity、
+#      dynamics/arm_length、motor/k_F、motor/k_T、motor/rpm_max。
 #      这些参数必须和动力学模块一致，否则同一条 setpoint 会在控制转换和
 #      动力学积分中对应不同推力。
+#
+# 初始位姿参数不在本文件中配置，已放到 single_uav_simulator.yaml。
 
 # odom/navsat 的 header.frame_id 不在本文件单独配置。
 # 它统一读取 sunray_mavros_sim_node.yaml 中的 global_frame_id。
+
+# 机体坐标系 frame_id。
+# 用作 ~/sunray_mavros_sim/odom 的 child_frame_id，以及 ~/sunray_mavros_sim/imu 的 header.frame_id。
+# 留空时程序自动使用 <agent_name><agent_id>/base_link，例如 uav1/base_link。
+base_frame_id: ""
 
 # 动力学积分频率，单位 Hz。
 dynamics_update_rate: 500.0
 
 # 电机 RPM 指令超时时间，单位 s。
-# 超过该时间没有收到 cmd_RPM 时，动力学模块会清零电机输入并保持当前位置。
+# 超过该时间没有收到 cmd_RPM 时，动力学模块会暂停仿真状态：
+#   1. 不再推进仿真时间；
+#   2. 当前位置和姿态保持不变；
+#   3. 速度、角速度、电机转速和推力清零；
+#   4. odom/imu/navsat 仍会按当前冻结状态继续发布，方便上层模块保持输入不断流。
 cmd_timeout: 0.1
-
-# RViz 无人机 marker 发布频率，单位 Hz。
-# marker 会显示四旋翼机体、机臂、电机盘、机头方向箭头，以及机体上方的位置文字。
-rviz_marker_rate: 10.0
-
-# RViz 无人机 marker 的整体缩放系数。
-# 只影响显示大小，不影响动力学参数、odom、imu 或点云。
-rviz_marker_scale: 1.3
-
-# RViz marker 发布话题。
-# 留空时程序自动使用 /<agent>/sunray_mavros_sim/rviz_markers。
-rviz_marker_topic: ""
-
-# 初始位置 x，单位 m，global_frame_id 坐标系。
-init_x: 0.0
-
-# 初始位置 y，单位 m，global_frame_id 坐标系。
-init_y: 0.0
-
-# 初始位置 z，单位 m，global_frame_id 坐标系。
-init_z: 0.0
-
-# 初始偏航角，单位 rad。
-init_yaw: 0.0
 
 # 四旋翼刚体参数。
 dynamics:
@@ -67,10 +54,10 @@ dynamics:
 
 # 电机模型参数。
 motor:
-  # 推力系数，推力 = k_F * omega^2。
+  # 推力系数，推力 = k_F * rpm^2，单位 N/rpm^2。
   k_F: 6.6e-8
 
-  # 反扭矩系数，扭矩 = k_T * omega^2。
+  # 反扭矩系数，反扭矩 = k_T * rpm^2，单位 Nm/rpm^2。
   k_T: 2.5e-9
 
   # 电机加速一阶响应时间常数，单位 s。
@@ -79,8 +66,8 @@ motor:
   # 电机减速一阶响应时间常数，单位 s。
   tau_down: 0.025
 
-  # 电机最小转速，单位 rad/s。
-  omega_min: 0.0
+  # 电机最小转速，单位 rpm。
+  rpm_min: 0.0
 
-  # 电机最大转速，单位 rad/s。
-  omega_max: 10000.0
+  # 电机最大转速，单位 rpm。
+  rpm_max: 10000.0

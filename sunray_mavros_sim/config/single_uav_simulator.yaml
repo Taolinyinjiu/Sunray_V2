@@ -1,0 +1,46 @@
+# SingleUavSimulator 无人机仿真管理模块参数。
+#
+# 模块功能：
+#   每个 SingleUavSimulator 负责创建并持有一架无人机相关模块：
+#     1. LocalMid360Simulator：enable_sensing=true 时创建，用全局地图生成局部 MID360 点云。
+#     2. QuadrotorSimulator：四旋翼动力学、odom、imu、navsat。
+#     3. Px4ControlSim：将 MAVROS setpoint 转换为电机 RPM。
+#     4. FakeMavrosBridge：输出假的 MAVROS 状态、odom、imu 和常用服务。
+#
+# 读取模块：
+#   SingleUavSimulator。
+#
+# 说明：
+#   本文件只放“无人机管理层”的参数。当前主要是每架无人机的初始位姿。
+#   主节点根据 sunray_mavros_sim_node.yaml 中的 agent_name 和 agent_ids 创建多架无人机；
+#   SingleUavSimulator 会按 vehicles/<agent_name><agent_id>/init_* 读取对应初始位姿。
+#   UGV 也复用本文件的 vehicles 分组，但只读取 init_x/init_y/init_yaw。
+
+vehicles:
+  # uav1 对应 agent_name: uav、agent_ids: [1]。
+  # 集群时继续增加 uav2、uav3 等条目即可。
+  uav1:
+    # 初始位置 x，单位 m，global_frame_id 坐标系。
+    init_x: 0.0
+
+    # 初始位置 y，单位 m，global_frame_id 坐标系。
+    init_y: 0.0
+
+    # 初始位置 z，单位 m，global_frame_id 坐标系。
+    init_z: 0.0
+
+    # 初始偏航角，单位 rad。
+    # 例如 1.5708 表示机头初始朝向逆时针 90 度。
+    init_yaw: 0.0
+
+  # ugv1 对应 ugv.agent_name: ugv、ugv.agent_ids: [1]。
+  # 只有 ugv.enable=true 时会读取。
+  ugv1:
+    # 初始位置 x，单位 m，global_frame_id 坐标系。
+    init_x: 0.0
+
+    # 初始位置 y，单位 m，global_frame_id 坐标系。
+    init_y: 0.0
+
+    # 初始偏航角，单位 rad。
+    init_yaw: 0.0

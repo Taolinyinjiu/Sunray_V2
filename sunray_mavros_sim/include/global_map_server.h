@@ -35,7 +35,7 @@ private:
 
     bool ready_{false};
     std::string map_name_;
-    std::string global_map_topic_{"/map_generator/global_cloud"};
+    std::string global_map_topic_{"/sunray_mavros_sim/global_cloud"};
     std::string global_frame_id_{"map"};
     int add_boundary_{0};
     double downsample_res_{0.1};

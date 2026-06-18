@@ -17,6 +17,9 @@ constexpr const char* kAnsiGood = "\033[1;32m";
 constexpr const char* kAnsiWarn = "\033[1;33m";
 }
 
+namespace sunray_mavros_sim
+{
+
 FakeMavrosBridge::FakeMavrosBridge(ros::NodeHandle& nh, const std::string& uav_name)
     : nh_(nh), uav_name_(uav_name) {
     nh_.param("fake_mavros_bridge/mavros_publish_rate", mavros_publish_rate_hz_, 50.0);
@@ -50,6 +53,10 @@ FakeMavrosBridge::FakeMavrosBridge(ros::NodeHandle& nh, const std::string& uav_n
                              20,
                              &FakeMavrosBridge::imuCallback,
                              this);
+    navsat_sub_ = nh_.subscribe(uav_name_ + "/sunray_mavros_sim/navsat",
+                                20,
+                                &FakeMavrosBridge::navsatCallback,
+                                this);
     local_setpoint_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/local",
                                         20,
                                         &FakeMavrosBridge::localSetpointCallback,
@@ -67,6 +74,14 @@ FakeMavrosBridge::FakeMavrosBridge(ros::NodeHandle& nh, const std::string& uav_n
         nh_.advertise<mavros_msgs::EstimatorStatus>(uav_name_ + "/mavros/estimator_status", 10);
     local_odom_pub_ =
         nh_.advertise<nav_msgs::Odometry>(uav_name_ + "/mavros/local_position/odom", 10);
+    local_pose_pub_ =
+        nh_.advertise<geometry_msgs::PoseStamped>(uav_name_ + "/mavros/local_position/pose", 10);
+    local_velocity_pub_ =
+        nh_.advertise<geometry_msgs::TwistStamped>(uav_name_ + "/mavros/local_position/velocity_local", 10);
+    global_position_pub_ =
+        nh_.advertise<sensor_msgs::NavSatFix>(uav_name_ + "/mavros/global_position/global", 10);
+    gps_raw_pub_ =
+        nh_.advertise<mavros_msgs::GPSRAW>(uav_name_ + "/mavros/gpsstatus/gps1/raw", 10);
     imu_pub_ = nh_.advertise<sensor_msgs::Imu>(uav_name_ + "/mavros/imu/data", 10);
     target_local_pub_ = nh_.advertise<mavros_msgs::PositionTarget>(
         uav_name_ + "/mavros/setpoint_raw/target_local", 10);
@@ -99,7 +114,7 @@ void FakeMavrosBridge::odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
     latest_odom_ = *msg;
     has_odom_ = true;
 
-    local_odom_pub_.publish(latest_odom_);
+    publishLocalPositionOutputs(ros::Time::now());
 }
 
 void FakeMavrosBridge::imuCallback(const sensor_msgs::Imu::ConstPtr& msg) {
@@ -107,6 +122,13 @@ void FakeMavrosBridge::imuCallback(const sensor_msgs::Imu::ConstPtr& msg) {
     has_imu_ = true;
 
     imu_pub_.publish(latest_imu_);
+}
+
+void FakeMavrosBridge::navsatCallback(const sensor_msgs::NavSatFix::ConstPtr& msg) {
+    latest_navsat_ = *msg;
+    has_navsat_ = true;
+
+    publishGlobalPositionOutputs(ros::Time::now());
 }
 
 void FakeMavrosBridge::localSetpointCallback(const mavros_msgs::PositionTarget::ConstPtr& msg) {
@@ -166,6 +188,14 @@ void FakeMavrosBridge::publishTimerCallback(const ros::TimerEvent&) {
     estimator_msg.gps_glitch_status_flag = false;
     estimator_msg.accel_error_status_flag = false;
     estimator_status_pub_.publish(estimator_msg);
+
+    if (has_odom_) {
+        publishLocalPositionOutputs(now);
+    }
+
+    if (has_navsat_) {
+        publishGlobalPositionOutputs(now);
+    }
 
     if (has_imu_) {
         latest_imu_.header.stamp = now;
@@ -263,6 +293,55 @@ bool FakeMavrosBridge::paramSetService(mavros_msgs::ParamSet::Request& req,
     return true;
 }
 
+void FakeMavrosBridge::publishLocalPositionOutputs(const ros::Time& stamp) {
+    nav_msgs::Odometry odom_msg = latest_odom_;
+    odom_msg.header.stamp = stamp;
+    local_odom_pub_.publish(odom_msg);
+
+    geometry_msgs::PoseStamped pose_msg;
+    pose_msg.header = odom_msg.header;
+    pose_msg.pose = odom_msg.pose.pose;
+    local_pose_pub_.publish(pose_msg);
+
+    geometry_msgs::TwistStamped velocity_msg;
+    velocity_msg.header = odom_msg.header;
+    velocity_msg.twist = odom_msg.twist.twist;
+    local_velocity_pub_.publish(velocity_msg);
+}
+
+void FakeMavrosBridge::publishGlobalPositionOutputs(const ros::Time& stamp) {
+    sensor_msgs::NavSatFix global_msg = latest_navsat_;
+    global_msg.header.stamp = stamp;
+    global_position_pub_.publish(global_msg);
+
+    mavros_msgs::GPSRAW gps_msg;
+    gps_msg.header = global_msg.header;
+    gps_msg.fix_type = mavros_msgs::GPSRAW::GPS_FIX_TYPE_3D_FIX;
+    gps_msg.lat = static_cast<int32_t>(std::llround(global_msg.latitude * 1.0e7));
+    gps_msg.lon = static_cast<int32_t>(std::llround(global_msg.longitude * 1.0e7));
+    gps_msg.alt = static_cast<int32_t>(std::llround(global_msg.altitude * 1000.0));
+    gps_msg.eph = 100;
+    gps_msg.epv = 150;
+    gps_msg.vel = 0;
+    if (has_odom_) {
+        const double vx = latest_odom_.twist.twist.linear.x;
+        const double vy = latest_odom_.twist.twist.linear.y;
+        const double vz = latest_odom_.twist.twist.linear.z;
+        gps_msg.vel = static_cast<uint16_t>(std::llround(std::hypot(std::hypot(vx, vy), vz) * 100.0));
+    }
+    gps_msg.cog = 0;
+    gps_msg.satellites_visible = 12;
+    gps_msg.alt_ellipsoid = gps_msg.alt;
+    gps_msg.h_acc = 1000;
+    gps_msg.v_acc = 1500;
+    gps_msg.vel_acc = 100;
+    gps_msg.hdg_acc = 0;
+    gps_msg.yaw = 0;
+    gps_msg.dgps_numch = 0;
+    gps_msg.dgps_age = 0;
+    gps_raw_pub_.publish(gps_msg);
+}
+
 uint8_t FakeMavrosBridge::estimateLandedState() const {
     if (!has_odom_) {
         return mavros_msgs::ExtendedState::LANDED_STATE_UNDEFINED;
@@ -311,36 +390,30 @@ std::string FakeMavrosBridge::buildStatusPanel() const {
        << "\n"
        << "          odom = " << (has_odom_ ? kAnsiGood : kAnsiWarn) << (has_odom_ ? "正常" : "等待") << kAnsiReset
        << "  imu = " << (has_imu_ ? kAnsiGood : kAnsiWarn) << (has_imu_ ? "正常" : "等待") << kAnsiReset
+       << "  navsat = " << (has_navsat_ ? kAnsiGood : kAnsiWarn) << (has_navsat_ ? "正常" : "等待") << kAnsiReset
        << "  local_sp = " << (has_local_target_ ? kAnsiGood : kAnsiWarn) << (has_local_target_ ? "正常" : "等待") << kAnsiReset
        << "  attitude_sp = " << (has_attitude_target_ ? kAnsiGood : kAnsiWarn) << (has_attitude_target_ ? "正常" : "等待") << kAnsiReset
        << "\n";
 
     ss << kAnsiGood << " 订阅话题 " << kAnsiReset
        << "里程计 -> " << uav_name_ << "/sunray_mavros_sim/odom"
-       << "\n"
-       << "          IMU -> " << uav_name_ << "/sunray_mavros_sim/imu"
+       << "  |  IMU -> " << uav_name_ << "/sunray_mavros_sim/imu"
+       << "  |  GNSS -> " << uav_name_ << "/sunray_mavros_sim/navsat"
        << "\n"
        << "          位置指令 -> " << uav_name_ << "/mavros/setpoint_raw/local"
-       << "\n"
-       << "          姿态指令 -> " << uav_name_ << "/mavros/setpoint_raw/attitude"
+       << "  |  姿态指令 -> " << uav_name_ << "/mavros/setpoint_raw/attitude"
        << "\n";
 
     ss << kAnsiGood << " 发布话题 " << kAnsiReset
-       << "状态 -> " << uav_name_ << "/mavros/state"
-       << "\n"
-       << "          扩展状态 -> " << uav_name_ << "/mavros/extended_state"
-       << "  |  系统状态 -> " << uav_name_ << "/mavros/sys_status"
-       << "\n"
-       << "          估计器状态 -> " << uav_name_ << "/mavros/estimator_status"
+       << "状态/系统 -> state, extended_state, sys_status, estimator_status"
        << "\n";
-    ss << "          里程计 -> " << uav_name_ << "/mavros/local_position/odom"
-       << "  |  IMU -> " << uav_name_ << "/mavros/imu/data"
+    ss << "          定位 -> local_position/{odom,pose,velocity_local}, global_position/global, gpsstatus/gps1/raw"
        << "\n"
-       << "          位置目标 -> " << uav_name_ << "/mavros/setpoint_raw/target_local"
-       << "  |  姿态目标 -> " << uav_name_ << "/mavros/setpoint_raw/target_attitude"
+       << "          IMU/目标 -> imu/data, setpoint_raw/{target_local,target_attitude}"
        << "\n";
     ss << "          EKF参数: EKF2_EV_CTRL = " << (ev_it != params_.end() ? ev_it->second.integer : 0)
        << "  EKF2_HGT_REF = " << (hgt_it != params_.end() ? hgt_it->second.integer : 0);
 
     return ss.str();
 }
+}  // namespace sunray_mavros_sim

@@ -218,7 +218,7 @@ rostopic echo /ugv1/sunray/ugv_control/control_cmd
 推荐顺序：
 
 1. 读定位模块总览和 `localization_fusion`。
-2. 根据使用环境选择定位源：Gazebo/Pengyu 仿真、动捕、VIO、FAST-LIO 或 VINS。
+2. 根据使用环境选择定位源：Gazebo/sunray_mavros_sim 仿真、动捕、VIO、FAST-LIO 或 VINS。
 3. 读驱动模块中对应硬件页面，例如 MAVROS、Livox、RealSense、VRPN、底盘驱动。
 4. 读仿真模块，确认仿真器输出的话题是否能进入 `localization_fusion`。
 

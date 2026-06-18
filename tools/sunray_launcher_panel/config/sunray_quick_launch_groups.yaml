@@ -1,6 +1,117 @@
 quick_launch_groups:
   - category: "sunray_mavros_sim"
     scripts:
+      - title: "单无人机控制验证"
+        description: "sunray_mavros_sim 单机仿真 + 定位融合 + 无人机控制"
+        items:
+          - ref: "sunray_mavros_sim/sunray_mavros_sim"
+            delay_sec: 2.0
+
+          - ref: "定位融合/无人机定位融合"
+            delay_sec: 1.0
+
+          - ref: "无人机控制/单机无人机控制"
+            args:
+              - "agent_name:=uav"
+              - "agent_id:=1"
+              - "enable_uav_control_monitor:=true"
+
+      - title: "单无人机 Diff 规划验证"
+        description: "sunray_mavros_sim 单机仿真 + 定位融合 + 无人机控制 + Diff 规划"
+        items:
+          - ref: "sunray_mavros_sim/sunray_mavros_sim"
+            delay_sec: 2.0
+
+          - ref: "定位融合/无人机定位融合"
+            delay_sec: 1.0
+
+          - ref: "无人机控制/单机无人机控制"
+            args:
+              - "agent_name:=uav"
+              - "agent_id:=1"
+              - "enable_uav_control_monitor:=true"
+            delay_sec: 1.0
+
+          - ref: "路径规划/Sunray Planning Diff"
+
+      - title: "单无人机 Ego 规划验证"
+        description: "sunray_mavros_sim 单机仿真 + 定位融合 + 无人机控制 + Ego 规划"
+        items:
+          - ref: "sunray_mavros_sim/sunray_mavros_sim"
+            delay_sec: 2.0
+
+          - ref: "定位融合/无人机定位融合"
+            delay_sec: 1.0
+
+          - ref: "无人机控制/单机无人机控制"
+            args:
+              - "agent_name:=uav"
+              - "agent_id:=1"
+              - "enable_uav_control_monitor:=true"
+            delay_sec: 1.0
+
+          - ref: "路径规划/Sunray Planning Ego"
+
+      - title: "6机无人机集群控制验证"
+        description: "sunray_mavros_sim 6机仿真 + 集群定位融合 + 集群无人机控制 + 集群控制"
+        items:
+          - title: "sunray_mavros_sim_6机集群"
+            package: "sunray_mavros_sim"
+            launch: "sunray_mavros_sim.launch"
+            args:
+              - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_swarm6.yaml"
+              - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_uav_simulator_swarm6.yaml"
+            delay_sec: 2.0
+
+          - ref: "定位融合/集群无人机定位融合"
+            args:
+              - "source_id:=5"
+              - "agent_name:=uav"
+              - "agent_num:=6"
+            delay_sec: 1.0
+
+          - ref: "无人机控制/集群无人机控制"
+            args:
+              - "agent_name:=uav"
+              - "agent_num:=6"
+              - "enable_monitor:=true"
+            delay_sec: 1.0
+
+          - ref: "无人机集群控制/无人机集群控制仿真"
+
+      - title: "单无人车控制验证"
+        description: "sunray_mavros_sim 单车仿真 + 定位融合 + 无人车控制"
+        items:
+          - ref: "sunray_mavros_sim/sunray_mavros_sim_单车"
+            delay_sec: 2.0
+
+          - ref: "定位融合/无人车定位融合"
+            delay_sec: 1.0
+
+          - ref: "无人车控制/单车无人车控制"
+
+      - title: "6车无人车集群控制验证"
+        description: "sunray_mavros_sim 6车仿真 + 集群定位融合 + 集群无人车控制 + 集群控制"
+        items:
+          - ref: "sunray_mavros_sim/sunray_mavros_sim_6车集群"
+            delay_sec: 2.0
+
+          - ref: "定位融合/集群无人车定位融合"
+            args:
+              - "source_id:=5"
+              - "agent_name:=ugv"
+              - "agent_num:=6"
+            delay_sec: 1.0
+
+          - ref: "无人车控制/集群无人车控制"
+            args:
+              - "agent_name:=ugv"
+              - "swarm_num:=6"
+              - "enable_monitor:=true"
+            delay_sec: 1.0
+
+          - ref: "无人车集群控制/无人车集群控制仿真"
+
       - title: "navrl_sim"
         description: "sunray_mavros_sim 仿真 + NavRL 适配 + 定位融合 + 无人机控制 + NavRL navigation_node"
         items:
@@ -43,63 +154,6 @@ quick_launch_groups:
               echo "conda activate NavRL && rosrun navigation_runner navigation_node.py"
               echo ""
               read -r -p "按 Enter 关闭这个提示终端..."
-
-  - category: "pengyu_sim"
-    scripts:
-      - title: "单无人机控制验证（pengyu_sim）"
-        description: "pengyu_sim无人机仿真节点 + 定位融合节点 + 无人机控制节点"
-        items:
-          - ref: "pengyu_sim仿真器/无人机动力学仿真"
-            delay_sec: 2.0
-          - ref: "定位融合/无人机定位融合"
-            delay_sec: 2.0
-          - ref: "无人机控制/单机无人机控制（pengyu_sim）"
-
-      - title: "单无人机规划验证（pengyu_sim）"
-        description: "pengyu_sim地图/局部点云 + pengyu_sim无人机仿真节点 + 定位融合节点 + 无人机控制节点 + diff 规划节点"
-        items:
-          - ref: "pengyu_sim仿真器/全局点云发布"
-            delay_sec: 0.5
-          - ref: "pengyu_sim仿真器/局部点云渲染"
-            delay_sec: 0.5
-          - ref: "pengyu_sim仿真器/无人机动力学仿真"
-            delay_sec: 1.0
-          - ref: "定位融合/无人机定位融合"
-            delay_sec: 1.0
-          - ref: "无人机控制/单机无人机控制（pengyu_sim）"
-            delay_sec: 1.0
-          - ref: "路径规划/Sunray Planning Diff"
-
-      - title: "单无人车控制验证（pengyu_sim）"
-        description: "pengyu_sim无人车仿真节点 + 定位融合节点 + 无人车控制节点"
-        items:
-          - ref: "pengyu_sim仿真器/无人车动力学仿真"
-            delay_sec: 1.0
-          - ref: "定位融合/无人车定位融合"
-            delay_sec: 1.0
-          - ref: "无人车控制/单车无人车控制"
-
-      - title: "6机无人机集群仿真（pengyu_sim）"
-        description: "pengyu_sim无人机仿真节点*6 + 定位融合节点*6 + 无人机控制节点*6 + 无人机集群控制节点*6"
-        items:
-          - ref: "pengyu_sim仿真器/集群无人机动力学仿真"
-            delay_sec: 1.5
-          - ref: "定位融合/集群无人机定位融合"
-            delay_sec: 1.0
-          - ref: "无人机控制/集群无人机控制（pengyu_sim）"
-            delay_sec: 1.0
-          - ref: "无人机集群控制/无人机集群控制仿真"
-
-      - title: "6车无人车集群仿真（pengyu_sim）"
-        description: "pengyu_sim无人车仿真节点*6 + 定位融合节点*6 + 无人车控制节点*6 + 无人车集群控制节点*6"
-        items:
-          - ref: "pengyu_sim仿真器/集群无人车动力学仿真"
-            delay_sec: 1.5
-          - ref: "定位融合/集群无人车定位融合"
-            delay_sec: 1.0
-          - ref: "无人车控制/集群无人车控制"
-            delay_sec: 1.0
-          - ref: "无人车集群控制/无人车集群控制仿真"
 
   - category: "Gazebo"
     scripts:

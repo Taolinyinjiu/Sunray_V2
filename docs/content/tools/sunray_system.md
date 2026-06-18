@@ -47,7 +47,7 @@ roslaunch sunray_system sunray_system.launch airframe_type:=sunray_300
 ```bash
 roslaunch sunray_system sunray_system.launch \
   workspace_setup_file:=/home/yundrone/Sunray_v2/devel/setup.bash \
-  external_workspaces:="['/home/yundrone/pengyu_sim']"
+  external_workspaces:="['/home/yundrone/external_ws']"
 ```
 
 ### 服务接口

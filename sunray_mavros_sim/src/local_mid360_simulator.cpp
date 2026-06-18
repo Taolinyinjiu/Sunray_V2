@@ -1,11 +1,11 @@
 #include "local_mid360_simulator.h"
 
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -23,6 +23,8 @@ constexpr const char* kAnsiReset = "\033[0m";
 constexpr const char* kAnsiTitle = "\033[1;36m";
 constexpr const char* kAnsiGood = "\033[1;32m";
 constexpr const char* kAnsiWarn = "\033[1;33m";
+constexpr const char* kAnsiBad = "\033[1;31m";
+constexpr double kRenderTimeWarnSec = 0.1;
 
 Eigen::Quaterniond odomQuaternion(const nav_msgs::Odometry& odom)
 {
@@ -41,6 +43,16 @@ Eigen::Vector3d odomPosition(const nav_msgs::Odometry& odom)
                            odom.pose.pose.position.z);
 }
 
+Eigen::Matrix3d rpyToRotationMatrix(const double roll_rad,
+                                    const double pitch_rad,
+                                    const double yaw_rad)
+{
+    const Eigen::AngleAxisd roll(roll_rad, Eigen::Vector3d::UnitX());
+    const Eigen::AngleAxisd pitch(pitch_rad, Eigen::Vector3d::UnitY());
+    const Eigen::AngleAxisd yaw(yaw_rad, Eigen::Vector3d::UnitZ());
+    return (yaw * pitch * roll).toRotationMatrix();
+}
+
 }  // namespace
 
 LocalMid360Simulator::LocalMid360Simulator(ros::NodeHandle& nh,
@@ -49,9 +61,15 @@ LocalMid360Simulator::LocalMid360Simulator(ros::NodeHandle& nh,
                                            const int agent_id)
     : nh_(nh), agent_prefix_("/" + agent_name + std::to_string(std::max(agent_id, 1))), global_map_(std::move(global_map))
 {
+    agent_frame_prefix_ = agent_name + std::to_string(std::max(agent_id, 1));
     nh_.param<std::string>("lidar_type", lidar_type_, lidar_type_);
     nh_.param<std::string>("global_frame_id", global_frame_id_, global_frame_id_);
+    sensor_frame_id_ = agent_frame_prefix_ + "/sensor";
     nh_.param<std::string>("sensor_frame_id", sensor_frame_id_, sensor_frame_id_);
+    if (sensor_frame_id_.empty())
+    {
+        sensor_frame_id_ = agent_frame_prefix_ + "/sensor";
+    }
     nh_.param<int>("is_360lidar", is_360lidar_, 1);
     nh_.param<double>("sensing_horizon", sensing_horizon_, 15.0);
     nh_.param<double>("sensing_rate", sensing_rate_, 10.0);
@@ -59,12 +77,21 @@ LocalMid360Simulator::LocalMid360Simulator(ros::NodeHandle& nh,
     nh_.param<double>("yaw_fov", yaw_fov_, 360.0);
     nh_.param<double>("vertical_fov", vertical_fov_, 90.0);
     nh_.param<double>("min_raylength", min_raylength_, 1.0);
+    nh_.param<double>("sensor_offset_x", sensor_offset_body_.x(), 0.0);
+    nh_.param<double>("sensor_offset_y", sensor_offset_body_.y(), 0.0);
+    nh_.param<double>("sensor_offset_z", sensor_offset_body_.z(), 0.0);
+    nh_.param<double>("sensor_roll", sensor_rpy_deg_.x(), 0.0);
+    nh_.param<double>("sensor_pitch", sensor_rpy_deg_.y(), 0.0);
+    nh_.param<double>("sensor_yaw", sensor_rpy_deg_.z(), 0.0);
 
     sensing_horizon_ = std::max(0.1, sensing_horizon_);
     sensing_rate_ = std::max(0.1, sensing_rate_);
     polar_resolution_ = std::max(0.05, polar_resolution_);
     yaw_fov_ = clampValue(yaw_fov_, 1.0, 360.0);
     vertical_fov_ = clampValue(vertical_fov_, 1.0, 179.0);
+    sensor_rotation_body_ = rpyToRotationMatrix(sensor_rpy_deg_.x() * kDegToRad,
+                                                sensor_rpy_deg_.y() * kDegToRad,
+                                                sensor_rpy_deg_.z() * kDegToRad);
 
     if (global_map_ && !global_map_->empty())
     {
@@ -79,8 +106,6 @@ LocalMid360Simulator::LocalMid360Simulator(ros::NodeHandle& nh,
         nh_.advertise<sensor_msgs::PointCloud2>(agent_prefix_ + "/sunray_mavros_sim/cloud_world_frame", 10);
     cloud_sensor_frame_pub_ =
         nh_.advertise<sensor_msgs::PointCloud2>(agent_prefix_ + "/sunray_mavros_sim/cloud_sensor_frame", 10);
-    depth_img_pub_ =
-        nh_.advertise<sensor_msgs::Image>(agent_prefix_ + "/sunray_mavros_sim/depth_img", 10);
 
     render_timer_ = nh_.createTimer(ros::Duration(1.0 / sensing_rate_),
                                     &LocalMid360Simulator::renderTimerCallback,
@@ -128,15 +153,20 @@ void LocalMid360Simulator::renderTimerCallback(const ros::TimerEvent&)
         return;
     }
 
-    const Eigen::Vector3d pos = odomPosition(odom_);
-    const Eigen::Quaterniond q = odomQuaternion(odom_);
-    const Eigen::Matrix3d rot = q.toRotationMatrix();
+    const ros::WallTime render_begin = ros::WallTime::now();
+
+    const Eigen::Vector3d body_pos = odomPosition(odom_);
+    const Eigen::Quaterniond body_q = odomQuaternion(odom_);
+    const Eigen::Matrix3d body_rot = body_q.toRotationMatrix();
+    const Eigen::Vector3d sensor_pos = body_pos + body_rot * sensor_offset_body_;
+    const Eigen::Matrix3d sensor_rot = body_rot * sensor_rotation_body_;
+    const Eigen::Quaterniond sensor_q(sensor_rot);
     const ros::Time stamp = odom_.header.stamp.isZero() ? ros::Time::now() : odom_.header.stamp;
 
     pcl::PointXYZI search_point;
-    search_point.x = pos.x();
-    search_point.y = pos.y();
-    search_point.z = pos.z();
+    search_point.x = sensor_pos.x();
+    search_point.y = sensor_pos.y();
+    search_point.z = sensor_pos.z();
 
     std::vector<int> indices;
     std::vector<float> distances;
@@ -152,7 +182,7 @@ void LocalMid360Simulator::renderTimerCallback(const ros::TimerEvent&)
     {
         const auto& map_pt = global_map_->points[index];
         const Eigen::Vector3d world_pt(map_pt.x, map_pt.y, map_pt.z);
-        const Eigen::Vector3d sensor_pt = rot.transpose() * (world_pt - pos);
+        const Eigen::Vector3d sensor_pt = sensor_rot.transpose() * (world_pt - sensor_pos);
         const double range = sensor_pt.norm();
         if (range < min_raylength_ || range > sensing_horizon_)
         {
@@ -209,7 +239,7 @@ void LocalMid360Simulator::renderTimerCallback(const ros::TimerEvent&)
             const Eigen::Vector3d local(range * std::cos(elevation) * std::cos(yaw),
                                         range * std::cos(elevation) * std::sin(yaw),
                                         range * std::sin(elevation));
-            const Eigen::Vector3d world = rot * local + pos;
+            const Eigen::Vector3d world = sensor_rot * local + sensor_pos;
 
             pcl::PointXYZI sensor_pt;
             sensor_pt.x = local.x();
@@ -243,48 +273,19 @@ void LocalMid360Simulator::renderTimerCallback(const ros::TimerEvent&)
     transform.header.stamp = stamp;
     transform.header.frame_id = global_frame_id_;
     transform.child_frame_id = sensor_frame_id_;
-    transform.transform.translation.x = pos.x();
-    transform.transform.translation.y = pos.y();
-    transform.transform.translation.z = pos.z();
-    transform.transform.rotation.x = q.x();
-    transform.transform.rotation.y = q.y();
-    transform.transform.rotation.z = q.z();
-    transform.transform.rotation.w = q.w();
+    transform.transform.translation.x = sensor_pos.x();
+    transform.transform.translation.y = sensor_pos.y();
+    transform.transform.translation.z = sensor_pos.z();
+    transform.transform.rotation.x = sensor_q.x();
+    transform.transform.rotation.y = sensor_q.y();
+    transform.transform.rotation.z = sensor_q.z();
+    transform.transform.rotation.w = sensor_q.w();
     tf_broadcaster_.sendTransform(transform);
 
-    publishDepthImage(ranges, width, height, stamp);
-}
-
-void LocalMid360Simulator::publishDepthImage(const std::vector<float>& ranges,
-                                             const int width,
-                                             const int height,
-                                             const ros::Time& stamp) const
-{
-    sensor_msgs::Image image;
-    image.header.stamp = stamp;
-    image.header.frame_id = sensor_frame_id_;
-    image.height = static_cast<uint32_t>(height);
-    image.width = static_cast<uint32_t>(width);
-    image.encoding = "32FC1";
-    image.is_bigendian = false;
-    image.step = static_cast<uint32_t>(width * sizeof(float));
-    image.data.resize(static_cast<std::size_t>(image.step * image.height), 0);
-
-    for (int row = 0; row < height; ++row)
-    {
-        for (int col = 0; col < width; ++col)
-        {
-            float value = ranges[static_cast<std::size_t>(row * width + col)];
-            if (!std::isfinite(value))
-            {
-                value = 0.0f;
-            }
-            const std::size_t dst = static_cast<std::size_t>((height - 1 - row) * width + col) * sizeof(float);
-            std::memcpy(&image.data[dst], &value, sizeof(float));
-        }
-    }
-
-    depth_img_pub_.publish(image);
+    last_render_time_sec_ = (ros::WallTime::now() - render_begin).toSec();
+    last_render_input_points_ = indices.size();
+    last_render_output_points_ = world_cloud.size();
+    has_render_stats_ = true;
 }
 
 void LocalMid360Simulator::printStatus() const
@@ -311,6 +312,33 @@ void LocalMid360Simulator::printStatus() const
        << "  分辨率 = " << polar_resolution_ << " deg"
        << "\n";
 
+    ss << kAnsiGood << " 安装外参 " << kAnsiReset
+       << "offset_body = (" << sensor_offset_body_.x() << ", "
+       << sensor_offset_body_.y() << ", " << sensor_offset_body_.z() << ") m"
+       << "  rpy_body = (" << sensor_rpy_deg_.x() << ", "
+       << sensor_rpy_deg_.y() << ", " << sensor_rpy_deg_.z() << ") deg"
+       << "\n";
+
+    ss << kAnsiGood << " 渲染统计 " << kAnsiReset;
+    if (has_render_stats_)
+    {
+        const bool render_slow = last_render_time_sec_ > kRenderTimeWarnSec;
+        const char* render_color = render_slow ? kAnsiBad : kAnsiGood;
+        ss << "耗时 = " << render_color << std::setprecision(3) << last_render_time_sec_ << " s" << kAnsiReset
+           << std::setprecision(2)
+           << "  输入点数 = " << last_render_input_points_
+           << "  输出点数 = " << last_render_output_points_
+           << "  阈值 = " << kRenderTimeWarnSec << " s";
+    }
+    else
+    {
+        ss << kAnsiWarn << "等待首帧渲染" << kAnsiReset
+           << "  输入点数 = 0"
+           << "  输出点数 = 0"
+           << "  阈值 = " << kRenderTimeWarnSec << " s";
+    }
+    ss << "\n";
+
     ss << kAnsiGood << " 订阅话题 " << kAnsiReset
        << "里程计 -> " << agent_prefix_ << "/sunray_mavros_sim/odom"
        << "\n";
@@ -319,8 +347,6 @@ void LocalMid360Simulator::printStatus() const
        << "全局系点云 -> " << agent_prefix_ << "/sunray_mavros_sim/cloud_world_frame"
        << "\n"
        << "          传感器系点云 -> " << agent_prefix_ << "/sunray_mavros_sim/cloud_sensor_frame"
-       << "\n"
-       << "          深度图 -> " << agent_prefix_ << "/sunray_mavros_sim/depth_img"
        << "\n"
        << "          TF -> " << global_frame_id_ << " -> " << sensor_frame_id_;
 

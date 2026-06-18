@@ -1,5 +1,4 @@
-external_workspaces:
-  - "~/pengyu_sim"
+external_workspaces: []
 
 launch_groups:
   - name: "sunray_mavros_sim"
@@ -8,6 +7,30 @@ launch_groups:
         package: "sunray_mavros_sim"
         launch: "sunray_mavros_sim.launch"
         description: "启动 sunray_mavros_sim 一体化仿真：全局地图、局部 MID360 点云、动力学、odom、imu 和 fake MAVROS。"
+
+      - title: "sunray_mavros_sim_6机集群"
+        package: "sunray_mavros_sim"
+        launch: "sunray_mavros_sim.launch"
+        args:
+          - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_swarm6.yaml"
+          - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_uav_simulator_swarm6.yaml"
+        description: "启动 6 架无人机的 sunray_mavros_sim 一体化仿真，用于集群控制/规划验证。"
+
+      - title: "sunray_mavros_sim_单车"
+        package: "sunray_mavros_sim"
+        launch: "sunray_mavros_sim.launch"
+        args:
+          - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_ugv.yaml"
+          - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_uav_simulator.yaml"
+        description: "启动单辆无人车的 sunray_mavros_sim 轻量仿真，用于 UGV 控制验证。"
+
+      - title: "sunray_mavros_sim_6车集群"
+        package: "sunray_mavros_sim"
+        launch: "sunray_mavros_sim.launch"
+        args:
+          - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_ugv_swarm6.yaml"
+          - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_ugv_simulator_swarm6.yaml"
+        description: "启动 6 辆无人车的 sunray_mavros_sim 轻量仿真，用于 UGV 集群控制验证。"
 
       - title: "NavRL2Sunray_sim"
         package: "sunray_navrl_adapter"
@@ -35,16 +58,7 @@ launch_groups:
           - "source_id:=5"
           - "agent_name:=uav"
           - "agent_id:=1"
-        description: "启动单架无人机 localization_fusion，默认 source_id=5 对接 pengyu_sim odom。"
-
-      - title: "无人车定位融合"
-        package: "localization_fusion"
-        launch: "localization_fusion.launch"
-        args:
-          - "source_id:=5"
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-        description: "启动单辆无人车 localization_fusion，默认 source_id=5 对接 pengyu_sim odom。"
+        description: "启动单架无人机 localization_fusion，默认 source_id=5 对接 sunray_mavros_sim odom。"
 
       - title: "集群无人机定位融合"
         package: "localization_fusion"
@@ -54,6 +68,15 @@ launch_groups:
           - "agent_name:=uav"
           - "agent_num:=6"
         description: "递归启动 1..agent_num 的无人机 localization_fusion，并启动统一定位监控。"
+
+      - title: "无人车定位融合"
+        package: "localization_fusion"
+        launch: "localization_fusion.launch"
+        args:
+          - "source_id:=5"
+          - "agent_name:=ugv"
+          - "agent_id:=1"
+        description: "启动单辆无人车 localization_fusion，默认 source_id=5 对接 sunray_mavros_sim odom。"
 
       - title: "集群无人车定位融合"
         package: "localization_fusion"
@@ -72,18 +95,8 @@ launch_groups:
         args:
           - "agent_name:=uav"
           - "agent_id:=1"
-          - "enable_single_monitor:=true"
+          - "enable_uav_control_monitor:=true"
         description: "启动单机 sunray_uav_control 控制节点和状态监控。"
-
-      - title: "单机无人机控制（pengyu_sim）"
-        package: "sunray_uav_control"
-        launch: "uav_control.launch"
-        args:
-          - "airframe_type:=pengyu_sim"
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "enable_single_monitor:=true"
-        description: "启动单机 sunray_uav_control 控制节点，使用 pengyu_sim 机型参数。"
 
       - title: "单机无人机控制（Gazebo）"
         package: "sunray_uav_control"
@@ -92,7 +105,7 @@ launch_groups:
           - "airframe_type:=gazebo_sim"
           - "agent_name:=uav"
           - "agent_id:=1"
-          - "enable_single_monitor:=true"
+          - "enable_uav_control_monitor:=true"
         description: "启动单机 sunray_uav_control 控制节点，使用 gazebo_sim 机型参数。"
 
       - title: "集群无人机控制"
@@ -103,16 +116,6 @@ launch_groups:
           - "agent_num:=6"
           - "enable_monitor:=true"
         description: "启动多架无人机控制节点和统一监控。"
-
-      - title: "集群无人机控制（pengyu_sim）"
-        package: "sunray_uav_control"
-        launch: "uav_control_swarm.launch"
-        args:
-          - "airframe_type:=pengyu_sim"
-          - "agent_name:=uav"
-          - "agent_num:=6"
-          - "enable_monitor:=true"
-        description: "启动多架无人机控制节点和统一监控，使用 pengyu_sim 机型参数。"
 
       - title: "集群无人机控制（Gazebo）"
         package: "sunray_uav_control"
@@ -312,55 +315,6 @@ launch_groups:
         package: "sunray_swarm_control"
         launch: "swarm_control_panel.launch"
         description: "启动集群 Qt 控制面板，同时支持 UAV / UGV 集群指令。"
-
-  - name: "pengyu_sim仿真器"
-    items:
-      - title: "全局点云发布"
-        package: "sunray_sim_map"
-        launch: "map_publisher.launch"
-        args:
-          - "launch_rviz:=false"
-        description: "外部 pengyu_sim 包：发布全局点云地图，常用于单无人机规划验证。"
-
-      - title: "局部点云渲染"
-        package: "sunray_sim_sensing"
-        launch: "local_sensing_mid360.launch"
-        description: "外部 pengyu_sim 包：根据全局地图和机器人位姿渲染局部点云。"
-
-      - title: "无人机动力学仿真"
-        package: "px4_control_simulator"
-        launch: "px4_uav_simulator.launch"
-        args:
-          - "agent_name:=uav"
-          - "agent_id:=1"
-          - "launch_rviz:=false"
-        description: "外部 pengyu_sim 包：启动单架无人机动力学、PX4 控制模拟和 fake mavros bridge。"
-
-      - title: "集群无人机动力学仿真"
-        package: "px4_control_simulator"
-        launch: "px4_uav_simulator_swarm.launch"
-        args:
-          - "swarm_num:=6"
-        description: "外部 pengyu_sim 包：启动多架无人机仿真。需要先 source pengyu_sim 工作空间。"
-
-      - title: "无人车动力学仿真"
-        package: "ugv_simulator"
-        launch: "ugv_simulator.launch"
-        args:
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-          - "drive_type:=mecanum"
-        description: "外部 pengyu_sim 包：启动无人车动力学仿真"
-
-      - title: "集群无人车动力学仿真"
-        package: "ugv_simulator"
-        launch: "ugv_simulator.launch"
-        args:
-          - "agent_name:=ugv"
-          - "agent_id:=1"
-          - "swarm_num:=6"
-          - "drive_type:=mecanum"
-        description: "外部 pengyu_sim 包：启动无人车动力学仿真，默认swarm_num为6"
 
   - name: "Gazebo仿真器"
     items:

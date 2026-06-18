@@ -88,7 +88,7 @@ float32 y
 | `VINS` | `2` | VINS 算法输出。 |
 | `GAZEBO` | `3` | Gazebo 仿真。 |
 | `GAZEBO_ARUCO` | `4` | Gazebo 中的 ArUco 重定位。 |
-| `PENGYU_SIM` | `5` | Pengyu 仿真。 |
+| `SUNRAY_MAVROS_SIM` | `5` | sunray_mavros_sim 轻量仿真。 |
 | `FASTLIO_EKF` | `6` | FAST-LIO + EKF 高频定位链路。 |
 
 字段说明：

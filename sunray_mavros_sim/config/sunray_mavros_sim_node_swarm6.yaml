@@ -1,0 +1,41 @@
+# sunray_mavros_sim 6 机集群主节点参数。
+#
+# 用途：
+#   给 sunray_launcher_panel 的集群一键脚本使用。
+#   不新增 launch 文件，只通过 sunray_mavros_sim.launch 的 node_config 参数切换到本配置。
+
+# UAV 启用配置。
+uav:
+  # 是否启动无人机仿真。
+  enable: true
+
+  # 无人机名称前缀，最终命名空间为 /uav1 ... /uav6。
+  agent_name: uav
+
+  # 同一个 sunray_mavros_sim_node 进程内创建 6 架无人机仿真。
+  agent_ids: [1, 2, 3, 4, 5, 6]
+
+# UGV 默认关闭，本配置只用于 6 机 UAV 集群。
+ugv:
+  enable: false
+  agent_name: ugv
+  agent_ids: [1]
+
+# 兼容旧读取路径。
+agent_name: uav
+agent_ids: [1, 2, 3, 4, 5, 6]
+
+# 全局坐标系 frame_id。保持和默认单机配置一致，方便接入规划和 RViz。
+global_frame_id: map
+
+# 集群验证默认打开感知链路：
+#   发布一份公共全局地图；
+#   每架无人机各自发布一份局部 MID360 点云。
+enable_sensing: true
+
+# 集群下终端输出会很多，默认关闭周期状态面板。
+# 需要排查时可以改成 true。
+enable_status_print: false
+
+# enable_status_print=true 时的打印频率，单位 Hz。
+status_print_hz: 1.0

@@ -230,7 +230,7 @@ git submodule update --init --recursive
 
 | 环节 | 仿真 | 实机 |
 | --- | --- | --- |
-| 定位 | Gazebo/Pengyu 真值或仿真 odom | 动捕、VIO、FAST-LIO、GPS/RTK |
+| 定位 | Gazebo/sunray_mavros_sim 真值或仿真 odom | 动捕、VIO、FAST-LIO、GPS/RTK |
 | 控制 | 同样发布 Sunray 控制消息 | 同样发布 Sunray 控制消息 |
 | 底层 | 仿真 MAVROS/模型/底盘 | 真实 PX4/MAVROS/底盘驱动 |
 | 安全 | 可快速试错 | 必须限速、限高、设置围栏和急停 |
@@ -240,7 +240,7 @@ git submodule update --init --recursive
 典型迁移步骤：
 
 1. 确认仿真中任务节点只发布 Sunray 标准控制命令。
-2. 把定位源从 Gazebo/Pengyu 切到动捕、VIO、FAST-LIO 或其他实机定位。
+2. 把定位源从 Gazebo/sunray_mavros_sim 切到动捕、VIO、FAST-LIO 或其他实机定位。
 3. 把控制参数从仿真 airframe 切到真实机型 airframe。
 4. 先限速、限高、限航点范围，在空旷环境做单机验证。
 5. 单机稳定后，再验证规划、集群、感知等上层功能。

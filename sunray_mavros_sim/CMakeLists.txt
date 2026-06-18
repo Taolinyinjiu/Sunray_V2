@@ -32,6 +32,11 @@ catkin_package(
     sunray_global_map_server
     sunray_local_mid360_simulator
     sunray_quadrotor_simulator
+    sunray_ugv_dynamics
+    sunray_ugv_simulator
+    sunray_sim_visualizer
+    sunray_single_uav_simulator
+    sunray_single_ugv_simulator
   CATKIN_DEPENDS
     geometry_msgs
     mavros_msgs
@@ -55,6 +60,9 @@ include_directories(
 
 add_library(sunray_quadrotor_dynamics src/quadrotor_dynamics.cpp)
 target_link_libraries(sunray_quadrotor_dynamics ${catkin_LIBRARIES})
+
+add_library(sunray_ugv_dynamics src/ugv_dynamics.cpp)
+target_link_libraries(sunray_ugv_dynamics ${catkin_LIBRARIES})
 
 add_library(sunray_imu_model src/imu_model.cpp)
 target_link_libraries(sunray_imu_model ${catkin_LIBRARIES})
@@ -81,11 +89,45 @@ target_link_libraries(
   sunray_imu_model
 )
 
+add_library(sunray_ugv_simulator src/ugv_simulator.cpp)
+target_link_libraries(
+  sunray_ugv_simulator
+  ${catkin_LIBRARIES}
+  sunray_ugv_dynamics
+  sunray_imu_model
+)
+
 add_library(sunray_local_mid360_simulator src/local_mid360_simulator.cpp)
 target_link_libraries(
   sunray_local_mid360_simulator
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
+)
+
+add_library(sunray_single_uav_simulator src/single_uav_simulator.cpp)
+target_link_libraries(
+  sunray_single_uav_simulator
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  sunray_local_mid360_simulator
+  sunray_quadrotor_simulator
+  sunray_px4_control_sim
+  sunray_fake_mavros_bridge
+)
+
+add_library(sunray_single_ugv_simulator src/single_ugv_simulator.cpp)
+target_link_libraries(
+  sunray_single_ugv_simulator
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  sunray_local_mid360_simulator
+  sunray_ugv_simulator
+)
+
+add_library(sunray_sim_visualizer src/sim_visualizer.cpp)
+target_link_libraries(
+  sunray_sim_visualizer
+  ${catkin_LIBRARIES}
 )
 
 add_executable(sunray_mavros_sim_node src/sunray_mavros_sim_node.cpp)
@@ -95,10 +137,9 @@ target_link_libraries(
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   sunray_global_map_server
-  sunray_local_mid360_simulator
-  sunray_quadrotor_simulator
-  sunray_px4_control_sim
-  sunray_fake_mavros_bridge
+  sunray_single_uav_simulator
+  sunray_single_ugv_simulator
+  sunray_sim_visualizer
 )
 
 install(TARGETS
@@ -109,12 +150,22 @@ install(TARGETS
   sunray_global_map_server
   sunray_local_mid360_simulator
   sunray_quadrotor_simulator
+  sunray_ugv_dynamics
+  sunray_ugv_simulator
+  sunray_sim_visualizer
+  sunray_single_uav_simulator
+  sunray_single_ugv_simulator
   sunray_mavros_sim_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(DIRECTORY launch/ config/ resource/
+install(DIRECTORY launch/ config/ resource/ rviz/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+
+catkin_install_python(PROGRAMS
+  test/minimal_closed_loop_check.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

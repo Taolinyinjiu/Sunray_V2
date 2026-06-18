@@ -162,7 +162,7 @@ localization/localization_fusion/config/localization_sources.yaml
 | `2` | `VINS` | `/vins_estimator/imu_propagate` | VINS 输出。 |
 | `3` | `GAZEBO` | `${agent_key}/sunray/gazebo_pose` | Gazebo 仿真真值/位姿。 |
 | `4` | `GAZEBO_ARUCO` | `${agent_key}/sunray_odom_in` | Gazebo + ArUco 重定位；重定位话题为 `/aruco_test`。 |
-| `5` | `PENGYU_SIM` | `${agent_key}/pengyu_sim/odom` | RViz/Pengyu 仿真器。 |
+| `5` | `SUNRAY_MAVROS_SIM` | `${agent_key}/sunray_mavros_sim/odom` | sunray_mavros_sim 轻量仿真器。 |
 | `6` | `Fast_LIO_EKF` | `/sunray/odometry` | MID360 + FAST-LIO 链路当前给 fusion 的输入；默认配置不是 `/sunray/ekf_odometry`。 |
 
 每个定位源配置包含：

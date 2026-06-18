@@ -4,6 +4,8 @@
 #include <Eigen/Dense>
 #include "common_types.h"
 
+namespace sunray_mavros_sim
+{
 class QuadrotorDynamics
 {
 public:
@@ -25,8 +27,8 @@ public:
 
     // 重置状态
     void reset(const Eigen::Vector3d& init_pos, const Eigen::Vector4d& init_quat);
-    // 冻结到当前位姿并清零动态量，用于无控制输入时保持静止
-    void hold();
+    // 暂停动力学状态，用于无电机指令时冻结仿真。
+    void pause();
     // 更新无人机状态
     void update(const DroneInput& input, double dt);
 
@@ -37,7 +39,7 @@ public:
 
 private:
     
-    double motorDynamics(double omega_des, double omega_act, double dt);
+    double motorRpmDynamics(double rpm_des, double rpm_act, double dt);
     void updateMotors(double dt);
     void computeMotorThrust();
     void computeTotalThrust();
@@ -54,5 +56,6 @@ private:
     Eigen::Vector4d quaternionMultiplication(const Eigen::Vector4d& q1, const Eigen::Vector4d& q2);
     Eigen::Vector4d quaternionNormalize(const Eigen::Vector4d& quat);
 };
+}  // namespace sunray_mavros_sim
 
 #endif

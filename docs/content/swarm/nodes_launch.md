@@ -395,8 +395,7 @@ roslaunch localization_fusion localization_fusion_swarm.launch \
 ```bash
 roslaunch sunray_uav_control uav_control_swarm.launch \
   agent_name:=uav \
-  agent_num:=6 \
-  airframe_type:=pengyu_sim
+  agent_num:=6
 ```
 
 4. 启动 UAV 集群控制：

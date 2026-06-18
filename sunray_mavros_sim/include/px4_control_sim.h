@@ -1,5 +1,5 @@
-#ifndef PX4_CONTROL_SIMULATOR_PX4_CONTROL_SIM_H
-#define PX4_CONTROL_SIMULATOR_PX4_CONTROL_SIM_H
+#ifndef SUNRAY_MAVROS_SIM_PX4_CONTROL_H
+#define SUNRAY_MAVROS_SIM_PX4_CONTROL_H
 
 #include <ros/ros.h>
 #include <mavros_msgs/AttitudeTarget.h>
@@ -7,12 +7,16 @@
 #include <mavros_msgs/State.h>
 #include <nav_msgs/Odometry.h>
 #include <Eigen/Dense>
+#include <cstdint>
+#include <set>
 #include <string>
 
-class PX4_CONTROL_SIM
+namespace sunray_mavros_sim
+{
+class Px4ControlSim
 {
 public:// 构造函数
-    PX4_CONTROL_SIM(ros::NodeHandle& nh, const std::string& uav_name);
+    Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name);
     void update();
     void printStatus() const;
     
@@ -101,6 +105,7 @@ private:
     bool has_odom_{false};
     bool mavros_armed_{true};
     bool has_mavros_state_{false};
+    bool setpoint_timed_out_{false};
     
     // ROS节点和话题
     ros::NodeHandle nh_;
@@ -116,6 +121,10 @@ private:
     ros::Publisher motor_rpm_pub_;
     ros::Timer update_timer_;
     std::string mavros_mode_{"OFFBOARD"};
+    ros::Time last_supported_setpoint_time_;
+    std::string last_rejected_setpoint_reason_;
+    std::set<uint32_t> warned_position_target_keys_;
+    std::set<uint8_t> warned_attitude_target_masks_;
     
     // 当前状态（由里程计话题获取）
     struct State {
@@ -154,7 +163,7 @@ private:
         Eigen::Vector3d thrust;             // 期望推力 [0, 0, T]，单位：N（机体坐标系Z轴方向）
         Eigen::Vector3d torque;             // 期望力矩 [τx, τy, τz]，单位：N·m（机体坐标系）
         Eigen::Vector4d motor_thrust;       // 期望电机推力 [T1, T2, T3, T4]，单位：N
-        Eigen::Vector4d motor_rpm;                // 期望电机转速 [ω1, ω2, ω3, ω4]，单位：rpm
+        Eigen::Vector4d motor_rpm;                // 期望电机转速 [rpm1, rpm2, rpm3, rpm4]，单位：rpm
     } desired_state_;
 
     // 控制参数
@@ -170,6 +179,7 @@ private:
     double max_acc_xy_;
     double max_acc_z_;
     double max_tilt_rad_;
+    double setpoint_timeout_{0.5};
     double vel_ff_xy_gain_when_pos_active_;
     double acc_xy_lpf_tau_;
     double acc_ff_xy_gain_;
@@ -202,6 +212,12 @@ private:
     void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
     void mavrosStateCallback(const mavros_msgs::State::ConstPtr& msg);
     void updateTimerCallback(const ros::TimerEvent& event);
+    bool isSupportedPositionTarget(const mavros_msgs::PositionTarget& msg, std::string& reason) const;
+    bool isSupportedAttitudeTarget(const mavros_msgs::AttitudeTarget& msg, std::string& reason) const;
+    void warnUnsupportedPositionTargetOnce(const mavros_msgs::PositionTarget& msg, const std::string& reason);
+    void warnUnsupportedAttitudeTargetOnce(const mavros_msgs::AttitudeTarget& msg, const std::string& reason);
+    void markSupportedSetpoint();
+    void clearControllerOutput();
     std::string buildStatusPanel() const;
     const char* controlModeName() const;
     
@@ -311,5 +327,6 @@ private:
     void publishMotorRPM(const Eigen::Vector4d& motor_rpm);
     void publishZeroMotorRPM();
 };
+}  // namespace sunray_mavros_sim
 
-#endif // PX4_CONTROL_SIMULATOR_PX4_CONTROL_SIM_H
+#endif  // SUNRAY_MAVROS_SIM_PX4_CONTROL_H

@@ -33,14 +33,20 @@ tools/sunray_launcher_panel/config/sunray_launch_groups.yaml
 tools/sunray_launcher_panel/config/sunray_quick_launch_groups.yaml
 ```
 
-`sunray_launch_groups.yaml` 配置模块列表、默认启动命令和外部 workspace：
+`sunray_launch_groups.yaml` 配置模块列表和默认启动命令：
 
 ```yaml
-external_workspaces:
-  - "~/pengyu_sim"
+external_workspaces: []
 
 launch_groups:
-  - name: "定位融合模块"
+  - name: "sunray_mavros_sim"
+    items:
+      - title: "sunray_mavros_sim"
+        package: "sunray_mavros_sim"
+        launch: "sunray_mavros_sim.launch"
+        description: "启动一体化轻量仿真。"
+
+  - name: "定位融合"
     items:
       - title: "无人机定位融合"
         package: "localization_fusion"
@@ -56,14 +62,14 @@ launch_groups:
 
 ```yaml
 quick_launch_groups:
-  - category: "pengyu_sim"
+  - category: "sunray_mavros_sim"
     scripts:
-      - title: "6机无人机集群仿真"
-        description: "pengyu_sim + 定位 + 控制 + 集群控制 + 面板"
+      - title: "6机无人机集群控制验证"
+        description: "sunray_mavros_sim 6机仿真 + 定位 + 控制 + 集群控制"
         items:
-          - ref: "pengyu_sim仿真器模块/集群无人机动力学仿真"
-            delay_sec: 1.5
-          - ref: "定位融合模块/集群无人机定位融合"
+          - ref: "sunray_mavros_sim/sunray_mavros_sim_6机集群"
+            delay_sec: 2.0
+          - ref: "定位融合/集群无人机定位融合"
             delay_sec: 1.0
 ```
 
@@ -81,7 +87,7 @@ quick_launch_groups:
 | `items[].args` | 否 | 默认 roslaunch 参数，格式为 `name:=value`。 |
 | `items[].description` | 否 | 启动文件列表“功能描述”列显示的说明文字。 |
 | `quick_launch_groups` | 否 | 一键启动脚本分类列表。 |
-| `quick_launch_groups[].category` | 是 | 一键启动脚本分类标签，例如 `pengyu_sim`、`Gazebo`、`真机`。 |
+| `quick_launch_groups[].category` | 是 | 一键启动脚本分类标签，例如 `sunray_mavros_sim`、`Gazebo`、`真机`。 |
 | `quick_launch_groups[].scripts` | 是 | 当前分类下的一键启动脚本列表。 |
 
 新增启动项时，只需要在对应模块的 `items` 下面追加一项。启动器会自动生成默认命令：
@@ -96,7 +102,7 @@ roslaunch <package> <launch> <args...>
 
 | 区域 | 作用 |
 | --- | --- |
-| `一键启动脚本` | 按 `pengyu_sim / Gazebo / 真机` 等标签显示常用联调脚本，一键在同一个 Ubuntu Terminal 窗口中打开多个 tab，每个 tab 启动一个 launch。 |
+| `一键启动脚本` | 按 `sunray_mavros_sim / Gazebo / 真机` 等标签显示常用联调脚本，一键在同一个 Ubuntu Terminal 窗口中打开多个 tab，每个 tab 启动一个 launch。 |
 | `启动文件列表` | 按模块标签页分类显示可启动的 launch，表格包含 `标题 / 状态 / ROS Package / launch文件名 / 功能描述`。选中一键启动脚本时，即将被启动的 launch 行、对应模块 tab 和选中项本身会显示预览高亮；实际运行中的 launch 会显示绿色高亮和更明显的前缀标记。 |
 | `操作日志` | 显示启动器内部日志，强调启动、停止、退出码、预览提示等关键事件；不实时复制 roslaunch 的 stdout/stderr。 |
 | `系统状态监控` | 显示 CPU、内存、当前 ROS node 列表，并提供 `停止全部 Launch` 按钮。 |
@@ -115,9 +121,9 @@ roslaunch localization_fusion localization_fusion.launch source_id:=5 agent_name
 
 ### 一键启动
 
-`一键启动脚本` 位于启动文件列表上方，用来把一组常用 launch 编排成一个脚本，例如单无人机控制联调、6机无人机集群仿真等。
+`一键启动脚本` 位于启动文件列表上方，用来把一组常用 launch 编排成一个脚本，例如单无人机控制联调、单无人车控制联调、6机/6车集群仿真等。
 
-一键启动脚本支持按标签分类显示。当前默认配置包含 `pengyu_sim`、`Gazebo`、`真机` 三类，其中现有联调脚本都归入 `pengyu_sim`，`Gazebo` 和 `真机` 先保留占位脚本，后续可以直接在配置文件中扩展。
+一键启动脚本支持按标签分类显示。当前默认配置包含 `sunray_mavros_sim`、`Gazebo`、`真机` 三类，其中常用 UAV/UGV 仿真联调脚本都归入 `sunray_mavros_sim`，`Gazebo` 和 `真机` 先保留占位脚本，后续可以直接在配置文件中扩展。
 
 一键启动使用 Ubuntu 自带的 `gnome-terminal --tab` 打开一个 terminal 窗口，并让每个 launch 独占一个 terminal tab。这样不会把多个 launch 的输出混在一起，直接点击 terminal 顶部标签即可切换。
 
@@ -127,16 +133,16 @@ roslaunch localization_fusion localization_fusion.launch source_id:=5 agent_name
 
 ```yaml
 quick_launch_groups:
-  - category: "pengyu_sim"
+  - category: "sunray_mavros_sim"
     scripts:
       - title: "单无人机控制联调"
-        description: "pengyu_sim 单机 UAV 仿真 + 定位融合 + UAV 控制 + UAV 控制面板"
+        description: "sunray_mavros_sim 单机 UAV 仿真 + 定位融合 + UAV 控制"
         items:
-          - ref: "pengyu_sim仿真器模块/无人机动力学仿真"
+          - ref: "sunray_mavros_sim/sunray_mavros_sim"
             delay_sec: 1.0
-          - ref: "定位融合模块/无人机定位融合"
+          - ref: "定位融合/无人机定位融合"
             delay_sec: 1.0
-          - ref: "无人机控制模块/无人机控制面板"
+          - ref: "无人机控制/单机无人机控制"
 ```
 
 一键启动脚本字段：
@@ -165,27 +171,26 @@ roslaunch 结束后 terminal 会自动关闭，不需要手动按回车。
 
 ### 外部 Workspace 适配
 
-`pengyu_sim仿真器模块` 中的 `px4_control_simulator` 和 `ugv_simulator` 是外部 ROS 包。启动器支持通过配置补充外部 workspace：
+默认配置不再依赖外部 `pengyu_sim` workspace，`sunray_mavros_sim` 已经放在当前 Sunray_v2 工作空间内。`external_workspaces` 默认保持空列表：
 
 ```yaml
-external_workspaces:
-  - "~/pengyu_sim"
+external_workspaces: []
 ```
 
-启动器会做两件事：
+如果后续确实需要接入外部 catkin workspace，可以在 `external_workspaces` 中补充路径。启动器会做两件事：
 
 | 动作 | 说明 |
 | --- | --- |
-| 启动器内部解析 | 扫描 `~/pengyu_sim` 下的 `package.xml`，即使当前终端只 source 了 `~/Sunray_v2/devel/setup.bash`，也能找到外部包的 launch 文件。 |
+| 启动器内部解析 | 扫描外部 workspace 下的 `package.xml`，即使当前终端只 source 了 `~/Sunray_v2/devel/setup.bash`，也能找到外部包的 launch 文件。 |
 | terminal 环境补充 | 打开独立 terminal 后，自动给 `ROS_PACKAGE_PATH`、`CMAKE_PREFIX_PATH`、`PATH`、`LD_LIBRARY_PATH`、`PYTHONPATH` 补充外部 workspace 的路径。 |
 
-这个机制用于兼容外部独立 workspace。更标准的 ROS 做法仍然是把 `~/Sunray_v2` 编译成 `~/pengyu_sim` 的 overlay，但启动器不强制要求这样做。
+这个机制只用于兼容外部独立 workspace。当前推荐直接使用当前仓库内的 `sunray_mavros_sim`。
 
 如果外部包仍然启动失败，先检查路径是否存在：
 
 ```bash
-ls ~/pengyu_sim/devel
-ls ~/pengyu_sim/src
+ls <external_workspace>/devel
+ls <external_workspace>/src
 ```
 
 ### 常见问题

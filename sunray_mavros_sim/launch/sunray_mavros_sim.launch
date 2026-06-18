@@ -3,21 +3,30 @@
       sunray_mavros_sim 的唯一启动入口。
 
       本 launch 只启动一个 ROS node：sunray_mavros_sim_node。
-      该 node 在同一个进程内创建 5 个模块：
-        1. GlobalMapServer：读取 PCD，发布全局点云。
-        2. LocalMid360Simulator：基于全局地图和 odom 生成 MID360 风格局部点云。
-        3. QuadrotorSimulator：订阅电机 RPM，发布 odom / imu / navsat。
-        4. PX4_CONTROL_SIM：订阅 MAVROS setpoint，转换成电机 RPM。
-        5. FakeMavrosBridge：发布假的 MAVROS 状态、odom、imu 和常用服务。
+      该 node 在同一个进程内创建这些模块：
+        1. SingleUavSimulator：无人机仿真管理层，每个 uav.agent_id 创建一套本机模块。
+        2. SingleUgvSimulator：无人车仿真管理层，每个 ugv.agent_id 创建一套本机模块。
+        3. GlobalMapServer：enable_sensing=true 时读取 PCD，发布全局点云。
+        4. LocalMid360Simulator：enable_sensing=true 时基于全局地图和 odom 生成 MID360 风格局部点云。
+        5. QuadrotorSimulator：订阅电机 RPM，发布 odom / imu / navsat。
+        6. Px4ControlSim：订阅 MAVROS setpoint，转换成电机 RPM。
+        7. FakeMavrosBridge：发布假的 MAVROS 状态、odom、imu 和常用服务。
+        8. UgvSimulator：订阅 UGV cmd_vel，发布 UGV odom / imu。
+        9. SimVisualizer：订阅仿真状态，发布一个 RViz MarkerArray 可视化话题。
 
       常用 topic：
-        /map_generator/global_cloud
+        /sunray_mavros_sim/global_cloud
         ~/sunray_mavros_sim/odom
         ~/sunray_mavros_sim/imu
         ~/sunray_mavros_sim/cloud_world_frame
         ~/sunray_mavros_sim/cloud_sensor_frame
+        ~/sunray_mavros_sim/visualization
         ~/mavros/state
         ~/mavros/local_position/odom
+        ~/mavros/local_position/pose
+        ~/mavros/local_position/velocity_local
+        ~/mavros/global_position/global
+        ~/mavros/gpsstatus/gps1/raw
         ~/mavros/imu/data
     -->
 
@@ -31,10 +40,17 @@
       参数归属：
         node_config:
           读取模块：sunray_mavros_sim_node
-          内容：agent_name、agent_id、global_frame_id、统一状态打印开关和频率。
+          内容：agent_name、agent_ids、global_frame_id、统一状态打印开关和频率。
+          其中 enable_sensing 控制是否启动 GlobalMapServer 和 LocalMid360Simulator。
           注意：global_frame_id 是全包共享参数，会被 GlobalMapServer、
                 LocalMid360Simulator、QuadrotorSimulator 同时读取，用于统一全局地图、
                 局部点云、TF、odom 和 navsat 的全局坐标系。
+
+        single_uav_simulator_config:
+          读取模块：SingleUavSimulator、SingleUgvSimulator
+          内容：每架无人机/无人车的初始位置和初始偏航角。SingleUavSimulator 按
+                vehicles/<uav_name><uav_id>/init_* 读取后传给 QuadrotorSimulator；
+                SingleUgvSimulator 按 vehicles/<ugv_name><ugv_id>/init_* 读取后传给 UgvSimulator。
 
         global_map_server_config:
           读取模块：GlobalMapServer
@@ -42,32 +58,49 @@
 
         local_mid360_simulator_config:
           读取模块：LocalMid360Simulator
-          内容：MID360 局部点云视场、量程、角分辨率、发布频率。
+          内容：MID360 局部点云视场、量程、角分辨率、发布频率和 sensor frame。
 
         quadrotor_simulator_config:
           读取模块：QuadrotorSimulator；其中质量/重力/机臂/电机关键参数也会被
-                PX4_CONTROL_SIM 读取，用于 setpoint 转 RPM。
-          内容：动力学频率、控制超时、初始位姿、刚体参数、电机参数。
+                Px4ControlSim 读取，用于 setpoint 转 RPM。
+          内容：动力学频率、控制超时、机体 frame、刚体参数、电机参数。
 
         imu_model_config:
           读取模块：QuadrotorSimulator 内部的 sunray_imu_sim::ImuModel
           内容：IMU preset、bias、噪声、协方差、安装误差、时间异步。
 
         px4_control_sim_config:
-          读取模块：PX4_CONTROL_SIM
+          读取模块：Px4ControlSim
           内容：PX4 setpoint 转 RPM 的 PID/限幅、PX4 控制更新频率。
 
         fake_mavros_bridge_config:
           读取模块：FakeMavrosBridge
           内容：fake MAVROS 发布频率、初始 armed/mode 状态和电池状态。
+
+        ugv_simulator_config:
+          读取模块：UgvSimulator
+          内容：UGV 底盘类型、速度/加速度限幅、cmd_vel 超时、odom 协方差和发布频率。
+
+        sim_visualizer_config:
+          读取模块：sunray_mavros_sim_node、SimVisualizer
+          内容：是否启用可视化、MarkerArray 话题、发布频率、UAV/UGV 显示大小、
+                轨迹长度、速度箭头和状态文字开关。UAV 显示为 X 型四旋翼，
+                UGV 显示为矩形车体和四轮小车。
     -->
     <arg name="node_config" default="$(find sunray_mavros_sim)/config/sunray_mavros_sim_node.yaml" />
+    <arg name="single_uav_simulator_config" default="$(find sunray_mavros_sim)/config/single_uav_simulator.yaml" />
     <arg name="global_map_server_config" default="$(find sunray_mavros_sim)/config/global_map_server.yaml" />
     <arg name="local_mid360_simulator_config" default="$(find sunray_mavros_sim)/config/local_mid360_simulator.yaml" />
     <arg name="quadrotor_simulator_config" default="$(find sunray_mavros_sim)/config/quadrotor_simulator.yaml" />
     <arg name="imu_model_config" default="$(find sunray_mavros_sim)/config/imu_model.yaml" />
     <arg name="px4_control_sim_config" default="$(find sunray_mavros_sim)/config/px4_control_sim.yaml" />
     <arg name="fake_mavros_bridge_config" default="$(find sunray_mavros_sim)/config/fake_mavros_bridge.yaml" />
+    <arg name="ugv_simulator_config" default="$(find sunray_mavros_sim)/config/ugv_simulator.yaml" />
+    <arg name="sim_visualizer_config" default="$(find sunray_mavros_sim)/config/sim_visualizer.yaml" />
+
+    <!-- 是否额外启动 RViz。true 时启动默认 RViz 配置，方便直接观察地图、局部点云和车辆 marker。 -->
+    <arg name="rviz" default="true" />
+    <arg name="rviz_config" default="$(find sunray_mavros_sim)/rviz/sunray_mavros_sim.rviz" />
 
     <!--
       唯一 node。
@@ -80,11 +113,26 @@
           type="sunray_mavros_sim_node"
           output="screen">
         <rosparam file="$(arg node_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg single_uav_simulator_config)" command="load" subst_value="true" />
         <rosparam file="$(arg global_map_server_config)" command="load" subst_value="true" />
         <rosparam file="$(arg local_mid360_simulator_config)" command="load" subst_value="true" />
         <rosparam file="$(arg quadrotor_simulator_config)" command="load" subst_value="true" />
         <rosparam file="$(arg imu_model_config)" command="load" subst_value="true" />
         <rosparam file="$(arg px4_control_sim_config)" command="load" subst_value="true" />
         <rosparam file="$(arg fake_mavros_bridge_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg ugv_simulator_config)" command="load" subst_value="true" />
+        <rosparam file="$(arg sim_visualizer_config)" command="load" subst_value="true" />
     </node>
+
+    <!--
+      可选 RViz。
+      默认自动启动，方便直接查看仿真效果；无图形环境或一键脚本不需要 RViz 时：
+        roslaunch sunray_mavros_sim sunray_mavros_sim.launch rviz:=false
+    -->
+    <node if="$(arg rviz)"
+          name="sunray_mavros_sim_rviz"
+          pkg="rviz"
+          type="rviz"
+          args="-d $(arg rviz_config)"
+          output="screen" />
 </launch>

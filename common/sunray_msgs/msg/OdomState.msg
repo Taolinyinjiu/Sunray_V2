@@ -12,7 +12,7 @@ uint8 MOCAP = 1	        # 动作捕捉定位源
 uint8 VINS = 2          # VINS算法
 uint8 GAZEBO = 3        # Gazebo仿真
 uint8 GAZEBO_ARUCO = 4  # Gazebo中的Aruco定位
-uint8 PENGYU_SIM = 5    # 借助pengyu_sim仿真包进行仿真
+uint8 SUNRAY_MAVROS_SIM = 5 # 借助 sunray_mavros_sim 轻量仿真包进行仿真
 uint8 FASTLIO_EKF = 6   # Fastlio算法+EKF高频
 # 当前使用的外部定位源
 uint8 external_source	

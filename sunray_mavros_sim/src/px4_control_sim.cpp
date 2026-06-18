@@ -70,7 +70,10 @@ std::string joinNames(const std::vector<std::string>& names)
 }
 }
 
-PX4_CONTROL_SIM::PX4_CONTROL_SIM(ros::NodeHandle& nh, const std::string& uav_name)
+namespace sunray_mavros_sim
+{
+
+Px4ControlSim::Px4ControlSim(ros::NodeHandle& nh, const std::string& uav_name)
     : nh_(nh), uav_name_(uav_name), dt_(0.005)
 {
     double px4_update_rate = 200.0;
@@ -85,12 +88,14 @@ PX4_CONTROL_SIM::PX4_CONTROL_SIM(ros::NodeHandle& nh, const std::string& uav_nam
     // 在“控制转换”和“动力学仿真”两边会被解释成不同推力。
     nh_.param("motor/k_F", motor_k_f_, 1.5e-5);
     nh_.param("motor/k_T", motor_k_t_, 2.5e-7);
-    nh_.param("motor/omega_max", motor_max_rpm_, 1200.0);
+    nh_.param("motor/rpm_max", motor_max_rpm_, 1200.0);
     nh_.param("limits/max_vel_xy", max_vel_xy_, 0.8);
     nh_.param("limits/max_vel_z", max_vel_z_, 0.6);
     nh_.param("limits/max_acc_xy", max_acc_xy_, 1.2);
     nh_.param("limits/max_acc_z", max_acc_z_, 1.0);
     nh_.param("limits/max_tilt_deg", max_tilt_rad_, 15.0);
+    nh_.param("setpoint_timeout", setpoint_timeout_, 0.5);
+    setpoint_timeout_ = std::max(0.0, setpoint_timeout_);
     nh_.param("position_control/vel_ff_xy_gain_when_pos_active", vel_ff_xy_gain_when_pos_active_, 1.0);
     nh_.param("velocity_control/acc_xy_lpf_tau", acc_xy_lpf_tau_, 0.0);
     nh_.param("velocity_control/acc_ff_xy_gain", acc_ff_xy_gain_, 1.0);
@@ -102,15 +107,15 @@ PX4_CONTROL_SIM::PX4_CONTROL_SIM(ros::NodeHandle& nh, const std::string& uav_nam
     initPIDParams();
     
     // 订阅mavros话题
-    attitude_target_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/attitude", 10, &PX4_CONTROL_SIM::attitudeTargetCallback, this);
-    position_target_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/local", 10, &PX4_CONTROL_SIM::positionTargetCallback, this);
-    odom_sub_ = nh_.subscribe(uav_name_ + "/sunray_mavros_sim/odom", 10, &PX4_CONTROL_SIM::odomCallback, this);
-    mavros_state_sub_ = nh_.subscribe(uav_name_ + "/mavros/state", 10, &PX4_CONTROL_SIM::mavrosStateCallback, this);
+    attitude_target_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/attitude", 10, &Px4ControlSim::attitudeTargetCallback, this);
+    position_target_sub_ = nh_.subscribe(uav_name_ + "/mavros/setpoint_raw/local", 10, &Px4ControlSim::positionTargetCallback, this);
+    odom_sub_ = nh_.subscribe(uav_name_ + "/sunray_mavros_sim/odom", 10, &Px4ControlSim::odomCallback, this);
+    mavros_state_sub_ = nh_.subscribe(uav_name_ + "/mavros/state", 10, &Px4ControlSim::mavrosStateCallback, this);
     
     // 发布电机RPM
     motor_rpm_pub_ = nh_.advertise<std_msgs::Float32MultiArray>(uav_name_ + "/sunray_mavros_sim/cmd_RPM", 10);
     update_timer_ = nh_.createTimer(ros::Duration(dt_),
-                                    &PX4_CONTROL_SIM::updateTimerCallback,
+                                    &Px4ControlSim::updateTimerCallback,
                                     this);
     
     // 初始化状态
@@ -159,8 +164,8 @@ PX4_CONTROL_SIM::PX4_CONTROL_SIM(ros::NodeHandle& nh, const std::string& uav_nam
     use_yaw_ = false;
     use_yaw_rate_ = false;
     
-    ROS_INFO("PX4_CONTROL_SIM initialized for %s at %.1f Hz", uav_name_.c_str(), px4_update_rate);
-    ROS_INFO("PX4_CONTROL_SIM params: mass=%.3f gravity=%.3f k_F=%.6e arm=%.3f omega_max=%.1f",
+    ROS_INFO("Px4ControlSim initialized for %s at %.1f Hz", uav_name_.c_str(), px4_update_rate);
+    ROS_INFO("Px4ControlSim params: mass=%.3f gravity=%.3f k_F=%.6e arm=%.3f rpm_max=%.1f",
              mass_,
              gravity_,
              motor_k_f_,
@@ -168,12 +173,12 @@ PX4_CONTROL_SIM::PX4_CONTROL_SIM(ros::NodeHandle& nh, const std::string& uav_nam
              motor_max_rpm_);
 }
 
-void PX4_CONTROL_SIM::updateTimerCallback(const ros::TimerEvent&)
+void Px4ControlSim::updateTimerCallback(const ros::TimerEvent&)
 {
     update();
 }
 
-void PX4_CONTROL_SIM::initPIDParams()
+void Px4ControlSim::initPIDParams()
 {
     nh_.param("position_control/kp_x", pos_pid_kp_(0), 1.0);
     nh_.param("position_control/kp_y", pos_pid_kp_(1), 1.0);
@@ -206,9 +211,264 @@ void PX4_CONTROL_SIM::initPIDParams()
     bodyrate_pid_integral_.setZero();
 }
 
-void PX4_CONTROL_SIM::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg)
+bool Px4ControlSim::isSupportedPositionTarget(const mavros_msgs::PositionTarget& msg,
+                                                std::string& reason) const
+{
+    const uint16_t mask = msg.type_mask;
+    const uint16_t known_mask = mavros_msgs::PositionTarget::IGNORE_PX |
+                                mavros_msgs::PositionTarget::IGNORE_PY |
+                                mavros_msgs::PositionTarget::IGNORE_PZ |
+                                mavros_msgs::PositionTarget::IGNORE_VX |
+                                mavros_msgs::PositionTarget::IGNORE_VY |
+                                mavros_msgs::PositionTarget::IGNORE_VZ |
+                                mavros_msgs::PositionTarget::IGNORE_AFX |
+                                mavros_msgs::PositionTarget::IGNORE_AFY |
+                                mavros_msgs::PositionTarget::IGNORE_AFZ |
+                                mavros_msgs::PositionTarget::FORCE |
+                                mavros_msgs::PositionTarget::IGNORE_YAW |
+                                mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+
+    if ((mask & ~known_mask) != 0)
+    {
+        reason = "type_mask 含有未知位";
+        return false;
+    }
+    if (msg.coordinate_frame != mavros_msgs::PositionTarget::FRAME_LOCAL_NED)
+    {
+        reason = "当前只支持 FRAME_LOCAL_NED，BODY/OFFSET 坐标系尚未实现转换";
+        return false;
+    }
+    if ((mask & mavros_msgs::PositionTarget::FORCE) != 0)
+    {
+        reason = "不支持 FORCE 模式，acceleration_or_force 只按加速度前馈解释";
+        return false;
+    }
+
+    const bool ignore_px = mask & mavros_msgs::PositionTarget::IGNORE_PX;
+    const bool ignore_py = mask & mavros_msgs::PositionTarget::IGNORE_PY;
+    const bool ignore_pz = mask & mavros_msgs::PositionTarget::IGNORE_PZ;
+    const bool ignore_vx = mask & mavros_msgs::PositionTarget::IGNORE_VX;
+    const bool ignore_vy = mask & mavros_msgs::PositionTarget::IGNORE_VY;
+    const bool ignore_vz = mask & mavros_msgs::PositionTarget::IGNORE_VZ;
+    const bool ignore_ax = mask & mavros_msgs::PositionTarget::IGNORE_AFX;
+    const bool ignore_ay = mask & mavros_msgs::PositionTarget::IGNORE_AFY;
+    const bool ignore_az = mask & mavros_msgs::PositionTarget::IGNORE_AFZ;
+    const bool ignore_yaw = mask & mavros_msgs::PositionTarget::IGNORE_YAW;
+    const bool ignore_yaw_rate = mask & mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+
+    if (ignore_px != ignore_py)
+    {
+        reason = "不支持只给 x 或只给 y 的位置输入，pos_xy 必须成对出现";
+        return false;
+    }
+    if (ignore_vx != ignore_vy)
+    {
+        reason = "不支持只给 vx 或只给 vy 的速度输入，vel_xy 必须成对出现";
+        return false;
+    }
+    if (ignore_ax != ignore_ay)
+    {
+        reason = "不支持只给 ax 或只给 ay 的加速度输入，acc_xy 必须成对出现";
+        return false;
+    }
+
+    const bool use_pos_xy = !ignore_px && !ignore_py;
+    const bool use_pos_z = !ignore_pz;
+    const bool use_vel_xy = !ignore_vx && !ignore_vy;
+    const bool use_vel_z = !ignore_vz;
+    const bool use_acc_xy = !ignore_ax && !ignore_ay;
+    const bool use_acc_z = !ignore_az;
+    const bool use_yaw = !ignore_yaw;
+    const bool use_yaw_rate = !ignore_yaw_rate;
+
+    if (!use_pos_xy && !use_pos_z &&
+        !use_vel_xy && !use_vel_z &&
+        !use_acc_xy && !use_acc_z &&
+        !use_yaw && !use_yaw_rate)
+    {
+        reason = "所有 position/velocity/acceleration/yaw/yaw_rate 字段都被忽略";
+        return false;
+    }
+
+    if (use_pos_xy && (!std::isfinite(msg.position.x) || !std::isfinite(msg.position.y)))
+    {
+        reason = "pos_xy 包含非有限数值";
+        return false;
+    }
+    if (use_pos_z && !std::isfinite(msg.position.z))
+    {
+        reason = "pos_z 包含非有限数值";
+        return false;
+    }
+    if (use_vel_xy && (!std::isfinite(msg.velocity.x) || !std::isfinite(msg.velocity.y)))
+    {
+        reason = "vel_xy 包含非有限数值";
+        return false;
+    }
+    if (use_vel_z && !std::isfinite(msg.velocity.z))
+    {
+        reason = "vel_z 包含非有限数值";
+        return false;
+    }
+    if (use_acc_xy && (!std::isfinite(msg.acceleration_or_force.x) ||
+                       !std::isfinite(msg.acceleration_or_force.y)))
+    {
+        reason = "acc_xy 包含非有限数值";
+        return false;
+    }
+    if (use_acc_z && !std::isfinite(msg.acceleration_or_force.z))
+    {
+        reason = "acc_z 包含非有限数值";
+        return false;
+    }
+    if (use_yaw && !std::isfinite(msg.yaw))
+    {
+        reason = "yaw 包含非有限数值";
+        return false;
+    }
+    if (use_yaw_rate && !std::isfinite(msg.yaw_rate))
+    {
+        reason = "yaw_rate 包含非有限数值";
+        return false;
+    }
+
+    return true;
+}
+
+bool Px4ControlSim::isSupportedAttitudeTarget(const mavros_msgs::AttitudeTarget& msg,
+                                                std::string& reason) const
+{
+    const uint8_t mask = msg.type_mask;
+    const uint8_t known_mask = mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE |
+                               mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE |
+                               mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE |
+                               mavros_msgs::AttitudeTarget::IGNORE_THRUST |
+                               mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE;
+    if ((mask & ~known_mask) != 0)
+    {
+        reason = "type_mask 含有未知位";
+        return false;
+    }
+    if ((mask & mavros_msgs::AttitudeTarget::IGNORE_THRUST) != 0)
+    {
+        reason = "不支持 IGNORE_THRUST，姿态/角速度控制必须带 thrust";
+        return false;
+    }
+    if (!std::isfinite(msg.thrust))
+    {
+        reason = "thrust 包含非有限数值";
+        return false;
+    }
+
+    const bool ignore_attitude = mask & mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE;
+    const bool ignore_roll_rate = mask & mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE;
+    const bool ignore_pitch_rate = mask & mavros_msgs::AttitudeTarget::IGNORE_PITCH_RATE;
+    const bool ignore_yaw_rate = mask & mavros_msgs::AttitudeTarget::IGNORE_YAW_RATE;
+
+    const bool bodyrate_thrust =
+        ignore_attitude && !ignore_roll_rate && !ignore_pitch_rate && !ignore_yaw_rate;
+    const bool attitude_thrust =
+        !ignore_attitude && ignore_roll_rate && ignore_pitch_rate && ignore_yaw_rate;
+    const bool roll_pitch_yawrate_thrust =
+        !ignore_attitude && ignore_roll_rate && ignore_pitch_rate && !ignore_yaw_rate;
+
+    if (!bodyrate_thrust && !attitude_thrust && !roll_pitch_yawrate_thrust)
+    {
+        reason = "仅支持 body_rate+thrust、roll_pitch_yaw+thrust、roll_pitch_yawrate+thrust";
+        return false;
+    }
+
+    if (bodyrate_thrust &&
+        (!std::isfinite(msg.body_rate.x) ||
+         !std::isfinite(msg.body_rate.y) ||
+         !std::isfinite(msg.body_rate.z)))
+    {
+        reason = "body_rate 包含非有限数值";
+        return false;
+    }
+    if (roll_pitch_yawrate_thrust && !std::isfinite(msg.body_rate.z))
+    {
+        reason = "yaw_rate 包含非有限数值";
+        return false;
+    }
+    if (!ignore_attitude)
+    {
+        const double q_norm =
+            std::sqrt(msg.orientation.w * msg.orientation.w +
+                      msg.orientation.x * msg.orientation.x +
+                      msg.orientation.y * msg.orientation.y +
+                      msg.orientation.z * msg.orientation.z);
+        if (!std::isfinite(q_norm) || q_norm < 1.0e-6)
+        {
+            reason = "orientation 四元数无效";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void Px4ControlSim::warnUnsupportedPositionTargetOnce(const mavros_msgs::PositionTarget& msg,
+                                                        const std::string& reason)
+{
+    const uint32_t key = (static_cast<uint32_t>(msg.coordinate_frame) << 16) |
+                         static_cast<uint32_t>(msg.type_mask);
+    last_rejected_setpoint_reason_ = "PositionTarget frame=" +
+                                     std::to_string(static_cast<int>(msg.coordinate_frame)) +
+                                     " mask=" + std::to_string(msg.type_mask) +
+                                     "，原因：" + reason;
+    if (warned_position_target_keys_.insert(key).second)
+    {
+        ROS_WARN("[px4_control_sim] unsupported PositionTarget frame=%u type_mask=%u: %s",
+                 msg.coordinate_frame,
+                 msg.type_mask,
+                 reason.c_str());
+    }
+}
+
+void Px4ControlSim::warnUnsupportedAttitudeTargetOnce(const mavros_msgs::AttitudeTarget& msg,
+                                                        const std::string& reason)
+{
+    last_rejected_setpoint_reason_ = "AttitudeTarget mask=" +
+                                     std::to_string(static_cast<int>(msg.type_mask)) +
+                                     "，原因：" + reason;
+    if (warned_attitude_target_masks_.insert(msg.type_mask).second)
+    {
+        ROS_WARN("[px4_control_sim] unsupported AttitudeTarget type_mask=%u: %s",
+                 msg.type_mask,
+                 reason.c_str());
+    }
+}
+
+void Px4ControlSim::markSupportedSetpoint()
+{
+    has_setpoint_ = true;
+    setpoint_timed_out_ = false;
+    last_supported_setpoint_time_ = ros::Time::now();
+}
+
+void Px4ControlSim::clearControllerOutput()
+{
+    desired_state_.thrust.setZero();
+    desired_state_.torque.setZero();
+    desired_state_.motor_thrust.setZero();
+    desired_state_.motor_rpm.setZero();
+    vel_pid_integral_.setZero();
+    bodyrate_pid_integral_.setZero();
+    filtered_acc_xy_.setZero();
+    filtered_acc_xy_initialized_ = false;
+}
+
+void Px4ControlSim::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::ConstPtr& msg)
 {
     mavros_msgs::AttitudeTarget att_target = *msg;
+    std::string unsupported_reason;
+    if (!isSupportedAttitudeTarget(att_target, unsupported_reason))
+    {
+        warnUnsupportedAttitudeTargetOnce(att_target, unsupported_reason);
+        return;
+    }
+
     const uint8_t mask = att_target.type_mask;
     const bool ignore_attitude = mask & mavros_msgs::AttitudeTarget::IGNORE_ATTITUDE;
     const bool ignore_roll_rate = mask & mavros_msgs::AttitudeTarget::IGNORE_ROLL_RATE;
@@ -232,7 +492,7 @@ void PX4_CONTROL_SIM::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::
         use_yaw_ = false;
         use_yaw_rate_ = false;
         control_mode_ = BODYRATE_CONTROL;
-        has_setpoint_ = true;
+        markSupportedSetpoint();
     }
     // 2) 四元数提供 roll/pitch/yaw，忽略 body_rate
     else if (!ignore_attitude && ignore_roll_rate && ignore_pitch_rate && ignore_yaw_rate)
@@ -252,7 +512,7 @@ void PX4_CONTROL_SIM::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::
         use_yaw_ = true;
         use_yaw_rate_ = false;
         control_mode_ = ATTITUDE_CONTROL;
-        has_setpoint_ = true;
+        markSupportedSetpoint();
     }
     // 3) 四元数只提供 roll/pitch，yaw 轴由 body_rate.z 直接控制
     else if (!ignore_attitude && ignore_roll_rate && ignore_pitch_rate && !ignore_yaw_rate)
@@ -271,13 +531,20 @@ void PX4_CONTROL_SIM::attitudeTargetCallback(const mavros_msgs::AttitudeTarget::
         use_yaw_ = false;
         use_yaw_rate_ = true;
         control_mode_ = ATTITUDE_CONTROL;
-        has_setpoint_ = true;
+        markSupportedSetpoint();
     }
 }
 
-void PX4_CONTROL_SIM::positionTargetCallback(const mavros_msgs::PositionTarget::ConstPtr& msg)
+void Px4ControlSim::positionTargetCallback(const mavros_msgs::PositionTarget::ConstPtr& msg)
 {
     mavros_msgs::PositionTarget pos_target = *msg;
+    std::string unsupported_reason;
+    if (!isSupportedPositionTarget(pos_target, unsupported_reason))
+    {
+        warnUnsupportedPositionTargetOnce(pos_target, unsupported_reason);
+        return;
+    }
+
     const uint16_t mask = pos_target.type_mask;
 
     // PositionTarget 在这里按“字段叠加”解释，而不是“模式互斥”解释：
@@ -355,10 +622,10 @@ void PX4_CONTROL_SIM::positionTargetCallback(const mavros_msgs::PositionTarget::
     }
 
     control_mode_ = (use_pos_xy_ || use_pos_z_) ? POSITION_CONTROL : VELOCITY_CONTROL;
-    has_setpoint_ = true;
+    markSupportedSetpoint();
 }
 
-void PX4_CONTROL_SIM::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
+void Px4ControlSim::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
     // 更新当前状态
     current_state_.pos << msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z;
@@ -377,7 +644,7 @@ void PX4_CONTROL_SIM::odomCallback(const nav_msgs::Odometry::ConstPtr& msg)
     has_odom_ = true;
 }
 
-void PX4_CONTROL_SIM::mavrosStateCallback(const mavros_msgs::State::ConstPtr& msg)
+void Px4ControlSim::mavrosStateCallback(const mavros_msgs::State::ConstPtr& msg)
 {
     mavros_armed_ = msg->armed;
     mavros_mode_ = msg->mode;
@@ -386,25 +653,32 @@ void PX4_CONTROL_SIM::mavrosStateCallback(const mavros_msgs::State::ConstPtr& ms
     if (!mavros_armed_)
     {
         has_setpoint_ = false;
+        setpoint_timed_out_ = false;
         px4_setpoint_.collective_thrust = 0.0;
         px4_setpoint_.bodyrate_roll_pitch.setZero();
         px4_setpoint_.bodyrate_yaw_rate = 0.0;
         px4_setpoint_.att_roll_pitch.setZero();
         px4_setpoint_.att_yaw = 0.0;
-        desired_state_.thrust.setZero();
-        desired_state_.torque.setZero();
-        desired_state_.motor_thrust.setZero();
-        desired_state_.motor_rpm.setZero();
-        vel_pid_integral_.setZero();
-        bodyrate_pid_integral_.setZero();
+        clearControllerOutput();
         publishZeroMotorRPM();
     }
 }
 
-void PX4_CONTROL_SIM::update()
+void Px4ControlSim::update()
 {
     if (has_mavros_state_ && !mavros_armed_)
     {
+        publishZeroMotorRPM();
+        return;
+    }
+
+    if (has_setpoint_ && setpoint_timeout_ > 0.0 &&
+        !last_supported_setpoint_time_.isZero() &&
+        (ros::Time::now() - last_supported_setpoint_time_).toSec() > setpoint_timeout_)
+    {
+        has_setpoint_ = false;
+        setpoint_timed_out_ = true;
+        clearControllerOutput();
         publishZeroMotorRPM();
         return;
     }
@@ -466,7 +740,7 @@ void PX4_CONTROL_SIM::update()
     publishMotorRPM(desired_state_.motor_rpm);
 }
 
-void PX4_CONTROL_SIM::positionControl()
+void Px4ControlSim::positionControl()
 {
     desired_state_.vel_xy.setZero();
     desired_state_.vel_z = 0.0;
@@ -494,7 +768,7 @@ void PX4_CONTROL_SIM::positionControl()
     desired_state_.vel_z = clampValue(desired_state_.vel_z, -max_vel_z_, max_vel_z_);
 }
 
-void PX4_CONTROL_SIM::velocityControl()
+void Px4ControlSim::velocityControl()
 {
     Eigen::Vector3d desired_vel;
     desired_vel << desired_state_.vel_xy(0), desired_state_.vel_xy(1), desired_state_.vel_z;
@@ -530,7 +804,7 @@ void PX4_CONTROL_SIM::velocityControl()
     desired_state_.acc(2) = clampValue(desired_state_.acc(2), -max_acc_z_, max_acc_z_);
 }
 
-void PX4_CONTROL_SIM::accelerationToAttitude()
+void Px4ControlSim::accelerationToAttitude()
 {
     // 这里采用简化做法：
     // 先根据期望加速度求总推力方向，再把它近似映射成 roll/pitch。
@@ -564,7 +838,7 @@ void PX4_CONTROL_SIM::accelerationToAttitude()
     }
 }
 
-void PX4_CONTROL_SIM::attitudeControl()
+void Px4ControlSim::attitudeControl()
 {
     Eigen::Vector3d desired_att;
     desired_att << desired_state_.att_roll_pitch(0), desired_state_.att_roll_pitch(1), desired_state_.att_yaw;
@@ -588,7 +862,7 @@ void PX4_CONTROL_SIM::attitudeControl()
     desired_state_.bodyrate_yaw_rate = clampValue(desired_yaw_rate, -max_yaw_rate_, max_yaw_rate_);
 }
 
-void PX4_CONTROL_SIM::bodyrateControl()
+void Px4ControlSim::bodyrateControl()
 {
     Eigen::Vector3d desired_bodyrate(desired_state_.bodyrate_roll_pitch(0), 
                                      desired_state_.bodyrate_roll_pitch(1), 
@@ -603,7 +877,7 @@ void PX4_CONTROL_SIM::bodyrateControl()
                            bodyrate_pid_ki_.cwiseProduct(bodyrate_pid_integral_);
 }
 
-Eigen::Vector3d PX4_CONTROL_SIM::computeRealThrust(double collective_thrust)
+Eigen::Vector3d Px4ControlSim::computeRealThrust(double collective_thrust)
 {
     /**
      * 计算公式：
@@ -630,7 +904,7 @@ Eigen::Vector3d PX4_CONTROL_SIM::computeRealThrust(double collective_thrust)
     return thrust_vector;
 }
 
-Eigen::Vector4d PX4_CONTROL_SIM::computeMotorThrust(double thrust, const Eigen::Vector3d& torque)
+Eigen::Vector4d Px4ControlSim::computeMotorThrust(double thrust, const Eigen::Vector3d& torque)
 {
     // 这里默认混控矩阵与当前动力学模型采用同一套电机编号和符号定义。
     // 如果后续调整动力学中的电机顺序，这里必须同步修改。
@@ -672,9 +946,9 @@ Eigen::Vector4d PX4_CONTROL_SIM::computeMotorThrust(double thrust, const Eigen::
     return motor_thrust;
 }
 
-Eigen::Vector4d PX4_CONTROL_SIM::computeMotorRPMFromThrust(const Eigen::Vector4d& motor_thrust)
+Eigen::Vector4d Px4ControlSim::computeMotorRPMFromThrust(const Eigen::Vector4d& motor_thrust)
 {
-    // 推力模型采用 T = k_F * omega^2，因此反算 RPM 时需要开平方。
+    // 推力模型采用 T = k_F * rpm^2，因此反算 RPM 时需要开平方。
     Eigen::Vector4d motor_rpm;
     for (int i = 0; i < 4; i++)
     {
@@ -689,7 +963,7 @@ Eigen::Vector4d PX4_CONTROL_SIM::computeMotorRPMFromThrust(const Eigen::Vector4d
 
 
 
-void PX4_CONTROL_SIM::publishMotorRPM(const Eigen::Vector4d& motor_rpm)
+void Px4ControlSim::publishMotorRPM(const Eigen::Vector4d& motor_rpm)
 {
     // 发布电机RPM
     std_msgs::Float32MultiArray rpm_msg;
@@ -701,22 +975,23 @@ void PX4_CONTROL_SIM::publishMotorRPM(const Eigen::Vector4d& motor_rpm)
     motor_rpm_pub_.publish(rpm_msg);
 }
 
-void PX4_CONTROL_SIM::publishZeroMotorRPM()
+void Px4ControlSim::publishZeroMotorRPM()
 {
     publishMotorRPM(Eigen::Vector4d::Zero());
 }
 
-void PX4_CONTROL_SIM::printStatus() const
+void Px4ControlSim::printStatus() const
 {
     std::cout << buildStatusPanel() << std::endl;
 }
 
-std::string PX4_CONTROL_SIM::buildStatusPanel() const
+std::string Px4ControlSim::buildStatusPanel() const
 {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(2);
 
     const char* setpoint_color = has_setpoint_ ? kAnsiGood : kAnsiWarn;
+    const std::string setpoint_status = has_setpoint_ ? "正常" : (setpoint_timed_out_ ? "超时" : "等待");
     const char* odom_color = has_odom_ ? kAnsiGood : kAnsiWarn;
 
     ss << kAnsiTitle << "=================== px4_control_sim_node [" << uav_name_
@@ -755,7 +1030,7 @@ std::string PX4_CONTROL_SIM::buildStatusPanel() const
         ss << kAnsiGood << " 控制输入 " << kAnsiReset
            << "位置指令话题（订阅） -> " << uav_name_ << "/mavros/setpoint_raw/local"
            << "\n"
-           << "          指令状态 = " << setpoint_color << stateText(has_setpoint_) << kAnsiReset
+           << "          指令状态 = " << setpoint_color << setpoint_status << kAnsiReset
            << "  当前模式 = " << controlModeName() << " (" << joinNames(enabled_inputs) << ")"
            << "\n";
         if (use_pos_xy_)
@@ -810,7 +1085,7 @@ std::string PX4_CONTROL_SIM::buildStatusPanel() const
         ss << kAnsiGood << " 控制输入 " << kAnsiReset
            << "姿态指令话题（订阅） -> " << uav_name_ << "/mavros/setpoint_raw/attitude"
            << "\n"
-           << "          指令状态 = " << setpoint_color << stateText(has_setpoint_) << kAnsiReset
+           << "          指令状态 = " << setpoint_color << setpoint_status << kAnsiReset
            << "  当前模式 = " << controlModeName() << " (" << joinNames(enabled_inputs) << ")"
            << "\n"
            << "           roll = " << radToDeg(px4_setpoint_.att_roll_pitch.x()) << " deg"
@@ -830,7 +1105,7 @@ std::string PX4_CONTROL_SIM::buildStatusPanel() const
         ss << kAnsiGood << " 控制输入 " << kAnsiReset
            << "姿态指令话题（订阅） -> " << uav_name_ << "/mavros/setpoint_raw/attitude"
            << "\n"
-           << "          指令状态 = " << setpoint_color << stateText(has_setpoint_) << kAnsiReset
+           << "          指令状态 = " << setpoint_color << setpoint_status << kAnsiReset
            << "  当前模式 = " << controlModeName() << " (use_bodyrate, thrust)"
            << "\n"
            << "           wx = " << radToDeg(px4_setpoint_.bodyrate_roll_pitch.x()) << " deg/s"
@@ -842,10 +1117,17 @@ std::string PX4_CONTROL_SIM::buildStatusPanel() const
     default:
         ss << kAnsiGood << " 控制输入 " << kAnsiReset
            << "无有效输入话题\n"
-           << "          指令状态 = " << setpoint_color << stateText(has_setpoint_) << kAnsiReset
+           << "          指令状态 = " << setpoint_color << setpoint_status << kAnsiReset
            << "  当前模式 = " << controlModeName()
            << "\n";
         break;
+    }
+
+    if (!last_rejected_setpoint_reason_.empty())
+    {
+        ss << kAnsiWarn << " 最近拒绝 " << kAnsiReset
+           << last_rejected_setpoint_reason_
+           << "\n";
     }
 
     ss << kAnsiGood << " 控制输出 " << kAnsiReset
@@ -864,7 +1146,7 @@ std::string PX4_CONTROL_SIM::buildStatusPanel() const
     return ss.str();
 }
 
-const char* PX4_CONTROL_SIM::controlModeName() const
+const char* Px4ControlSim::controlModeName() const
 {
     switch (control_mode_) {
     case POSITION_CONTROL:
@@ -879,3 +1161,4 @@ const char* PX4_CONTROL_SIM::controlModeName() const
         return "UNKNOWN";
     }
 }
+}  // namespace sunray_mavros_sim
