@@ -96,15 +96,23 @@ void YunlinkRosBridgeNode::systemServiceWorkerLoop() {
     }
 }
 
+/// 获取 system service 通道级超时；未配置时使用旧的全局 system_service_timeout_sec。
+double YunlinkRosBridgeNode::serviceTimeoutSec(const char* channel) const {
+    const auto cfg = channelQos(qos_channels_.system_services, channel);
+    return cfg.has_timeout_sec ? cfg.timeout_sec : params_.system_service_timeout_sec;
+}
+
 /// 按配置的超时策略等待 Sunray ROS service 可用。
-bool YunlinkRosBridgeNode::waitForService(ros::ServiceClient& client, const char* name) const {
-    if (params_.system_service_timeout_sec <= 0.0) {
+bool YunlinkRosBridgeNode::waitForService(ros::ServiceClient& client,
+                                          const char* name,
+                                          double timeout_sec) const {
+    if (timeout_sec <= 0.0) {
         return client.exists();
     }
-    if (client.waitForExistence(ros::Duration(params_.system_service_timeout_sec))) {
+    if (client.waitForExistence(ros::Duration(timeout_sec))) {
         return true;
     }
-    ROS_WARN("yunlink_ros_bridge service unavailable: %s", name);
+    ROS_WARN("yunlink_ros_bridge service unavailable: %s timeout_sec=%.3f", name, timeout_sec);
     return false;
 }
 
@@ -113,7 +121,7 @@ void YunlinkRosBridgeNode::handleFeatureListJob(const SystemServiceJob& job) {
     yunlink::FeatureListResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "list_features");
 
-    if (!waitForService(list_features_client_, name.c_str())) {
+    if (!waitForService(list_features_client_, name.c_str(), serviceTimeoutSec("feature_list"))) {
         response.success = false;
         response.message = "ros-service-unavailable: " + name;
     } else {
@@ -141,7 +149,7 @@ void YunlinkRosBridgeNode::handleFeatureGetJob(const SystemServiceJob& job) {
     yunlink::FeatureGetResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "get_features");
 
-    if (!waitForService(get_features_client_, name.c_str())) {
+    if (!waitForService(get_features_client_, name.c_str(), serviceTimeoutSec("feature_get"))) {
         response.success = false;
         response.message = "ros-service-unavailable: " + name;
         response.name = job.feature_get.feature_name;
@@ -180,7 +188,7 @@ void YunlinkRosBridgeNode::handleFeatureStartJob(const SystemServiceJob& job) {
     yunlink::FeatureStartResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "start_feature");
 
-    if (!waitForService(start_feature_client_, name.c_str())) {
+    if (!waitForService(start_feature_client_, name.c_str(), serviceTimeoutSec("feature_start"))) {
         response.success = false;
         response.message = "ros-service-unavailable: " + name;
         response.feature_name = job.feature_start.feature_name;
@@ -214,7 +222,7 @@ void YunlinkRosBridgeNode::handleFeatureStopJob(const SystemServiceJob& job) {
     yunlink::FeatureStopResponse response{};
     const std::string name = service_name(params_.sunray_system_ns, "stop_feature");
 
-    if (!waitForService(stop_feature_client_, name.c_str())) {
+    if (!waitForService(stop_feature_client_, name.c_str(), serviceTimeoutSec("feature_stop"))) {
         response.success = false;
         response.message = "ros-service-unavailable: " + name;
         response.feature_name = job.feature_stop.feature_name;

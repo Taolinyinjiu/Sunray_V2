@@ -6,10 +6,14 @@
 /// topic 回调只镜像状态，权威控制状态仍在 Sunray 包内。
 /// 转发本地里程计到 YunLink。
 void YunlinkRosBridgeNode::onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg) {
+    const ros::Time now = ros::Time::now();
+    const ros::Time receive_time = msg->header.stamp.isZero() ? now : msg->header.stamp;
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
-        recordRosToYunlinkEvent(&local_odom_diag_,
-                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp);
+        recordRosToYunlinkEvent(&local_odom_diag_, receive_time);
+    }
+    if (!shouldPublishRosToYunlink("local_odom", now.isZero() ? receive_time : now)) {
+        return;
     }
     const yunlink::LocalOdomSnapshot payload = mapLocalOdom(*msg);
     publishSnapshot("local_odom", &yunlink::Runtime::publish_local_odom, payload);
@@ -17,19 +21,22 @@ void YunlinkRosBridgeNode::onLocalOdom(const nav_msgs::Odometry::ConstPtr& msg) 
 
 /// 转发定位状态并同步诊断里程计 topic 元信息。
 void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& msg) {
+    const ros::Time now = ros::Time::now();
+    const ros::Time receive_time = msg->header.stamp.isZero() ? now : msg->header.stamp;
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
         std::string detail = "external_source=" + std::to_string(msg->external_source) +
                              " odometry_valid=" + std::string(msg->odometry_valid ? "true" : "false");
-        recordRosToYunlinkEvent(&odom_state_diag_,
-                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
-                                detail);
+        recordRosToYunlinkEvent(&odom_state_diag_, receive_time, detail);
         external_odom_diag_.detail = "source_topic=" + msg->subtopic_name_external_odom;
         if (!msg->subtopic_name_external_relocalization.empty()) {
             external_odom_diag_.detail += " relocalization=" + msg->subtopic_name_external_relocalization;
         }
         local_odom_diag_.topic = msg->pubtopic_name_local_odom;
         local_odom_diag_.configured = !msg->pubtopic_name_local_odom.empty();
+    }
+    if (!shouldPublishRosToYunlink("odom_state", now.isZero() ? receive_time : now)) {
+        return;
     }
     yunlink::OdomStateSnapshot payload{};
     payload.header = mapHeader(msg->header);
@@ -55,11 +62,16 @@ void YunlinkRosBridgeNode::onOdomState(const sunray_msgs::OdomState::ConstPtr& m
 /// 转发 Sunray 控制命令 snapshot，包含 bridge 下发和本地发布的命令。
 void YunlinkRosBridgeNode::onControlCmd(const sunray_msgs::UAVControlCMD::ConstPtr& msg) {
     // 同步 bridge 转发命令和本地 Sunray 命令到同一条 snapshot 流。
+    const ros::Time now = ros::Time::now();
+    const ros::Time receive_time = msg->header.stamp.isZero() ? now : msg->header.stamp;
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
         recordRosToYunlinkEvent(&uav_control_cmd_diag_,
-                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                receive_time,
                                 "control_cmd=" + std::to_string(msg->control_cmd));
+    }
+    if (!shouldPublishRosToYunlink("uav_control_cmd", now.isZero() ? receive_time : now)) {
+        return;
     }
     const auto payload = mapControlCmd(*msg);
     publishSnapshot("uav_control_cmd", &yunlink::Runtime::publish_uav_control_cmd, payload);
@@ -67,11 +79,16 @@ void YunlinkRosBridgeNode::onControlCmd(const sunray_msgs::UAVControlCMD::ConstP
 
 /// 转发控制状态 snapshot，不在 bridge 内判断任务是否完成。
 void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::ConstPtr& msg) {
+    const ros::Time now = ros::Time::now();
+    const ros::Time receive_time = msg->header.stamp.isZero() ? now : msg->header.stamp;
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
         recordRosToYunlinkEvent(&uav_control_state_diag_,
-                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                receive_time,
                                 "fsm=" + std::to_string(msg->control_state));
+    }
+    if (!shouldPublishRosToYunlink("control_state", now.isZero() ? receive_time : now)) {
+        return;
     }
     yunlink::UavControlStateSnapshot payload{};
     payload.header = mapHeader(msg->header);
@@ -98,6 +115,11 @@ void YunlinkRosBridgeNode::onControlState(const sunray_msgs::UAVControlState::Co
 void YunlinkRosBridgeNode::onCommandExecutionStatus(
     const sunray_msgs::UAVCommandExecutionStatus::ConstPtr& msg) {
     // 执行结果权威来源是 sunray_uav_control；bridge 只做 snapshot 转换。
+    const ros::Time now = ros::Time::now();
+    const ros::Time receive_time = msg->header.stamp.isZero() ? now : msg->header.stamp;
+    if (!shouldPublishRosToYunlink("command_execution_status", now.isZero() ? receive_time : now)) {
+        return;
+    }
     const auto payload = mapCommandExecutionStatus(*msg);
     publishSnapshot("command_execution_status",
                     &yunlink::Runtime::publish_command_execution_status,
@@ -106,6 +128,8 @@ void YunlinkRosBridgeNode::onCommandExecutionStatus(
 
 /// 转发 PX4 状态，并缓存高度供机体系速度命令使用。
 void YunlinkRosBridgeNode::onPx4State(const sunray_msgs::Px4State::ConstPtr& msg) {
+    const ros::Time now = ros::Time::now();
+    const ros::Time receive_time = msg->header.stamp.isZero() ? now : msg->header.stamp;
     {
         std::lock_guard<std::mutex> lock(px4_state_mu_);
         latest_px4_height_m_ = static_cast<float>(msg->local_pose.position.z);
@@ -114,9 +138,12 @@ void YunlinkRosBridgeNode::onPx4State(const sunray_msgs::Px4State::ConstPtr& msg
     {
         std::lock_guard<std::mutex> lock(diag_mu_);
         recordRosToYunlinkEvent(&px4_state_diag_,
-                                msg->header.stamp.isZero() ? ros::Time::now() : msg->header.stamp,
+                                receive_time,
                                 "armed=" + std::string(msg->armed ? "true" : "false") +
                                     " mode=" + std::to_string(msg->flight_mode));
+    }
+    if (!shouldPublishRosToYunlink("px4_state", now.isZero() ? receive_time : now)) {
+        return;
     }
 
     yunlink::Px4StateSnapshot payload{};

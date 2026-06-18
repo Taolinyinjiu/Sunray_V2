@@ -1,33 +1,6 @@
-udp_bind_port: 9696
-udp_target_port: 9898
-tcp_listen_port: 9696
-remote_ip: ""
-remote_tcp_port: 0
-shared_secret: "yunlink-default-secret"
-agent_id: 1
+# 仿真覆盖配置。
+# 通用参数来自 yunlink_ros_bridge_base.yaml；这里仅保留仿真和通用默认值不一致、
+# 或者需要显式提醒使用者的参数。
 
-enable_endpoint_discovery: true
-discovery_port: 9966
-discovery_target_ip: "255.255.255.255"
-discovery_period_ms: 1000
-endpoint_name_prefix: "yundrone_uav"
-endpoint_id_file: "$(env HOME)/.config/yunlink_ros_bridge/endpoint_id"
-
-enable_system_services: true
-sunray_system_ns: "/sunray_system"
-system_service_timeout_sec: 3.0
-default_start_with_terminal: false
-
-enable_runtime_diagnostics: true
-diagnostic_publish_rate_hz: 2.0
-diagnostic_stale_timeout_ms: 1000
-monitor_diagnostic_topic: "/yunlink_ros_bridge/monitor_diagnostics"
-
-local_odom_topic: "/uav1/sunray/localization/local_odom"
-odom_state_topic: "/uav1/sunray/localization/odom_state"
+# 仿真链路通常不接真实外部定位输入，只使用 localization_fusion 输出的标准 local/global odom。
 external_odom_topic: ""
-global_odom_topic: "/uav1/sunray/localization/global_odom"
-control_state_topic: "/uav1/sunray/uav_control/control_state"
-command_execution_status_topic: "/uav1/sunray/uav_control/command_execution_status"
-control_cmd_topic: "/uav1/sunray/uav_control/control_cmd"
-px4_state_topic: "/uav1/sunray/px4_state"

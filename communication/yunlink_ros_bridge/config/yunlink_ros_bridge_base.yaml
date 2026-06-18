@@ -1,0 +1,168 @@
+# YunLink runtime 本地端口配置。
+# udp_bind_port   : 本机 UDP 绑定端口，用于接收 UDP 数据/发现相关回复。
+# udp_target_port : 主动发送 UDP 时使用的默认目标端口；实际业务仍受 QoS 和会话端点约束。
+# tcp_listen_port : 本机 TCP 监听端口。remote_ip 为空或 remote_tcp_port 为 0 时，bridge 进入被动等待连接模式。
+udp_bind_port: 9696
+udp_target_port: 9898
+tcp_listen_port: 9696
+
+# 主动连接目标。默认留空表示不主动拨号，等待 monitor 根据端点发现连入。
+remote_ip: ""
+remote_tcp_port: 0
+
+# YunLink 会话认证口令。它只决定能否建立认证会话，不等同于控制权授权。
+shared_secret: "yunlink-default-secret"
+
+# 当前 bridge 代表的 UAV 编号，会影响 YunLink identity 和默认 topic 语义。
+agent_id: 1
+
+# 端点发现广播。monitor 通过这里发现被动监听的 bridge，再发起 TCP 连接。
+enable_endpoint_discovery: true
+discovery_port: 9966
+discovery_target_ip: "255.255.255.255"
+discovery_period_ms: 1000
+endpoint_name_prefix: "yundrone_uav"
+endpoint_id_file: "$(env HOME)/.config/yunlink_ros_bridge/endpoint_id"
+
+# Sunray system service 桥接开关。用于把 monitor 的功能列表/启动/停止请求转到 ROS service。
+enable_system_services: true
+sunray_system_ns: "/sunray_system"
+system_service_timeout_sec: 3.0
+default_start_with_terminal: false
+
+# YunLink QoS profile，不是 ROS 2 DDS QoS。本 bridge 是 ROS1 节点。
+#   reliable    : 所有 YunLink 消息优先 TCP，适合真机首轮联调。
+#   balanced    : 命令/服务走 TCP，事件/批量类可走 UDP，推荐默认值。
+#   low_latency : 命令/服务走 TCP，状态快照/事件优先 UDP，适合低时延链路验证。
+# ROS 层的 queue_size/tcp_no_delay 只影响本地 ROS 订阅/发布；
+# YunLink 层的 qos_class/transport 决定封包语义和 TCP/UDP 传输偏好。
+# 只有当前会话已知对端 UDP 端点时才会真正走 UDP，否则由 fallback_to_tcp 决定是否回退 TCP。
+qos_profile: "balanced"
+
+# UDP 发送失败时，允许可回退通道改走 TCP。
+# 命令、session、authority、system service 等关键链路必须保持可靠传输。
+qos_udp_fallback_to_tcp: true
+
+# 按 bridge 语义通道覆盖 QoS，不使用原始 ROS topic 名。
+# 例如 local_odom_topic 从 /uav1 改成 /uav2 后，通道名仍然是 local_odom。
+#
+# 可按场景调整的通道：
+#   local_odom, odom_state, uav_control_cmd, control_state, px4_state,
+#   runtime_diagnostic, vehicle_event
+#
+# 必须保持 reliable_ordered + tcp 的关键通道：
+#   takeoff_command, land_command, return_command, goto_command,
+#   velocity_setpoint_command, feature_start, feature_stop,
+#   session, authority, command_result
+#
+# ROS/bridge 层字段：
+#   queue_size    : ROS 订阅/发布队列长度。
+#   tcp_no_delay  : ROS TCPROS 是否禁用 Nagle，降低本机 ROS 传输延迟。
+#   publish_hz    : ROS->YunLink 最高发送频率；0 表示收到每条 ROS 消息都转发。
+#   timeout_sec   : system service 等请求/响应通道的等待超时。
+# YunLink 层字段：
+#   qos_class, transport, fallback_to_tcp
+#
+# 如果关键通道被配置成 best_effort、udp 或 bulk，bridge 启动时会报 invalid-qos-config；
+# 这里故意不静默改写 YAML，避免真机链路误以为配置已经生效。
+qos_channels:
+  ros_to_yunlink:
+    # 高频状态快照只需要最新值，默认 queue_size=1，避免积压旧状态。
+    local_odom:
+      queue_size: 1
+      tcp_no_delay: true
+      publish_hz: 10.0
+      qos_class: "reliable_latest"
+      transport: "tcp"
+    odom_state:
+      queue_size: 1
+      tcp_no_delay: true
+      publish_hz: 2.0
+      qos_class: "reliable_latest"
+      transport: "tcp"
+    control_state:
+      queue_size: 1
+      tcp_no_delay: true
+      publish_hz: 5.0
+      qos_class: "reliable_latest"
+      transport: "tcp"
+    uav_control_cmd:
+      queue_size: 1
+      tcp_no_delay: true
+      publish_hz: 0.0
+      qos_class: "reliable_latest"
+      transport: "tcp"
+    command_execution_status:
+      queue_size: 1
+      tcp_no_delay: true
+      publish_hz: 0.0
+      qos_class: "reliable_latest"
+      transport: "tcp"
+    px4_state:
+      queue_size: 1
+      tcp_no_delay: true
+      publish_hz: 2.0
+      qos_class: "reliable_latest"
+      transport: "tcp"
+
+  yunlink_to_ros:
+    # 入站飞行命令最终发布到同一个 control_cmd_topic，保持有序可靠。
+    takeoff_command:
+      queue_size: 20
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    land_command:
+      queue_size: 20
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    return_command:
+      queue_size: 20
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    goto_command:
+      queue_size: 20
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    velocity_setpoint_command:
+      queue_size: 20
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+
+  system_services:
+    # feature_* 是请求/响应式服务桥接，timeout_sec 覆盖全局 system_service_timeout_sec。
+    feature_list:
+      timeout_sec: 3.0
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    feature_get:
+      timeout_sec: 3.0
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    feature_start:
+      timeout_sec: 3.0
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+    feature_stop:
+      timeout_sec: 3.0
+      qos_class: "reliable_ordered"
+      transport: "tcp"
+
+# bridge 运行诊断。monitor_diagnostic_topic 是给 monitor/TUI 看的 bridge 自诊断，不是业务控制通道。
+enable_runtime_diagnostics: true
+diagnostic_publish_rate_hz: 2.0
+diagnostic_stale_timeout_ms: 1000
+monitor_diagnostic_topic: "/yunlink_ros_bridge/monitor_diagnostics"
+
+# TUI 刷新参数。launch 会把 base 和覆盖文件同时加载到 TUI 节点私有参数空间。
+print_hz: 2.0
+stale_timeout_ms: 1000
+
+# 默认 Sunray topic。多机、真机命名空间或仿真命名空间不一致时，应显式覆盖这些 topic。
+local_odom_topic: "/uav1/sunray/localization/local_odom"
+odom_state_topic: "/uav1/sunray/localization/odom_state"
+external_odom_topic: ""
+global_odom_topic: "/uav1/sunray/localization/global_odom"
+control_state_topic: "/uav1/sunray/uav_control/control_state"
+command_execution_status_topic: "/uav1/sunray/uav_control/command_execution_status"
+control_cmd_topic: "/uav1/sunray/uav_control/control_cmd"
+px4_state_topic: "/uav1/sunray/px4_state"

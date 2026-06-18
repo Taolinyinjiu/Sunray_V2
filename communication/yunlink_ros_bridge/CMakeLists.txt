@@ -52,6 +52,7 @@ add_executable(yunlink_ros_bridge_node
   src/main.cpp
   src/diagnostics/bridge_forwarding_diagnostics.cpp
   src/diagnostics/bridge_monitor_state.cpp
+  src/diagnostics/bridge_monitor_diagnostic_array.cpp
   src/diagnostics/bridge_runtime_diagnostics.cpp
   src/discovery/bridge_endpoint_discovery.cpp
   src/bridge_mapping.cpp
@@ -60,8 +61,12 @@ add_executable(yunlink_ros_bridge_node
   src/bridge_topics.cpp
   src/runtime/bridge_control_publish.cpp
   src/runtime/bridge_runtime_core.cpp
+  src/runtime/bridge_runtime_params.cpp
+  src/runtime/bridge_runtime_qos.cpp
+  src/runtime/bridge_runtime_qos_helpers.cpp
   src/runtime/bridge_runtime_session.cpp
   src/runtime/bridge_runtime_services.cpp
+  src/runtime/bridge_runtime_subscribers.cpp
 )
 add_dependencies(yunlink_ros_bridge_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(yunlink_ros_bridge_node

@@ -1,62 +1,19 @@
 /** @file @brief YunLink runtime 诊断 snapshot 与 ROS DiagnosticArray 发布实现。 */
 #include "bridge_node.hpp"
 
-#include <diagnostic_msgs/DiagnosticStatus.h>
-#include <diagnostic_msgs/KeyValue.h>
+#include "diagnostics/bridge_diagnostic_helpers.hpp"
 
 namespace {
 
-/// 抑制稀疏命令 topic 空闲时的重复 summary 告警。
+/// 抑制不会影响当前运行安全性的配置/空闲状态 summary 告警。
 bool suppress_summary_warn(const yunlink::SunrayTopicDiagnosticSnapshot& item) {
-    return item.key == "uav_control_cmd" && item.status == "WAIT_MESSAGE";
-}
-
-/// 计算诊断时间年龄，时间无效时返回 0。
-uint32_t to_age_ms(const ros::Time& now, const ros::Time& then) {
-    if (then.isZero() || now < then) {
-        return 0;
-    }
-    return static_cast<uint32_t>((now - then).toSec() * 1000.0);
+    return item.status == "UNCONFIGURED" ||
+           (item.key == "uav_control_cmd" && item.status == "WAIT_MESSAGE");
 }
 
 /// 拼接状态和详情，供 summary 使用。
 std::string join_status_detail(const std::string& status, const std::string& detail) {
     return detail.empty() ? status : status + ": " + detail;
-}
-
-/// 将文本状态映射到 ROS diagnostic level。
-uint8_t level_for_status(const std::string& status) {
-    if (status == "OK") {
-        return diagnostic_msgs::DiagnosticStatus::OK;
-    }
-    if (status == "ERROR") {
-        return diagnostic_msgs::DiagnosticStatus::ERROR;
-    }
-    return diagnostic_msgs::DiagnosticStatus::WARN;
-}
-
-/// 创建 DiagnosticStatus 的 key/value 项。
-diagnostic_msgs::KeyValue make_kv(const std::string& key, const std::string& value) {
-    diagnostic_msgs::KeyValue kv;
-    kv.key = key;
-    kv.value = value;
-    return kv;
-}
-
-/// 将 bool 格式化成诊断字段文本。
-std::string bool_text(bool value) {
-    return value ? "true" : "false";
-}
-
-/// 将 bridge 方向枚举格式化成诊断字段文本。
-std::string direction_text(YunlinkRosBridgeNode::BridgeFlowDirection direction) {
-    return direction == YunlinkRosBridgeNode::BridgeFlowDirection::kRosToYunlink ? "ROS->YunLink"
-                                                                                 : "YunLink->ROS";
-}
-
-/// 判断最近是否发生过转发失败。
-bool recent_forwarding_failure(const ros::Time& now, const ros::Time& last_error_time) {
-    return !last_error_time.isZero() && now >= last_error_time && (now - last_error_time).toSec() <= 5.0;
 }
 
 }  // namespace
@@ -83,7 +40,7 @@ void YunlinkRosBridgeNode::publishRuntimeDiagnosticSnapshot() {
             payload.last_connect_error = last_connect_error_;
             payload.last_session_error = last_session_error_;
             payload.last_publish_error = last_publish_error_;
-            payload.last_error_age_ms = to_age_ms(now, last_error_time_);
+            payload.last_error_age_ms = bridge_diag_age_ms(now, last_error_time_);
             payload.connect_attempt_count = connect_attempt_count_;
             payload.session_lost_count = session_lost_count_;
             payload.ros_to_yunlink_publish_count = ros_to_yunlink_publish_count_;
@@ -131,7 +88,7 @@ void YunlinkRosBridgeNode::publishRuntimeDiagnosticSnapshot() {
                 worst = "WARN";
                 summary = "YunLink session WAIT";
             }
-            if (recent_forwarding_failure(now, last_error_time_) && worst != "ERROR") {
+            if (bridge_diag_recent_forwarding_failure(now, last_error_time_) && worst != "ERROR") {
                 worst = "WARN";
                 summary = "bridge forwarding publish failure";
             }
@@ -147,146 +104,6 @@ void YunlinkRosBridgeNode::publishRuntimeDiagnosticSnapshot() {
         }
     }
     publishMonitorDiagnosticArray(now);
-}
-
-/// 组装给 TUI 使用的 ROS DiagnosticArray。
-void YunlinkRosBridgeNode::publishMonitorDiagnosticArray(const ros::Time& now) {
-    diagnostic_msgs::DiagnosticArray array;
-    array.header.stamp = now;
-    array.header.frame_id = "/uav" + std::to_string(std::max(params_.agent_id, 0));
-
-    std::lock_guard<std::mutex> lock(diag_mu_);
-    refreshTopicPublisherCounts();
-
-    const auto append_ros_status = [&](const TopicDiagnosticRuntime& runtime) {
-        diagnostic_msgs::DiagnosticStatus status;
-        status.name = "yunlink_ros_bridge/ros_to_yunlink/" + runtime.key;
-        status.hardware_id = params_.node_name;
-        status.message = statusForTopicDiagnostic(runtime, now, params_.diagnostic_stale_timeout_ms);
-        status.level = level_for_status(status.message);
-        status.values.push_back(make_kv("direction", "ROS->YunLink"));
-        status.values.push_back(make_kv("key", runtime.key));
-        status.values.push_back(make_kv("label", runtime.label));
-        status.values.push_back(make_kv("topic", runtime.topic));
-        status.values.push_back(make_kv("configured", bool_text(runtime.configured)));
-        status.values.push_back(make_kv("has_message", bool_text(runtime.has_message)));
-        status.values.push_back(make_kv("publisher_count", std::to_string(runtime.publisher_count)));
-        status.values.push_back(make_kv("message_count", std::to_string(runtime.message_count)));
-        status.values.push_back(make_kv("hz", std::to_string(runtime.hz)));
-        status.values.push_back(make_kv("age_ms", std::to_string(to_age_ms(now, runtime.last_receive_time))));
-        status.values.push_back(make_kv("last_transition", runtime.last_transition));
-        status.values.push_back(
-            make_kv("last_transition_age_ms", std::to_string(to_age_ms(now, runtime.last_transition_time))));
-        status.values.push_back(make_kv("publish_fail_count", std::to_string(runtime.publish_fail_count)));
-        status.values.push_back(make_kv("expected_min_hz", std::to_string(runtime.expected_min_hz)));
-        status.values.push_back(make_kv("sparse", bool_text(runtime.sparse)));
-        status.values.push_back(make_kv("detail", runtime.detail));
-        array.status.push_back(status);
-    };
-
-    const auto append_cmd_status = [&](const FlowDiagnosticRuntime& runtime) {
-        diagnostic_msgs::DiagnosticStatus status;
-        status.name = "yunlink_ros_bridge/yunlink_to_ros/" + runtime.key;
-        status.hardware_id = params_.node_name;
-        status.message = statusForMonitorFlow(true,
-                                              runtime.has_message,
-                                              1,
-                                              runtime.last_receive_time,
-                                              now,
-                                              params_.diagnostic_stale_timeout_ms,
-                                              false,
-                                              runtime.stale_by_age);
-        status.level = level_for_status(status.message);
-        status.values.push_back(make_kv("direction", "YunLink->ROS"));
-        status.values.push_back(make_kv("key", runtime.key));
-        status.values.push_back(make_kv("label", runtime.label));
-        status.values.push_back(make_kv("configured", "true"));
-        status.values.push_back(make_kv("has_message", bool_text(runtime.has_message)));
-        status.values.push_back(make_kv("message_count", std::to_string(runtime.message_count)));
-        status.values.push_back(make_kv("publish_count", std::to_string(runtime.publish_count)));
-        status.values.push_back(make_kv("fail_count", std::to_string(runtime.fail_count)));
-        status.values.push_back(make_kv("hz", std::to_string(runtime.hz)));
-        status.values.push_back(make_kv("age_ms", std::to_string(to_age_ms(now, runtime.last_receive_time))));
-        status.values.push_back(make_kv("detail", runtime.detail));
-        array.status.push_back(status);
-    };
-
-    append_ros_status(local_odom_diag_);
-    append_ros_status(odom_state_diag_);
-    append_ros_status(uav_control_cmd_diag_);
-    append_ros_status(uav_control_state_diag_);
-    append_ros_status(px4_state_diag_);
-    append_cmd_status(takeoff_diag_);
-    append_cmd_status(land_diag_);
-    append_cmd_status(return_diag_);
-    append_cmd_status(goto_diag_);
-    append_cmd_status(velocity_setpoint_diag_);
-    append_cmd_status(feature_list_diag_);
-    append_cmd_status(feature_get_diag_);
-    append_cmd_status(feature_start_diag_);
-    append_cmd_status(feature_stop_diag_);
-
-    diagnostic_msgs::DiagnosticStatus conn;
-    conn.name = "yunlink_ros_bridge/connection";
-    conn.hardware_id = params_.node_name;
-    conn.message = peer_ready_ ? "OK" : "WAIT";
-    conn.level = peer_ready_ ? diagnostic_msgs::DiagnosticStatus::OK
-                             : diagnostic_msgs::DiagnosticStatus::WARN;
-    conn.values.push_back(make_kv("udp_bind_port", std::to_string(params_.udp_bind_port)));
-    conn.values.push_back(make_kv("udp_target_port", std::to_string(params_.udp_target_port)));
-    conn.values.push_back(make_kv("tcp_listen_port", std::to_string(params_.tcp_listen_port)));
-    conn.values.push_back(make_kv("remote_ip", params_.remote_ip));
-    conn.values.push_back(make_kv("remote_tcp_port", std::to_string(params_.remote_tcp_port)));
-    conn.values.push_back(make_kv("runtime_started", bool_text(runtime_started_)));
-    conn.values.push_back(make_kv("peer_ready", bool_text(peer_ready_)));
-    conn.values.push_back(make_kv("peer_id", peer_id_.empty() ? "WAIT" : peer_id_));
-    conn.values.push_back(make_kv("session_id", session_id_ == 0 ? "WAIT" : std::to_string(session_id_)));
-    conn.values.push_back(make_kv("last_connect_error", last_connect_error_));
-    conn.values.push_back(make_kv("last_session_error", last_session_error_));
-    conn.values.push_back(make_kv("last_publish_error", last_publish_error_));
-    conn.values.push_back(make_kv("last_error_age_ms", std::to_string(to_age_ms(now, last_error_time_))));
-    conn.values.push_back(make_kv("connect_attempt_count", std::to_string(connect_attempt_count_)));
-    conn.values.push_back(make_kv("session_lost_count", std::to_string(session_lost_count_)));
-    array.status.push_back(conn);
-
-    diagnostic_msgs::DiagnosticStatus forwarding;
-    forwarding.name = "yunlink_ros_bridge/forwarding";
-    forwarding.hardware_id = params_.node_name;
-    forwarding.message = recent_forwarding_failure(now, last_error_time_) ? "PUBLISH_FAIL" : "OK";
-    forwarding.level = forwarding.message == "OK" ? diagnostic_msgs::DiagnosticStatus::OK
-                                                   : diagnostic_msgs::DiagnosticStatus::WARN;
-    forwarding.values.push_back(
-        make_kv("ros_to_yunlink_publish_count", std::to_string(ros_to_yunlink_publish_count_)));
-    forwarding.values.push_back(
-        make_kv("ros_to_yunlink_fail_count", std::to_string(ros_to_yunlink_fail_count_)));
-    forwarding.values.push_back(
-        make_kv("yunlink_to_ros_command_count", std::to_string(yunlink_to_ros_command_count_)));
-    forwarding.values.push_back(
-        make_kv("yunlink_to_ros_publish_count", std::to_string(yunlink_to_ros_publish_count_)));
-    forwarding.values.push_back(
-        make_kv("yunlink_to_ros_fail_count", std::to_string(yunlink_to_ros_fail_count_)));
-    forwarding.values.push_back(make_kv("last_fail_direction", last_fail_direction_));
-    forwarding.values.push_back(make_kv("last_fail_key", last_fail_key_));
-    forwarding.values.push_back(make_kv("last_fail_error_code", std::to_string(last_fail_error_code_)));
-    forwarding.values.push_back(make_kv("last_fail_detail", last_fail_detail_));
-    array.status.push_back(forwarding);
-
-    for (size_t i = 0; i < recent_events_.size(); ++i) {
-        const BridgeEvent& event = recent_events_[recent_events_.size() - 1 - i];
-        diagnostic_msgs::DiagnosticStatus item;
-        item.name = "yunlink_ros_bridge/recent_event/" + std::to_string(i);
-        item.hardware_id = params_.node_name;
-        item.level = diagnostic_msgs::DiagnosticStatus::OK;
-        item.message = direction_text(event.direction) + " " + event.key;
-        item.values.push_back(make_kv("direction", direction_text(event.direction)));
-        item.values.push_back(make_kv("key", event.key));
-        item.values.push_back(make_kv("stamp_sec", std::to_string(event.time.toSec())));
-        item.values.push_back(make_kv("age_ms", std::to_string(to_age_ms(now, event.time))));
-        item.values.push_back(make_kv("detail", event.detail));
-        array.status.push_back(item);
-    }
-
-    monitor_diagnostic_pub_.publish(array);
 }
 
 /// 诊断定时器入口。

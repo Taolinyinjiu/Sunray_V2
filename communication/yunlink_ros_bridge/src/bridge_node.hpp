@@ -6,8 +6,10 @@
 #include <mutex>
 #include <condition_variable>
 #include <deque>
+#include <map>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <diagnostic_msgs/DiagnosticArray.h>
 #include <nav_msgs/Odometry.h>
@@ -21,43 +23,11 @@
 #include <sunray_msgs/UAVControlCMD.h>
 #include <sunray_msgs/UAVCommandExecutionStatus.h>
 #include <sunray_msgs/UAVControlState.h>
+#include <yunlink/core/semantic/message_ids.hpp>
 #include <yunlink/runtime/runtime.hpp>
 
+#include "bridge_runtime_types.hpp"
 #include "discovery/bridge_endpoint_discovery.hpp"
-
-/** @brief bridge 的 ROS topic、YunLink 端口、诊断和发现参数集合。 */
-struct BridgeParams {
-    std::string local_odom_topic{"/uav1/sunray/localization/local_odom"};
-    std::string odom_state_topic{"/uav1/sunray/localization/odom_state"};
-    std::string control_state_topic{"/uav1/sunray/uav_control/control_state"};
-    std::string command_execution_status_topic{"/uav1/sunray/uav_control/command_execution_status"};
-    std::string control_cmd_topic{"/uav1/sunray/uav_control/control_cmd"};
-    std::string px4_state_topic{"/uav1/sunray/px4_state"};
-    std::string external_odom_topic;
-    std::string global_odom_topic{"/uav1/sunray/localization/global_odom"};
-    bool enable_system_services{true};
-    bool enable_runtime_diagnostics{true};
-    std::string sunray_system_ns{"/sunray_system"};
-    double system_service_timeout_sec{3.0};
-    double diagnostic_publish_rate_hz{2.0};
-    int diagnostic_stale_timeout_ms{1000};
-    std::string monitor_diagnostic_topic{"/yunlink_ros_bridge/monitor_diagnostics"};
-    bool default_start_with_terminal{false};
-    std::string remote_ip;
-    std::string shared_secret{"yunlink-default-secret"};
-    std::string node_name{"yunlink_ros_bridge_node"};
-    int remote_tcp_port{0};
-    int udp_bind_port{9696};
-    int udp_target_port{9898};
-    int tcp_listen_port{9696};
-    int agent_id{1};
-    bool enable_endpoint_discovery{true};
-    int discovery_port{9966};
-    std::string discovery_target_ip{"255.255.255.255"};
-    int discovery_period_ms{1000};
-    std::string endpoint_name_prefix{"yundrone_uav"};
-    std::string endpoint_id_file;
-};
 
 /** @brief 负责 YunLink runtime 与 Sunray ROS topic/service 之间的双向适配。 */
 class YunlinkRosBridgeNode {
@@ -145,6 +115,7 @@ class YunlinkRosBridgeNode {
     };
 
     void loadParams();
+    bool loadQosParams();
     void startRuntime();
     void setupSubscribers();
     void setupDiagnosticState();
@@ -161,13 +132,33 @@ class YunlinkRosBridgeNode {
     void refreshTopicPublisherCounts();
     void systemServiceWorkerLoop();
     void enqueueSystemServiceJob(SystemServiceJob job);
-    bool waitForService(ros::ServiceClient& client, const char* name) const;
+    bool waitForService(ros::ServiceClient& client, const char* name, double timeout_sec) const;
+    double serviceTimeoutSec(const char* channel) const;
     void handleFeatureListJob(const SystemServiceJob& job);
     void handleFeatureGetJob(const SystemServiceJob& job);
     void handleFeatureStartJob(const SystemServiceJob& job);
     void handleFeatureStopJob(const SystemServiceJob& job);
 
     static uint16_t clampPort(int port);
+    static std::string normalizeQosToken(const std::string& value);
+    static const char* qosProfileName(yunlink::QosProfile profile);
+    static const char* transportName(yunlink::TransportPreference transport);
+    yunlink::RuntimeQosPolicy makeRuntimeQosPolicy() const;
+    std::vector<yunlink::RuntimeQosChannelPolicy> makeRuntimeQosChannelPolicies() const;
+    bool validateQosChannels(std::string* error) const;
+    int queueSize(const std::map<std::string, BridgeChannelQosConfig>& group,
+                  const char* channel,
+                  int fallback) const;
+    bool tcpNoDelay(const std::map<std::string, BridgeChannelQosConfig>& group,
+                    const char* channel,
+                    bool fallback) const;
+    double publishHz(const std::map<std::string, BridgeChannelQosConfig>& group,
+                     const char* channel,
+                     double fallback) const;
+    BridgeChannelQosConfig channelQos(const std::map<std::string, BridgeChannelQosConfig>& group,
+                                      const char* channel) const;
+    bool shouldPublishRosToYunlink(const char* channel, const ros::Time& now);
+    void logQosConfig() const;
     bool ensurePeerReady();
     yunlink::TargetSelector targetSelector() const;
     float latestPx4Height(bool* has_height = nullptr) const;
@@ -243,6 +234,7 @@ class YunlinkRosBridgeNode {
     yunlink::Runtime runtime_;
     BridgeEndpointDiscovery endpoint_discovery_;
     BridgeParams params_;
+    BridgeQosChannels qos_channels_;
     std::string peer_id_;
     size_t takeoff_command_sub_token_{0}, land_command_sub_token_{0}, return_command_sub_token_{0};
     size_t goto_command_sub_token_{0}, velocity_setpoint_command_sub_token_{0};
@@ -289,4 +281,5 @@ class YunlinkRosBridgeNode {
     FlowDiagnosticRuntime feature_start_diag_;
     FlowDiagnosticRuntime feature_stop_diag_;
     std::deque<BridgeEvent> recent_events_;
+    std::map<std::string, ros::Time> last_ros_to_yunlink_publish_time_;
 };

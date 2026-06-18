@@ -1,15 +1,22 @@
 <launch>
 
-  <arg name="config_yamlfile_path" default="$(find yunlink_ros_bridge)/config/yunlink_ros_bridge_sim.yaml" />
+  <arg name="config_base_yamlfile_path" default="$(find yunlink_ros_bridge)/config/yunlink_ros_bridge_base.yaml" />
+  <arg name="enable_sim" default="true" />
+  <arg name="config_sim_yamlfile_path" default="$(find yunlink_ros_bridge)/config/yunlink_ros_bridge_sim.yaml" />
+  <arg name="config_real_yamlfile_path" default="$(find yunlink_ros_bridge)/config/yunlink_ros_bridge_real.yaml" />
   <arg name="enable_tui_monitor" default="true" />
 
   <node pkg="yunlink_ros_bridge" type="yunlink_ros_bridge_node" name="yunlink_ros_bridge_node" output="screen">
-    <rosparam command="load" file="$(arg config_yamlfile_path)" subst_value="true" />
+    <rosparam command="load" file="$(arg config_base_yamlfile_path)" subst_value="true" />
+    <rosparam if="$(arg enable_sim)" command="load" file="$(arg config_sim_yamlfile_path)" subst_value="true" />
+    <rosparam unless="$(arg enable_sim)" command="load" file="$(arg config_real_yamlfile_path)" subst_value="true" />
   </node>
 
   <node if="$(arg enable_tui_monitor)"
     pkg="yunlink_ros_bridge" type="yunlink_ros_bridge_tui_node" name="yunlink_ros_bridge_tui_node" output="screen">
-    <rosparam command="load" file="$(arg config_yamlfile_path)" subst_value="true" />
+    <rosparam command="load" file="$(arg config_base_yamlfile_path)" subst_value="true" />
+    <rosparam if="$(arg enable_sim)" command="load" file="$(arg config_sim_yamlfile_path)" subst_value="true" />
+    <rosparam unless="$(arg enable_sim)" command="load" file="$(arg config_real_yamlfile_path)" subst_value="true" />
   </node>
 
 </launch>
