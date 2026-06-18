@@ -1,14 +1,18 @@
 <launch>
-  <!--
+    <!--
     MOCAP定位源启动栈:
     1. vrpn_client_ros/sample.launch
     2. sunray_mocap/mocap_odom.launch
-  -->
-  <arg name="vrpn_server" default="192.168.20.15" />
+    -->
 
-  <include file="$(find vrpn_client_ros)/launch/sample.launch">
-    <arg name="server" value="$(arg vrpn_server)" />
-  </include>
+    <!-- 动捕vrpn服务器地址 -->
+    <arg name="vrpn_server" default="192.168.20.15" />
 
-  <include file="$(find sunray_mocap)/launch/mocap_odom.launch" />
+    <!-- vrpn包，用于捕获动捕服务器输出的vrpn流数据 -->
+    <include file="$(find vrpn_client_ros)/launch/sample.launch">
+        <arg name="server" value="$(arg vrpn_server)" />
+    </include>
+
+    <!-- 启动sunray_mocap节点，将vrpn输出的动捕位置与动捕速度结合，输出标准Odometry格式消息 -->
+    <include file="$(find sunray_mocap)/launch/mocap_odom.launch" />
 </launch>

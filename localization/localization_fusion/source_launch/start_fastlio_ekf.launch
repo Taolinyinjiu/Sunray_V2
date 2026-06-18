@@ -1,29 +1,28 @@
 <launch>
-  <!--
+    <!--
     Fast-LIO + EKF定位源启动栈
-    source_id=6
-    1. livox_ros_driver2/launch_ROS1/msg_MID360s.launch
+    1. livox_ros_driver2/launch_ROS1/msg_sunray_lidar.launch
     2. fast_lio/mapping_mid360.launch
     3. ekf_odometry/ekf_odometry.launch
-  -->
-  <arg name="log_type" default="log" />
+    -->
 
-  <!-- 启动MID360的点云数据输出 -->
-  <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360.launch">
-  </include>
+    <!-- 输出日志类型 log:保存到日志文件 screen: 实时屏幕打印 -->
+    <arg name="log_type" default="log" />
+    <!-- 是否启动基于IMU数据EKF预测更新算法,输出高频里程计 -->
+    <arg name="ekf_enable" default="true" />
 
-  <!-- 启动MID360s的点云数据输出 -->
-  <!-- <include file="$(find livox_ros_driver2)/launch_ROS1/msg_MID360s.launch">
-    <arg name="log_type" value="$(arg log_type)" />
-  </include> -->
-
-  <!-- 启动fast_lio建图 -->
-  <include file="$(find fast_lio)/launch/mapping_mid360.launch">
-    <arg name="log_type" value="$(arg log_type)" />
-  </include>
-
-  <!-- 启动ekf融合imu -->
-  <include file="$(find ekf_odometry)/launch/ekf_odometry.launch">
-    <arg name="log_type" value="$(arg log_type)" />
-  </include>
+    <!-- 启动 Sunray 统一 Livox 雷达数据输出，支持 MID360 与 MID360s -->
+    <include file="$(find livox_ros_driver2)/launch_ROS1/msg_sunray_lidar.launch">
+        <arg name="log_type" value="$(arg log_type)" />
+    </include>
+    
+    <!-- 启动fast_lio建图 -->
+    <include file="$(find fast_lio)/launch/mapping_mid360.launch">
+        <arg name="log_type" value="$(arg log_type)" />
+    </include>
+    
+    <!-- 启动ekf融合imu -->
+    <include file="$(find ekf_odometry)/launch/ekf_odometry.launch" if="$(arg ekf_enable)">
+        <arg name="log_type" value="$(arg log_type)" />
+    </include>
 </launch>
