@@ -226,10 +226,10 @@
     "group": "MAVROS 仿真",
     "title": "MAVROS 仿真",
     "files": [
-      "simulation/sunray_mavros_sim.md"
+      "simulation/sunray_sim.md"
     ],
     "sections": [
-      {"id": "simulation-sunray-mavros-sim", "title": "sunray_mavros_sim"}
+      {"id": "simulation-sunray-sim", "title": "sunray_sim"}
     ]
   },
   {

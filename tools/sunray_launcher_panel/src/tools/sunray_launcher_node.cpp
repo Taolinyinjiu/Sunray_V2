@@ -101,7 +101,7 @@ struct QuickLaunchStep
 struct QuickLaunchGroup
 {
     std::string title;
-    std::string category{"sunray_mavros_sim"};
+    std::string category{"sunray_sim"};
     std::string description;
     std::vector<QuickLaunchStep> steps;
 };
@@ -898,10 +898,10 @@ private:
 
             if (category_value.hasMember("category") && category_value.hasMember("scripts"))
             {
-                std::string category = trimCopy(xmlRpcToString(category_value["category"], "sunray_mavros_sim"));
+                std::string category = trimCopy(xmlRpcToString(category_value["category"], "sunray_sim"));
                 if (category.empty())
                 {
-                    category = "sunray_mavros_sim";
+                    category = "sunray_sim";
                 }
 
                 XmlRpc::XmlRpcValue scripts = category_value["scripts"];
@@ -923,7 +923,7 @@ private:
 
             // Backward compatibility for the old flat list format.
             QuickLaunchGroup group;
-            if (parseQuickLaunchGroup(category_value, "sunray_mavros_sim", group))
+            if (parseQuickLaunchGroup(category_value, "sunray_sim", group))
             {
                 addQuickLaunchGroup(group);
             }
@@ -942,7 +942,7 @@ private:
         }
 
         group = QuickLaunchGroup{};
-        group.category = category_fallback.empty() ? "sunray_mavros_sim" : category_fallback;
+        group.category = category_fallback.empty() ? "sunray_sim" : category_fallback;
         group.title = xmlRpcToString(group_value["title"]);
         if (group_value.hasMember("category"))
         {
@@ -950,7 +950,7 @@ private:
         }
         if (group.category.empty())
         {
-            group.category = "sunray_mavros_sim";
+            group.category = "sunray_sim";
         }
         if (group_value.hasMember("description"))
         {
@@ -1326,7 +1326,7 @@ private:
         });
 
         selected_command_ = new QTextEdit();
-        selected_command_->setPlaceholderText("roslaunch sunray_mavros_sim sunray_mavros_sim.launch");
+        selected_command_->setPlaceholderText("roslaunch sunray_sim sunray_sim.launch");
         selected_command_->setMinimumHeight(34);
         selected_command_->setMaximumHeight(40);
         selected_command_->setObjectName("commandEdit");

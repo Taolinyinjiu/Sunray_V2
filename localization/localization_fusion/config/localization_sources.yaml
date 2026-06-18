@@ -96,12 +96,12 @@ sources_list:
         - [0.0, 0.0, 1.0, 0.0]
         - [0.0, 0.0, 0.0, 1.0]
     
-    # sunray_mavros_sim 轻量仿真器
-    SUNRAY_MAVROS_SIM:
+    # sunray_sim 轻量仿真器
+    SUNRAY_SIM:
         # 定位源序号
         source_id: 5
         # 订阅的里程计话题
-        odometry_topic: "${agent_key}/sunray_mavros_sim/odom"
+        odometry_topic: "${agent_key}/sunray_sim/odom"
         # 订阅的重定位话题
         relocalization_topic: ""
         # local odom 超时判定时间

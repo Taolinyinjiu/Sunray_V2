@@ -1,0 +1,49 @@
+# sunray_sim 6 机集群初始位姿参数。
+#
+# 读取模块：
+#   SingleUavSimulator
+#
+# 说明：
+#   主节点按 agent_name + agent_ids 组成 vehicle key，例如 uav1、uav2。
+#   SingleUavSimulator 会读取 vehicles/<vehicle_key>/init_* 初始化对应无人机。
+
+vehicles:
+  uav1:
+    # 初始位置 x，单位 m，global_frame_id 坐标系。
+    init_x: 0.0
+    # 初始位置 y，单位 m，global_frame_id 坐标系。
+    init_y: 0.0
+    # 初始位置 z，单位 m，global_frame_id 坐标系。
+    init_z: 0.0
+    # 初始偏航角，单位 rad。
+    init_yaw: 0.0
+
+  uav2:
+    init_x: 2.0
+    init_y: 0.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav3:
+    init_x: 4.0
+    init_y: 0.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav4:
+    init_x: 0.0
+    init_y: 2.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav5:
+    init_x: 2.0
+    init_y: 2.0
+    init_z: 0.0
+    init_yaw: 0.0
+
+  uav6:
+    init_x: 4.0
+    init_y: 2.0
+    init_z: 0.0
+    init_yaw: 0.0

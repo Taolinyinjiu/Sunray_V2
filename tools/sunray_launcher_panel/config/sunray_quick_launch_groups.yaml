@@ -1,10 +1,10 @@
 quick_launch_groups:
-  - category: "sunray_mavros_sim"
+  - category: "sunray_sim"
     scripts:
       - title: "单无人机控制验证"
-        description: "sunray_mavros_sim 单机仿真 + 定位融合 + 无人机控制"
+        description: "sunray_sim 单机仿真 + 定位融合 + 无人机控制"
         items:
-          - ref: "sunray_mavros_sim/sunray_mavros_sim"
+          - ref: "sunray_sim/sunray_sim"
             delay_sec: 2.0
 
           - ref: "定位融合/无人机定位融合"
@@ -17,9 +17,9 @@ quick_launch_groups:
               - "enable_uav_control_monitor:=true"
 
       - title: "单无人机 Diff 规划验证"
-        description: "sunray_mavros_sim 单机仿真 + 定位融合 + 无人机控制 + Diff 规划"
+        description: "sunray_sim 单机仿真 + 定位融合 + 无人机控制 + Diff 规划"
         items:
-          - ref: "sunray_mavros_sim/sunray_mavros_sim"
+          - ref: "sunray_sim/sunray_sim"
             delay_sec: 2.0
 
           - ref: "定位融合/无人机定位融合"
@@ -35,9 +35,9 @@ quick_launch_groups:
           - ref: "路径规划/Sunray Planning Diff"
 
       - title: "单无人机 Ego 规划验证"
-        description: "sunray_mavros_sim 单机仿真 + 定位融合 + 无人机控制 + Ego 规划"
+        description: "sunray_sim 单机仿真 + 定位融合 + 无人机控制 + Ego 规划"
         items:
-          - ref: "sunray_mavros_sim/sunray_mavros_sim"
+          - ref: "sunray_sim/sunray_sim"
             delay_sec: 2.0
 
           - ref: "定位融合/无人机定位融合"
@@ -53,14 +53,14 @@ quick_launch_groups:
           - ref: "路径规划/Sunray Planning Ego"
 
       - title: "6机无人机集群控制验证"
-        description: "sunray_mavros_sim 6机仿真 + 集群定位融合 + 集群无人机控制 + 集群控制"
+        description: "sunray_sim 6机仿真 + 集群定位融合 + 集群无人机控制 + 集群控制"
         items:
-          - title: "sunray_mavros_sim_6机集群"
-            package: "sunray_mavros_sim"
-            launch: "sunray_mavros_sim.launch"
+          - title: "sunray_sim_6机集群"
+            package: "sunray_sim"
+            launch: "sunray_sim.launch"
             args:
-              - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_swarm6.yaml"
-              - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_uav_simulator_swarm6.yaml"
+              - "node_config_file:=sunray_sim_node_swarm6.yaml"
+              - "single_uav_simulator_config_file:=single_uav_simulator_swarm6.yaml"
             delay_sec: 2.0
 
           - ref: "定位融合/集群无人机定位融合"
@@ -80,9 +80,9 @@ quick_launch_groups:
           - ref: "无人机集群控制/无人机集群控制仿真"
 
       - title: "单无人车控制验证"
-        description: "sunray_mavros_sim 单车仿真 + 定位融合 + 无人车控制"
+        description: "sunray_sim 单车仿真 + 定位融合 + 无人车控制"
         items:
-          - ref: "sunray_mavros_sim/sunray_mavros_sim_单车"
+          - ref: "sunray_sim/sunray_sim_单车"
             delay_sec: 2.0
 
           - ref: "定位融合/无人车定位融合"
@@ -91,9 +91,9 @@ quick_launch_groups:
           - ref: "无人车控制/单车无人车控制"
 
       - title: "6车无人车集群控制验证"
-        description: "sunray_mavros_sim 6车仿真 + 集群定位融合 + 集群无人车控制 + 集群控制"
+        description: "sunray_sim 6车仿真 + 集群定位融合 + 集群无人车控制 + 集群控制"
         items:
-          - ref: "sunray_mavros_sim/sunray_mavros_sim_6车集群"
+          - ref: "sunray_sim/sunray_sim_6车集群"
             delay_sec: 2.0
 
           - ref: "定位融合/集群无人车定位融合"
@@ -113,14 +113,14 @@ quick_launch_groups:
           - ref: "无人车集群控制/无人车集群控制仿真"
 
       - title: "navrl_sim"
-        description: "sunray_mavros_sim 仿真 + NavRL 适配 + 定位融合 + 无人机控制 + NavRL navigation_node"
+        description: "sunray_sim 仿真 + NavRL 适配 + 定位融合 + 无人机控制 + NavRL navigation_node"
         items:
-          - title: "sunray_mavros_sim"
-            ref: "sunray_mavros_sim/sunray_mavros_sim"
+          - title: "sunray_sim"
+            ref: "sunray_sim/sunray_sim"
             delay_sec: 2.0
 
           - title: "NavRL2Sunray_sim"
-            ref: "sunray_mavros_sim/NavRL2Sunray_sim"
+            ref: "sunray_sim/NavRL2Sunray_sim"
             delay_sec: 1.0
 
           - title: "localization_fusion"
@@ -136,7 +136,7 @@ quick_launch_groups:
             delay_sec: 1.0
 
           - title: "NavRLTerminalControl"
-            ref: "sunray_mavros_sim/NavRLTerminalControl"
+            ref: "sunray_sim/NavRLTerminalControl"
             delay_sec: 0.5
 
           - title: "手动启动 NavRL navigation_node"

@@ -1,36 +1,36 @@
 external_workspaces: []
 
 launch_groups:
-  - name: "sunray_mavros_sim"
+  - name: "sunray_sim"
     items:
-      - title: "sunray_mavros_sim"
-        package: "sunray_mavros_sim"
-        launch: "sunray_mavros_sim.launch"
-        description: "启动 sunray_mavros_sim 一体化仿真：全局地图、局部 MID360 点云、动力学、odom、imu 和 fake MAVROS。"
+      - title: "sunray_sim"
+        package: "sunray_sim"
+        launch: "sunray_sim.launch"
+        description: "启动 sunray_sim 一体化仿真：全局地图、局部 MID360 点云、动力学、odom、imu 和 fake MAVROS。"
 
-      - title: "sunray_mavros_sim_6机集群"
-        package: "sunray_mavros_sim"
-        launch: "sunray_mavros_sim.launch"
+      - title: "sunray_sim_6机集群"
+        package: "sunray_sim"
+        launch: "sunray_sim.launch"
         args:
-          - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_swarm6.yaml"
-          - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_uav_simulator_swarm6.yaml"
-        description: "启动 6 架无人机的 sunray_mavros_sim 一体化仿真，用于集群控制/规划验证。"
+          - "node_config_file:=sunray_sim_node_swarm6.yaml"
+          - "single_uav_simulator_config_file:=single_uav_simulator_swarm6.yaml"
+        description: "启动 6 架无人机的 sunray_sim 一体化仿真，用于集群控制/规划验证。"
 
-      - title: "sunray_mavros_sim_单车"
-        package: "sunray_mavros_sim"
-        launch: "sunray_mavros_sim.launch"
+      - title: "sunray_sim_单车"
+        package: "sunray_sim"
+        launch: "sunray_sim.launch"
         args:
-          - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_ugv.yaml"
-          - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_uav_simulator.yaml"
-        description: "启动单辆无人车的 sunray_mavros_sim 轻量仿真，用于 UGV 控制验证。"
+          - "node_config_file:=sunray_sim_node_ugv.yaml"
+          - "single_uav_simulator_config_file:=single_uav_simulator.yaml"
+        description: "启动单辆无人车的 sunray_sim 轻量仿真，用于 UGV 控制验证。"
 
-      - title: "sunray_mavros_sim_6车集群"
-        package: "sunray_mavros_sim"
-        launch: "sunray_mavros_sim.launch"
+      - title: "sunray_sim_6车集群"
+        package: "sunray_sim"
+        launch: "sunray_sim.launch"
         args:
-          - "node_config:=$(find sunray_mavros_sim)/config/sunray_mavros_sim_node_ugv_swarm6.yaml"
-          - "single_uav_simulator_config:=$(find sunray_mavros_sim)/config/single_ugv_simulator_swarm6.yaml"
-        description: "启动 6 辆无人车的 sunray_mavros_sim 轻量仿真，用于 UGV 集群控制验证。"
+          - "node_config_file:=sunray_sim_node_ugv_swarm6.yaml"
+          - "single_uav_simulator_config_file:=single_ugv_simulator_swarm6.yaml"
+        description: "启动 6 辆无人车的 sunray_sim 轻量仿真，用于 UGV 集群控制验证。"
 
       - title: "NavRL2Sunray_sim"
         package: "sunray_navrl_adapter"
@@ -58,7 +58,7 @@ launch_groups:
           - "source_id:=5"
           - "agent_name:=uav"
           - "agent_id:=1"
-        description: "启动单架无人机 localization_fusion，默认 source_id=5 对接 sunray_mavros_sim odom。"
+        description: "启动单架无人机 localization_fusion，默认 source_id=5 对接 sunray_sim odom。"
 
       - title: "集群无人机定位融合"
         package: "localization_fusion"
@@ -76,7 +76,7 @@ launch_groups:
           - "source_id:=5"
           - "agent_name:=ugv"
           - "agent_id:=1"
-        description: "启动单辆无人车 localization_fusion，默认 source_id=5 对接 sunray_mavros_sim odom。"
+        description: "启动单辆无人车 localization_fusion，默认 source_id=5 对接 sunray_sim odom。"
 
       - title: "集群无人车定位融合"
         package: "localization_fusion"

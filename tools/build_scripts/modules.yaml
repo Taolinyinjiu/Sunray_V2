@@ -271,11 +271,11 @@ modules:
     source_path: "simulation/sunray_simulator"
     build_path: "build/sunray_simulator"
     dependencies: ["gazebo_plugin", "sunray_common", "sunray_msgs"]
-  sunray_mavros_sim:
-    description: "sunray_mavros_sim，无人机动力学、全局点云、局部 MID360 点云数值仿真"
+  sunray_sim:
+    description: "sunray_sim，轻量化纯数值仿真包，借助 RViz 可视化 UAV/UGV、全局地图和局部 MID360 点云"
     label: simulation
-    source_path: "sunray_mavros_sim"
-    build_path: "build/sunray_mavros_sim"
+    source_path: "sunray_sim"
+    build_path: "build/sunray_sim"
     dependencies: ["sunray_common", "sunray_msgs"]
 
   # ----- swarm: 多机集群控制和集群示例 -----

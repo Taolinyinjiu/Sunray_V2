@@ -303,7 +303,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.029999999329447746
       Style: Flat Squares
-      Topic: /sunray_mavros_sim/global_cloud
+      Topic: /sunray_sim/global_cloud
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -331,7 +331,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.10000000149011612
       Style: Flat Squares
-      Topic: /uav1/sunray_mavros_sim/cloud_world_frame
+      Topic: /uav1/sunray_sim/cloud_world_frame
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -359,7 +359,7 @@ Visualization Manager:
       Size (Pixels): 3
       Size (m): 0.10000000149011612
       Style: Flat Squares
-      Topic: /uav1/sunray_mavros_sim/cloud_world_frame
+      Topic: /uav1/sunray_sim/cloud_world_frame
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -396,12 +396,12 @@ Visualization Manager:
         Shaft Length: 1
         Shaft Radius: 0.05000000074505806
         Value: Axes
-      Topic: /uav1/sunray_mavros_sim/odom
+      Topic: /uav1/sunray_sim/odom
       Unreliable: false
       Value: false
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /uav1/sunray_mavros_sim/rviz_markers
+      Marker Topic: /uav1/sunray_sim/rviz_markers
       Name: MarkerArray
       Namespaces:
         quadrotor_arms: true

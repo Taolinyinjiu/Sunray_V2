@@ -72,7 +72,7 @@ class Navigation:
             #    sunray_navrl_adapter/NavRL2Sunray_node 会订阅该话题，并转换成 Sunray UAVControlCMD。
             # 3. setpoint_pose 用于 NAVRL 内部起飞/目标位姿相关逻辑。
             # 以下odom三选一均可
-            self.odom_sub1 = rospy.Subscriber("/uav1/sunray_mavros_sim/odom", Odometry, self.odom_callback)
+            self.odom_sub1 = rospy.Subscriber("/uav1/sunray_sim/odom", Odometry, self.odom_callback)
             self.odom_sub2 = rospy.Subscriber("/uav1/sunray/localization/local_odom", Odometry, self.odom_callback)
             self.odom_sub = rospy.Subscriber("/CERLAB/quadcopter/odom", Odometry, self.odom_callback)
             self.action_pub = rospy.Publisher("/CERLAB/quadcopter/cmd_vel", TwistStamped, queue_size=10)

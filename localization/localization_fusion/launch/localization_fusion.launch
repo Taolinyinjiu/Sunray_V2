@@ -3,7 +3,7 @@
     <!-- 使用的定位源配置 -->
     <!-- source_id 对应 localization_sources.yaml:
         0=VIOBOT, 1=MOCAP, 2=VINS, 3=GAZEBO, 4=GAZEBO_ARUCO,
-        5=PENGYU_SIM, 6=Fast_LIO, 7=Fast_LIO_EKF -->
+        5=SUNRAY_SIM, 6=Fast_LIO, 7=Fast_LIO_EKF -->
     <arg name="source_id" default="3" />
     <!-- 使用的配置文件路径 -->
     <arg name="config_yamlfile_path" default="$(find localization_fusion)/config/localization_sources.yaml" />

@@ -9,8 +9,8 @@
   <arg name="rviz_config" default="$(find sunray_navrl_adapter)/rviz/sim.rviz" />
   <arg name="map_config" default="$(find sunray_navrl_adapter)/config/sim_config.yaml" />
 
-  <arg name="odom_topic" default="$(arg agent_prefix)/sunray_mavros_sim/odom" />
-  <arg name="point_cloud_topic" default="$(arg agent_prefix)/sunray_mavros_sim/cloud_sensor_frame" />
+  <arg name="odom_topic" default="$(arg agent_prefix)/sunray_sim/odom" />
+  <arg name="point_cloud_topic" default="$(arg agent_prefix)/sunray_sim/cloud_sensor_frame" />
   <arg name="cmd_vel_topic" default="/CERLAB/quadcopter/cmd_vel" />
   <arg name="setpoint_pose_topic" default="/CERLAB/quadcopter/setpoint_pose" />
   <arg name="goal_topic" default="/move_base_simple/goal" />

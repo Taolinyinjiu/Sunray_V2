@@ -1,0 +1,39 @@
+# GlobalMapServer 全局地图模块参数。
+#
+# 模块功能：
+#   读取 PCD 文件，生成全局点云，并周期发布到 global_map_topic。
+#
+# 读取模块：
+#   GlobalMapServer
+
+# PCD 地图文件路径。
+# launch 使用 subst_value="true" 加载本文件，所以这里可以使用 $(find sunray_sim)。
+map_name: "$(find sunray_sim)/resource/small_forest01cutoff.pcd"
+
+# 全局地图点云发布话题。
+# 这是环境级公共话题，不带 /uav1 这样的无人机前缀；多机共用同一张环境地图。
+global_map_topic: /sunray_sim/global_cloud
+
+# 全局地图点云 frame_id 不在本文件单独配置。
+# 它统一读取 sunray_sim_node.yaml 中的 global_frame_id。
+
+# 是否给地图添加外包围盒边界点。
+# 0：不添加；1：添加。
+add_boundary: 0
+
+# 地图体素降采样分辨率，单位 m。
+# 设置为 0 或很小的值时基本不降采样。
+downsample_res: 0.1
+
+# 地图整体 x 方向平移，单位 m。
+map_offset_x: 0.0
+
+# 地图整体 y 方向平移，单位 m。
+map_offset_y: 0.0
+
+# 地图整体 z 方向平移，单位 m。
+map_offset_z: 0.0
+
+# 全局地图重复发布频率，单位 Hz。
+# 话题是 latch 发布，后启动的节点也能收到最近一次地图。
+map_publish_rate: 1.0

@@ -1,0 +1,35 @@
+# sunray_sim 6 车集群初始位姿参数。
+#
+# 读取模块：
+#   SingleUgvSimulator
+
+vehicles:
+  ugv1:
+    init_x: 0.0
+    init_y: 0.0
+    init_yaw: 0.0
+
+  ugv2:
+    init_x: 2.0
+    init_y: 0.0
+    init_yaw: 0.0
+
+  ugv3:
+    init_x: 4.0
+    init_y: 0.0
+    init_yaw: 0.0
+
+  ugv4:
+    init_x: 0.0
+    init_y: 2.0
+    init_yaw: 0.0
+
+  ugv5:
+    init_x: 2.0
+    init_y: 2.0
+    init_yaw: 0.0
+
+  ugv6:
+    init_x: 4.0
+    init_y: 2.0
+    init_yaw: 0.0

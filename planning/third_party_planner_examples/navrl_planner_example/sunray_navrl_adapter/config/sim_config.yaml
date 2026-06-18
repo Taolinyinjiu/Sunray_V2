@@ -2,7 +2,7 @@
 # 本文件由 NavRL2Sunray_sim.launch 加载到 /occupancy_map 命名空间。
 
 # 传感器输入模式：0 表示深度图，1 表示点云。
-# sunray_mavros_sim 已经提供局部点云，所以这里使用点云模式。
+# sunray_sim 已经提供局部点云，所以这里使用点云模式。
 sensor_input_mode: 1
 
 # 定位输入模式：0 表示 PoseStamped，1 表示 Odometry。
@@ -11,14 +11,14 @@ localization_mode: 1
 # 深度图话题。当前点云模式下 map_manager 不使用该话题，保留给切换深度图模式时使用。
 depth_image_topic: /camera/depth/image_raw
 
-# 点云话题。仿真中使用 sunray_mavros_sim 发布的传感器系局部点云。
-point_cloud_topic: /uav1/sunray_mavros_sim/cloud_sensor_frame
+# 点云话题。仿真中使用 sunray_sim 发布的传感器系局部点云。
+point_cloud_topic: /uav1/sunray_sim/cloud_sensor_frame
 
 # 位姿话题。当前 odom 模式下不使用，保留为 NAVRL 默认兼容项。
 pose_topic: /CERLAB/quadcopter/pose
 
-# 里程计话题。仿真中使用 sunray_mavros_sim 的动力学里程计。
-odom_topic: /uav1/sunray_mavros_sim/odom
+# 里程计话题。仿真中使用 sunray_sim 的动力学里程计。
+odom_topic: /uav1/sunray_sim/odom
 
 # 无人机碰撞体尺寸，单位 m，分别对应 x/y/z 方向。
 robot_size: [0.2, 0.2, 0.1]
@@ -44,7 +44,7 @@ image_cols: 640
 image_rows: 480
 
 # 机体系到传感器系的外参矩阵，按行展开。
-# sunray_mavros_sim/cloud_sensor_frame 已经是以无人机传感器系表达的局部点云，这里使用单位阵。
+# sunray_sim/cloud_sensor_frame 已经是以无人机传感器系表达的局部点云，这里使用单位阵。
 body_to_camera: [1.0, 0.0, 0.0, 0.0,
                  0.0, 1.0, 0.0, 0.0,
                  0.0, 0.0, 1.0, 0.0,

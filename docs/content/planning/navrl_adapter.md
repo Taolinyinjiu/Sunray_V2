@@ -26,7 +26,7 @@ navigation_runner/navigation_node.py
 | --- | --- |
 | `src/NavRL2Sunray.cpp` | 订阅 NAVRL 速度/位置话题，转换为 Sunray 控制指令，并打印输入输出状态。 |
 | `src/NavRLTerminalControl.cpp` | 手动目标点和控制命令终端工具。交互式节点建议手动 `rosrun` 启动，不建议通过 `roslaunch` 脚本管理器启动。 |
-| `launch/NavRL2Sunray_sim.launch` | 仿真入口，读取 `sunray_mavros_sim` 的 odom 和传感器系局部点云。 |
+| `launch/NavRL2Sunray_sim.launch` | 仿真入口，读取 `sunray_sim` 的 odom 和传感器系局部点云。 |
 | `launch/NavRL2Sunray.launch` | 真机入口，读取 Sunray 定位 odom 和局部点云。 |
 | `launch/NavRLTerminalControl.launch` | 终端交互工具的 launch 入口。 |
 | `config/sim_config.yaml` | 仿真占据地图参数。 |
@@ -39,8 +39,8 @@ navigation_runner/navigation_node.py
 
 | 方向 | 话题 | 消息 | 说明 |
 | --- | --- | --- | --- |
-| 输入 | `/uav1/sunray_mavros_sim/odom` | `nav_msgs/Odometry` | 仿真里程计。 |
-| 输入 | `/uav1/sunray_mavros_sim/cloud_sensor_frame` | `sensor_msgs/PointCloud2` | 仿真局部点云，供 `map_manager` 建占据地图。 |
+| 输入 | `/uav1/sunray_sim/odom` | `nav_msgs/Odometry` | 仿真里程计。 |
+| 输入 | `/uav1/sunray_sim/cloud_sensor_frame` | `sensor_msgs/PointCloud2` | 仿真局部点云，供 `map_manager` 建占据地图。 |
 | 输入 | `/CERLAB/quadcopter/cmd_vel` | `geometry_msgs/TwistStamped` | NAVRL 输出速度。 |
 | 输入 | `/CERLAB/quadcopter/setpoint_pose` | `geometry_msgs/PoseStamped` | NAVRL 输出姿态/定点保持。 |
 | 输入 | `/move_base_simple/goal` | `geometry_msgs/PoseStamped` | RViz 或终端发布的导航目标点。 |
@@ -78,18 +78,18 @@ source /opt/ros/noetic/setup.bash
 source ~/Sunray_v2/devel/setup.bash
 ```
 
-#### 1.4.2 终端2：启动 sunray_mavros_sim
+#### 1.4.2 终端2：启动 sunray_sim
 
 ```bash
-roslaunch sunray_mavros_sim sunray_mavros_sim.launch
+roslaunch sunray_sim sunray_sim.launch
 ```
 
 该仿真节点会发布：
 
 ```text
-/uav1/sunray_mavros_sim/odom
-/uav1/sunray_mavros_sim/cloud_sensor_frame
-/uav1/sunray_mavros_sim/cloud_world_frame
+/uav1/sunray_sim/odom
+/uav1/sunray_sim/cloud_sensor_frame
+/uav1/sunray_sim/cloud_world_frame
 /uav1/mavros/*
 ```
 
@@ -122,7 +122,7 @@ NavRL2Sunray_sim_1
 rviz
 ```
 
-其中 `occupancy_map_node` 读取 `/uav1/sunray_mavros_sim/cloud_sensor_frame` 和 `/uav1/sunray_mavros_sim/odom`，发布 NAVRL 使用的占据地图和 raycast 服务。
+其中 `occupancy_map_node` 读取 `/uav1/sunray_sim/cloud_sensor_frame` 和 `/uav1/sunray_sim/odom`，发布 NAVRL 使用的占据地图和 raycast 服务。
 
 #### 1.4.5 终端5：启动 NAVRL 官方导航节点
 
@@ -143,7 +143,7 @@ rosrun navigation_runner navigation_node.py
 /CERLAB/quadcopter/setpoint_pose
 ```
 
-仿真中 `navigation.py` 的非 PX4 模式会同时订阅 `/uav1/sunray_mavros_sim/odom`、`/uav1/sunray/localization/local_odom` 和 `/CERLAB/quadcopter/odom`。当前仿真流程主要依赖 `/uav1/sunray_mavros_sim/odom`。
+仿真中 `navigation.py` 的非 PX4 模式会同时订阅 `/uav1/sunray_sim/odom`、`/uav1/sunray/localization/local_odom` 和 `/CERLAB/quadcopter/odom`。当前仿真流程主要依赖 `/uav1/sunray_sim/odom`。
 
 #### 1.4.6 终端6：起飞并发送目标点
 
