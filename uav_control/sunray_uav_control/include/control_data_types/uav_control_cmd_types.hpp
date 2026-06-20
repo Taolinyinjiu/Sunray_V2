@@ -33,7 +33,7 @@ struct UavControlCmd {
         MOVE_TRAJECTORY = 8,     // 轨迹指令：跟踪轨迹
         MOVE_POINT_BODY = 9,     // 移动指令：移动到机体系下的某一点
         MOVE_VELOCITY_BODY = 10, // 速度指令：控制无人机在机体系下的速度
-        MOVE_POINT_WGS84 = 11    // 移动指令：移动到经纬高系下的某一点
+        MOVE_POINT_WGS84 = 11    // reserved能力：WGS84经纬高控制，当前运行路径拒绝执行
     };
     // ------------偏航角控制模式枚举---------
     enum class YawMode : uint8_t {

@@ -22,8 +22,10 @@ uint8 cmd_source
 # ---------- control command ----------
 # ------------- 控制命令枚举 ------------
 # 发布频率规则：
-# - TAKEOFF / LAND / RETURN / KILL / HOVER / MOVE_POINT / MOVE_POINT_BODY / MOVE_POINT_WGS84：
+# - TAKEOFF / LAND / RETURN / KILL / HOVER / MOVE_POINT / MOVE_POINT_BODY：
 #   事件型命令，发送一次即可。
+# - MOVE_POINT_WGS84：
+#   预留命令，当前 sunray_uav_control 会直接拒绝，不进入运行时控制链路。
 # - MOVE_VELOCITY / MOVE_VELOCITY_BODY：
 #   连续型速度命令，需要持续发布，建议 >=10Hz；停止发布后控制节点会按超时逻辑切回悬停。
 # - MOVE_TRAJECTORY：
@@ -38,7 +40,7 @@ uint8 MOVE_VELOCITY=7               # 惯性系速度控制：需要持续发布
 uint8 MOVE_TRAJECTORY=8             # 惯性系轨迹控制：需要持续发布，建议>=100Hz或与规划器频率一致；配合desired_pos、desired_vel、desired_acc、yaw_mode使用
 uint8 MOVE_POINT_BODY=9             # 机体系位置控制：发送一次即可，配合desired_body_xy_pos、fixed_height、desired_yaw使用（偏航角为惯性系设定值）
 uint8 MOVE_VELOCITY_BODY=10         # 机体系速度控制：需要持续发布，建议>=10Hz；配合desired_body_xy_vel、fixed_height、yaw_mode使用
-uint8 MOVE_POINT_WGS84=11           # WGS84系经纬高控制：发送一次即可，暂未支持。
+uint8 MOVE_POINT_WGS84=11           # WGS84系经纬高控制：reserved能力，当前sunray_uav_control会拒绝执行。
 # 控制命令
 uint8 control_cmd
 

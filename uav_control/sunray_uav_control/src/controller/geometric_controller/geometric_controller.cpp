@@ -1948,9 +1948,7 @@ bool Geometric_Controller::move_velocity_body(
 }
 
 bool Geometric_Controller::move_point_wgs84(geographic_msgs::GeoPoint point) {
-    clear_motion_curve();
-    reset_point_motion_context();
-    yaw_reference_state_.reset();
+    (void)point;
     return false;
 }
 

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <functional>
 
 namespace sunray_fsm {
 
@@ -42,8 +43,6 @@ enum class SunrayEvent {
     VELOCITY_COMPLETED,     ///< 速度控制完成
     TRAJECTORY_REQUEST,     ///< 进入轨迹控制
     TRAJECTORY_COMPLETED,   ///< 轨迹执行完成。
-    POINT_WGS84_REQUEST,    ///< 进入WGS98位置控制
-    POINT_WGS84_COMPLETED,  ///< WGS98位置控制完成
     KILL_REQUEST,           ///< 请求紧急锁桨 (Kill阶段没有完成态,因为我们不会切换到其他状态)
     TAKEOFF_FAILED,         ///< 起飞失败。
 };

@@ -1,0 +1,90 @@
+# sunray_uav_control grouped indexed parameter catalog
+#
+# This file is a design copy of sunray_control_base.yaml.
+# It is meant for a parameter-manager style API, not for direct rosparam loading.
+#
+# Design:
+#   - param_index is a stable, one-based global catalog index.
+#   - YAML keys under parameter_groups keep the original parameter group names.
+#   - param_name is short within its group.
+#   - param_value keeps the original YAML type.
+
+schema:
+  name: sunray_control_grouped_indexed_params
+  version: 1
+  index_base: 1
+  layout: grouped
+
+parameter_groups:
+  basic_param:
+    - {param_index: 1, param_name: controller_types, param_value: 1}
+    - {param_index: 2, param_name: controller_update_frequency, param_value: 100}
+    - {param_index: 3, param_name: supervisor_update_frequency, param_value: 10}
+    - {param_index: 4, param_name: odom_topic_name, param_value: "${agent_key}/sunray/localization/local_odom"}
+    - {param_index: 5, param_name: fuse_odom_type, param_value: 1}
+    - {param_index: 6, param_name: fuse_odom_frequency, param_value: 50}
+
+  protect_param:
+    - {param_index: 7, param_name: check_param, param_value: false}
+    - {param_index: 8, param_name: low_voltage, param_value: 13.2}
+    - {param_index: 9, param_name: low_voltage_operate, param_value: 0}
+    - {param_index: 10, param_name: control_with_no_rc, param_value: false}
+    - {param_index: 11, param_name: lost_with_rc, param_value: 1}
+    - {param_index: 12, param_name: arm_with_code, param_value: true}
+    - {param_index: 13, param_name: takeoff_with_code, param_value: true}
+    - {param_index: 14, param_name: check_flip, param_value: false}
+    - {param_index: 15, param_name: tilt_angle_max, param_value: 20}
+    - {param_index: 16, param_name: msg_timeout_operate, param_value: 1}
+
+  msg_timeout_param:
+    - {param_index: 17, param_name: local_odometry, param_value: 0.5}
+    - {param_index: 18, param_name: mavros_connect, param_value: 0.5}
+    - {param_index: 19, param_name: sunray_station, param_value: 0.5}
+
+  takeoff_land_param:
+    - {param_index: 20, param_name: takeoff_relative_height, param_value: 0.6}
+    - {param_index: 21, param_name: takeoff_max_velocity, param_value: 0.3}
+    - {param_index: 22, param_name: land_type, param_value: 0}
+    - {param_index: 23, param_name: land_max_velocity, param_value: 0.30}
+    - {param_index: 24, param_name: return_with_land, param_value: true}
+
+  arrival_judge_param:
+    - {param_index: 25, param_name: judge_stabile_time_s, param_value: 1}
+    - {param_index: 26, param_name: pos_stabile_err_m, param_value: 0.08}
+    - {param_index: 27, param_name: vel_stabile_err_mps, param_value: 0.12}
+    - {param_index: 28, param_name: max_pos_err_m, param_value: 0.3}
+    - {param_index: 29, param_name: yaw_stabile_err_deg, param_value: 8.0}
+    - {param_index: 30, param_name: yaw_rate_stabile_err_deg_s, param_value: 10.0}
+
+  local_fence_param:
+    - {param_index: 31, param_name: x_max, param_value: 4.0}
+    - {param_index: 32, param_name: x_min, param_value: -4.0}
+    - {param_index: 33, param_name: y_max, param_value: 4.0}
+    - {param_index: 34, param_name: y_min, param_value: -4.0}
+    - {param_index: 35, param_name: z_max, param_value: 2.0}
+    - {param_index: 36, param_name: z_min, param_value: 0.0}
+
+  velocity_param:
+    - {param_index: 37, param_name: max_velocity.x_vel, param_value: 1.0}
+    - {param_index: 38, param_name: max_velocity.y_vel, param_value: 1.0}
+    - {param_index: 39, param_name: max_velocity.z_vel, param_value: 1.0}
+    - {param_index: 40, param_name: max_velocity_with_rc.x_vel, param_value: 1.0}
+    - {param_index: 41, param_name: max_velocity_with_rc.y_vel, param_value: 1.0}
+    - {param_index: 42, param_name: max_velocity_with_rc.z_vel, param_value: 1.0}
+    - {param_index: 43, param_name: yaw_rate, param_value: 30}
+
+  geometric_controller_param:
+    - {param_index: 44, param_name: mass_kg, param_value: 0.96}
+    - {param_index: 45, param_name: gravity, param_value: 9.8}
+    - {param_index: 46, param_name: hover_thrust_percent, param_value: 0.375}
+    - {param_index: 47, param_name: control_type, param_value: 1}
+    - {param_index: 48, param_name: hover_thrust_estimator_type, param_value: 0}
+    - {param_index: 49, param_name: takeoff_land_type, param_value: 1}
+    - {param_index: 50, param_name: pos_kp, param_value: [1.5, 1.5, 3]}
+    - {param_index: 51, param_name: pos_ki, param_value: [0.0, 0.0, 0.0]}
+    - {param_index: 52, param_name: pos_kd, param_value: [0.0, 0.0, 0.0]}
+    - {param_index: 53, param_name: vel_kp, param_value: [2.0, 2.0, 3]}
+    - {param_index: 54, param_name: vel_ki, param_value: [0.0, 0.0, 0.0]}
+    - {param_index: 55, param_name: vel_kd, param_value: [0.0, 0.0, 0.0]}
+    - {param_index: 56, param_name: max_acc, param_value: 9.0}
+    - {param_index: 57, param_name: attitude_tau, param_value: 0.3}

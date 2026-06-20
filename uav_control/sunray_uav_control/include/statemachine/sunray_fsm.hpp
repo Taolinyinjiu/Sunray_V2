@@ -11,7 +11,6 @@
 #include "sunray_fsm_param.hpp"
 #include "sunray_state_types.hpp"
 #include "sunray_msgs/UAVControlCMD.h"
-#include "sunray_msgs/UAVControlState.h"
 #include <nav_msgs/Odometry.h>
 #include "controller/controller_interface.hpp"
 #include "control_data_types/uav_control_cmd_types.hpp"
@@ -56,14 +55,21 @@ class Sunray_FSM {
   private:
     // ------------------------- 表驱动FSM类型 -------------------------
 
+    struct QueuedFsmEvent_t {
+        sunray_fsm::SunrayEvent event{sunray_fsm::SunrayEvent::CONTROLLER_READY};
+        bool has_control_cmd{false};
+        control_common::UavControlCmd control_cmd;
+    };
+
     // ------------------------- FSM核心 -------------------------
-    void init_transition_table();  // 初始化状态转移表
-    // 获取状态转移表，请注意，每一条状态转移的规则，对应一个结构体，所有结构体加起来，对应一个容器，因此使用vecotr作为返回类型
+    // 初始化状态转移表
+    void init_transition_table();  
+    // 获取状态转移表，表中的每条规则描述一个 current_state + event 到 target_state 的转移条件和转移动作。
     const std::vector<sunray_fsm::Transition>& get_transition_table();
-    // 状态转移处理，参数为触发状态转移的事件  
-    bool handle_event(sunray_fsm::SunrayEvent event);  
-    // KILL等全局高优先级事件处理
-    bool handle_global_event(sunray_fsm::SunrayEvent event);  
+    // 处理一个已入队的FSM事件,参数为命令快照
+    bool handle_event(const QueuedFsmEvent_t& queued_event);  
+    // 处理KILL等全局高优先级事件,参数为命令快照
+    bool handle_global_event(const QueuedFsmEvent_t& queued_event);  
 
     // ------------------------- 函数 -------------------------
     // 初始化部分
@@ -85,6 +91,7 @@ class Sunray_FSM {
     // 里程计滤波处理部分 TODO:使用小状态卡尓曼滤波器估计滤波，或者a-b滤波器
     bool validate_odometry_sample(const control_common::UAVStateEstimate& odom,
                                   std::string* invalid_reason = nullptr) const;
+    bool has_fresh_valid_odometry() const;
     bool get_latest_valid_odometry(control_common::UAVStateEstimate& odom) const;
 
     // 从最新的里程计数据设置悬停点
@@ -116,9 +123,13 @@ class Sunray_FSM {
     // 更新home点
     bool update_home_point();
     void check_move_completed();
+    
     // -----------------------状态机事件入口函数---------------------
-    // 向状态机事件队列中填入数据
+    // 内部状态事件：由控制器状态、完成条件、超时检查等内部流程触发，不携带新的控制命令。
     void enqueue_fsm_event(sunray_fsm::SunrayEvent input_event);
+    // 外部命令事件：由UAVControlCMD触发，携带触发本次转移的命令快照，供guard/action/状态提交使用。
+    void enqueue_fsm_event(sunray_fsm::SunrayEvent input_event,
+                           const control_common::UavControlCmd& control_cmd);
     // 处理状态机事件队列中的事件
     void process_fsm_event_queue();
     // ------------------------- 变量 ---------------------------
@@ -150,6 +161,8 @@ class Sunray_FSM {
     bool has_valid_odometry_{false};
     // 最新的控制指令
     control_common::UavControlCmd last_control_cmd_;
+    control_common::UavControlCmd transition_control_cmd_;
+    bool has_transition_control_cmd_{false};
     std::atomic<double> active_takeoff_relative_height_{0.0};
     std::atomic<double> active_takeoff_max_velocity_{0.0};
     std::atomic<double> active_land_max_velocity_{0.0};
@@ -181,7 +194,7 @@ class Sunray_FSM {
     mutable std::mutex event_mutex_;  // fsm当前事件队列
 
     sunray_fsm::SunrayState fsm_state_{sunray_fsm::SunrayState::OFF};  // 当前状态
-    std::queue<sunray_fsm::SunrayEvent> fsm_event_queue_;              // 事件队列
+    std::queue<QueuedFsmEvent_t> fsm_event_queue_;                         // 事件队列
     sunray_fsm::sunray_fsm_config_t fsm_config_;                       // 状态机参数结构体
     std::vector<sunray_fsm::Transition> sunray_state_transmit_table_;  // 成员变量
     bool rc_connected{false};  // 遥控器连接状态，这里是从sunray_rc_joy_node节点传递？

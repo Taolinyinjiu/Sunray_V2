@@ -876,11 +876,9 @@ bool PX4_OriginController::move_velocity_body(
     cache_local_setpoint(velocity_setpoint);
     return true;
 }
-// WGS84不知道怎么测试，先放一边
+// WGS84预留接口：当前控制链路不支持，保持无副作用拒绝。
 bool PX4_OriginController::move_point_wgs84(geographic_msgs::GeoPoint point) {
-    clear_motion_curve();
-    reset_point_motion_context();
-    yaw_reference_state_.reset();
+    (void)point;
     return false;
 }
 // -------------起降状态查询接口------------

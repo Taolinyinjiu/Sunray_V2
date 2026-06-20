@@ -26,20 +26,12 @@ void Sunray_FSM::update_controller_output() {
     sunray_fsm::SunrayState fsm_state_snapshot;
     control_common::UavControlCmd uav_control_cmd;
     control_common::UAVStateEstimate uav_odom;
-    bool has_valid_odom = false;
     {
-        std::lock_guard<std::mutex> lk(state_mutex_);
+        std::scoped_lock lock(state_mutex_, cmd_mutex_);
         fsm_state_snapshot = fsm_state_;
-    }
-    {
-        std::lock_guard<std::mutex> lk2(cmd_mutex_);
         uav_control_cmd = last_control_cmd_;
     }
-    {
-        std::lock_guard<std::mutex> lk2(odom_mutex_);
-        has_valid_odom = has_valid_odometry_;
-        uav_odom = last_odometry_;
-    }
+    const bool has_valid_odom = get_latest_valid_odometry(uav_odom);
     if (fsm_state_snapshot != sunray_fsm::SunrayState::RETURN) {
         return_height_initialized_ = false;
     }
@@ -50,28 +42,39 @@ void Sunray_FSM::update_controller_output() {
     case sunray_fsm::SunrayState::OFF: {
         break;
     }
-    // INIT状态：init状态可以认为是每次任务开始前的第一个状态
-    // 当接受到takeoff命令，我们从 init-> takeoff -> hover
-    // 当接受到land命令，我们从 hover/move -> land -> init
-    // 因此，从一次完整的飞行任务来看，我们认为，init状态应该保持为position模式，当任务开始，我们输出setpoint流并切换为offboard模式
+    case sunray_fsm::SunrayState::EMERGENCY_KILL: {
+        sunray_controller_->emergency_kill();
+        break;
+    }
     case sunray_fsm::SunrayState::INIT: {
+        if (!has_valid_odom) {
+            break;
+        }
         sunray_controller_->set_position_mode();
         break;
     }
     // 起飞阶段
     case sunray_fsm::SunrayState::TAKEOFF: {
-        // 实际上takeoff函数是一个bool类型的函数
+        if (!has_valid_odom) {
+            break;
+        }
         sunray_controller_->takeoff(active_takeoff_relative_height_.load(),
                                     active_takeoff_max_velocity_.load());
         break;
     }
     // 悬停阶段
     case sunray_fsm::SunrayState::HOVER: {
+        if (!has_valid_odom) {
+            break;
+        }
         sunray_controller_->hover();
         break;
     }
     // 降落阶段
     case sunray_fsm::SunrayState::LAND: {
+        if (!has_valid_odom) {
+            break;
+        }
         const double land_velocity = effective_land_max_velocity(uav_control_cmd);
         active_land_max_velocity_.store(land_velocity);
         sunray_controller_->land(fsm_config_.takeoff_land_param.land_type,
@@ -107,6 +110,9 @@ void Sunray_FSM::update_controller_output() {
     }
     // 移动阶段
     case sunray_fsm::SunrayState::MOVE: {
+        if (!has_valid_odom) {
+            break;
+        }
         switch (uav_control_cmd.control_cmd) {
         case control_common::UavControlCmd::ControlCmd::MOVE_POINT: {
             controller_data_types::TargetPoint_t point;
@@ -185,16 +191,7 @@ void Sunray_FSM::update_controller_output() {
             sunray_controller_->move_trajectory(traj_point);
             break;
         }
-        case control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84: {
-            break;
         }
-            //
-        }
-        break;
-    }
-    // 紧急锁桨阶段
-    case sunray_fsm::SunrayState::EMERGENCY_KILL: {
-        sunray_controller_->emergency_kill();
         break;
     }
     }
@@ -239,7 +236,7 @@ bool Sunray_FSM::update_home_point() {
     control_common::UavControlCmd cmd_snapshot;
     {
         std::lock_guard<std::mutex> lk(cmd_mutex_);
-        cmd_snapshot = last_control_cmd_;
+        cmd_snapshot = has_transition_control_cmd_ ? transition_control_cmd_ : last_control_cmd_;
     }
     double takeoff_height = fsm_config_.takeoff_land_param.takeoff_relative_height;
     double takeoff_velocity = fsm_config_.takeoff_land_param.takeoff_max_velocity;

@@ -18,16 +18,7 @@ void Sunray_FSM::check_controller_ready() {
         return;
     }
 
-    bool odom_ready = false;
-    {
-        std::lock_guard<std::mutex> lk(odom_mutex_);
-        odom_ready = has_valid_odometry_ &&
-                     !last_valid_odom_receive_time_.isZero() &&
-                     (ros::Time::now() - last_valid_odom_receive_time_).toSec() <=
-                         fsm_config_.msg_timeout_param.local_odometry;
-    }
-
-    controller_ready_ = odom_ready && sunray_controller_->is_ready();
+    controller_ready_ = has_fresh_valid_odometry() && sunray_controller_->is_ready();
     if (controller_ready_) {
         enqueue_fsm_event(sunray_fsm::SunrayEvent::CONTROLLER_READY);
     }
@@ -44,14 +35,7 @@ bool Sunray_FSM::check_allow_takeoff(double relative_takeoff_height,
         return allow_takeoff_;
     }
 
-    bool odom_ready = false;
-    {
-        std::lock_guard<std::mutex> lk(odom_mutex_);
-        odom_ready = has_valid_odometry_ &&
-                     !last_valid_odom_receive_time_.isZero() &&
-                     (ros::Time::now() - last_valid_odom_receive_time_).toSec() <=
-                         fsm_config_.msg_timeout_param.local_odometry;
-    }
+    const bool odom_ready = has_fresh_valid_odometry();
     const bool controller_ready =
         sunray_controller_ != nullptr && sunray_controller_->is_ready();
 
@@ -110,6 +94,9 @@ void Sunray_FSM::check_move_completed() {
         std::lock_guard<std::mutex> lk1(state_mutex_);
         current_state = fsm_state_;
     }
+    if (!has_fresh_valid_odometry()) {
+        return;
+    }
     if (current_state == sunray_fsm::SunrayState::TAKEOFF) {
         if (sunray_controller_->is_takeoff_failed()) {
             const auto reason = sunray_controller_->takeoff_failure_reason();
@@ -139,11 +126,10 @@ void Sunray_FSM::check_move_completed() {
         std::lock_guard<std::mutex> lk1(cmd_mutex_);
         current_cmd = last_control_cmd_;
     }
-    // 其中，只有move_point / move_point_body/ move_point_wgs84
+    // 其中，只有move_point / move_point_body
     // 需要判断是否到达位置，剩余的直接切换为hover
     if (current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT ||
-        current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY ||
-        current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84) {
+        current_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY) {
         if (sunray_controller_->is_point_complete()) {
             enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_COMPLETED);
         }
@@ -199,9 +185,19 @@ bool Sunray_FSM::validate_odometry_sample(const control_common::UAVStateEstimate
     return true;
 }
 
+bool Sunray_FSM::has_fresh_valid_odometry() const {
+    std::lock_guard<std::mutex> lk(odom_mutex_);
+    return has_valid_odometry_ &&
+           !last_valid_odom_receive_time_.isZero() &&
+           (ros::Time::now() - last_valid_odom_receive_time_).toSec() <=
+               fsm_config_.msg_timeout_param.local_odometry;
+}
+
 bool Sunray_FSM::get_latest_valid_odometry(control_common::UAVStateEstimate& odom) const {
     std::lock_guard<std::mutex> lk(odom_mutex_);
-    if (!has_valid_odometry_) {
+    if (!has_valid_odometry_ || last_valid_odom_receive_time_.isZero() ||
+        (ros::Time::now() - last_valid_odom_receive_time_).toSec() >
+            fsm_config_.msg_timeout_param.local_odometry) {
         return false;
     }
     odom = last_odometry_;

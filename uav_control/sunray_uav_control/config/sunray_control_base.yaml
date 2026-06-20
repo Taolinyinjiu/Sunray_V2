@@ -220,7 +220,7 @@ takeoff_land_param:
 # -------------------到达稳定判定参数-----------------------
 # 使用位置:
 #   - PX4_OriginController 和 Geometric_Controller 都会读取。
-#   - 起飞完成判定、move_point / move_point_body / move_point_wgs84 到点判定使用本组参数。
+#   - 起飞完成判定、move_point / move_point_body 到点判定使用本组参数。
 # 不适用:
 #   - 纯速度命令 MOVE_VELOCITY / MOVE_VELOCITY_BODY 不靠“到点”完成。
 #   - MOVE_TRAJECTORY 主要跟随外部持续给出的轨迹点，不用本组参数判断最终任务完成。

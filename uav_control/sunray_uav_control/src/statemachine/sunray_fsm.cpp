@@ -11,7 +11,6 @@
 #include "controller/geometric_controller.hpp"
 #include <mavros_msgs/AttitudeTarget.h>
 #include <mavros_msgs/PositionTarget.h>
-#include "utils/orientation_utils.hpp"
 #include <algorithm>
 #include <cctype>
 
@@ -36,6 +35,32 @@ geometry_msgs::Vector3 toVector3Msg(const Eigen::Vector3d& value) {
     msg.y = value.y();
     msg.z = value.z();
     return msg;
+}
+
+bool is_streaming_move_cmd(control_common::UavControlCmd::ControlCmd cmd) {
+    return cmd == control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY ||
+           cmd == control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY ||
+           cmd == control_common::UavControlCmd::ControlCmd::MOVE_TRAJECTORY;
+}
+
+bool command_requires_fresh_odometry(control_common::UavControlCmd::ControlCmd cmd) {
+    switch (cmd) {
+    case control_common::UavControlCmd::ControlCmd::TAKEOFF:
+    case control_common::UavControlCmd::ControlCmd::LAND:
+    case control_common::UavControlCmd::ControlCmd::RETURN:
+    case control_common::UavControlCmd::ControlCmd::HOVER:
+    case control_common::UavControlCmd::ControlCmd::MOVE_POINT:
+    case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY:
+    case control_common::UavControlCmd::ControlCmd::MOVE_TRAJECTORY:
+    case control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY:
+    case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY:
+        return true;
+    case control_common::UavControlCmd::ControlCmd::KILL:
+    case control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84:
+    case control_common::UavControlCmd::ControlCmd::UNDEFINE:
+    default:
+        return false;
+    }
 }
 
 void split_agent_key(const std::string& agent_key, std::string& agent_name, int& agent_id) {
@@ -246,10 +271,15 @@ void Sunray_FSM::local_odom_callback(const nav_msgs::Odometry& msg) {
             last_odometry_ = odom_kf_.update(odom_sample);
             last_valid_odom_receive_time_ = receive_time;
             has_valid_odometry_ = true;
+        } else {
+            has_valid_odometry_ = false;
+            odom_kf_.reset();
         }
     }
 
-    (void)invalid_reason;
+    if (!accept_sample && !invalid_reason.empty()) {
+        ROS_WARN_STREAM_THROTTLE(1.0, "[Sunray_FSM] odometry rejected: " << invalid_reason);
+    }
     (void)odom_below_target_rate;
     (void)odom_frequency_hz;
 }
@@ -259,13 +289,25 @@ void Sunray_FSM::uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg)
     // 构造临时变量
     control_common::UavControlCmd temp_cmd(msg);
     // 强制使用收到指令的时刻作为时间戳，避免上游忘记填充 header.stamp 时
-    // 让 last_control_cmd_.timestamp 永远停留在 ros::Time(0)，进而导致
+    // 让命令时间戳永远停留在 ros::Time(0)，进而导致
     // check_rosmsg_timeout 无法判定指令流断开，move 状态卡死无法切回 hover。
     temp_cmd.timestamp = ros::Time::now();
-    // 更新缓存
+    sunray_fsm::SunrayState current_state;
     {
+        std::lock_guard<std::mutex> lk(state_mutex_);
+        current_state = fsm_state_;
+    }
+    const bool can_refresh_streaming_move_cmd =
+        current_state == sunray_fsm::SunrayState::MOVE && is_streaming_move_cmd(temp_cmd.control_cmd);
+    if (command_requires_fresh_odometry(temp_cmd.control_cmd) && !has_fresh_valid_odometry()) {
+        ROS_WARN_STREAM("[Sunray_FSM] command rejected: odometry is not fresh or valid, cmd="
+                        << static_cast<int>(temp_cmd.control_cmd));
+        return;
+    }
+    if (can_refresh_streaming_move_cmd) {
         std::lock_guard<std::mutex> lk(cmd_mutex_);
         last_control_cmd_ = temp_cmd;
+        return;
     }
     if (temp_cmd.control_cmd == control_common::UavControlCmd::ControlCmd::TAKEOFF) {
         double takeoff_height = fsm_config_.takeoff_land_param.takeoff_relative_height;
@@ -278,40 +320,38 @@ void Sunray_FSM::uav_control_cmd_callback(const sunray_msgs::UAVControlCMD& msg)
                                                       : reject_reason));
             return;
         }
-        active_takeoff_relative_height_.store(takeoff_height);
-        active_takeoff_max_velocity_.store(takeoff_velocity);
     }
     // 将control_cmd中的指令，转换为sunray_fsm的事件请求
     switch (temp_cmd.control_cmd) {
     case control_common::UavControlCmd::ControlCmd::TAKEOFF:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::TAKEOFF_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::LAND:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::LAND_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::RETURN:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::RETURN_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::RETURN_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::KILL:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::KILL_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::KILL_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::HOVER:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::HOVER_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::HOVER_REQUEST, temp_cmd);
         break;
     // local系和body系都是同一个point_request和point_completed
     case control_common::UavControlCmd::ControlCmd::MOVE_POINT:
     case control_common::UavControlCmd::ControlCmd::MOVE_POINT_BODY:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY:
     case control_common::UavControlCmd::ControlCmd::MOVE_VELOCITY_BODY:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::VELOCITY_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::VELOCITY_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::MOVE_TRAJECTORY:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::TRAJECTORY_REQUEST);
+        enqueue_fsm_event(sunray_fsm::SunrayEvent::TRAJECTORY_REQUEST, temp_cmd);
         break;
     case control_common::UavControlCmd::ControlCmd::MOVE_POINT_WGS84:
-        enqueue_fsm_event(sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST);
+        ROS_WARN_STREAM("[Sunray_FSM] MOVE_POINT_WGS84 command rejected: reserved capability is not supported by runtime control path");
         break;
     case control_common::UavControlCmd::ControlCmd::UNDEFINE:
     default:
@@ -334,24 +374,27 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     bool has_self_odom_msg_snapshot = false;
     ros::Time last_valid_odom_receive_time_snapshot{0.0};
     {
-        std::lock_guard<std::mutex> lk1(state_mutex_);
+        std::scoped_lock lock(state_mutex_, cmd_mutex_);
         fsm_state_snapshot = fsm_state_;
-    }
-    {
-        std::lock_guard<std::mutex> lk2(cmd_mutex_);
         last_cmd_snapshot = last_control_cmd_;
     }
+    const ros::Time publish_time = ros::Time::now();
+    bool odometry_usable_snapshot = false;
     {
         std::lock_guard<std::mutex> lk3(odom_mutex_);
         self_odom_snapshot = last_self_odom_msg_;
         has_valid_odometry_snapshot = has_valid_odometry_;
         has_self_odom_msg_snapshot = has_self_odom_msg_;
         last_valid_odom_receive_time_snapshot = last_valid_odom_receive_time_;
+        odometry_usable_snapshot = has_valid_odometry_snapshot &&
+                                   !last_valid_odom_receive_time_snapshot.isZero() &&
+                                   (publish_time - last_valid_odom_receive_time_snapshot).toSec() <=
+                                       fsm_config_.msg_timeout_param.local_odometry;
     }
     // 构建要发布的消息
     sunray_msgs::UAVControlState fsm_state_msg;
     // 首先填充话题头
-    fsm_state_msg.header.stamp = ros::Time::now();
+    fsm_state_msg.header.stamp = publish_time;
     fsm_state_msg.agent_name = agent_name_;
     fsm_state_msg.agent_id = static_cast<uint8_t>(std::clamp(agent_id_, 0, 255));
     fsm_state_msg.controller_types = fsm_config_.basic_param.controller_types;
@@ -395,20 +438,20 @@ void Sunray_FSM::pub_sunray_fsm_state() {
     }
     mavros_msgs::PositionTarget position_target;
     mavros_msgs::AttitudeTarget attitude_target;
-    if (sunray_controller_ && sunray_controller_->get_last_position_target(position_target)) {
+    if (odometry_usable_snapshot && sunray_controller_ &&
+        sunray_controller_->get_last_position_target(position_target)) {
         fsm_state_msg.controller_output_type = sunray_msgs::UAVControlState::OUTPUT_POSITION_TARGET;
         fsm_state_msg.position_target = position_target;
-    } else if (sunray_controller_ && sunray_controller_->get_last_attitude_target(attitude_target)) {
+    } else if (odometry_usable_snapshot && sunray_controller_ &&
+               sunray_controller_->get_last_attitude_target(attitude_target)) {
         fsm_state_msg.controller_output_type = sunray_msgs::UAVControlState::OUTPUT_ATTITUDE_TARGET;
         fsm_state_msg.attitude_target = attitude_target;
     } else {
         fsm_state_msg.controller_output_type = sunray_msgs::UAVControlState::OUTPUT_NONE;
     }
     // 与已有消息定义保持兼容：仅暴露关键的里程计健康状态
-    fsm_state_msg.odometry_lost = !last_valid_odom_receive_time_snapshot.isZero() &&
-                                  (ros::Time::now() - last_valid_odom_receive_time_snapshot).toSec() >
-                                      fsm_config_.msg_timeout_param.local_odometry;
-    fsm_state_msg.odometry_valid = has_valid_odometry_snapshot;
+    fsm_state_msg.odometry_lost = !odometry_usable_snapshot;
+    fsm_state_msg.odometry_valid = odometry_usable_snapshot;
     // 发布消息
     sunray_fsm_state_pub_.publish(fsm_state_msg);
 }

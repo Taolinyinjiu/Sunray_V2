@@ -57,7 +57,7 @@ class Controller_Interface {
     virtual bool move_point_body(controller_data_types::TargetBodyPoint_t point) = 0;
     // 以机体系速度的方式运动, 其中 yaw 仍按惯性系绝对角解释, yaw_rate 为角速度
     virtual bool move_velocity_body(controller_data_types::TargetBodyVelocity_t velocity) = 0;
-    // 移动到WGS84下的某一点
+    // WGS84预留接口：当前FSM运行路径不会调用，保留用于外部API兼容和未来实现。
     virtual bool move_point_wgs84(geographic_msgs::GeoPoint point) = 0;
     // ---------------------起降状态查询接口-----------------------
     // [先占个位置] 查询起飞状态

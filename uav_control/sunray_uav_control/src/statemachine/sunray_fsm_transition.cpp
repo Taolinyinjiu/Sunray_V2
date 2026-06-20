@@ -16,6 +16,10 @@ void Sunray_FSM::init_transition_table() {
         return;
     // always是一个lambda表达式，用于表示，这一项不需要进行检查or执行
     auto always = [] { return true; };
+    auto command_request_or_control_lost = [this] {
+        std::lock_guard<std::mutex> lk(cmd_mutex_);
+        return has_transition_control_cmd_ || control_msg_lost_;
+    };
 
     // struct Transition {
     //     sunray_fsm::SunrayState current_state;   // 状态机当前状态
@@ -37,16 +41,33 @@ void Sunray_FSM::init_transition_table() {
                                             sunray_fsm::SunrayEvent::TAKEOFF_REQUEST,
                                             sunray_fsm::SunrayState::TAKEOFF,
                                             [this] {
-                                                return check_allow_takeoff(
-                                                    active_takeoff_relative_height_.load(),
-                                                    active_takeoff_max_velocity_.load());
+                                                control_common::UavControlCmd cmd_snapshot;
+                                                {
+                                                    std::lock_guard<std::mutex> lk(cmd_mutex_);
+                                                    cmd_snapshot = has_transition_control_cmd_
+                                                                       ? transition_control_cmd_
+                                                                       : last_control_cmd_;
+                                                }
+                                                double takeoff_height =
+                                                    fsm_config_.takeoff_land_param.takeoff_relative_height;
+                                                double takeoff_velocity =
+                                                    fsm_config_.takeoff_land_param.takeoff_max_velocity;
+                                                if (!resolve_takeoff_command_params(
+                                                        cmd_snapshot,
+                                                        &takeoff_height,
+                                                        &takeoff_velocity,
+                                                        nullptr)) {
+                                                    return false;
+                                                }
+                                                return check_allow_takeoff(takeoff_height,
+                                                                          takeoff_velocity);
                                             },
                                             [this] {
-                                                const bool home_ok = update_home_point();
-                                                // handle_event() 当前不使用 action 返回值回滚状态。
-                                                // 这里的 reset 只表示 TAKEOFF_REQUEST guard 已通过后的新 session 初始化。
+                                                if (!update_home_point()) {
+                                                    return false;
+                                                }
                                                 sunray_controller_->reset_takeoff_status();
-                                                return home_ok;
+                                                return true;
                                             }});
 
     // TAKEOFF -> HOVER
@@ -91,13 +112,6 @@ void Sunray_FSM::init_transition_table() {
                                             always,
                                             always});
 
-    // HOVER -> MOVE (POINT_WGS84)
-    sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::HOVER,
-                                            sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST,
-                                            sunray_fsm::SunrayState::MOVE,
-                                            always,
-                                            always});
-
     // MOVE -> MOVE (POINT)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::POINT_REQUEST,
@@ -118,18 +132,11 @@ void Sunray_FSM::init_transition_table() {
                                             sunray_fsm::SunrayState::MOVE,
                                             always,
                                             always});
-
-    // MOVE -> MOVE (POINT_WGS84)
-    sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
-                                            sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST,
-                                            sunray_fsm::SunrayState::MOVE,
-                                            always,
-                                            always});
     // MOVE -> HOVER (HOVER_REQUEST)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::HOVER_REQUEST,
                                             sunray_fsm::SunrayState::HOVER,
-                                            always,
+                                            command_request_or_control_lost,
                                             [this] { return set_hover_point_from_latest_odom(); }});
     // MOVE -> HOVER (POINT_COMPLETED)
     // 用 move_point 的目标点而不是当前里程计作为悬停点，避免到达判断阶段的位置误差被锁死
@@ -149,13 +156,6 @@ void Sunray_FSM::init_transition_table() {
     // MOVE -> HOVER (TRAJECTORY_COMPLETED)
     sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
                                             sunray_fsm::SunrayEvent::TRAJECTORY_COMPLETED,
-                                            sunray_fsm::SunrayState::HOVER,
-                                            always,
-                                            [this] { return set_hover_point_from_latest_odom(); }});
-
-    // MOVE -> HOVER (POINT_WGS84_COMPLETED)
-    sunray_state_transmit_table_.push_back({sunray_fsm::SunrayState::MOVE,
-                                            sunray_fsm::SunrayEvent::POINT_WGS84_COMPLETED,
                                             sunray_fsm::SunrayState::HOVER,
                                             always,
                                             [this] { return set_hover_point_from_latest_odom(); }});
@@ -219,16 +219,17 @@ const std::vector<sunray_fsm::Transition>& Sunray_FSM::get_transition_table() {
     return sunray_state_transmit_table_;
 }
 // 处理全局高优先级状态
-bool Sunray_FSM::handle_global_event(sunray_fsm::SunrayEvent event) {
-    switch (event) {
+bool Sunray_FSM::handle_global_event(const QueuedFsmEvent_t& queued_event) {
+    switch (queued_event.event) {
     // 全局最高优先级：紧急锁桨
     // 任意状态收到该事件，都需要进入EMERGENCY_KILL
     case sunray_fsm::SunrayEvent::KILL_REQUEST: {
-        // 切换状态为
-        {
-            std::lock_guard<std::mutex> lk(state_mutex_);
-            fsm_state_ = sunray_fsm::SunrayState::EMERGENCY_KILL;
+        std::scoped_lock lock(state_mutex_, cmd_mutex_);
+        fsm_state_ = sunray_fsm::SunrayState::EMERGENCY_KILL;
+        if (queued_event.has_control_cmd) {
+            last_control_cmd_ = queued_event.control_cmd;
         }
+        has_transition_control_cmd_ = false;
         return true;
     }
     default:
@@ -237,25 +238,20 @@ bool Sunray_FSM::handle_global_event(sunray_fsm::SunrayEvent event) {
     }
 }
 // 处理正常情况下的状态转移
-bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
+bool Sunray_FSM::handle_event(const QueuedFsmEvent_t& queued_event) {
+    const auto event = queued_event.event;
     // 首先丢进全局高优先级状态检查
-    if (handle_global_event(event)) {
+    if (handle_global_event(queued_event)) {
         return true;
     }
-    // handle_event() -> false 说明不是kill状态，按照正常流程往下走
     // 打个快照
     sunray_fsm::SunrayState current_state;
-    control_common::UavControlCmd current_cmd;
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
         current_state = fsm_state_;
     }
-    {
-        std::lock_guard<std::mutex> lk(cmd_mutex_);
-        current_cmd = last_control_cmd_;
-    }
     // 获取缓存的状态转移表
-    const auto state_table = get_transition_table();
+    const auto& state_table = get_transition_table();
     // 使用迭代器 查找匹配字段
     for (const auto& t : state_table) {
         // 如果当前迭代器找到的状态转移规则不是针对当前状态的，则跳过
@@ -266,28 +262,41 @@ bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
         if (t.event != event) {
             continue;
         }
+        if (queued_event.has_control_cmd) {
+            std::lock_guard<std::mutex> lk(cmd_mutex_);
+            transition_control_cmd_ = queued_event.control_cmd;
+            has_transition_control_cmd_ = true;
+        }
+        auto clear_transition_cmd = [this] {
+            std::lock_guard<std::mutex> lk(cmd_mutex_);
+            has_transition_control_cmd_ = false;
+        };
         // 那么运行到这里，就应当得到了针对当前状态和事件的转移规则
         // 这里分为两个方面，一个是判断是否允许转移，一个是转移后执行的函数
-        // 首先判断是否允许转移
-        // (t.guard ? t.guard() : true) -> 如果t.guard存在，则返回t.guard()的结果
-        //                                 如果t.guard不存在，则直接返回true
         const bool allow_checkout_state = (t.guard ? t.guard() : true);
         if (!allow_checkout_state) {
+            clear_transition_cmd();
             ROS_WARN_STREAM("[Sunray_FSM] command rejected by current controller state, event="
                             << static_cast<int>(event));
             return false;
         }
-        {
-            std::lock_guard<std::mutex> lk(state_mutex_);
-            fsm_state_ = t.transmit_state;
+        const bool action_ok = (t.action ? t.action() : true);
+        if (!action_ok) {
+            clear_transition_cmd();
+            ROS_WARN_STREAM("[Sunray_FSM] transition action failed, event="
+                            << static_cast<int>(event)
+                            << ", state=" << static_cast<int>(current_state)
+                            << ", target=" << static_cast<int>(t.transmit_state));
+            return false;
         }
-        // (t.action ? t.action() : true) -> 如果t.action存在，则执行t.action()
-        //                                   如果t.action不存在，则直接返回true
-        const bool need_action = (t.action ? t.action() : true);
-        // 但其是我们不关心action的结果，因为写到这里的时候，我意识到handle_event其实是用作controlcmd的回调和运动判断完成的回调，而不是一个高频更新的函数
-        //  因此这里的action并不能够与无人机的运动相关联
-        //  但是我认为保留这一项可能有一些好处，比如action可以作为日志，存储每一次状态切换的细节
-        (void)need_action;
+        {
+            std::scoped_lock lock(state_mutex_, cmd_mutex_);
+            fsm_state_ = t.transmit_state;
+            if (queued_event.has_control_cmd) {
+                last_control_cmd_ = queued_event.control_cmd;
+            }
+            has_transition_control_cmd_ = false;
+        }
         return true;
     }
     switch (event) {
@@ -297,7 +306,6 @@ bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
     case sunray_fsm::SunrayEvent::POINT_REQUEST:
     case sunray_fsm::SunrayEvent::VELOCITY_REQUEST:
     case sunray_fsm::SunrayEvent::TRAJECTORY_REQUEST:
-    case sunray_fsm::SunrayEvent::POINT_WGS84_REQUEST:
         ROS_WARN_STREAM("[Sunray_FSM] command not allowed in current FSM state, event="
                         << static_cast<int>(event)
                         << ", state=" << static_cast<int>(current_state));
@@ -312,22 +320,33 @@ bool Sunray_FSM::handle_event(sunray_fsm::SunrayEvent event) {
 // note:如果传入的事件与队列中最新的事件相同，则不会传入
 void Sunray_FSM::enqueue_fsm_event(sunray_fsm::SunrayEvent input_event) {
     std::lock_guard<std::mutex> lk(event_mutex_);
-    if (!fsm_event_queue_.empty() && fsm_event_queue_.back() == input_event) {
+    if (!fsm_event_queue_.empty() && fsm_event_queue_.back().event == input_event) {
         // 如果事件队列非空，并且传入的与队列中最新的是一致的，那么就return
         return;
     }
-    fsm_event_queue_.push(input_event);
+    fsm_event_queue_.push(QueuedFsmEvent_t{input_event, false, control_common::UavControlCmd{}});
+}
+
+void Sunray_FSM::enqueue_fsm_event(sunray_fsm::SunrayEvent input_event,
+                                   const control_common::UavControlCmd& control_cmd) {
+    std::lock_guard<std::mutex> lk(event_mutex_);
+    if (!fsm_event_queue_.empty() && fsm_event_queue_.back().event == input_event) {
+        fsm_event_queue_.back().has_control_cmd = true;
+        fsm_event_queue_.back().control_cmd = control_cmd;
+        return;
+    }
+    fsm_event_queue_.push(QueuedFsmEvent_t{input_event, true, control_cmd});
 }
 // 处理状态机事件中的事件
 void Sunray_FSM::process_fsm_event_queue() {
-    sunray_fsm::SunrayEvent event;
+    QueuedFsmEvent_t queued_event;
     {
         std::lock_guard<std::mutex> lk(event_mutex_);
         if (fsm_event_queue_.empty()) {
             return;
         }
-        event = fsm_event_queue_.front();
+        queued_event = fsm_event_queue_.front();
         fsm_event_queue_.pop();
     }
-    handle_event(event);
+    handle_event(queued_event);
 }
